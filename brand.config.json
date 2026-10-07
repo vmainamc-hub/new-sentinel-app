@@ -1,0 +1,144 @@
+{
+    "brand_name": "Apex Sentinel",
+    "brand_domain": "peppy-starship-b80f54.netlify.app",
+    "brand_hostname": {
+        "staging": "peppy-starship-b80f54.netlify.app",
+        "production": "peppy-starship-b80f54.netlify.app"
+    },
+    "domain_name": "peppy-starship-b80f54.netlify.app",
+    "sites": {
+        "default_site": "apex-sentinel",
+        "entries": [
+            {
+                "id": "apex-sentinel",
+                "hosts": [
+                    "peppy-starship-b80f54.netlify.app",
+                    "localhost"
+                ],
+                "display_domain": "Apex Sentinel",
+                "website_url": "https://peppy-starship-b80f54.netlify.app",
+                "redirect_uri": "https://peppy-starship-b80f54.netlify.app/callback",
+                "client_id": "YOUR_DERIV_OAUTH_CLIENT_ID",
+                "scopes": [
+                    "trade",
+                    "application_read"
+                ],
+                "environment": "production",
+                "bot_library": {
+                    "title": "Free Bots",
+                    "manifest_url": "/free-bots/domains/apex-sentinel.json",
+                    "base_url": "/free-bots"
+                }
+            }
+        ]
+    },
+    "colors": {
+        "primary": "#059669",
+        "secondary": "#0f172a",
+        "tertiary": "#6d28d9",
+        "success": "#10b981",
+        "danger": "#ef4e43",
+        "warning": "#f59e0b",
+        "info": "#1597d4",
+        "neutral": "#64748b",
+        "black": "#0b1218",
+        "white": "#ffffff",
+        "grey": {
+            "50": "#f8fafc",
+            "100": "#f1f5f9",
+            "200": "#e2e8f0",
+            "300": "#cbd5e1",
+            "400": "#94a3b8",
+            "500": "#64748b",
+            "600": "#475569",
+            "700": "#334155",
+            "800": "#1f2937",
+            "900": "#111827"
+        }
+    },
+    "typography": {
+        "font_family": {
+            "primary": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+            "secondary": "Georgia, 'Times New Roman', Times, serif",
+            "monospace": "'SFMono-Regular', Consolas, 'Liberation Mono', monospace"
+        },
+        "font_sizes": {
+            "xs": "0.75rem",
+            "sm": "0.875rem",
+            "base": "1rem",
+            "lg": "1.125rem",
+            "xl": "1.25rem",
+            "2xl": "1.5rem",
+            "3xl": "1.875rem",
+            "4xl": "2.25rem"
+        }
+    },
+    "color_variants": {
+        "light_variants": [
+            100,
+            200,
+            300,
+            400,
+            500
+        ],
+        "dark_variants": [
+            600,
+            700,
+            800,
+            900
+        ],
+        "opacity_variants": [
+            10,
+            20,
+            30,
+            40,
+            50,
+            60,
+            70,
+            80,
+            90
+        ]
+    },
+    "theme_config": {
+        "enable_dynamic_themes": true,
+        "auto_generate_variants": true,
+        "css_variable_prefix": "--brand"
+    },
+    "platform": {
+        "name": "Apex Sentinel",
+        "logo": {
+            "type": "component",
+            "component_name": "BrandLogo",
+            "alt_text": "Apex Sentinel",
+            "link_url": "/",
+            "show_text": true,
+            "text": "Apex Sentinel"
+        },
+        "footer": {
+            "enable_language_settings": false,
+            "enable_theme_toggle": false
+        },
+        "hostname": {
+            "production": {
+                "com": "peppy-starship-b80f54.netlify.app"
+            },
+            "staging": {
+                "com": "peppy-starship-b80f54.netlify.app"
+            }
+        },
+        "auth2_url": {
+            "production": "https://auth.deriv.com/oauth2/",
+            "staging": "https://staging-auth.deriv.com/oauth2/"
+        },
+        "derivws": {
+            "url": {
+                "staging": "https://staging-api.derivws.com/trading/v1/",
+                "production": "https://api.derivws.com/trading/v1/"
+            },
+            "directories": {
+                "options": "options/",
+                "derivatives": "derivatives/"
+            }
+        }
+    }
+}

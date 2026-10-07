@@ -1,0 +1,236 @@
+.prodb-bot-builder-host.is-hidden {
+    display: none !important;
+}
+
+.prodb-analysis-tool-tabs {
+    display: flex;
+    gap: 7px;
+    margin: -4px 0 14px;
+    padding: 4px;
+    width: fit-content;
+    border: 1px solid #dde6e9;
+    border-radius: 9px;
+    background: #fff;
+}
+
+.prodb-analysis-tool-tabs button {
+    height: 34px;
+    padding: 0 15px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #697786;
+    font-size: 10px;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.prodb-analysis-tool-tabs button.is-active {
+    background: #0aa77d;
+    color: #fff;
+    box-shadow: 0 5px 12px rgba(10, 167, 125, .18);
+}
+
+.prodb-analysis-iframe-card {
+    height: calc(100vh - 245px);
+    min-height: 520px;
+    overflow: hidden;
+    border: 1px solid #dbe5e8;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(35, 55, 68, .06);
+}
+
+.prodb-analysis-iframe {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border: 0;
+    background: #fff;
+}
+
+.prodb-global-trade {
+    position: fixed;
+    right: 18px;
+    bottom: 54px;
+    z-index: 115;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.prodb-global-trade__launcher {
+    width: 62px;
+    height: 36px;
+    border: 1px solid #087d60;
+    border-radius: 999px;
+    background: #0aa77d;
+    color: #fff;
+    box-shadow: 0 8px 20px rgba(8, 137, 99, .25);
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: .7px;
+    cursor: pointer;
+}
+
+.prodb-global-trade.is-open .prodb-global-trade__launcher {
+    background: #13232e;
+    border-color: #13232e;
+}
+
+.prodb-global-trade__panel {
+    width: 330px;
+    max-height: calc(100vh - 145px);
+    overflow: auto;
+    padding: 15px;
+    border: 1px solid #d9e3e6;
+    border-radius: 12px;
+    background: #fff;
+    color: #192735;
+    box-shadow: 0 18px 46px rgba(20, 38, 51, .2);
+}
+
+.prodb-global-trade__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.prodb-global-trade__head > div {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.prodb-global-trade__head small {
+    color: #0a8a69;
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: .8px;
+}
+
+.prodb-global-trade__head strong {
+    font-size: 17px;
+}
+
+.prodb-global-trade__head > button {
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 50%;
+    background: #f1f4f5;
+    color: #394957;
+    font-size: 17px;
+    cursor: pointer;
+}
+
+.prodb-global-trade__panel > p {
+    margin: 8px 0 13px;
+    color: #71808c;
+    font-size: 9px;
+    line-height: 1.45;
+}
+
+.prodb-global-trade__fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px;
+}
+
+.prodb-global-trade__fields label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: #778590;
+    font-size: 7px;
+    font-weight: 900;
+    letter-spacing: .4px;
+}
+
+.prodb-global-trade__fields select,
+.prodb-global-trade__fields input {
+    width: 100%;
+    height: 36px;
+    padding: 0 8px;
+    border: 1px solid #d8e1e5;
+    border-radius: 5px;
+    background: #fff;
+    color: #182631;
+    font-size: 10px;
+    outline: 0;
+}
+
+.prodb-global-trade__fields select:focus,
+.prodb-global-trade__fields input:focus {
+    border-color: #0aa77d;
+    box-shadow: 0 0 0 3px rgba(10, 167, 125, .08);
+}
+
+.prodb-global-trade__market {
+    min-height: 31px;
+    margin-top: 10px;
+    padding: 7px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-radius: 6px;
+    background: #f5f9f8;
+    font-size: 9px;
+}
+
+.prodb-global-trade__market b {
+    white-space: nowrap;
+    color: #087b60;
+}
+
+.prodb-global-trade__actions {
+    display: flex;
+    gap: 7px;
+    margin-top: 10px;
+}
+
+.prodb-global-trade__actions button {
+    min-height: 36px;
+    flex: 1;
+    padding: 0 10px;
+    border: 1px solid #0aa77d;
+    border-radius: 6px;
+    background: #fff;
+    color: #08765b;
+    font-size: 9px;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.prodb-global-trade__actions button.is-buy {
+    background: #0aa77d;
+    color: #fff;
+}
+
+.prodb-global-trade__actions button:disabled {
+    opacity: .55;
+    cursor: wait;
+}
+
+@media (max-width: 700px) {
+    .prodb-analysis-iframe-card {
+        height: calc(100vh - 220px);
+        min-height: 430px;
+    }
+
+    .prodb-global-trade {
+        right: 10px;
+        bottom: 50px;
+    }
+
+    .prodb-global-trade__panel {
+        width: min(330px, calc(100vw - 20px));
+    }
+
+    .prodb-global-trade__fields {
+        grid-template-columns: 1fr;
+    }
+}

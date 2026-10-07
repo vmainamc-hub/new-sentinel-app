@@ -1,0 +1,120 @@
+/*
+ * Native Deriv Bot Builder integration inside the premium shell.
+ *
+ * AppContent already mounts the official Deriv <Main />, <BotBuilder /> and
+ * <RunPanel /> components. These overrides only make room for them beneath
+ * the custom header/navigation; they do not replace any Deriv builder logic.
+ */
+
+.prodb-premium-shell--builder .prodb-premium-content {
+    height: calc(100vh - 55px - 47px - 24px);
+    min-height: 0;
+    overflow: hidden;
+    background: var(--general-main-1, #fff);
+}
+
+.prodb-bot-builder-host {
+    position: relative;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--general-main-1, #fff);
+}
+
+.prodb-bot-builder-host .bot-dashboard {
+    position: relative;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    --bot-content-height: calc(100vh - 55px - 47px - 24px);
+}
+
+/* Main is kept because it owns Deriv's RunStrategy and RunPanel. Its own
+ * Dashboard/Charts/Tutorial tab content is not part of the premium Bot Builder
+ * page, so only that tab chrome/content is hidden. */
+.prodb-bot-builder-host .main {
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+.prodb-bot-builder-host .main__container {
+    height: 100%;
+    min-height: 0;
+}
+
+.prodb-bot-builder-host .dc-tabs--main__tabs {
+    height: 100%;
+    min-height: 0;
+}
+
+.prodb-bot-builder-host .dc-tabs--main__tabs > div:first-child,
+.prodb-bot-builder-host .dc-tabs__content--main__tabs {
+    display: none !important;
+}
+
+/* The Blockly builder is a sibling of Main in Deriv AppContent. Keep the
+ * native active builder above the intentionally hidden Main tab content. */
+.prodb-bot-builder-host .bot-builder--active {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background: var(--general-main-1, #fff);
+}
+
+.prodb-bot-builder-host .bot-builder--active #scratch_div {
+    width: 100%;
+    max-width: 100%;
+}
+
+/* Restore the official Deriv Run/Stop control. A previous premium override
+ * hid RunStrategy's toolbar__section. */
+.prodb-bot-builder-host .main__run-strategy-wrapper > .toolbar__section {
+    display: flex !important;
+}
+
+/* Position the native control below the premium header + six-item nav + ticker. */
+.prodb-bot-builder-host .main__run-strategy-wrapper {
+    position: fixed !important;
+    top: 134px !important;
+    inset-inline-end: 10px !important;
+    z-index: 96 !important;
+}
+
+/* Deriv's native desktop Run Panel defaults to top:10.4rem, which belongs to
+ * the original Deriv shell. Move it below our 126px premium shell instead. */
+.prodb-bot-builder-host .run-panel__container {
+    top: 126px !important;
+    height: calc(100vh - 126px) !important;
+    z-index: 95 !important;
+}
+
+/* Keep Blockly's toolbox/flyout and workspace interactive above shell layers. */
+.prodb-bot-builder-host .blocklyToolboxDiv,
+.prodb-bot-builder-host .blocklyFlyout,
+.prodb-bot-builder-host .blocklyWidgetDiv,
+.prodb-bot-builder-host .injectionDiv {
+    pointer-events: auto;
+}
+
+@media (max-width: 720px) {
+    .prodb-premium-shell--builder .prodb-premium-content {
+        height: calc(100vh - 55px - 47px - 24px);
+    }
+
+    .prodb-bot-builder-host .bot-dashboard {
+        --bot-content-height: calc(100vh - 55px - 47px - 24px);
+    }
+
+    .prodb-bot-builder-host .main__run-strategy-wrapper {
+        position: static !important;
+    }
+
+    .prodb-bot-builder-host .run-panel__container--mobile {
+        top: 0 !important;
+    }
+}

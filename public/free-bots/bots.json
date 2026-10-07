@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "site_id": "apex-sentinel",
+  "count": 3,
+  "bots": [
+    {
+      "id": "grffy-v1",
+      "name": "grffy v1",
+      "file": "grffy v1.xml",
+      "asset": "uploads/apex-sentinel/grffy v1.xml",
+      "description": "Apex Sentinel bundled strategy.",
+      "emoji": "APEX",
+      "priority": 1
+    },
+    {
+      "id": "speed-bot",
+      "name": "Mr Duke Speed Bot.1",
+      "file": "Mr Duke Speed Bot.1.xml",
+      "asset": "uploads/apex-sentinel/Mr Duke Speed Bot.1.xml",
+      "description": "Fast execution bot.",
+      "emoji": "APEX",
+      "priority": 2
+    },
+    {
+      "id": "wealth-generator",
+      "name": "Wealth Generator",
+      "file": "Wealth Generator.xml",
+      "asset": "uploads/apex-sentinel/Wealth Generator.xml",
+      "description": "Wealth strategy.",
+      "emoji": "APEX",
+      "priority": 3
+    }
+  ],
+  "source": "Apex Sentinel bundled strategies"
+}

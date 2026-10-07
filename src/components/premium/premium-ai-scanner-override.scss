@@ -1,0 +1,87 @@
+/*
+ * Global AI scanner hardening.
+ *
+ * premium-app.scss also contains an older `.prodb-ai-scanner` selector for a
+ * small Bulk Trader badge. Scope the real global scanner to the direct child
+ * mounted by PremiumLayout, but leave top/left positioning to the component so
+ * the scanner window can be dragged around the application workspace.
+ */
+.prodb-premium-shell > .prodb-ai-scanner {
+    position: fixed !important;
+    width: min(430px, calc(100vw - 16px)) !important;
+    height: min(500px, calc(100dvh - 86px)) !important;
+    min-height: min(330px, calc(100dvh - 86px)) !important;
+    max-height: calc(100dvh - 16px) !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    box-sizing: border-box;
+    border: 1px solid #1f2a30 !important;
+    border-radius: 10px !important;
+    background: #eef5ff !important;
+    color: #13223a !important;
+    box-shadow: 0 24px 68px rgba(8, 18, 28, .30) !important;
+    font-size: inherit !important;
+    font-weight: inherit !important;
+    /* The native Run Panel is 180/190. Keeping the scanner below it ensures
+       that the scanner belongs to the app workspace and never sits "on" the
+       Run Panel. */
+    z-index: 175 !important;
+}
+
+.prodb-premium-shell > .prodb-ai-scanner > .prodb-ai-scanner__header {
+    flex: 0 0 42px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    cursor: move;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+
+.prodb-premium-shell > .prodb-ai-scanner > .prodb-ai-scanner__header:active {
+    cursor: grabbing;
+}
+
+.prodb-ai-scanner__drag-dots {
+    margin-right: 5px;
+    color: #78848b;
+    letter-spacing: -3px;
+}
+
+.prodb-premium-shell > .prodb-ai-scanner > .prodb-ai-scanner__body {
+    display: block !important;
+    flex: 1 1 auto !important;
+    width: 100%;
+    min-height: 0 !important;
+    padding: 12px !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    box-sizing: border-box;
+    background: #eef5ff;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+/* If the user opens the native Run Panel, keep the scanner off that execution
+   surface. Closing the Run Panel returns the scanner at its saved position. */
+.prodb-premium-shell--run-open > .prodb-ai-scanner {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+@media (max-width: 768px) {
+    .prodb-premium-shell > .prodb-ai-scanner {
+        width: min(430px, calc(100vw - 16px)) !important;
+        height: min(500px, calc(100dvh - 76px)) !important;
+        min-height: min(330px, calc(100dvh - 76px)) !important;
+        max-height: calc(100dvh - 8px - env(safe-area-inset-bottom, 0px)) !important;
+        border-radius: 11px !important;
+    }
+
+    .prodb-premium-shell > .prodb-ai-scanner > .prodb-ai-scanner__body {
+        padding: 10px !important;
+    }
+}

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" role="img" aria-label="Colorful neural brain background">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#030712"/>
+      <stop offset=".48" stop-color="#071226"/>
+      <stop offset="1" stop-color="#02040a"/>
+    </linearGradient>
+    <radialGradient id="a" cx="36%" cy="42%" r="42%">
+      <stop offset="0" stop-color="#8b5cf6" stop-opacity=".95"/>
+      <stop offset=".42" stop-color="#2563eb" stop-opacity=".48"/>
+      <stop offset="1" stop-color="#2563eb" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="b" cx="66%" cy="46%" r="40%">
+      <stop offset="0" stop-color="#22d3ee" stop-opacity=".9"/>
+      <stop offset=".43" stop-color="#10b981" stop-opacity=".42"/>
+      <stop offset="1" stop-color="#10b981" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="c" cx="54%" cy="66%" r="34%">
+      <stop offset="0" stop-color="#f43f5e" stop-opacity=".78"/>
+      <stop offset=".45" stop-color="#f59e0b" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#f59e0b" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="brainStroke" x1="280" x2="1320" y1="250" y2="760">
+      <stop offset="0" stop-color="#a78bfa"/>
+      <stop offset=".25" stop-color="#60a5fa"/>
+      <stop offset=".5" stop-color="#22d3ee"/>
+      <stop offset=".72" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#fb7185"/>
+    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="35"/></filter>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#bg)"/>
+  <rect width="1600" height="1000" fill="url(#a)"/>
+  <rect width="1600" height="1000" fill="url(#b)"/>
+  <rect width="1600" height="1000" fill="url(#c)"/>
+  <g opacity=".22" filter="url(#soft)">
+    <ellipse cx="420" cy="380" rx="230" ry="170" fill="#6d28d9"/>
+    <ellipse cx="1150" cy="430" rx="250" ry="190" fill="#0891b2"/>
+    <ellipse cx="820" cy="720" rx="210" ry="130" fill="#e11d48"/>
+  </g>
+  <g fill="none" stroke="url(#brainStroke)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)">
+    <path d="M790 238c-72-82-194-83-266-18-27 24-44 55-49 90-59 8-103 45-120 91-13 35-10 74 8 108-45 34-63 89-49 137 14 47 57 84 112 94 12 72 74 124 149 122 51-1 96-26 123-66 20 15 51 18 78 7 35-14 59-49 59-87V348c0-45-17-82-45-110z"/>
+    <path d="M810 238c72-82 194-83 266-18 27 24 44 55 49 90 59 8 103 45 120 91 13 35 10 74-8 108 45 34 63 89 49 137-14 47-57 84-112 94-12 72-74 124-149 122-51-1-96-26-123-66-20 15-51 18-78 7-35-14-59-49-59-87V348c0-45 17-82 45-110z"/>
+    <path d="M544 329c49 6 87 37 101 80M471 409c61-7 116 25 139 76M425 527c48-20 104-10 140 29M458 651c44-10 88 6 114 41M617 244c-11 37 5 81 40 104M640 489c-10 38 4 80 37 106M578 737c45 4 84 30 103 68M689 367c40 12 71 46 78 88M691 625c40-4 76 13 99 44"/>
+    <path d="M1056 329c-49 6-87 37-101 80M1129 409c-61-7-116 25-139 76M1175 527c-48-20-104-10-140 29M1142 651c-44-10-88 6-114 41M983 244c11 37-5 81-40 104M960 489c10 38-4 80-37 106M1022 737c-45 4-84 30-103 68M911 367c-40 12-71 46-78 88M909 625c-40-4-76 13-99 44"/>
+  </g>
+  <g fill="#e0f2fe" filter="url(#glow)">
+    <circle cx="475" cy="310" r="8"/><circle cx="614" cy="409" r="7"/><circle cx="425" cy="527" r="8"/><circle cx="566" cy="556" r="7"/><circle cx="458" cy="651" r="8"/><circle cx="681" cy="805" r="7"/><circle cx="767" cy="455" r="7"/><circle cx="790" cy="669" r="8"/>
+    <circle cx="1125" cy="310" r="8"/><circle cx="986" cy="409" r="7"/><circle cx="1175" cy="527" r="8"/><circle cx="1034" cy="556" r="7"/><circle cx="1142" cy="651" r="8"/><circle cx="919" cy="805" r="7"/><circle cx="833" cy="455" r="7"/><circle cx="810" cy="669" r="8"/>
+  </g>
+  <g opacity=".42" fill="#93c5fd">
+    <circle cx="180" cy="180" r="2"/><circle cx="240" cy="760" r="2"/><circle cx="1370" cy="170" r="2"/><circle cx="1440" cy="730" r="2"/><circle cx="1230" cy="850" r="2"/><circle cx="330" cy="890" r="2"/>
+  </g>
+</svg>

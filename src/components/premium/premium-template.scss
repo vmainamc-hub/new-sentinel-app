@@ -1,0 +1,207 @@
+.prodb-brand {
+    min-width: 0;
+}
+
+.prodb-brand__symbol {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    color: #ffffff;
+    background:
+        radial-gradient(circle at 28% 22%, rgba(255,255,255,.35), transparent 28%),
+        linear-gradient(135deg, #7c3aed 0%, #2563eb 34%, #06b6d4 66%, #10b981 100%);
+    box-shadow: 0 8px 24px rgba(37, 99, 235, .22), inset 0 0 0 1px rgba(255,255,255,.22);
+    font-size: 13px;
+    font-weight: 950;
+    letter-spacing: .7px;
+    text-transform: uppercase;
+}
+
+.prodb-brand__copy strong {
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+}
+
+.prodb-brand--dark .prodb-brand__symbol {
+    box-shadow: 0 0 30px rgba(34, 211, 238, .24), inset 0 0 0 1px rgba(255,255,255,.22);
+}
+
+.prodb-brand--dark .prodb-brand__copy strong { color: #f8fafc; }
+
+.prodb-hero h1 { font-size: 0; }
+.prodb-hero h1::before,
+.prodb-hero h1::after {
+    font-size: 32px;
+    line-height: 1.08;
+    font-weight: 900;
+    letter-spacing: -1.15px;
+}
+.prodb-hero h1::before { content: 'Welcome to '; color: #f5f8f8; }
+.prodb-hero h1::after { content: var(--template-domain, 'website'); color: #21dca3; }
+
+.prodb-btn--outline-dark,
+.prodb-btn--green { font-size: 0; }
+.prodb-btn--outline-dark::after { content: 'Login'; font-size: 10px; }
+.prodb-btn--green::after { content: 'Create Free Account'; font-size: 10px; }
+
+.prodb-hero__primary span,
+.prodb-hero__secondary span { font-size: 0; }
+.prodb-hero__primary span::after { content: 'Login'; font-size: 11px; }
+.prodb-hero__secondary span::after { content: 'Create Free Account'; font-size: 11px; }
+
+.prodb-landing__footer { font-size: 0; }
+.prodb-landing__footer::after {
+    content: '© 2026 ' var(--template-domain, 'website') '. All rights reserved.';
+    font-size: 6.5px;
+}
+
+.prodb-help-panel__welcome h2 { font-size: 0; }
+.prodb-help-panel__welcome h2::after {
+    content: 'Welcome to ' var(--template-domain, 'website');
+    font-size: 18px;
+}
+
+.prodb-loader {
+    background:
+        radial-gradient(circle at 50% 48%, rgba(9, 20, 44, .05), rgba(1, 4, 12, .36) 62%, rgba(1, 3, 8, .72) 100%),
+        url('../../assets/prodb-premium/domain-brain.svg') center / cover no-repeat;
+}
+.prodb-loader__veil {
+    background: linear-gradient(180deg, rgba(1,4,13,.12), rgba(1,4,13,.46));
+    backdrop-filter: saturate(1.2) contrast(1.04);
+}
+.prodb-loader__content {
+    width: min(520px, 92vw);
+    padding: 32px 26px;
+    border: 1px solid rgba(148, 210, 255, .16);
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgba(3, 10, 26, .52), rgba(3, 8, 20, .26));
+    box-shadow: 0 24px 70px rgba(0,0,0,.35), inset 0 0 38px rgba(74, 222, 128, .035);
+    backdrop-filter: blur(7px);
+}
+.prodb-loader__content h1 {
+    max-width: 92vw;
+    overflow-wrap: anywhere;
+    font-size: clamp(24px, 4vw, 38px);
+    color: #f8fbff;
+    text-shadow: 0 0 28px rgba(56, 189, 248, .34);
+}
+.prodb-loader__content p { color: #b8c7d9; }
+
+.prodb-nav {
+    justify-content: flex-start;
+    flex-direction: row;
+    padding-left: 0;
+    padding-right: 0;
+}
+.prodb-nav > button {
+    flex: 0 0 148px;
+    min-width: 118px;
+    justify-content: center;
+}
+
+.prodb-premium-shell--builder .prodb-premium-content {
+    height: calc(100vh - 55px - 47px - 24px - 39px);
+    overflow: hidden;
+}
+.prodb-bot-builder-host,
+.prodb-bot-builder-host .bot-dashboard,
+.prodb-bot-builder-host .main,
+.prodb-bot-builder-host .main__container {
+    height: 100%;
+    min-height: 0;
+}
+.prodb-bot-builder-host .main {
+    padding: 0;
+    overflow: visible;
+}
+.prodb-bot-builder-host .main__run-strategy-wrapper {
+    inset-inline-end: 0;
+    top: 0;
+    z-index: 95;
+}
+.prodb-bot-builder-host .main__run-strategy-wrapper > .toolbar__section {
+    display: none;
+}
+.prodb-bot-builder-host .run-panel__container {
+    z-index: 94;
+}
+
+.prodb-launchers--six {
+    max-width: 760px;
+    margin-inline: auto;
+}
+
+.prodb-trade-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-height: 70px;
+    margin-top: 32px;
+    border-radius: 5px;
+    overflow: hidden;
+    box-shadow: 0 7px 20px rgba(0,0,0,.14);
+}
+.prodb-trade-pair > div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: #fff;
+    background: #49a7a4;
+    font-size: 16px;
+    font-weight: 900;
+}
+.prodb-trade-pair > div:last-child { background: #ef4e43; }
+.prodb-trade-pair strong { font-size: 13px; }
+.prodb-trade-pair small { font-size: 8px; opacity: .88; }
+
+.prodb-run:disabled { cursor: default; opacity: .82; }
+.prodb-run.is-enabled { cursor: pointer; opacity: 1; }
+
+@media (max-width: 900px) {
+    .prodb-dashboard-page { display: block; overflow: auto; }
+    .prodb-dashboard-candles { inset: 0; }
+    .prodb-dashboard-main { padding: 18px 14px 28px; }
+    .prodb-help-panel { border-left: 0; border-top: 1px solid #ecf0f3; padding-bottom: 64px; }
+    .prodb-launchers--six { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .prodb-launchers--six button { width: 100%; }
+
+    .prodb-form-row,
+    .prodb-form-row--three { grid-template-columns: 1fr; }
+    .prodb-bulk-page { padding: 14px 12px 76px; }
+    .prodb-digit-row { grid-template-columns: repeat(5, 1fr); row-gap: 15px; padding-top: 92px; }
+    .prodb-sequence { overflow-x: auto; justify-content: flex-start; padding-bottom: 5px; }
+}
+
+@media (max-width: 720px) {
+    .prodb-brand__copy strong { max-width: 150px; }
+    .prodb-hero h1::before,
+    .prodb-hero h1::after { font-size: 26px; }
+    .prodb-btn--green::after { font-size: 9px; }
+
+    .prodb-nav {
+        justify-content: flex-start;
+        flex-direction: row;
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+    }
+    .prodb-nav > button { flex: 0 0 auto; min-width: 116px; padding-inline: 12px; }
+
+    .prodb-launchers--six { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .prodb-digit-row span { width: 43px; height: 43px; }
+    .prodb-current-tick strong { font-size: 34px; }
+    .prodb-ai-scanner { top: 27px; }
+
+    .prodb-premium-shell--builder .prodb-premium-content {
+        height: calc(100vh - 55px - 47px - 24px - 39px);
+        overflow: hidden;
+    }
+    .prodb-bot-builder-host .main__run-strategy-wrapper { inset-inline-end: 0; }
+}

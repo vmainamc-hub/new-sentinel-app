@@ -1,0 +1,23 @@
+[build]
+  command = "npm run generate:brand-css && npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[[redirects]]
+  from = "/api/oauth/token"
+  to = "/.netlify/functions/oauth-token"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/callback"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

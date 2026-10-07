@@ -1,0 +1,448 @@
+/*
+ * Premium shell layering and mobile safety.
+ *
+ * The Deriv AppContent stays mounted so Blockly and the native Run Panel keep
+ * their state while users move between premium sections. When the builder is
+ * not the visible page, collapse its visual workspace to a zero-size host but
+ * deliberately keep the native Run Panel and its dialogs interactive.
+ */
+
+.prodb-premium-shell {
+    min-width: 0;
+    max-width: 100vw;
+    overflow-x: hidden;
+}
+
+.prodb-premium-shell .prodb-bot-builder-host.is-hidden {
+    display: block !important;
+    position: fixed !important;
+    inset: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: transparent !important;
+    pointer-events: none;
+    z-index: 94;
+}
+
+.prodb-premium-shell .prodb-bot-builder-host.is-hidden .bot-dashboard {
+    position: static !important;
+    width: 0 !important;
+    height: 0 !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: transparent !important;
+    pointer-events: none;
+}
+
+.prodb-premium-shell .prodb-bot-builder-host.is-hidden .main,
+.prodb-premium-shell .prodb-bot-builder-host.is-hidden .bot-builder,
+.prodb-premium-shell .prodb-bot-builder-host.is-hidden .bot-builder--active,
+.prodb-premium-shell .prodb-bot-builder-host.is-hidden .load-strategy__container {
+    display: none !important;
+}
+
+.prodb-premium-shell .prodb-bot-builder-host.is-hidden .main__run-strategy-wrapper {
+    position: static !important;
+    width: 0 !important;
+    height: 0 !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    pointer-events: none;
+}
+
+.prodb-premium-shell .prodb-bot-builder-host.is-hidden .main__run-strategy-wrapper > .toolbar__section {
+    display: none !important;
+}
+
+.prodb-premium-shell .prodb-bot-builder-host .dc-drawer.run-panel,
+.prodb-premium-shell .prodb-bot-builder-host .controls__section,
+.prodb-premium-shell .prodb-bot-builder-host .dc-dialog,
+.prodb-premium-shell .prodb-bot-builder-host .dc-modal,
+.prodb-premium-shell .prodb-bot-builder-host .statistics__modal {
+    pointer-events: auto;
+}
+
+/* Desktop Run Panel: leave the native 16px edge handle reachable on every
+ * section and stop the open panel above the premium status bar. */
+.prodb-premium-shell:not(.prodb-premium-shell--builder) .prodb-bot-builder-host .run-panel__container {
+    top: 126px !important;
+    height: calc(100dvh - 126px - 39px) !important;
+    z-index: 130 !important;
+}
+
+.prodb-premium-shell--builder .prodb-bot-builder-host .run-panel__container {
+    height: calc(100dvh - 126px) !important;
+}
+
+/* The account selector is portalled to document.body. It therefore cannot be
+ * clipped by header/content overflow, transforms, the Run Panel, or the
+ * bottom trading dock. */
+.prodb-api-account__menu--portal {
+    position: fixed !important;
+    top: auto;
+    right: auto !important;
+    bottom: auto;
+    z-index: 4000 !important;
+    box-sizing: border-box;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.prodb-api-account__menu--portal * {
+    box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+    :root {
+        --prodb-mobile-header-stack: 123px;
+        --prodb-mobile-run-controls: 60px;
+        --prodb-mobile-run-handle: 44px;
+        --prodb-mobile-safe-bottom: env(safe-area-inset-bottom, 0px);
+        --prodb-mobile-trade-dock: calc(
+            var(--prodb-mobile-run-controls) + var(--prodb-mobile-run-handle) + var(--prodb-mobile-safe-bottom)
+        );
+    }
+
+    .prodb-premium-shell {
+        width: 100%;
+        min-height: 100dvh;
+        max-width: 100vw;
+        overflow-x: hidden;
+    }
+
+    .prodb-app-header {
+        min-width: 0;
+        padding-inline: 9px;
+    }
+
+    .prodb-app-header__brand {
+        min-width: 0;
+        flex: 1 1 auto;
+        overflow: hidden;
+    }
+
+    .prodb-app-header .prodb-brand {
+        min-width: 0;
+    }
+
+    .prodb-api-account {
+        flex: 0 0 auto;
+        z-index: auto;
+    }
+
+    .prodb-api-account__trigger {
+        min-width: 0;
+        height: 44px;
+        padding-inline: 4px;
+    }
+
+    .prodb-api-account__current strong {
+        max-width: 94px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .prodb-api-account__menu--portal {
+        border-radius: 10px;
+        box-shadow: 0 18px 46px rgba(15, 31, 43, .24);
+    }
+
+    .prodb-api-account__choice {
+        min-height: 56px;
+        grid-template-columns: 30px minmax(0, 1fr) auto 14px;
+        gap: 7px;
+    }
+
+    .prodb-api-account__choice > b {
+        max-width: 94px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .prodb-nav {
+        max-width: 100vw;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .prodb-nav button {
+        min-height: 47px;
+        touch-action: manipulation;
+    }
+
+    /* The mobile trading dock is fixed. Reserve real scroll space for it so
+     * the last field, button, chart, or card on every page can be scrolled
+     * fully above the handle instead of sitting underneath it. */
+    .prodb-premium-content,
+    .prodb-premium-shell--builder .prodb-premium-content {
+        width: 100%;
+        max-width: 100vw;
+        height: calc(100dvh - var(--prodb-mobile-header-stack)) !important;
+        min-height: 0;
+        padding-bottom: calc(var(--prodb-mobile-trade-dock) + 10px);
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+        scroll-padding-bottom: calc(var(--prodb-mobile-trade-dock) + 16px);
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* The desktop status strip duplicates the native mobile trade controls and
+     * was one of the layers covering page content. Desktop keeps it unchanged. */
+    .prodb-bottom-bar {
+        display: none !important;
+    }
+
+    .prodb-bot-builder-host.is-active {
+        min-width: 0;
+        max-width: 100%;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .prodb-bot-builder-host.is-active .bot-dashboard {
+        --bot-content-height: 100%;
+        height: 100%;
+        min-height: 0;
+    }
+
+    /* Mobile Run Panel = a bottom sheet. Closed state exposes only a 44px
+     * handle above the 60px native run controls. Open state stays below the
+     * premium header and scrolls internally. */
+    .prodb-premium-shell .prodb-bot-builder-host .run-panel__container--mobile {
+        position: static !important;
+        width: 0 !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        pointer-events: none;
+    }
+
+    .prodb-premium-shell .prodb-bot-builder-host .dc-drawer.run-panel {
+        position: fixed !important;
+        top: auto !important;
+        right: 0 !important;
+        bottom: calc(var(--prodb-mobile-run-controls) + var(--prodb-mobile-safe-bottom)) !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: min(72dvh, calc(100dvh - var(--prodb-mobile-header-stack) - var(--prodb-mobile-run-controls) - 8px)) !important;
+        max-height: calc(100dvh - var(--prodb-mobile-header-stack) - var(--prodb-mobile-run-controls) - 8px) !important;
+        background: var(--general-main-1, #fff);
+        box-shadow: 0 -12px 34px rgba(17, 31, 43, .16);
+        transform: translateY(calc(100% - var(--prodb-mobile-run-handle))) !important;
+        transition: transform .24s ease !important;
+        z-index: 180 !important;
+        pointer-events: auto;
+        will-change: transform;
+    }
+
+    .prodb-premium-shell .prodb-bot-builder-host .dc-drawer.run-panel.dc-drawer--open {
+        transform: translateY(0) !important;
+    }
+
+    .prodb-premium-shell .prodb-bot-builder-host .dc-drawer.run-panel .dc-drawer__toggle {
+        position: relative !important;
+        width: 100% !important;
+        height: var(--prodb-mobile-run-handle) !important;
+        min-height: var(--prodb-mobile-run-handle) !important;
+        flex: 0 0 var(--prodb-mobile-run-handle);
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-top: 1px solid var(--general-section-1, #e8ecef);
+        border-bottom: 1px solid var(--general-section-1, #e8ecef);
+        background: var(--general-main-1, #fff);
+        cursor: pointer;
+        touch-action: manipulation;
+    }
+
+    .prodb-premium-shell .prodb-bot-builder-host .dc-drawer.run-panel .dc-drawer__toggle::before {
+        content: 'Run panel';
+        position: absolute;
+        left: 14px;
+        color: var(--text-less-prominent, #6b7785);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: .2px;
+    }
+
+    .prodb-premium-shell .prodb-bot-builder-host .dc-drawer.run-panel .dc-drawer__toggle-icon {
+        width: 24px;
+        height: 24px;
+    }
+
+    .prodb-premium-shell .prodb-bot-builder-host .dc-drawer.run-panel .dc-drawer__container {
+        width: 100% !important;
+        height: calc(100% - var(--prodb-mobile-run-handle)) !important;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .prodb-premium-shell .prodb-bot-builder-host .run-panel__content,
+    .prodb-premium-shell .prodb-bot-builder-host .dc-drawer__content.run-panel__content {
+        min-height: 0;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .prodb-premium-shell .prodb-bot-builder-host .run-panel__stat--mobile {
+        position: static !important;
+        width: 100% !important;
+        flex: 0 0 auto;
+        padding-bottom: 0 !important;
+    }
+
+    .prodb-premium-shell .prodb-bot-builder-host .run-panel-tab__content--mobile {
+        position: relative !important;
+        inset: auto !important;
+        bottom: auto !important;
+        width: 100% !important;
+        max-width: 100%;
+    }
+
+    .prodb-premium-shell .prodb-bot-builder-host .controls__section {
+        position: fixed !important;
+        right: 0;
+        bottom: 0 !important;
+        left: 0;
+        width: 100% !important;
+        height: calc(var(--prodb-mobile-run-controls) + var(--prodb-mobile-safe-bottom));
+        min-height: var(--prodb-mobile-run-controls);
+        padding: 0 0 var(--prodb-mobile-safe-bottom) !important;
+        background: var(--general-main-1, #fff);
+        border-top: 1px solid var(--general-section-1, #e8ecef);
+        box-shadow: 0 -4px 16px rgba(17, 31, 43, .08);
+        z-index: 181 !important;
+        pointer-events: auto;
+    }
+
+    .prodb-premium-shell .prodb-bot-builder-host .controls__buttons {
+        width: 100% !important;
+        height: var(--prodb-mobile-run-controls) !important;
+        min-height: var(--prodb-mobile-run-controls) !important;
+        max-width: 620px;
+        margin: 0 auto;
+        padding: 8px 12px !important;
+    }
+
+    /* Floating helpers sit above the collapsed dock, and disappear while the
+     * Run Panel is expanded so they cannot block its tabs or Reset control. */
+    .prodb-global-trade {
+        right: 10px;
+        bottom: calc(var(--prodb-mobile-trade-dock) + 10px) !important;
+        max-width: calc(100vw - 20px);
+    }
+
+    .prodb-ai-button {
+        bottom: calc(var(--prodb-mobile-trade-dock) + 14px);
+    }
+
+    .prodb-premium-shell--run-open .prodb-global-trade,
+    .prodb-premium-shell--run-open .prodb-ai-button {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+    }
+
+    /* Common premium page safety: no grid/card can force the viewport wider,
+     * and all primary form controls remain reachable and usable on touch. */
+    .prodb-dashboard-page,
+    .prodb-dashboard-main,
+    .prodb-free-bots,
+    .prodb-bulk-page,
+    .prodb-live-page,
+    .prodb-import-page,
+    .prodb-iframe-page,
+    .prodb-live-grid,
+    .prodb-import-grid,
+    .prodb-live-card,
+    .prodb-import-card,
+    .prodb-chart-card,
+    .prodb-analysis-iframe-card {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .prodb-live-actions,
+    .prodb-import-actions,
+    .prodb-chart-stats,
+    .prodb-analysis-tool-tabs {
+        max-width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .prodb-analysis-tool-tabs {
+        width: 100%;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .prodb-analysis-tool-tabs button,
+    .prodb-live-actions button,
+    .prodb-import-actions button,
+    .prodb-copy-execute,
+    .prodb-bulk-execute {
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+
+    .prodb-live-actions button,
+    .prodb-import-actions button {
+        flex: 1 1 120px;
+    }
+
+    .prodb-premium-content input,
+    .prodb-premium-content select,
+    .prodb-premium-content textarea {
+        max-width: 100%;
+        font-size: 16px;
+    }
+
+    .prodb-chart-canvas,
+    .prodb-analysis-iframe,
+    .prodb-iframe-page iframe {
+        max-width: 100%;
+    }
+
+    .prodb-copy-accounts label,
+    .prodb-position-list article,
+    .prodb-result-list article {
+        min-width: 0;
+    }
+}
+
+@media (max-width: 420px) {
+    .prodb-api-account__current strong {
+        max-width: 78px;
+        font-size: 11px;
+    }
+
+    .prodb-api-account-icon,
+    .prodb-api-account-icon > svg {
+        width: 26px;
+        height: 26px;
+    }
+
+    .prodb-app-header {
+        padding-inline: 7px;
+    }
+
+    .prodb-live-page,
+    .prodb-import-page,
+    .prodb-free-bots,
+    .prodb-bulk-page {
+        padding-inline: 10px;
+    }
+}

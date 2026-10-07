@@ -1,0 +1,81 @@
+.prodb-premium-shell {
+    .prodb-app-header {
+        background: var(--site-header-background, #fff);
+    }
+
+    .prodb-nav {
+        background: var(--site-nav-background, #151d26);
+    }
+
+    .prodb-nav button {
+        color: var(--site-nav-text, #f3f6f8);
+        background: var(--site-nav-background, #151d26);
+    }
+
+    .prodb-nav button svg {
+        color: var(--site-secondary, #19cba3);
+    }
+
+    .prodb-nav button.is-active {
+        color: #fff;
+        background: var(--site-primary, #059669);
+    }
+
+    .prodb-nav button.is-active svg {
+        color: #fff;
+    }
+
+    .prodb-app-header__actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .prodb-theme-toggle {
+        width: 38px;
+        height: 38px;
+        display: grid;
+        place-items: center;
+        flex: 0 0 38px;
+        border: 1px solid #d8e0e6;
+        border-radius: 999px;
+        background: #f7fafb;
+        color: #22313d;
+        cursor: pointer;
+        transition:
+            background .18s ease,
+            border-color .18s ease,
+            color .18s ease;
+    }
+
+    .prodb-theme-toggle:hover {
+        border-color: var(--site-secondary, #19cba3);
+        background: #edf8f6;
+        color: var(--site-primary, #059669);
+    }
+
+    .prodb-theme-toggle svg {
+        width: 18px;
+        height: 18px;
+    }
+}
+
+.theme--dark .prodb-premium-shell {
+    .prodb-app-header {
+        background: #101820;
+        border-bottom-color: #263541;
+    }
+
+    .prodb-theme-toggle {
+        border-color: #334653;
+        background: #18242f;
+        color: #eaf4f2;
+    }
+
+    .prodb-theme-toggle:hover {
+        border-color: var(--site-secondary, #19cba3);
+        background: #20313a;
+        color: var(--site-secondary, #19cba3);
+    }
+}

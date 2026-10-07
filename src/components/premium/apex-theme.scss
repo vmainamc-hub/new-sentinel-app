@@ -1,0 +1,188 @@
+// Apex Sentinel dark navy + gold skin. Loaded last so it wins over the base premium styles.
+$bg: #050a14;
+$panel: #0a1426;
+$panel-2: #0e1a31;
+$line: #16233d;
+$text: #e8eefc;
+$muted: #8fa1c2;
+$gold: #e8b84a;
+$gold-ink: #1a1203;
+
+.prodb-premium-shell {
+    background: $bg;
+    color: $text;
+
+    .prodb-app-header {
+        background: #050a14;
+        border-bottom: 1px solid $line;
+    }
+
+    .prodb-app-header__brand strong,
+    .prodb-brand__copy strong { color: #fff; }
+    .prodb-brand__copy small { color: $muted; letter-spacing: .28em; }
+
+    .prodb-theme-toggle {
+        background: $panel-2;
+        border-color: $line;
+        color: $gold;
+        &:hover { background: #13223f; color: $gold; border-color: $gold; }
+    }
+
+    // Navigation as separate rounded pills with a gold active state.
+    .prodb-nav {
+        display: flex;
+        gap: 10px;
+        padding: 10px 24px;
+        background: #07101f;
+        border-bottom: 1px solid $line;
+        overflow-x: auto;
+        scrollbar-width: none;
+        &::-webkit-scrollbar { display: none; }
+
+        button {
+            flex: 0 0 auto;
+            border: 1px solid $line;
+            border-radius: 12px;
+            background: $panel-2;
+            color: $text;
+            font-weight: 700;
+            border-right: 1px solid $line;
+            svg { color: $text; }
+            &:hover { border-color: $gold; }
+            &.is-active {
+                background: $gold;
+                border-color: $gold;
+                color: $gold-ink;
+                svg { color: $gold-ink; }
+            }
+        }
+    }
+
+    .prodb-ticker, .prodb-ticker--light {
+        background: #050a14;
+        border-bottom: 1px solid $line;
+        color: $text;
+    }
+
+    .prodb-premium-content,
+    .prodb-dashboard-page,
+    .prodb-free-bots,
+    .prodb-live-page,
+    .auto-trades-page,
+    .prodb-calculator-page {
+        background: $bg;
+        color: $text;
+    }
+
+    h1, h2, h3, h4, h5, strong, label, th { color: #f3f6fb; }
+    p, small, span, li, td { color: inherit; }
+    .prodb-muted, .prodb-live-card p, .prodb-help-card p { color: $muted; }
+
+    .prodb-live-card,
+    .prodb-calculator-card,
+    .prodb-calculator-plan,
+    .prodb-api-note,
+    .prodb-analysis-tool-tabs,
+    .auto-trades-card,
+    .launcher-icon,
+    .prodb-help-panel,
+    .prodb-help-panel__welcome,
+    .prodb-help-card,
+    .prodb-stat-card,
+    .manual-trading-toolbar__status,
+    .manual-trading-ticket__message {
+        background: $panel;
+        border: 1px solid $line;
+        color: $text;
+    }
+
+    .prodb-dashboard-page .launcher-icon,
+    .prodb-dashboard-page [class*='launcher'] { background: $panel-2; border-color: $line; color: $text; }
+
+    input, select, textarea,
+    .auto-trades-strategy-selector__select,
+    .auto-trades-config__select,
+    .auto-trades-martingale-selector__select,
+    .auto-trades-config__prediction-controls,
+    .auto-trades-strategy-btn,
+    .auto-trades-market__badge,
+    .auto-trades-markets__selected-count {
+        background: #0b1830;
+        border-color: $line;
+        color: $text;
+    }
+    ::placeholder { color: #5f7396; }
+
+    .prodb-bottom-bar,
+    .prodb-execution,
+    .prodb-switch,
+    .prodb-bot-state {
+        background: #07101f;
+        border-color: $line;
+        color: $text;
+    }
+    .prodb-bottom-bar { border-top: 1px solid $line; }
+
+    // Gold call-to-action buttons.
+    .prodb-live-card button,
+    .prodb-free-bots button {
+        border-radius: 10px;
+    }
+
+    // Dashboard stat strip and launcher tiles.
+    .prodb-dashboard-api-strip > div {
+        background: $panel;
+        border: 1px solid $line;
+        color: $text;
+        small, span { color: $muted; }
+        strong { color: #fff; }
+    }
+    .prodb-launchers button {
+        background: $panel-2;
+        border: 1px solid $line;
+        color: $text;
+        font-weight: 700;
+        &:hover { border-color: $gold; }
+    }
+    .prodb-dashboard-main { background: radial-gradient(1200px 500px at 70% 100%, rgba(232, 184, 74, .08), transparent 60%), $bg; }
+
+    // Free Bots cards.
+    .prodb-bot-grid { background: transparent; }
+    .prodb-bot-card {
+        background: linear-gradient(180deg, #0b1a33, #08111f);
+        border: 1px solid #1b3a66;
+        border-top: 3px solid #2a7fd1;
+        border-radius: 14px;
+        color: $text;
+        small { color: $muted; letter-spacing: .12em; text-transform: lowercase; }
+        h2 { color: #fff; }
+        p, i { color: $muted; }
+        .prodb-bot-card__top span {
+            background: #0f5fa8;
+            color: #fff;
+            border-radius: 999px;
+            padding: 2px 10px;
+            font-size: 11px;
+            font-weight: 800;
+        }
+        .prodb-bot-card__top button {
+            background: transparent;
+            border: 1px solid #1b3a66;
+            color: $gold;
+            border-radius: 8px;
+        }
+    }
+    .prodb-load-bot {
+        background: #1167b1;
+        color: #fff;
+        border: 0;
+        border-radius: 6px;
+        font-weight: 800;
+        letter-spacing: .04em;
+        &:hover { background: #1a7cd0; }
+    }
+
+    // The heading text is already rendered by React; drop the duplicate generated by the base template.
+    .prodb-help-panel__welcome h2 { font-size: 20px; }
+    .prodb-help-panel__welcome h2::after { content: none; }
+}

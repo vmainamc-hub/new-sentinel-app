@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "site_id": "apex-sentinel",
+  "navigation": [
+    "dashboard",
+    "bot_builder",
+    "free_bots",
+    "manual_trading",
+    "auto_trader",
+    "tradingview",
+    "copy_trading",
+    "calculator",
+    "analysis_tools"
+  ],
+  "colors": {
+    "primary": "#e8b84a",
+    "secondary": "#e8b84a",
+    "nav_background": "#07101f",
+    "nav_text": "#f3f6fb",
+    "header_background": "#050a14"
+  }
+}

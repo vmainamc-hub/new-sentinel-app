@@ -1,0 +1,18 @@
+import type { SVGProps } from 'react';
+const Icon = ({ children, ...props }: SVGProps<SVGSVGElement>) => <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.9' strokeLinecap='round' strokeLinejoin='round' {...props}>{children}</svg>;
+export const PulseIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path d='M3 12h4l2-5 4 10 2-5h6' /></Icon>;
+export const BoltIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path d='M13 2 4.8 13h6.1L10 22l8.2-11H12z' /></Icon>;
+export const ChevronIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path d='m9 18 6-6-6-6' /></Icon>;
+export const HomeIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path d='m3 10 9-7 9 7' /><path d='M5 9v11h14V9' /><path d='M9 20v-6h6v6' /></Icon>;
+export const GearIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><circle cx='12' cy='12' r='3' /><path d='M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1' /><circle cx='12' cy='12' r='7' /></Icon>;
+export const RobotIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><rect x='5' y='8' width='14' height='11' rx='2' /><path d='M12 4v4' /><circle cx='12' cy='3' r='1' /><path d='M8.5 12h.01M15.5 12h.01M9 16h6M3 12v4M21 12v4' /></Icon>;
+export const GridIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><rect x='3' y='3' width='7' height='7' rx='1' /><rect x='14' y='3' width='7' height='7' rx='1' /><rect x='3' y='14' width='7' height='7' rx='1' /><rect x='14' y='14' width='7' height='7' rx='1' /></Icon>;
+export const MonitorIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><rect x='3' y='4' width='18' height='13' rx='2' /><path d='M8 21h8M12 17v4' /></Icon>;
+export const CopyIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><rect x='4' y='6' width='16' height='14' rx='2' /><path d='M8 6V4h8v2M8 11h8M8 15h5' /></Icon>;
+export const ChartIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path d='M4 20V9M10 20V4M16 20v-7M22 20H2' /></Icon>;
+export const SearchIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><circle cx='11' cy='11' r='7' /><path d='m20 20-4-4' /></Icon>;
+export const CalculatorIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><rect x='5' y='2.5' width='14' height='19' rx='2' /><path d='M8 6h8v3H8zM8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01M16 17h.01' /></Icon>;
+export const MoonIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path d='M21 14.2A7.6 7.6 0 0 1 9.8 3 8.8 8.8 0 1 0 21 14.2Z' /></Icon>;
+export const SunIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><circle cx='12' cy='12' r='4' /><path d='M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4' /></Icon>;
+export const DownloadIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path d='M12 3v12M7 10l5 5 5-5M5 21h14' /></Icon>;
+export const PlayIcon = (p: SVGProps<SVGSVGElement>) => <svg viewBox='0 0 24 24' fill='currentColor' {...p}><path d='M7 4.7v14.6c0 .8.9 1.3 1.6.9l11-7.3a1.1 1.1 0 0 0 0-1.8l-11-7.3A1 1 0 0 0 7 4.7Z' /></svg>;
