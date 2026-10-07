@@ -1,24 +1,24 @@
 {
     "brand_name": "Apex Sentinel",
-    "brand_domain": "peppy-starship-b80f54.netlify.app",
+    "brand_domain": "newapexsentinel.netlify.app",
     "brand_hostname": {
-        "staging": "peppy-starship-b80f54.netlify.app",
-        "production": "peppy-starship-b80f54.netlify.app"
+        "staging": "newapexsentinel.netlify.app",
+        "production": "newapexsentinel.netlify.app"
     },
-    "domain_name": "peppy-starship-b80f54.netlify.app",
+    "domain_name": "newapexsentinel.netlify.app",
     "sites": {
         "default_site": "apex-sentinel",
         "entries": [
             {
                 "id": "apex-sentinel",
                 "hosts": [
-                    "peppy-starship-b80f54.netlify.app",
+                    "newapexsentinel.netlify.app",
                     "localhost"
                 ],
                 "display_domain": "Apex Sentinel",
-                "website_url": "https://peppy-starship-b80f54.netlify.app",
-                "redirect_uri": "https://peppy-starship-b80f54.netlify.app/callback",
-                "client_id": "YOUR_DERIV_OAUTH_CLIENT_ID",
+                "website_url": "https://newapexsentinel.netlify.app",
+                "redirect_uri": "https://newapexsentinel.netlify.app/callback",
+                "client_id": "34BIr72thLXMJHaL9PQxN",
                 "scopes": [
                     "trade",
                     "application_read"
@@ -120,10 +120,10 @@
         },
         "hostname": {
             "production": {
-                "com": "peppy-starship-b80f54.netlify.app"
+                "com": "newapexsentinel.netlify.app"
             },
             "staging": {
-                "com": "peppy-starship-b80f54.netlify.app"
+                "com": "newapexsentinel.netlify.app"
             }
         },
         "auth2_url": {
