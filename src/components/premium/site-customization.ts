@@ -29,6 +29,8 @@ export const NAVIGATION_CATALOG: Array<{ id: PremiumSection; label: string; requ
     { id: 'copy_trading', label: 'Copy Trading' },
     { id: 'analysis_tools', label: 'Analysis Tool' },
     { id: 'calculator', label: 'Calculator' },
+    { id: 'ai_bots', label: 'AI Bots' },
+    { id: 'digits_analysis', label: 'Digits Analysis' },
 ];
 
 export const DEFAULT_NAVIGATION: PremiumSection[] = [
@@ -36,11 +38,13 @@ export const DEFAULT_NAVIGATION: PremiumSection[] = [
     'bot_builder',
     'free_bots',
     'manual_trading',
+    'ai_bots',
     'auto_trader',
     'tradingview',
     'copy_trading',
     'calculator',
     'analysis_tools',
+    'digits_analysis',
 ];
 
 const CATALOG_ID_LIST = NAVIGATION_CATALOG.map(item => item.id);

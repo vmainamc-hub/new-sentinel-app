@@ -6,11 +6,13 @@
     "bot_builder",
     "free_bots",
     "manual_trading",
+    "ai_bots",
     "auto_trader",
     "tradingview",
     "copy_trading",
     "calculator",
-    "analysis_tools"
+    "analysis_tools",
+    "digits_analysis"
   ],
   "colors": {
     "primary": "#e8b84a",

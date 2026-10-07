@@ -284,9 +284,9 @@ export const SourceAnalysisToolsPage = () => <div className='prodb-import-page p
 export const DTraderPage = () => <div className='prodb-import-page prodb-iframe-page'><PageHeader eyebrow='IMPORTED · DTRADER' title='DTrader Charts' subtitle='The source DTrader page is preserved with the Deriv chart workspace inside the premium navigation.' /><iframe src='https://charts.deriv.com/deriv' title='Deriv DTrader charts' allow='fullscreen' /></div>;
 
 export const ImportedBestBotsSource = [
-    { tag: 'APEX', title: 'grffy v1', file: 'grffy v1.xml', description: 'Apex Sentinel bundled strategy, ready for direct Bot Builder loading.' },
-    { tag: 'APEX', title: 'Mr Duke Speed Bot.1', file: 'Mr Duke Speed Bot.1.xml', description: 'Fast execution bot bundled with Apex Sentinel.' },
-    { tag: 'APEX', title: 'Wealth Generator', file: 'Wealth Generator.xml', description: 'Strategy bundled with Apex Sentinel for direct Bot Builder loading.' },
+    { tag: 'APEX', title: 'grffy v1', file: 'grffy-v1.xml', description: 'Apex Sentinel bundled strategy, ready for direct Bot Builder loading.' },
+    { tag: 'APEX', title: 'Mr Duke Speed Bot.1', file: 'mr-duke-speed-bot-1.xml', description: 'Fast execution bot bundled with Apex Sentinel.' },
+    { tag: 'APEX', title: 'Wealth Generator', file: 'wealth-generator.xml', description: 'Strategy bundled with Apex Sentinel for direct Bot Builder loading.' },
 ];
 
 export const loadSourceBot = async (file: string, openBotBuilder: () => void) => {

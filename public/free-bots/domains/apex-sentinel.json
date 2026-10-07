@@ -1,34 +1,304 @@
 {
   "version": 1,
   "site_id": "apex-sentinel",
-  "count": 3,
+  "count": 33,
   "bots": [
     {
       "id": "grffy-v1",
       "name": "grffy v1",
       "file": "grffy v1.xml",
-      "asset": "uploads/apex-sentinel/grffy v1.xml",
-      "description": "Apex Sentinel bundled strategy.",
-      "emoji": "APEX",
+      "asset": "uploads/apex-sentinel/grffy-v1.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
       "priority": 1
     },
     {
-      "id": "speed-bot",
+      "id": "mr-duke-speed-bot-1",
       "name": "Mr Duke Speed Bot.1",
       "file": "Mr Duke Speed Bot.1.xml",
-      "asset": "uploads/apex-sentinel/Mr Duke Speed Bot.1.xml",
-      "description": "Fast execution bot.",
-      "emoji": "APEX",
+      "asset": "uploads/apex-sentinel/mr-duke-speed-bot-1.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
       "priority": 2
     },
     {
       "id": "wealth-generator",
       "name": "Wealth Generator",
       "file": "Wealth Generator.xml",
-      "asset": "uploads/apex-sentinel/Wealth Generator.xml",
-      "description": "Wealth strategy.",
-      "emoji": "APEX",
+      "asset": "uploads/apex-sentinel/wealth-generator.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
       "priority": 3
+    },
+    {
+      "id": "wealth-generator-v2",
+      "name": "WEALTH GENERATOR V2",
+      "file": "WEALTH GENERATOR V2.xml",
+      "asset": "uploads/apex-sentinel/wealth-generator-v2.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 4
+    },
+    {
+      "id": "m27-original-version",
+      "name": "M27 Original version",
+      "file": "M27 Original version.xml",
+      "asset": "uploads/apex-sentinel/m27-original-version.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 5
+    },
+    {
+      "id": "accumulators-bt",
+      "name": "ACCUMULATORS BT",
+      "file": "ACCUMULATORS BT.xml",
+      "asset": "uploads/apex-sentinel/accumulators-bt.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 6
+    },
+    {
+      "id": "black-devil-v2-by-mr-duke",
+      "name": "BLACK DEVIL v2(By MR. DUKE)",
+      "file": "BLACK DEVIL v2(By MR. DUKE).xml",
+      "asset": "uploads/apex-sentinel/black-devil-v2-by-mr-duke.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 7
+    },
+    {
+      "id": "candle-mine-version-3-1",
+      "name": "Candle Mine Version 3.1",
+      "file": "Candle Mine Version 3.1.xml",
+      "asset": "uploads/apex-sentinel/candle-mine-version-3-1.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 8
+    },
+    {
+      "id": "d1-2025-bot",
+      "name": "D1 2025 BOT",
+      "file": "D1 2025 BOT.xml",
+      "asset": "uploads/apex-sentinel/d1-2025-bot.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 9
+    },
+    {
+      "id": "d1-by-mr-duke",
+      "name": "D1 BY MR.DUKE",
+      "file": "D1 BY MR.DUKE.xml",
+      "asset": "uploads/apex-sentinel/d1-by-mr-duke.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 10
+    },
+    {
+      "id": "d2-by-mr-duke",
+      "name": "D2 BY MR.DUKE",
+      "file": "D2 BY MR.DUKE.xml",
+      "asset": "uploads/apex-sentinel/d2-by-mr-duke.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 11
+    },
+    {
+      "id": "d4-update-by-mr-dukefinal",
+      "name": "D4 Update by MR.DUKEFINAL",
+      "file": "D4 Update by MR.DUKEFINAL.xml",
+      "asset": "uploads/apex-sentinel/d4-update-by-mr-dukefinal.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 12
+    },
+    {
+      "id": "d5-original-version",
+      "name": "D5 (Original version )",
+      "file": "D5 (Original version ).xml",
+      "asset": "uploads/apex-sentinel/d5-original-version.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 13
+    },
+    {
+      "id": "d6-deriv-by-duke",
+      "name": "D6 Deriv by Duke",
+      "file": "D6 Deriv by Duke.xml",
+      "asset": "uploads/apex-sentinel/d6-deriv-by-duke.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 14
+    },
+    {
+      "id": "d7-over-2-bot",
+      "name": "D7 Over 2 bot",
+      "file": "D7 Over 2 bot.xml",
+      "asset": "uploads/apex-sentinel/d7-over-2-bot.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 15
+    },
+    {
+      "id": "differhub",
+      "name": "Differhub",
+      "file": "Differhub.xml",
+      "asset": "uploads/apex-sentinel/differhub.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 16
+    },
+    {
+      "id": "double-over-with-analysis",
+      "name": "Double Over With analysis",
+      "file": "Double Over With analysis.xml",
+      "asset": "uploads/apex-sentinel/double-over-with-analysis.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 17
+    },
+    {
+      "id": "even-odd-killer-bot",
+      "name": "Even Odd Killer bot",
+      "file": "Even Odd Killer bot.xml",
+      "asset": "uploads/apex-sentinel/even-odd-killer-bot.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 18
+    },
+    {
+      "id": "gibu-v8-pro-2024",
+      "name": "Gibu V8 PRO (2024)",
+      "file": "Gibu V8 PRO (2024).xml",
+      "asset": "uploads/apex-sentinel/gibu-v8-pro-2024.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 19
+    },
+    {
+      "id": "kiazala-v1-by-the-risk-manager",
+      "name": "Kiazala v1 by The Risk Manager",
+      "file": "Kiazala v1 by The Risk Manager.xml",
+      "asset": "uploads/apex-sentinel/kiazala-v1-by-the-risk-manager.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 20
+    },
+    {
+      "id": "mkorean-sv5-2024",
+      "name": "Mkorean SV5 2024",
+      "file": "Mkorean SV5 2024.xml",
+      "asset": "uploads/apex-sentinel/mkorean-sv5-2024.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 21
+    },
+    {
+      "id": "mkorean-sv7-2025",
+      "name": "Mkorean SV7 2025",
+      "file": "Mkorean SV7 2025.xml",
+      "asset": "uploads/apex-sentinel/mkorean-sv7-2025.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 22
+    },
+    {
+      "id": "mkorean-sv7-bot",
+      "name": "Mkorean sv7 bot",
+      "file": "Mkorean sv7 bot.xml",
+      "asset": "uploads/apex-sentinel/mkorean-sv7-bot.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 23
+    },
+    {
+      "id": "mwenda-pole-by-the-risk-manager",
+      "name": "Mwenda Pole By The Risk Manager",
+      "file": "Mwenda Pole By The Risk Manager.xml",
+      "asset": "uploads/apex-sentinel/mwenda-pole-by-the-risk-manager.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 24
+    },
+    {
+      "id": "new-dollar-printer-bot-vxy",
+      "name": "New Dollar Printer Bot.VXY($)",
+      "file": "New Dollar Printer Bot.VXY($).xml",
+      "asset": "uploads/apex-sentinel/new-dollar-printer-bot-vxy.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 25
+    },
+    {
+      "id": "over-1-recovery-over-4",
+      "name": "OVER 1 RECOVERY OVER 4",
+      "file": "OVER 1 RECOVERY OVER 4.xml",
+      "asset": "uploads/apex-sentinel/over-1-recovery-over-4.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 26
+    },
+    {
+      "id": "rise-fall-thunder",
+      "name": "Rise fall thunder ⚡",
+      "file": "Rise fall thunder ⚡.xml",
+      "asset": "uploads/apex-sentinel/rise-fall-thunder.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 27
+    },
+    {
+      "id": "simba-ai-v1",
+      "name": "Simba Ai v1",
+      "file": "Simba Ai v1.xml",
+      "asset": "uploads/apex-sentinel/simba-ai-v1.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 28
+    },
+    {
+      "id": "speedhack-by-mrduke-site-00",
+      "name": "Speedhack by mrduke.site 00",
+      "file": "Speedhack by mrduke.site 00.xml",
+      "asset": "uploads/apex-sentinel/speedhack-by-mrduke-site-00.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 29
+    },
+    {
+      "id": "the-d3-rise-and-fall",
+      "name": "The-D3 rise and fall",
+      "file": "The-D3 rise and fall.xml",
+      "asset": "uploads/apex-sentinel/the-d3-rise-and-fall.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 30
+    },
+    {
+      "id": "grffy-upated-martingale-2-loss-premium-bot",
+      "name": "grffy upated martingale 2 loss premium bot",
+      "file": "grffy upated martingale 2 loss premium bot.xml",
+      "asset": "uploads/apex-sentinel/grffy-upated-martingale-2-loss-premium-bot.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 31
+    },
+    {
+      "id": "grffy",
+      "name": "grffy",
+      "file": "grffy.xml",
+      "asset": "uploads/apex-sentinel/grffy.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 32
+    },
+    {
+      "id": "under-7-8-9-g2-bot-1",
+      "name": "under 7,8,9 g2 bot 1",
+      "file": "under 7,8,9 g2 bot 1.xml",
+      "asset": "uploads/apex-sentinel/under-7-8-9-g2-bot-1.xml",
+      "description": "Blockly strategy bundled with Apex Sentinel.",
+      "emoji": "SITE BOT",
+      "priority": 33
     }
   ]
 }
