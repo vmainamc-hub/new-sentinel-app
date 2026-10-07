@@ -35,7 +35,8 @@ for (const [index, site] of entries.entries()) {
 
   for (const hostValue of site.hosts) {
     const host = normalizeHost(hostValue);
-    if (!host || !host.includes('.')) throw new Error(`${label}.hosts contains an invalid hostname: ${hostValue}`);
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1';
+    if (!host || (!host.includes('.') && !isLocalHost)) throw new Error(`${label}.hosts contains an invalid hostname: ${hostValue}`);
     const owner = seenHosts.get(host);
     if (owner && owner !== id) throw new Error(`Hostname ${host} is assigned to both ${owner} and ${id}.`);
     seenHosts.set(host, id);
