@@ -13,6 +13,27 @@ export const normalizeTradeParameters = (parameters: TradeParameters) => ({
     ...(parameters.barrier != null ? { barrier: String(parameters.barrier) } : {}),
 });
 
+/**
+ * Deriv's API client rejects with the raw response object ({ error: { code, message } }),
+ * not an Error instance, so `err instanceof Error` checks lose the real reason.
+ */
+export const getErrorMessage = (err: unknown, fallback: string): string => {
+    if (err instanceof Error && err.message) return err.message;
+    if (typeof err === 'string' && err) return err;
+    const candidate = err as { error?: { message?: string; code?: string }; message?: string } | null;
+    const message = candidate?.error?.message ?? candidate?.message;
+    if (message) return candidate?.error?.code ? `${message} (${candidate.error.code})` : String(message);
+    return fallback;
+};
+
+const sendRequest = async (request: Record<string, any>) => {
+    try {
+        return await (api_base.api as any).send(request);
+    } catch (err) {
+        throw new Error(getErrorMessage(err, 'Deriv request failed.'));
+    }
+};
+
 export const buyContractForUi = async ({
     parameters,
     price,
@@ -23,7 +44,7 @@ export const buyContractForUi = async ({
 }) => {
     if (!api_base.api) throw new Error('Deriv connection is not ready yet.');
 
-    const proposalResponse = await (api_base.api as any).send({
+    const proposalResponse = await sendRequest({
         proposal: 1,
         ...normalizeTradeParameters(parameters),
     });
@@ -33,7 +54,7 @@ export const buyContractForUi = async ({
     const proposalId = proposalResponse?.proposal?.id;
     if (!proposalId) throw new Error('No proposal id was returned for this contract.');
 
-    const buyResponse = await (api_base.api as any).send({
+    const buyResponse = await sendRequest({
         buy: proposalId,
         price,
     });
