@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
+import useThemeSwitcher from '@/hooks/useThemeSwitcher';
 import { PlayIcon } from './icons';
 
 const formatUTC = (d: Date) => {
@@ -9,11 +10,18 @@ const formatUTC = (d: Date) => {
     return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())} GMT`;
 };
 
-const BottomStatusBar = ({ botBuilderActive = false }: { botBuilderActive?: boolean }) => {
+const BottomStatusBar = ({
+    botBuilderActive = false,
+    onOpenBotBuilder,
+}: {
+    botBuilderActive?: boolean;
+    onOpenBotBuilder?: () => void;
+}) => {
     const [now, setNow] = useState(new Date());
     const [busy, setBusy] = useState(false);
     const { connectionStatus, isAuthorized } = useApiBase();
     const { run_panel } = useStore() ?? {};
+    const { is_dark_mode_on, toggleTheme } = useThemeSwitcher();
     const isRunning = Boolean(run_panel?.is_running || api_base.is_running);
     const canStop = Boolean(run_panel?.is_stop_button_visible || isRunning);
     const connected = String(connectionStatus).toLowerCase().includes('open') || isAuthorized;
@@ -24,26 +32,44 @@ const BottomStatusBar = ({ botBuilderActive = false }: { botBuilderActive?: bool
     }, []);
 
     const handleRunControl = async () => {
-        if (!botBuilderActive || !run_panel || busy) return;
+        // A running bot can always be stopped from here, whichever page is open.
+        if (canStop) {
+            run_panel?.onStopButtonClick();
+            return;
+        }
+        // Otherwise this button is a shortcut into Bot Builder, where bots are run.
+        if (!botBuilderActive) {
+            onOpenBotBuilder?.();
+            return;
+        }
+        if (!run_panel || busy) return;
         setBusy(true);
         try {
-            if (canStop) run_panel.onStopButtonClick();
-            else await run_panel.onRunButtonClick();
+            await run_panel.onRunButtonClick();
         } finally {
             setBusy(false);
         }
     };
 
-    const runLabel = busy ? 'Please wait' : canStop ? 'Stop' : botBuilderActive ? 'Run' : 'Ready';
+    const toggleFullscreen = () => {
+        try {
+            if (document.fullscreenElement) void document.exitFullscreen();
+            else void document.documentElement.requestFullscreen?.();
+        } catch {
+            /* fullscreen is optional */
+        }
+    };
+
+    const runLabel = busy ? 'Please wait' : canStop ? 'Stop' : botBuilderActive ? 'Run' : 'Bot Builder';
 
     return <div className='prodb-bottom-bar'>
         <button className='prodb-risk' onClick={() => window.alert('Trading involves risk. Use demo trading to test strategies before risking real funds.')}>Risk Disclaimer</button>
         <div className='prodb-run-status'>
-            <button className={`prodb-run ${botBuilderActive ? 'is-enabled' : ''}`} onClick={handleRunControl} disabled={!botBuilderActive || busy} title={botBuilderActive ? 'Run or stop the current Bot Builder strategy' : 'Open Bot Builder to run a bot'}><PlayIcon /> {runLabel}</button>
-            <div className='prodb-execution'><small>DERIV WS</small><strong>{connected ? 'LIVE' : 'OFFLINE'}</strong><span className='prodb-switch'><i /></span></div>
-            <div className='prodb-bot-state'><strong>{isRunning ? 'Bot is running' : 'Bot is not running'}</strong><span /></div>
+            <button className={`prodb-run ${botBuilderActive ? 'is-enabled' : ''}`} onClick={handleRunControl} disabled={busy} title={botBuilderActive ? 'Run or stop the current Bot Builder strategy' : 'Open Bot Builder to run a bot'}><PlayIcon /> {runLabel}</button>
+            <div className='prodb-execution' title='Connection status of the Deriv WebSocket'><small>DERIV WS</small><strong>{connected ? 'LIVE' : 'OFFLINE'}</strong><span className='prodb-switch'><i /></span></div>
+            <div className='prodb-bot-state' title='Whether a Bot Builder bot is currently running'><strong>{isRunning ? 'Bot is running' : 'Bot is not running'}</strong><span /></div>
         </div>
-        <div className='prodb-bottom-meta'><i className={`prodb-online-dot ${connected ? '' : 'is-offline'}`} /><span>{formatUTC(now)}</span><button>☼</button><button>⇥</button><button>⛶</button></div>
+        <div className='prodb-bottom-meta'><i className={`prodb-online-dot ${connected ? '' : 'is-offline'}`} /><span>{formatUTC(now)}</span><button type='button' onClick={toggleTheme} title={is_dark_mode_on ? 'Switch to light mode' : 'Switch to dark mode'} aria-label='Toggle theme'>☼</button><button type='button' onClick={toggleFullscreen} title='Toggle full screen' aria-label='Toggle full screen'>⛶</button></div>
     </div>;
 };
 
