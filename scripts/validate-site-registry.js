@@ -35,7 +35,8 @@ for (const [index, site] of entries.entries()) {
 
   for (const hostValue of site.hosts) {
     const host = normalizeHost(hostValue);
-    if (!host || !host.includes('.')) throw new Error(`${label}.hosts contains an invalid hostname: ${hostValue}`);
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1';
+    if (!host || (!host.includes('.') && !isLocalHost)) throw new Error(`${label}.hosts contains an invalid hostname: ${hostValue}`);
     const owner = seenHosts.get(host);
     if (owner && owner !== id) throw new Error(`Hostname ${host} is assigned to both ${owner} and ${id}.`);
     seenHosts.set(host, id);
@@ -53,11 +54,12 @@ for (const [index, site] of entries.entries()) {
 
   if (website.protocol !== 'https:') throw new Error(`${label}.website_url must use HTTPS.`);
   if (redirect.protocol !== 'https:') throw new Error(`${label}.redirect_uri must use HTTPS.`);
-  if (normalizeHost(website.hostname) !== normalizeHost(displayDomain)) {
-    throw new Error(`${label}.website_url hostname must match display_domain.`);
+  const configuredHosts = new Set(site.hosts.map(normalizeHost));
+  if (!configuredHosts.has(normalizeHost(website.hostname))) {
+    throw new Error(`${label}.website_url hostname must match one of the configured hosts.`);
   }
-  if (normalizeHost(redirect.hostname) !== normalizeHost(displayDomain)) {
-    throw new Error(`${label}.redirect_uri hostname must match display_domain.`);
+  if (!configuredHosts.has(normalizeHost(redirect.hostname))) {
+    throw new Error(`${label}.redirect_uri hostname must match one of the configured hosts.`);
   }
   if (redirect.pathname !== '/callback') throw new Error(`${label}.redirect_uri must end with /callback.`);
 

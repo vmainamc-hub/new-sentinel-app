@@ -22,6 +22,8 @@ const NAV_ICONS: Partial<Record<PremiumSection, typeof HomeIcon>> = {
     copy_trading: CopyIcon,
     analysis_tools: SearchIcon,
     calculator: CalculatorIcon,
+    ai_bots: RobotIcon,
+    digits_analysis: SearchIcon,
 };
 
 const NAV_LABELS = Object.fromEntries(NAVIGATION_CATALOG.map(item => [item.id, item.label])) as Partial<Record<PremiumSection, string>>;

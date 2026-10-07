@@ -18,10 +18,12 @@ import GlobalQuickTrade from './GlobalQuickTrade';
 import LandingPage from './LandingPage';
 import PremiumHeader from './PremiumHeader';
 import PremiumLoader from './PremiumLoader';
+import AIBotsPage from './pages/AIBotsPage';
 import AnalysisToolsPage from './pages/AnalysisToolsPage';
 import BatchTraderPage from './pages/BatchTraderPage';
 import BulkTraderPage from './pages/BulkTraderPage';
 import CalculatorPage from './pages/CalculatorPage';
+import DigitsAnalysisPage from './pages/DigitsAnalysisPage';
 import DashboardHome from './pages/DashboardHome';
 import FreeBotsPage from './pages/FreeBotsPage';
 import {
@@ -61,11 +63,12 @@ import './premium-calculator.scss';
 import './premium-wallet.scss';
 import './premium-site-theme.scss';
 import './apex-theme.scss';
+import './apex-pages.scss';
 
 const validSections: PremiumSection[] = [
     'dashboard', 'bot_ideas', 'quick_bot', 'bot_builder', 'free_bots', 'signal_ai', 'auto_trader',
     'manual_trading', 'bulk_trader', 'batch_trader', 'copy_trading', 'speedbot', 'calculator', 'pro_ai', 'analysis_tools',
-    'analysis_hub', 'charts', 'tradingview', 'dtrader',
+    'analysis_hub', 'charts', 'tradingview', 'dtrader', 'ai_bots', 'digits_analysis',
 ];
 
 const sectionFromHash = (hash: string): PremiumSection => {
@@ -211,6 +214,8 @@ const PremiumLayout = observer(() => {
             case 'charts': return <ChartsPage />;
             case 'tradingview': return <TradingViewPage />;
             case 'dtrader': return <DTraderPage />;
+            case 'ai_bots': return <AIBotsPage />;
+            case 'digits_analysis': return <DigitsAnalysisPage />;
             default: return null;
         }
     };
