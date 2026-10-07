@@ -41,6 +41,7 @@ export const DEFAULT_NAVIGATION: PremiumSection[] = [
     'ai_bots',
     'auto_trader',
     'tradingview',
+    'bulk_trader',
     'copy_trading',
     'calculator',
     'analysis_tools',
