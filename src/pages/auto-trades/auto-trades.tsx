@@ -17,7 +17,7 @@ import {
 } from '@/utils/digit-strategy';
 import { recordDiagnosticEvent, setDiagnosticGauge } from '@/utils/diagnostics';
 import { getLastDigitFromQuote, getMarketPipSize, isExpectedStreamInterruption } from '@/utils/market-data';
-import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purchase';
+import { buyContractForUi, streamContractUntilSettled, getErrorMessage } from '@/utils/trade-purchase';
 import { ensureDerivConnection, safeSubscribe } from '@/utils/websocket-handler';
 import {
     AUTO_TRADE_STRATEGY_FAMILIES,
@@ -1909,7 +1909,7 @@ const AutoTrades = observer(() => {
                 return Number(contract.profit ?? 0);
             } catch (err) {
                 console.error('[AutoTrades] executeTrade exception:', err);
-                setError(err instanceof Error ? err.message : 'Auto Trades could not purchase this contract.');
+                setError(getErrorMessage(err, 'Auto Trades could not purchase this contract.'));
                 return 0;
             } finally {
                 contractStreamAbortControllersRef.current.delete(abortController);

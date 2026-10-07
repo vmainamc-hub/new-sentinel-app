@@ -244,7 +244,7 @@ const PremiumLayout = observer(() => {
         </main>
         <GlobalAIScannerV2 openBotBuilder={openBotBuilder} />
         <GlobalQuickTrade hidden={isBotBuilder} />
-        {!isBotBuilder && <BottomStatusBar />}
+        {!isBotBuilder && <BottomStatusBar onOpenBotBuilder={openBotBuilder} />}
     </div>;
 });
 

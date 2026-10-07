@@ -122,7 +122,10 @@ const AppWrapper = observer(() => {
     const GetHashedValue = (tab: number) => {
         tab_value = location.hash?.split('#')[1];
         if (!tab_value) return tab;
-        return Number(hash.indexOf(String(tab_value)));
+        // Premium-only sections (e.g. #manual_trading, #auto_trader) are not Deriv tabs.
+        // indexOf would return -1 for them and wipe the active tab, so keep the current one.
+        const hash_index = hash.indexOf(String(tab_value));
+        return hash_index === -1 ? tab : hash_index;
     };
     const active_hash_tab = GetHashedValue(active_tab);
 
@@ -278,10 +281,14 @@ const AppWrapper = observer(() => {
             setActiveTab(Number(active_hash_tab));
             if (!isDesktop) handleTabChange(Number(active_hash_tab));
             init_render.current = false;
-        } else {
-            // Preserve URL parameters when navigating
+        } else if (hash[active_tab]) {
+            // Preserve URL parameters when navigating.
+            // Only Deriv's own tabs (Dashboard, Bot Builder, Charts, Tutorial) own a URL hash.
+            // Auto Trades (4) and DTrader (5) are premium sections whose hash is managed by
+            // PremiumLayout; rewriting it to #dashboard here bounced the first click back to
+            // the dashboard and only the second click stayed on the page.
             const currentSearch = window.location.search;
-            navigate(`${currentSearch}#${hash[active_tab] || hash[0]}`);
+            navigate(`${currentSearch}#${hash[active_tab]}`);
         }
         if (active_tour !== '') {
             setActiveTour('');
