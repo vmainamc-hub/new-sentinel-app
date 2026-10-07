@@ -21,7 +21,7 @@
     },
     {
       "id": "manual_trading",
-      "label": "Manual Trading"
+      "label": "DTrader"
     },
     {
       "id": "tradingview",
@@ -50,6 +50,14 @@
     {
       "id": "calculator",
       "label": "Calculator"
+    },
+    {
+      "id": "ai_bots",
+      "label": "AI Bots"
+    },
+    {
+      "id": "digits_analysis",
+      "label": "Digits Analysis"
     }
   ],
   "defaults": {
@@ -65,14 +73,16 @@
       "speedbot",
       "copy_trading",
       "analysis_tools",
-      "calculator"
+      "calculator",
+      "ai_bots",
+      "digits_analysis"
     ],
     "colors": {
-      "primary": "#059669",
-      "secondary": "#19cba3",
-      "nav_background": "#151d26",
-      "nav_text": "#f3f6f8",
-      "header_background": "#ffffff"
+      "primary": "#e8b84a",
+      "secondary": "#e8b84a",
+      "nav_background": "#07101f",
+      "nav_text": "#f3f6fb",
+      "header_background": "#050a14"
     }
   }
 }
