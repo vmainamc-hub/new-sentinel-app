@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { observer } from 'mobx-react-lite';
 import useThemeSwitcher from '@/hooks/useThemeSwitcher';
@@ -34,6 +34,44 @@ const PremiumHeader = observer(
         const dragRef = useRef({ active: false, pointerId: -1, startX: 0, scrollLeft: 0, moved: false });
         const suppressClickRef = useRef(false);
         const { is_dark_mode_on, toggleTheme } = useThemeSwitcher();
+        const [canScrollLeft, setCanScrollLeft] = useState(false);
+        const [canScrollRight, setCanScrollRight] = useState(false);
+
+        const updateScrollState = useCallback(() => {
+            const nav = navRef.current;
+            if (!nav) return;
+            setCanScrollLeft(nav.scrollLeft > 2);
+            setCanScrollRight(nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 2);
+        }, []);
+
+        useEffect(() => {
+            const nav = navRef.current;
+            if (!nav) return undefined;
+            updateScrollState();
+            nav.addEventListener('scroll', updateScrollState, { passive: true });
+            window.addEventListener('resize', updateScrollState);
+            const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateScrollState) : null;
+            resizeObserver?.observe(nav);
+            return () => {
+                nav.removeEventListener('scroll', updateScrollState);
+                window.removeEventListener('resize', updateScrollState);
+                resizeObserver?.disconnect();
+            };
+        }, [navigation, updateScrollState]);
+
+        // Keep the active tab visible (e.g. when a section is opened from the dashboard).
+        useEffect(() => {
+            navRef.current?.querySelector<HTMLElement>('button.is-active')?.scrollIntoView?.({
+                block: 'nearest',
+                inline: 'nearest',
+            });
+        }, [active]);
+
+        const scrollNav = (direction: -1 | 1) => {
+            const nav = navRef.current;
+            if (!nav) return;
+            nav.scrollBy({ left: direction * Math.max(200, nav.clientWidth * 0.6), behavior: 'smooth' });
+        }, []);
 
         const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
             if (event.pointerType !== 'mouse' || event.button !== 0 || !navRef.current) return;
