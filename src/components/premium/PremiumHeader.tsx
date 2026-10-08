@@ -42,7 +42,7 @@ const PremiumHeader = observer(
             if (!nav) return;
             setCanScrollLeft(nav.scrollLeft > 2);
             setCanScrollRight(nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 2);
-        };
+        }, []);
 
         useEffect(() => {
             const nav = navRef.current;
