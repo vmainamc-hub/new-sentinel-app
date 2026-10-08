@@ -1,23 +1,23 @@
 {
   "brand_name": "Apex Sentinel",
-  "brand_domain": "sparkling-blini-dac614.netlify.app",
+  "brand_domain": "precisionapex.netlify.app",
   "brand_hostname": {
-    "staging": "sparkling-blini-dac614.netlify.app",
-    "production": "sparkling-blini-dac614.netlify.app"
+    "staging": "precisionapex.netlify.app",
+    "production": "precisionapex.netlify.app"
   },
-  "domain_name": "sparkling-blini-dac614.netlify.app",
+  "domain_name": "precisionapex.netlify.app",
   "sites": {
     "default_site": "apex-sentinel",
     "entries": [
       {
         "id": "apex-sentinel",
         "hosts": [
-          "sparkling-blini-dac614.netlify.app",
+          "precisionapex.netlify.app",
           "localhost"
         ],
         "display_domain": "Apex Sentinel",
-        "website_url": "https://sparkling-blini-dac614.netlify.app",
-        "redirect_uri": "https://sparkling-blini-dac614.netlify.app/callback",
+        "website_url": "https://precisionapex.netlify.app",
+        "redirect_uri": "https://precisionapex.netlify.app/callback",
         "client_id": "34BIr72thLXMJHaL9PQxN",
         "scopes": [
           "trade",
@@ -140,10 +140,10 @@
     },
     "hostname": {
       "production": {
-        "com": "sparkling-blini-dac614.netlify.app"
+        "com": "precisionapex.netlify.app"
       },
       "staging": {
-        "com": "sparkling-blini-dac614.netlify.app"
+        "com": "precisionapex.netlify.app"
       }
     },
     "auth2_url": {
