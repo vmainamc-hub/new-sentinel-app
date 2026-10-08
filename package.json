@@ -7,7 +7,7 @@
   },
   "scripts": {
     "start": "rsbuild dev -o",
-    "build": "rsbuild build",
+    "build": "node scripts/sync-netlify-brand-config.js && rsbuild build",
     "watch": "rsbuild build --watch",
     "serve": "http-server dist -p 8443 -a localhost -o",
     "start:webpack": "webpack serve --open --config webpack.config.js",
