@@ -71,7 +71,7 @@ const PremiumHeader = observer(
             const nav = navRef.current;
             if (!nav) return;
             nav.scrollBy({ left: direction * Math.max(200, nav.clientWidth * 0.6), behavior: 'smooth' });
-        }, []);
+        };
 
         const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
             if (event.pointerType !== 'mouse' || event.button !== 0 || !navRef.current) return;
