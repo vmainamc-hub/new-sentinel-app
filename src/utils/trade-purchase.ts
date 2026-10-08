@@ -9,7 +9,8 @@ export const normalizeTradeParameters = (parameters: TradeParameters) => ({
     currency: parameters.currency ?? 'USD',
     duration: parameters.duration ?? 1,
     duration_unit: parameters.duration_unit ?? 't',
-    symbol: parameters.symbol,
+    // Deriv's API now rejects `symbol` ("Properties not allowed: symbol"); it expects `underlying_symbol`.
+    underlying_symbol: parameters.underlying_symbol ?? parameters.symbol,
     ...(parameters.barrier != null ? { barrier: String(parameters.barrier) } : {}),
 });
 
