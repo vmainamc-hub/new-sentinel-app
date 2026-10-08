@@ -56,3 +56,12 @@
     .prodb-app-header .prodb-brand__copy{display:none}.prodb-app-header__flag{display:none}.prodb-user-circle{width:25px;height:25px}.prodb-nav button{padding:0 12px}.prodb-nav button span{font-size:9px}.prodb-premium-content{height:calc(100svh - 52px - 47px - 24px - 39px)}.prodb-launchers{gap:9px}.prodb-launchers button{width:94px}.prodb-bot-grid{grid-template-columns:1fr}.prodb-form-row,.prodb-form-row--three{grid-template-columns:1fr}.prodb-digit-row span{width:42px;height:42px}.prodb-current-tick strong{font-size:34px}.prodb-even-odd{margin-top:20px}.prodb-risk{padding:0 8px;font-size:7px}.prodb-execution{display:none}.prodb-run{height:32px}
 }
 @media (prefers-reduced-motion: reduce) { .prodb-ticker__track,.prodb-reviews__track{animation-duration:120s}.prodb-loader__dots span,.prodb-loader__line span{animation-duration:4s} }
+
+
+/* Scroll arrows for the tool navigation (tabs overflow on narrower screens) */
+.prodb-nav-wrap { position:relative; z-index:40; }
+.prodb-nav-wrap .prodb-nav { z-index:auto; }
+.prodb-nav-arrow { position:absolute; top:0; bottom:0; z-index:3; width:38px; border:0; padding:0; display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:900; line-height:1; color:#fff; cursor:pointer; }
+.prodb-nav-arrow--left { left:0; background:linear-gradient(90deg,#0b1218 55%,rgba(11,18,24,0)); }
+.prodb-nav-arrow--right { right:0; background:linear-gradient(270deg,#0b1218 55%,rgba(11,18,24,0)); }
+.prodb-nav-arrow:hover { color:#19cba3; }
