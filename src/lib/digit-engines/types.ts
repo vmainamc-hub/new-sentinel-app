@@ -5,7 +5,7 @@ export type DigitContractType = ParityContract | DigitContract;
 export type EngineName = "even-odd" | "matches" | "differs";
 export interface DigitTick { quote: string | number; pipSize: number; epoch?: number; }
 export interface QuoteEconomics { stake: number; /** Total return if won, including returned stake. */ totalPayout: number; }
-export interface ValidationReport { observations: number; modelBrier: number; baselineBrier: number; }
+export interface ValidationReport { observations: number; wins: number; modelBrier: number; baselineBrier: number; }
 export interface EngineInput {
   ticks: DigitTick[];
   symbol?: string;
