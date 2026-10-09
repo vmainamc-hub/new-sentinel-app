@@ -14,6 +14,7 @@ const sleep = (ms: number) => new Promise(resolve => window.setTimeout(resolve, 
 const num = (value: unknown, fallback = 0) => { const n = Number(value); return Number.isFinite(n) ? n : fallback; };
 const money = (value: number, currency: string) => `${value.toFixed(2)} ${currency}`;
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const DIGIT_CONTRACTS = new Set(['DIGITEVEN', 'DIGITODD', 'DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF']);
 
 const BulkTraderPage = () => {
     const { authData } = useApiBase();
@@ -50,7 +51,8 @@ const BulkTraderPage = () => {
     useEffect(() => () => { mounted.current = false; runRef.current = false; }, []);
 
     // ------------------------------------------------------------------
-    // Market data: 5000 ticks of history, then live ticks, for all 13 markets.
+    // Market data: 5000 ticks of history, then live ticks. Jump indices are included only
+    // when Deriv confirms that at least one digit contract is actually available.
     // ------------------------------------------------------------------
     useEffect(() => {
         let alive = true;
@@ -64,6 +66,16 @@ const BulkTraderPage = () => {
             const worker = async () => {
                 for (let market = queue.shift(); market && alive; market = queue.shift()) {
                     try {
+                        if (market.symbol.startsWith('JD')) {
+                            const capabilities = await PremiumDerivApiService.contractsFor(market.symbol);
+                            const types = (Array.isArray(capabilities?.available) ? capabilities.available : [])
+                                .flatMap((item: any) => Array.isArray(item?.contract_type) ? item.contract_type : [item?.contract_type])
+                                .filter((type: unknown): type is string => typeof type === 'string');
+                            if (!types.some(type => DIGIT_CONTRACTS.has(type))) {
+                                console.info(`[AI Bulk Trader] ${market.symbol} has no digit contracts available and is omitted from the digit scanner.`);
+                                continue;
+                            }
+                        }
                         const prices = await PremiumDerivApiService.ticksHistory(market.symbol, MAX_HISTORY);
                         if (!alive) return;
                         // Decimals come from the ticks themselves (Deriv strips trailing zeros), so a wrong
@@ -109,7 +121,7 @@ const BulkTraderPage = () => {
     }, [reloadKey]);
 
     const inputs: MarketInput[] = useMemo(
-        () => BULK_MARKETS.map(market => ({
+        () => BULK_MARKETS.filter(market => Boolean(store.current[market.symbol])).map(market => ({
             symbol: market.symbol, name: market.name,
             digits: store.current[market.symbol]?.digits ?? [], price: store.current[market.symbol]?.price ?? null,
         })),
@@ -150,6 +162,18 @@ const BulkTraderPage = () => {
         if (invalid) { setError(invalid); return; }
 
         const market = BULK_MARKETS.find(item => item.symbol === symbol) ?? BULK_MARKETS[0];
+        try {
+            const capabilities = await PremiumDerivApiService.contractsFor(market.symbol);
+            const types = (Array.isArray(capabilities?.available) ? capabilities.available : [])
+                .flatMap((item: any) => Array.isArray(item?.contract_type) ? item.contract_type : [item?.contract_type]);
+            if (!types.includes(contract)) {
+                setError(`${contract} is not available for ${market.name} on the selected Deriv account. Choose a supported contract or market.`);
+                return;
+            }
+        } catch (err) {
+            setError(`Could not verify contract availability for ${market.name}: ${errorText(err)}`);
+            return;
+        }
         const label = needsBarrier(contract) ? `${def.sides[side]} ${barrierDigit}` : def.sides[side];
         const accountText = accountKind ? `${accountKind} account` : 'the selected Deriv account';
         const confirmed = window.confirm(
