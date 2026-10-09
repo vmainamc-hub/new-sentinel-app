@@ -1,5 +1,5 @@
 import {
-    BULK_MARKETS, FAMILIES, barrierError, digitsFromTicks, emptyTally, exposure, gapOf, inferDecimals, lastDigit,
+    BULK_MARKETS, FAMILIES, FAMILY_ORDER, barrierError, digitsFromTicks, emptyTally, exposure, gapOf, inferDecimals, lastDigit,
     lossLimitHit, normCdf, pairPercents, recordPlaced, recordSettled, sanitizeBulk, scanMarkets, scanWindows, zBinom,
     type Family, type MarketInput,
 } from '../bulk-engine';
@@ -20,6 +20,13 @@ const uniform = (n: number, rand: () => number, bias?: { p: number; digits: numb
 
 const markets = (make: (symbol: string, index: number) => number[]): MarketInput[] =>
     BULK_MARKETS.map((market, index) => ({ symbol: market.symbol, name: market.name, digits: make(market.symbol, index) }));
+
+describe('bulk trader strategy families', () => {
+    it('keeps all three families visible in the scanner selector', () => {
+        expect(FAMILY_ORDER).toEqual(['evenodd', 'overunder', 'matchesdiffers']);
+        expect(FAMILY_ORDER.map(family => FAMILIES[family].title)).toEqual(['Even / Odd', 'Over / Under', 'Matches / Differs']);
+    });
+});
 
 describe('bulk markets', () => {
     it('covers all 13 volatility indices once', () => {
