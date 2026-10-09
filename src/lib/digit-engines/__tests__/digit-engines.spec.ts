@@ -1,4 +1,4 @@
-import { ALLOWED_DIFFERS_DIGITS, analyseDiffers, analyseEvenOdd, analyseMatches, buildCandidate, extractDigits, lastDigitFromQuote, WalkForwardValidator, wilsonLowerBound } from "../index";
+import { ALLOWED_DIFFERS_DIGITS, analyseDiffers, analyseEvenOdd, analyseMatches, analyseOverUnder, buildCandidate, extractDigits, lastDigitFromQuote, WalkForwardValidator, wilsonLowerBound } from "../index";
 import type { DigitTick } from "../types";
 const ticks=(digits:number[]):DigitTick[]=>digits.map(d=>({quote:"100."+String(d),pipSize:1}));
 
@@ -20,6 +20,19 @@ describe("Even/Odd",()=>{
     expect(r.candidates.every(c=>c.qualification==="UNQUALIFIED"&&!c.canTrade)).toBe(true);
   });
   it("reports insufficient data",()=>expect(analyseEvenOdd({ticks:ticks([1,2,3])}).status).toBe("INSUFFICIENT_DATA"));
+});
+describe("Over/Under",()=>{
+  it("returns all legal barriers and keeps candidates unqualified without live evidence",()=>{
+    const r=analyseOverUnder({ticks:ticks(Array.from({length:240},(_,i)=>i%10))});
+    expect(r.candidates).toHaveLength(18);
+    expect(r.candidates.filter(c=>c.contractType==="DIGITOVER").map(c=>Number(c.barrier)).sort((a,b)=>a-b)).toEqual([0,1,2,3,4,5,6,7,8]);
+    expect(r.candidates.filter(c=>c.contractType==="DIGITUNDER").map(c=>Number(c.barrier)).sort((a,b)=>a-b)).toEqual([1,2,3,4,5,6,7,8,9]);
+    expect(r.candidates.every(c=>c.qualification==="UNQUALIFIED"&&!c.canTrade)).toBe(true);
+  });
+  it("reports insufficient data and does not invent a candidate from no ticks",()=>{
+    expect(analyseOverUnder({ticks:ticks([1,2,3])}).status).toBe("INSUFFICIENT_DATA");
+    expect(analyseOverUnder({ticks:[]}).bestCandidate).toBeNull();
+  });
 });
 describe("Matches",()=>{
   it("ranks a returning digit after low longer-window share",()=>{
