@@ -1,5 +1,6 @@
 // Pure, framework-free logic for the Apex Sentinel AI Bulk Trader (scanner + bulk-run bookkeeping).
 // No React, no network: everything here is deterministic and unit-tested in __tests__/bulk-engine.spec.ts.
+import { analyseDiffers, analyseEvenOdd, analyseMatches, analyseOverUnder } from '../../lib/digit-engines';
 //
 // What the scanner does: for each of the 13 volatility indices it measures how far recent last-digit
 // frequencies sit from theory for every candidate trade in the chosen family, corrects for the number
@@ -20,7 +21,7 @@ export type FamilyDef = {
 export const FAMILIES: Record<Family, FamilyDef> = {
     evenodd: { title: 'Even / Odd', sides: ['Even', 'Odd'], contracts: ['DIGITEVEN', 'DIGITODD'], tests: 2 },
     overunder: { title: 'Over / Under', sides: ['Over', 'Under'], contracts: ['DIGITOVER', 'DIGITUNDER'], tests: 18 },
-    matchesdiffers: { title: 'Matches / Differs', sides: ['Matches', 'Differs'], contracts: ['DIGITMATCH', 'DIGITDIFF'], tests: 20 },
+    matchesdiffers: { title: 'Matches / Differs', sides: ['Matches', 'Differs'], contracts: ['DIGITMATCH', 'DIGITDIFF'], tests: 16 },
 };
 
 export const FAMILY_ORDER: Family[] = ['evenodd', 'overunder', 'matchesdiffers'];
@@ -121,8 +122,12 @@ export type ScanPick = {
     side: 0 | 1;
     barrier: number | null;
     z: number;
-    /** 0-100 ranking score. NOT a win probability. */
+    /** 0-100 blended rank from the strategy engine and statistical diagnostic; not a win probability. */
     score: number;
+    /** Strategy-engine ranking score (not a probability). */
+    engineScore: number;
+    /** Legacy multiple-testing-adjusted statistical ranking score. */
+    statisticalScore: number;
     strength: Strength;
     hitPct: number;
     theoryPct: number;
@@ -178,7 +183,7 @@ const evaluate = (family: Family, c: Candidate, hists: number[][], windows: numb
 
     return {
         family, label: c.label, contract: c.contract, side: c.side, barrier: c.barrier,
-        z: round2(long.z), score, strength,
+        z: round2(long.z), score, engineScore: 0, statisticalScore: score, strength,
         hitPct: round1(long.hit * 100), theoryPct: round1(c.p0 * 100), breakEvenPct: round1(breakEvenRate(c.p0) * 100),
         rawP: round4(rawP), adjP: round4(adjP),
         agree: `${agreeing}/${per.length}`,
@@ -196,6 +201,36 @@ const range = (from: number, to: number) => Array.from({ length: to - from + 1 }
 export const gapOf = (digits: number[], d: number): number => {
     for (let i = digits.length - 1, gap = 0; i >= 0; i -= 1, gap += 1) if (digits[i] === d) return gap;
     return digits.length;
+};
+
+type EngineRank = { candidateScore: number; reasons: string[] };
+
+/**
+ * Run the new digit engines on the exact digit history used by the scanner.
+ * Digits are encoded as integer quotes with pipSize=0, preserving the already
+ * precision-correct final digit while keeping the engine API shared with raw ticks.
+ * These are research rankings only: quote economics and walk-forward evidence are
+ * deliberately not fabricated, so every candidate remains unqualified for automation.
+ */
+const engineRanksFor = (family: Family, symbol: string, digits: number[]): Map<string, EngineRank> => {
+    const input = { symbol, ticks: digits.map(digit => ({ quote: digit, pipSize: 0 })) };
+    const results = family === 'evenodd'
+        ? [analyseEvenOdd(input)]
+        : family === 'overunder'
+            ? [analyseOverUnder(input)]
+            : [analyseMatches(input), analyseDiffers(input)];
+    const ranks = new Map<string, EngineRank>();
+    for (const result of results) {
+        for (const candidate of result.candidates) {
+            // Defense in depth for the user-requested Differs restriction.
+            if (candidate.contractType === 'DIGITDIFF' && ![2, 3, 4, 5, 6, 7].includes(Number(candidate.barrier))) continue;
+            ranks.set(`${candidate.contractType}:${candidate.barrier ?? ''}`, {
+                candidateScore: candidate.candidateScore,
+                reasons: candidate.reasons,
+            });
+        }
+    }
+    return ranks;
 };
 
 const candidatesFor = (family: Family, digits: number[]): Candidate[] => {
@@ -226,8 +261,10 @@ const candidatesFor = (family: Family, digits: number[]): Candidate[] => {
         const gap = gapOf(digits, d);
         out.push({ label: `Matches ${d}`, contract: 'DIGITMATCH', side: 0, barrier: d, win: [d], p0: 0.1, gap,
             describe: (h, z, w) => `Digit ${d} printed ${h}% vs 10% expected over ${w} ticks (z ${signed(z)}); last seen ${gap} ticks ago.` });
-        out.push({ label: `Differs ${d}`, contract: 'DIGITDIFF', side: 1, barrier: d, win: range(0, 9).filter(x => x !== d), p0: 0.9, gap,
-            describe: (h, z, w) => `Digit ${d} printed only ${round1(100 - h)}% vs 10% expected over ${w} ticks (z ${signed(z)}); last seen ${gap} ticks ago.` });
+        if (d >= 2 && d <= 7) {
+            out.push({ label: `Differs ${d}`, contract: 'DIGITDIFF', side: 1, barrier: d, win: range(0, 9).filter(x => x !== d), p0: 0.9, gap,
+                describe: (h, z, w) => `Digit ${d} printed only ${round1(100 - h)}% vs 10% expected over ${w} ticks (z ${signed(z)}); last seen ${gap} ticks ago.` });
+        }
     }
     return out;
 };
@@ -283,7 +320,21 @@ export const scanMarkets = (family: Family, inputs: MarketInput[], ticks: number
         const windows = scanWindows(digits.length, ticks);
         const hists = windows.map(window => histogram(digits, window));
         const used = windows[windows.length - 1];
-        const picks = candidatesFor(family, digits).map(c => evaluate(family, c, hists, windows, tests)).sort(byStrength);
+        const engineRanks = engineRanksFor(family, input.symbol, digits);
+        const picks = candidatesFor(family, digits).map(c => {
+            const pick = evaluate(family, c, hists, windows, tests);
+            const engineRank = engineRanks.get(`${pick.contract}:${pick.barrier ?? ''}`);
+            if (!engineRank) return pick;
+            return {
+                ...pick,
+                // Blend strategy ranking with the independent statistical score: this lets the new
+                // engine influence ordering without allowing a weak heuristic to bury strong evidence.
+                // Neither score is a win probability, and qualification remains a separate trade gate.
+                engineScore: Math.round(clamp(engineRank.candidateScore, 0, 100)),
+                score: Math.round(0.35 * clamp(engineRank.candidateScore, 0, 100) + 0.65 * pick.statisticalScore),
+                reason: `${pick.reason} Engine rationale: ${engineRank.reasons.slice(0, 2).join(' ')}`,
+            };
+        }).sort(byStrength);
         return {
             symbol: input.symbol, name: input.name, ready: true, n: digits.length, ticksUsed: used,
             lastDigit: digits[digits.length - 1], lastPrice: input.price ?? null, recent: digits.slice(-12),
@@ -321,12 +372,13 @@ export const pairPercents = (digitPct: number[], family: Family, barrier: number
 export const needsBarrier = (contract: DigitContract): boolean =>
     contract === 'DIGITOVER' || contract === 'DIGITUNDER' || contract === 'DIGITMATCH' || contract === 'DIGITDIFF';
 
-/** Deriv only offers Over 0-8 and Under 1-9; Matches/Differs accept 0-9. */
+/** Over supports 0-8, Under 1-9, Matches 0-9, and this app restricts Differs targets to 2-7. */
 export const barrierError = (contract: DigitContract, barrier: number): string | null => {
     if (!needsBarrier(contract)) return null;
     if (!Number.isInteger(barrier) || barrier < 0 || barrier > 9) return 'Barrier must be a digit from 0 to 9.';
     if (contract === 'DIGITOVER' && barrier > 8) return 'Over supports barriers 0 to 8.';
     if (contract === 'DIGITUNDER' && barrier < 1) return 'Under supports barriers 1 to 9.';
+    if (contract === 'DIGITDIFF' && ![2, 3, 4, 5, 6, 7].includes(barrier)) return 'Differs supports target digits 2 to 7 only.';
     return null;
 };
 

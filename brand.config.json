@@ -33,11 +33,11 @@
       {
         "id": "apex-sentinel-preview",
         "hosts": [
-          "repair-additions--newapexsentinel.netlify.app"
+          "deploy-preview-7--precisionapex.netlify.app"
         ],
         "display_domain": "Apex Sentinel Preview",
-        "website_url": "https://repair-additions--newapexsentinel.netlify.app",
-        "redirect_uri": "https://repair-additions--newapexsentinel.netlify.app/callback",
+        "website_url": "https://deploy-preview-7--precisionapex.netlify.app",
+        "redirect_uri": "https://deploy-preview-7--precisionapex.netlify.app/callback",
         "client_id": "34BIr72thLXMJHaL9PQxN",
         "scopes": [
           "trade",
