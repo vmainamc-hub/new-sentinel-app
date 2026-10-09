@@ -52,6 +52,63 @@ const signedPct = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(1)}
 
 const ringStyle = (pct: number, color: string) => ({ '--p': Math.min(100, pct * 3), '--c': color }) as CSSProperties;
 
+const ENGINE_CARDS: Array<{ id: Family; eyebrow: string; title: string; description: string; contracts: string; rule: string }> = [
+    {
+        id: 'evenodd',
+        eyebrow: 'ENGINE 01',
+        title: 'Even / Odd',
+        description: 'Measures parity frequencies against the 50 / 50 theoretical baseline across the selected tick window.',
+        contracts: 'DIGITEVEN · DIGITODD',
+        rule: 'No barrier digit',
+    },
+    {
+        id: 'overunder',
+        eyebrow: 'ENGINE 02',
+        title: 'Over / Under',
+        description: 'Ranks threshold candidates using the legal digit ranges and compares historical frequency with each contract baseline.',
+        contracts: 'DIGITOVER · DIGITUNDER',
+        rule: 'Over 0–8 · Under 1–9',
+    },
+    {
+        id: 'matchesdiffers',
+        eyebrow: 'ENGINE 03',
+        title: 'Matches / Differs',
+        description: 'Compares each match digit and ranks the allowed differs targets without using the excluded edge digits.',
+        contracts: 'DIGITMATCH · DIGITDIFF',
+        rule: 'Differs targets: 2, 3, 4, 5, 6, 7 only',
+    },
+];
+
+const EngineArchitecture = ({ family, onFamily }: Pick<BulkViewProps, 'family' | 'onFamily'>) => (
+    <section className='apex-bt__engine-lab' aria-label='Digit engine architectures'>
+        <div className='apex-bt__engine-lab-head'>
+            <div>
+                <span className='apex-bt__eyebrow'>PRECISIONAPEX · STRATEGY WORKSPACE</span>
+                <h2>Choose a digit engine</h2>
+                <p>Select an engine to drive the live scanner and the trade controls below. Each engine ranks candidates from tick history; none guarantees an edge.</p>
+            </div>
+            <span className='apex-bt__lab-state'><i /> 3 engines available</span>
+        </div>
+        <div className='apex-bt__engine-grid'>
+            {ENGINE_CARDS.map(engine => (
+                <article key={engine.id} className={`apex-bt__engine-card${family === engine.id ? ' is-selected' : ''}`}>
+                    <div className='apex-bt__engine-card-top'>
+                        <span>{engine.eyebrow}</span>
+                        {family === engine.id && <b>SELECTED</b>}
+                    </div>
+                    <h3>{engine.title}</h3>
+                    <p>{engine.description}</p>
+                    <div className='apex-bt__engine-contracts'>{engine.contracts}</div>
+                    <div className='apex-bt__engine-rule'><span>RULE SET</span><strong>{engine.rule}</strong></div>
+                    <button type='button' aria-pressed={family === engine.id} onClick={() => onFamily(engine.id)}>
+                        {family === engine.id ? 'Engine selected' : 'Use this engine'}
+                    </button>
+                </article>
+            ))}
+        </div>
+    </section>
+);
+
 const Scanner = ({ family, onFamily, ticks, onTicks, scan, live, onRescan, onLoad, loaded, symbol }: BulkViewProps) => (
     <section className='apex-bt__panel'>
         <div className='apex-bt__head'>
@@ -252,11 +309,12 @@ const BulkTraderView = (props: BulkViewProps) => (
             <h1>AI Bulk Trader</h1>
             <p>Scan all 13 volatility indices, load the ranked pick, and place it in bulk. Up to {MAX_BULK_RUNS} trades per run.</p>
         </header>
+        <EngineArchitecture family={props.family} onFamily={props.onFamily} />
         <Scanner {...props} />
         <Trader {...props} />
         <p className='apex-bt__foot'>
             The scanner combines the new strategy engines with separate historical significance diagnostics. Engine scores rank hypotheses; they are not win probabilities and do not prove an edge. Synthetic-index digit contracts are random and payouts include Deriv&apos;s margin, so expected return is generally negative. Test on a demo account first.
-            Test on a demo account first.
+
         </p>
     </div>
 );
