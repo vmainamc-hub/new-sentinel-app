@@ -122,8 +122,12 @@ export type ScanPick = {
     side: 0 | 1;
     barrier: number | null;
     z: number;
-    /** 0-100 ranking score. NOT a win probability. */
+    /** 0-100 blended rank from the strategy engine and statistical diagnostic; not a win probability. */
     score: number;
+    /** Strategy-engine ranking score (not a probability). */
+    engineScore: number;
+    /** Legacy multiple-testing-adjusted statistical ranking score. */
+    statisticalScore: number;
     strength: Strength;
     hitPct: number;
     theoryPct: number;
@@ -179,7 +183,7 @@ const evaluate = (family: Family, c: Candidate, hists: number[][], windows: numb
 
     return {
         family, label: c.label, contract: c.contract, side: c.side, barrier: c.barrier,
-        z: round2(long.z), score, strength,
+        z: round2(long.z), score, engineScore: 0, statisticalScore: score, strength,
         hitPct: round1(long.hit * 100), theoryPct: round1(c.p0 * 100), breakEvenPct: round1(breakEvenRate(c.p0) * 100),
         rawP: round4(rawP), adjP: round4(adjP),
         agree: `${agreeing}/${per.length}`,
@@ -323,9 +327,11 @@ export const scanMarkets = (family: Family, inputs: MarketInput[], ticks: number
             if (!engineRank) return pick;
             return {
                 ...pick,
-                // The new engine score now drives the displayed ranking and market ordering.
-                // The legacy z/p-value fields remain independent diagnostics, not probabilities.
-                score: Math.round(clamp(engineRank.candidateScore, 0, 100)),
+                // Blend strategy ranking with the independent statistical score: this lets the new
+                // engine influence ordering without allowing a weak heuristic to bury strong evidence.
+                // Neither score is a win probability, and qualification remains a separate trade gate.
+                engineScore: Math.round(clamp(engineRank.candidateScore, 0, 100)),
+                score: Math.round(0.35 * clamp(engineRank.candidateScore, 0, 100) + 0.65 * pick.statisticalScore),
                 reason: `${pick.reason} Engine rationale: ${engineRank.reasons.slice(0, 2).join(' ')}`,
             };
         }).sort(byStrength);
