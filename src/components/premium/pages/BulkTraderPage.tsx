@@ -1,233 +1,242 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApiBase } from '@/hooks/useApiBase';
 import { PremiumDerivApiService } from '@/services/premium-deriv-api.service';
+import {
+    BULK_MARKETS, DEFAULT_BULK, FAMILIES, MAX_HISTORY, type Family, type MarketInput, type Tally, barrierError, digitsFromTicks,
+    emptyTally, exposure, inferDecimals, lastDigit, lossLimitHit, needsBarrier, recordPlaced, recordSettled, sanitizeBulk, scanMarkets,
+} from '../bulk-engine';
+import BulkTraderView, { type BulkForm, type LoadedPick, type LogRow } from './BulkTraderView';
 
-type TradeMode = 'Even/Odd' | 'Over/Under' | 'Matches/Differs';
+type MarketStore = Record<string, { digits: number[]; price: number | null }>;
 
-type DigitFamily = {
-    mode: TradeMode;
-    sides: [string, string];
-    contracts: [string, string];
-};
-
-const DIGIT_FAMILIES: DigitFamily[] = [
-    { mode: 'Even/Odd', sides: ['Even', 'Odd'], contracts: ['DIGITEVEN', 'DIGITODD'] },
-    { mode: 'Over/Under', sides: ['Over', 'Under'], contracts: ['DIGITOVER', 'DIGITUNDER'] },
-    { mode: 'Matches/Differs', sides: ['Matches', 'Differs'], contracts: ['DIGITMATCH', 'DIGITDIFF'] },
-];
-
-const symbolCode = (item: any) => item?.underlying_symbol || item?.symbol || '';
-const symbolName = (item: any) => item?.underlying_symbol_name || item?.display_name || symbolCode(item);
-const pipDecimals = (item: any) => {
-    const pip = String(item?.pip_size ?? item?.pip ?? '0.01');
-    return pip.includes('.') ? pip.split('.')[1].replace(/0+$/, '').length : 0;
-};
-const numeric = (value: unknown, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+const IDLE = 'Bot is not running.';
+const sleep = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
+const num = (value: unknown, fallback = 0) => { const n = Number(value); return Number.isFinite(n) ? n : fallback; };
+const money = (value: number, currency: string) => `${value.toFixed(2)} ${currency}`;
+const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 const BulkTraderPage = () => {
     const { authData } = useApiBase();
-    const [symbols, setSymbols] = useState<any[]>([]);
-    const [availableContracts, setAvailableContracts] = useState<string[]>([]);
-    const [symbol, setSymbol] = useState('1HZ100V');
-    const [mode, setMode] = useState<TradeMode>('Even/Odd');
-    const [side, setSide] = useState('Even');
-    const [barrier, setBarrier] = useState('5');
-    const [windowSize, setWindowSize] = useState(1000);
-    const [duration, setDuration] = useState(1);
-    const [stake, setStake] = useState(0.5);
-    const [runs, setRuns] = useState(1);
-    const [prices, setPrices] = useState<number[]>([]);
-    const [busy, setBusy] = useState(false);
-    const [results, setResults] = useState<any[]>([]);
-    const [error, setError] = useState('');
     const currency = authData?.currency || 'USD';
-    const selectedSymbol = symbols.find(item => symbolCode(item) === symbol);
-    const decimals = pipDecimals(selectedSymbol);
+    const accountKind = (typeof localStorage !== 'undefined' && localStorage.getItem('account_type')) || '';
 
-    useEffect(() => {
-        PremiumDerivApiService.activeSymbols().then(items => {
-            const list = items
-                .filter(item => symbolCode(item))
-                .sort((a, b) => symbolName(a).localeCompare(symbolName(b)));
-            setSymbols(list);
-            if (!list.some(item => symbolCode(item) === symbol) && list[0]) setSymbol(symbolCode(list[0]));
-        }).catch(err => setError(err instanceof Error ? err.message : String(err)));
-    }, []);
+    const [family, setFamily] = useState<Family>('evenodd');
+    const [ticks, setTicks] = useState(1000);
+    const [symbol, setSymbol] = useState('1HZ100V');
+    const [barrier, setBarrier] = useState('5');
+    const [loaded, setLoaded] = useState<LoadedPick | null>(null);
+    const [form, setForm] = useState<BulkForm>({
+        duration: String(DEFAULT_BULK.duration), stake: String(DEFAULT_BULK.stake),
+        runs: String(DEFAULT_BULK.runs), maxLoss: String(DEFAULT_BULK.maxLoss),
+    });
+    const [version, setVersion] = useState(0);
+    const [reloadKey, setReloadKey] = useState(0);
+    const [live, setLive] = useState(false);
+    const [error, setError] = useState('');
+    const [running, setRunning] = useState(false);
+    const [status, setStatus] = useState(IDLE);
+    const [tally, setTally] = useState<Tally>(emptyTally());
+    const [log, setLog] = useState<LogRow[]>([]);
 
-    useEffect(() => {
-        if (!symbol) return;
-        setAvailableContracts([]);
-        PremiumDerivApiService.contractsFor(symbol).then(data => {
-            const available = Array.isArray(data?.available) ? data.available : [];
-            const types = [...new Set(available.map((item: any) => String(item.contract_type || '')).filter(Boolean))];
-            setAvailableContracts(types);
-            const supportedFamily = DIGIT_FAMILIES.find(family => family.contracts.some(type => types.includes(type)));
-            if (supportedFamily && !supportedFamily.contracts.includes(contractType)) {
-                setMode(supportedFamily.mode);
-                setSide(supportedFamily.sides[0]);
-            }
-        }).catch(() => {
-            // Keep all digit families selectable if contract metadata is temporarily unavailable.
-            setAvailableContracts([]);
-        });
-    }, [symbol]);
+    const store = useRef<MarketStore>({});
+    const decimals = useRef<Record<string, number>>(Object.fromEntries(BULK_MARKETS.map(market => [market.symbol, market.pip])));
+    const dirty = useRef(false);
+    const mounted = useRef(true);
+    const runRef = useRef(false);
+    const tallyRef = useRef<Tally>(emptyTally());
+    const rowSeq = useRef(0);
+    const traderRef = useRef<HTMLElement>(null);
 
+    useEffect(() => () => { mounted.current = false; runRef.current = false; }, []);
+
+    // ------------------------------------------------------------------
+    // Market data: 5000 ticks of history, then live ticks, for all 13 markets.
+    // ------------------------------------------------------------------
     useEffect(() => {
-        if (!symbol) return;
-        let dispose: (() => void) | undefined;
+        let alive = true;
+        const disposers: Array<() => void> = [];
+        store.current = {};
+        setLive(false);
         setError('');
-        PremiumDerivApiService.ticksHistory(symbol, windowSize)
-            .then(setPrices)
-            .catch(err => setError(err instanceof Error ? err.message : String(err)));
-        PremiumDerivApiService.subscribeTicks(symbol, tick => {
-            const quote = numeric(tick?.quote, NaN);
-            if (Number.isFinite(quote)) setPrices(current => [...current.slice(-(windowSize - 1)), quote]);
-        }).then(fn => { dispose = fn; }).catch(err => setError(err instanceof Error ? err.message : String(err)));
-        return () => dispose?.();
-    }, [symbol, windowSize]);
 
-    useEffect(() => {
-        const family = DIGIT_FAMILIES.find(item => item.mode === mode) || DIGIT_FAMILIES[0];
-        setSide(family.sides[0]);
-    }, [mode]);
-
-    const family = DIGIT_FAMILIES.find(item => item.mode === mode) || DIGIT_FAMILIES[0];
-    const contractType = family.contracts[family.sides.indexOf(side) === 1 ? 1 : 0];
-    const barrierDigit = Math.min(Math.max(Math.trunc(numeric(barrier, 5)), 0), 9);
-
-    const digits = useMemo(() => prices.map(price => Number(price.toFixed(decimals).slice(-1))), [prices, decimals]);
-    const counts = useMemo(() => Array.from({ length: 10 }, (_, digit) => digits.filter(value => value === digit).length), [digits]);
-    const total = digits.length || 1;
-    const max = Math.max(...counts), min = Math.min(...counts);
-    const current = prices.at(-1);
-
-    const pairStats = useMemo(() => {
-        let leftCount = 0;
-        let rightCount = 0;
-        let leftLabel = family.sides[0];
-        let rightLabel = family.sides[1];
-
-        if (mode === 'Even/Odd') {
-            leftCount = digits.filter(value => value % 2 === 0).length;
-            rightCount = digits.length - leftCount;
-        } else if (mode === 'Over/Under') {
-            leftCount = digits.filter(value => value > barrierDigit).length;
-            rightCount = digits.filter(value => value < barrierDigit).length;
-            leftLabel = `Over ${barrierDigit}`;
-            rightLabel = `Under ${barrierDigit}`;
-        } else {
-            leftCount = digits.filter(value => value === barrierDigit).length;
-            rightCount = digits.filter(value => value !== barrierDigit).length;
-            leftLabel = `Matches ${barrierDigit}`;
-            rightLabel = `Differs ${barrierDigit}`;
-        }
-
-        return {
-            leftLabel,
-            rightLabel,
-            leftPercent: (leftCount / total) * 100,
-            rightPercent: (rightCount / total) * 100,
+        const run = async () => {
+            const queue = [...BULK_MARKETS];
+            const worker = async () => {
+                for (let market = queue.shift(); market && alive; market = queue.shift()) {
+                    try {
+                        const prices = await PremiumDerivApiService.ticksHistory(market.symbol, MAX_HISTORY);
+                        if (!alive) return;
+                        // Decimals come from the ticks themselves (Deriv strips trailing zeros), so a wrong
+                        // fallback pip can never silently shift every digit.
+                        const places = inferDecimals(prices, market.pip);
+                        decimals.current[market.symbol] = places;
+                        store.current[market.symbol] = {
+                            digits: digitsFromTicks(prices, places).slice(-MAX_HISTORY),
+                            price: prices.length ? prices[prices.length - 1] : null,
+                        };
+                        dirty.current = true;
+                        const dispose = await PremiumDerivApiService.subscribeTicks(market.symbol, tick => {
+                            const quote = Number(tick?.quote);
+                            const entry = store.current[market.symbol];
+                            if (!Number.isFinite(quote) || !entry) return;
+                            const pip = Number(tick?.pip_size);
+                            if (Number.isInteger(pip) && pip >= 0) decimals.current[market.symbol] = Math.max(decimals.current[market.symbol], pip);
+                            entry.digits.push(lastDigit(quote, decimals.current[market.symbol]));
+                            if (entry.digits.length > MAX_HISTORY) entry.digits.splice(0, entry.digits.length - MAX_HISTORY);
+                            entry.price = quote;
+                            dirty.current = true;
+                        });
+                        if (alive) disposers.push(dispose); else dispose();
+                    } catch (err) {
+                        if (alive) setError(errorText(err));
+                    }
+                }
+            };
+            await Promise.all([worker(), worker(), worker(), worker()]);
+            if (alive) setLive(true);
         };
-    }, [barrierDigit, digits, family.sides, mode, total]);
+        void run();
 
-    const modeSupported = (candidate: DigitFamily) =>
-        availableContracts.length === 0 || candidate.contracts.some(type => availableContracts.includes(type));
+        const timer = window.setInterval(() => {
+            if (dirty.current) { dirty.current = false; setVersion(value => value + 1); }
+        }, 700);
 
-    const contractSupported = availableContracts.length === 0 || availableContracts.includes(contractType);
+        return () => {
+            alive = false;
+            window.clearInterval(timer);
+            disposers.forEach(dispose => { try { dispose(); } catch { /* already closed */ } });
+        };
+    }, [reloadKey]);
 
-    const execute = async () => {
-        if (!contractSupported) {
-            setError(`${mode} is not available for ${symbolName(selectedSymbol) || symbol}. Choose another market or digit trade type.`);
-            return;
-        }
-        const count = Math.min(Math.max(Math.trunc(runs), 1), 100);
-        const perTrade = Math.max(stake, 0.01);
-        const estimate = count * perTrade;
-        if (!window.confirm(`Place ${count} ${side} digit purchase(s) on ${symbolName(selectedSymbol) || symbol}? Estimated stake: ${estimate.toFixed(2)} ${currency}.`)) return;
-        setBusy(true); setError(''); setResults([]);
-        const completed: any[] = [];
+    const inputs: MarketInput[] = useMemo(
+        () => BULK_MARKETS.map(market => ({
+            symbol: market.symbol, name: market.name,
+            digits: store.current[market.symbol]?.digits ?? [], price: store.current[market.symbol]?.price ?? null,
+        })),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [version]
+    );
+    const scan = useMemo(() => scanMarkets(family, inputs, ticks), [family, inputs, ticks]);
+
+    // ------------------------------------------------------------------
+    // Scanner -> trader hand-off. Nothing is applied automatically; the user chooses to load a pick.
+    // ------------------------------------------------------------------
+    const onLoad = useCallback((target: string) => {
+        const market = scan.markets.find(item => item.symbol === target);
+        if (!market?.best) return;
+        setSymbol(target);
+        if (market.best.barrier !== null) setBarrier(String(market.best.barrier));
+        setLoaded({ symbol: target, pick: market.best });
+        setError('');
+        window.setTimeout(() => traderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }, [scan]);
+
+    const onForm = (key: keyof BulkForm) => (event: { target: { value: string } }) =>
+        setForm(current => ({ ...current, [key]: event.target.value }));
+
+    // ------------------------------------------------------------------
+    // Bulk execution: place N purchases through the app's authenticated Deriv socket and track settlement.
+    // ------------------------------------------------------------------
+    const execute = async (side: 0 | 1) => {
+        if (runRef.current) return;
+        setError('');
+        const def = FAMILIES[family];
+        const contract = def.contracts[side];
+        const params = sanitizeBulk({
+            stake: Number(form.stake), runs: Number(form.runs), duration: Number(form.duration), maxLoss: Number(form.maxLoss),
+        });
+        const barrierDigit = Math.trunc(Number(barrier));
+        const invalid = barrierError(contract, barrierDigit);
+        if (invalid) { setError(invalid); return; }
+
+        const market = BULK_MARKETS.find(item => item.symbol === symbol) ?? BULK_MARKETS[0];
+        const label = needsBarrier(contract) ? `${def.sides[side]} ${barrierDigit}` : def.sides[side];
+        const accountText = accountKind ? `${accountKind} account` : 'the selected Deriv account';
+        const confirmed = window.confirm(
+            `Place ${params.runs} × ${label} on ${market.name}?\n\nThis places real trades on ${accountText} (${currency}).\n` +
+            `Stake ${money(params.stake, currency)} each · ${params.duration} tick(s) · total exposure ${money(exposure(params), currency)}.\n` +
+            `${params.maxLoss > 0 ? `Stops placing new trades once settled losses reach ${money(params.maxLoss, currency)}.` : 'No loss limit set.'}\n\n` +
+            'Statistics describe past ticks and do not predict results. Trading involves risk of loss. Test on a demo account first.'
+        );
+        if (!confirmed) return;
+
+        runRef.current = true;
+        setRunning(true);
+        setLog([]);
+        tallyRef.current = emptyTally();
+        setTally(tallyRef.current);
+
+        const owned = new Map<number, number>(); // contract id -> log row id
+        const settled = new Set<number>();
+        const off = PremiumDerivApiService.onContractUpdate(update => {
+            const id = Math.trunc(Number(update?.contract_id));
+            if (!owned.has(id) || settled.has(id) || !PremiumDerivApiService.isContractClosed(update)) return;
+            settled.add(id);
+            const profit = num(update.profit);
+            tallyRef.current = recordSettled(tallyRef.current, profit);
+            if (!mounted.current) return;
+            setTally(tallyRef.current);
+            const rowId = owned.get(id);
+            setLog(rows => rows.map(row => (row.id === rowId ? { ...row, profit, state: profit > 0 ? 'won' : 'lost' } : row)));
+        });
+
+        let final = IDLE;
         try {
-            for (let index = 0; index < count; index += 1) {
+            for (let index = 0; index < params.runs && runRef.current && mounted.current; index += 1) {
+                if (lossLimitHit(tallyRef.current, params.maxLoss)) {
+                    final = `Loss limit of ${money(params.maxLoss, currency)} reached. No further trades placed.`;
+                    break;
+                }
+                setStatus(`Placing trade ${index + 1}/${params.runs}…`);
                 try {
                     const proposal = await PremiumDerivApiService.proposal({
-                        amount: perTrade,
-                        basis: 'stake',
-                        contract_type: contractType,
-                        currency,
-                        underlying_symbol: symbol,
-                        duration: Math.max(Math.trunc(duration), 1),
-                        duration_unit: 't',
-                        barrier: ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(contractType) ? String(barrierDigit) : undefined,
+                        amount: params.stake, basis: 'stake', contract_type: contract, currency, underlying_symbol: market.symbol,
+                        duration: params.duration, duration_unit: 't', barrier: needsBarrier(contract) ? String(barrierDigit) : undefined,
                     });
-                    const maxPrice = numeric(proposal.ask_price, perTrade);
-                    const buy = await PremiumDerivApiService.buy(proposal.id, maxPrice);
-                    completed.push({ index: index + 1, ok: true, contract_id: buy.contract_id, price: buy.buy_price ?? maxPrice });
+                    const bought = await PremiumDerivApiService.buy(proposal.id, num(proposal.ask_price, params.stake));
+                    const contractId = Math.trunc(Number(bought.contract_id));
+                    const rowId = (rowSeq.current += 1);
+                    owned.set(contractId, rowId);
+                    tallyRef.current = recordPlaced(tallyRef.current);
+                    setTally(tallyRef.current);
+                    setLog(rows => [{ id: rowId, time: new Date().toLocaleTimeString(), label, stake: params.stake, state: 'open' as const, profit: 0 }, ...rows].slice(0, 100));
                 } catch (err) {
-                    completed.push({ index: index + 1, ok: false, error: err instanceof Error ? err.message : String(err) });
+                    // A failed purchase (insufficient balance, market closed, ...) would repeat for every trade: stop here.
+                    const message = errorText(err);
+                    setLog(rows => [{ id: (rowSeq.current += 1), time: new Date().toLocaleTimeString(), label, stake: params.stake, state: 'error' as const, profit: 0, note: message }, ...rows]);
+                    setError(message);
+                    final = 'Stopped because a purchase failed.';
+                    break;
                 }
-                setResults([...completed]);
             }
+            if (final === IDLE && !runRef.current) final = 'Stopped. Open trades will still settle.';
+
+            const deadline = Date.now() + 45000;
+            while (settled.size < owned.size && Date.now() < deadline && mounted.current) {
+                setStatus(`Waiting for ${owned.size - settled.size} open trade(s) to settle…`);
+                await sleep(500);
+            }
+            if (settled.size < owned.size && final === IDLE) final = 'Some trades had not settled yet. Check your Deriv statement.';
         } finally {
-            setBusy(false);
+            off();
+            runRef.current = false;
+            if (mounted.current) {
+                setRunning(false);
+                setStatus(final === IDLE ? `Done. ${tallyRef.current.settled} trade(s) settled · P/L ${money(tallyRef.current.pnl, currency)}.` : final);
+            }
         }
     };
 
-    return <div className='prodb-bulk-page'>
-        <div className='prodb-form-row'>
-            <label>MARKET
-                <select value={symbol} onChange={e => setSymbol(e.target.value)}>
-                    {symbols.map(item => <option value={symbolCode(item)} key={symbolCode(item)}>{symbolName(item)} · {symbolCode(item)}</option>)}
-                </select>
-            </label>
-            <label>DIGIT TRADE TYPE
-                <select value={mode} onChange={e => setMode(e.target.value as TradeMode)}>
-                    {DIGIT_FAMILIES.map(item => <option key={item.mode} value={item.mode} disabled={!modeSupported(item)}>{item.mode}</option>)}
-                </select>
-            </label>
-        </div>
+    const stop = () => { runRef.current = false; setStatus('Stopping after the current trade…'); };
 
-        <div className='prodb-form-row prodb-bulk-side-row'>
-            <label>CONTRACT
-                <select value={side} onChange={e => setSide(e.target.value)}>
-                    {family.sides.map((item, index) => <option key={item} disabled={availableContracts.length > 0 && !availableContracts.includes(family.contracts[index])}>{item}</option>)}
-                </select>
-            </label>
-            {mode !== 'Even/Odd' && <label>DIGIT BARRIER
-                <select value={String(barrierDigit)} onChange={e => setBarrier(e.target.value)}>
-                    {Array.from({ length: 10 }, (_, digit) => <option value={digit} key={digit}>{digit}</option>)}
-                </select>
-            </label>}
-        </div>
-
-        <label className='prodb-full-input'>NUMBER OF ANALYSIS TICKS
-            <input type='number' min='10' max='5000' value={windowSize} onChange={e => setWindowSize(Math.min(Math.max(numeric(e.target.value, 1000), 10), 5000))}/>
-        </label>
-
-        <div className='prodb-bulk-stats'>
-            <div className='prodb-current-tick'><small>CURRENT DERIV TICK</small><strong>{current === undefined ? '—' : current.toFixed(decimals)}</strong></div>
-            <button className='prodb-ai-scanner' type='button'>DERIV LIVE</button>
-            <div className='prodb-digit-row'>{counts.map((count, digit) => <div key={digit}><span className={count === max ? 'ring-teal' : count === min ? 'ring-red' : ''}>{digit}</span><small>{((count / total) * 100).toFixed(2)}%</small></div>)}</div>
-            <div className='prodb-sequence'>{digits.slice(-20).map((digit,index)=><span className={digit % 2 === 0 ? 'even':'odd'} key={`${index}-${digit}`}>{digit}</span>)}</div>
-        </div>
-
-        <div className='prodb-form-row prodb-form-row--three'>
-            <label>DURATION (TICKS)<input type='number' min='1' value={duration} onChange={e => setDuration(numeric(e.target.value, 1))}/></label>
-            <label>STAKE ({currency})<input type='number' min='.01' step='.01' value={stake} onChange={e => setStake(numeric(e.target.value, .5))}/></label>
-            <label>NO. OF BULK TRADES<input type='number' min='1' max='100' value={runs} onChange={e => setRuns(numeric(e.target.value, 1))}/></label>
-        </div>
-
-        <div className='prodb-trade-pair'>
-            <div><span>{pairStats.leftLabel}</span><strong>{pairStats.leftPercent.toFixed(2)}%</strong><small>{mode === 'Over/Under' ? 'equal digits excluded' : 'analysis window'}</small></div>
-            <div><span>{pairStats.rightLabel}</span><strong>{pairStats.rightPercent.toFixed(2)}%</strong><small>{mode === 'Over/Under' ? 'equal digits excluded' : 'analysis window'}</small></div>
-        </div>
-
-        <button className='prodb-bulk-execute' onClick={execute} disabled={busy || !symbol || !contractSupported}>
-            {busy ? `EXECUTING ${results.length}/${Math.min(Math.max(Math.trunc(runs),1),100)}…` : `EXECUTE ${side.toUpperCase()}`}
-        </button>
-        {!contractSupported && <div className='prodb-live-error'>{side} is not available on the selected market.</div>}
-        {error && <div className='prodb-live-error'>{error}</div>}
-        {results.length > 0 && <div className='prodb-bulk-results'>{results.slice(-12).map(item => <span className={item.ok ? 'is-ok' : 'is-fail'} key={item.index}>#{item.index} {item.ok ? `✓ ${item.contract_id || ''}` : `✕ ${item.error}`}</span>)}</div>}
-    </div>;
+    return <BulkTraderView
+        family={family} onFamily={setFamily} ticks={ticks} onTicks={setTicks} scan={scan} live={live}
+        onRescan={() => setReloadKey(value => value + 1)}
+        symbol={symbol} onSymbol={setSymbol} barrier={barrier} onBarrier={setBarrier}
+        loaded={loaded} onLoad={onLoad} form={form} onForm={onForm}
+        currency={currency} running={running} status={status} error={error} tally={tally} log={log}
+        onExecute={side => void execute(side)} onStop={stop} traderRef={traderRef}
+    />;
 };
 
 export default BulkTraderPage;
