@@ -71,7 +71,7 @@ export function analyseOverUnder(input: EngineInput): EngineResult {
     });
   });
 
-  const ranked = sortCandidates(candidates);
+  const ranked = n ? sortCandidates(candidates) : [];
   return {
     engine: "over-under",
     symbol: input.symbol,
