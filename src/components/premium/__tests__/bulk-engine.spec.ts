@@ -97,6 +97,17 @@ describe('scanner', () => {
         expect(differs.ranked[0].best?.side).toBe(1);
     });
 
+    it('never exposes edge digits as Differs picks', () => {
+        const rand = rng(41);
+        const result = scanMarkets('matchesdiffers', markets(() => uniform(1200, rand)), 1000);
+        result.markets.forEach(market => {
+            const visible = [market.best, ...market.alternatives].filter((pick): pick is NonNullable<typeof pick> => Boolean(pick));
+            visible.filter(pick => pick.contract === 'DIGITDIFF').forEach(pick => {
+                expect([2, 3, 4, 5, 6, 7]).toContain(pick.barrier);
+            });
+        });
+    });
+
     it('finds a market skewed to high digits for Over/Under', () => {
         const rand = rng(4);
         const result = scanMarkets('overunder', markets(symbol =>
