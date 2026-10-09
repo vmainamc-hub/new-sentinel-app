@@ -47,7 +47,7 @@ describe("qualification and walk-forward",()=>{
     expect(wilsonLowerBound(50,100)).toBeGreaterThan(0.4);
     const c=buildCandidate({engine:"matches",contractType:"DIGITMATCH",barrier:"7",label:"Matches 7",candidateScore:70,
       estimatedWinProbability:0.12,empiricalWins:36,sampleSize:240,minSampleSize:240,quote:{stake:1,totalPayout:10},
-      validation:{observations:120,modelBrier:0.07,baselineBrier:0.09},strategyReasons:[]});
+      validation:{observations:120,wins:24,modelBrier:0.16,baselineBrier:0.18},strategyReasons:[]});
     expect(c.expectedValuePerTrade).toBeCloseTo(0.2);
     expect(c.breakEvenProbability).toBeCloseTo(0.1);
     expect(c.canTrade).toBe(true);
@@ -63,5 +63,6 @@ describe("qualification and walk-forward",()=>{
     v.recordForecast("DIGITMATCH:7",0.2,0.1);
     expect(v.settleNext("DIGITMATCH:7",true)).toBe(true);
     expect(v.report("DIGITMATCH:7").modelBrier).toBeCloseTo(0.64);
+    expect(v.report("DIGITMATCH:7").wins).toBe(1);
   });
 });
