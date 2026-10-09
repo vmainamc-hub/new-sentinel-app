@@ -323,7 +323,7 @@ export const pairPercents = (digitPct: number[], family: Family, barrier: number
 export const needsBarrier = (contract: DigitContract): boolean =>
     contract === 'DIGITOVER' || contract === 'DIGITUNDER' || contract === 'DIGITMATCH' || contract === 'DIGITDIFF';
 
-/** Deriv only offers Over 0-8 and Under 1-9; Matches/Differs accept 0-9. */
+/** Over supports 0-8, Under 1-9, Matches 0-9, and this app restricts Differs targets to 2-7. */
 export const barrierError = (contract: DigitContract, barrier: number): string | null => {
     if (!needsBarrier(contract)) return null;
     if (!Number.isInteger(barrier) || barrier < 0 || barrier > 9) return 'Barrier must be a digit from 0 to 9.';
