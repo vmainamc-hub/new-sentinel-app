@@ -64,6 +64,7 @@ import './premium-wallet.scss';
 import './premium-site-theme.scss';
 import './apex-theme.scss';
 import './apex-pages.scss';
+import './apex-bulk.scss';
 
 const validSections: PremiumSection[] = [
     'dashboard', 'bot_ideas', 'quick_bot', 'bot_builder', 'free_bots', 'signal_ai', 'auto_trader',
