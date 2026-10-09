@@ -20,7 +20,7 @@ export type FamilyDef = {
 export const FAMILIES: Record<Family, FamilyDef> = {
     evenodd: { title: 'Even / Odd', sides: ['Even', 'Odd'], contracts: ['DIGITEVEN', 'DIGITODD'], tests: 2 },
     overunder: { title: 'Over / Under', sides: ['Over', 'Under'], contracts: ['DIGITOVER', 'DIGITUNDER'], tests: 18 },
-    matchesdiffers: { title: 'Matches / Differs', sides: ['Matches', 'Differs'], contracts: ['DIGITMATCH', 'DIGITDIFF'], tests: 20 },
+    matchesdiffers: { title: 'Matches / Differs', sides: ['Matches', 'Differs'], contracts: ['DIGITMATCH', 'DIGITDIFF'], tests: 16 },
 };
 
 export const FAMILY_ORDER: Family[] = ['evenodd', 'overunder', 'matchesdiffers'];
@@ -226,8 +226,10 @@ const candidatesFor = (family: Family, digits: number[]): Candidate[] => {
         const gap = gapOf(digits, d);
         out.push({ label: `Matches ${d}`, contract: 'DIGITMATCH', side: 0, barrier: d, win: [d], p0: 0.1, gap,
             describe: (h, z, w) => `Digit ${d} printed ${h}% vs 10% expected over ${w} ticks (z ${signed(z)}); last seen ${gap} ticks ago.` });
-        out.push({ label: `Differs ${d}`, contract: 'DIGITDIFF', side: 1, barrier: d, win: range(0, 9).filter(x => x !== d), p0: 0.9, gap,
-            describe: (h, z, w) => `Digit ${d} printed only ${round1(100 - h)}% vs 10% expected over ${w} ticks (z ${signed(z)}); last seen ${gap} ticks ago.` });
+        if (d >= 2 && d <= 7) {
+            out.push({ label: `Differs ${d}`, contract: 'DIGITDIFF', side: 1, barrier: d, win: range(0, 9).filter(x => x !== d), p0: 0.9, gap,
+                describe: (h, z, w) => `Digit ${d} printed only ${round1(100 - h)}% vs 10% expected over ${w} ticks (z ${signed(z)}); last seen ${gap} ticks ago.` });
+        }
     }
     return out;
 };
@@ -327,6 +329,7 @@ export const barrierError = (contract: DigitContract, barrier: number): string |
     if (!Number.isInteger(barrier) || barrier < 0 || barrier > 9) return 'Barrier must be a digit from 0 to 9.';
     if (contract === 'DIGITOVER' && barrier > 8) return 'Over supports barriers 0 to 8.';
     if (contract === 'DIGITUNDER' && barrier < 1) return 'Under supports barriers 1 to 9.';
+    if (contract === 'DIGITDIFF' && ![2, 3, 4, 5, 6, 7].includes(barrier)) return 'Differs supports target digits 2 to 7 only.';
     return null;
 };
 
