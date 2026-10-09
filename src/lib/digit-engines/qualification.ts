@@ -10,14 +10,20 @@ export interface CandidateDraft {
   quote?: QuoteEconomics; validation?: ValidationReport; strategyReasons: string[];
 }
 export function buildCandidate(d: CandidateDraft): Candidate {
-  const reasons = [...d.strategyReasons], p = clamp(d.estimatedWinProbability, 0, 1), lower = wilsonLowerBound(d.empiricalWins, d.sampleSize);
+  const reasons = [...d.strategyReasons], p = clamp(d.estimatedWinProbability, 0, 1);
+  const validation = d.validation;
+  // Qualification confidence must come from future outcomes of forecasts made before those outcomes existed.
+  // In-sample history remains a fallback diagnostic only and can never clear the trade gate by itself.
+  const lower = validation && validation.observations > 0
+    ? wilsonLowerBound(validation.wins, validation.observations)
+    : wilsonLowerBound(d.empiricalWins, d.sampleSize);
   const q = d.quote, validQuote = Boolean(q && Number.isFinite(q.stake) && Number.isFinite(q.totalPayout) && q.stake > 0 && q.totalPayout > 0);
   const breakEven = validQuote ? q!.stake/q!.totalPayout : null, ev = validQuote ? p*q!.totalPayout-q!.stake : null;
   if (d.sampleSize < d.minSampleSize) reasons.push("Insufficient tick history for qualification.");
   if (!validQuote) reasons.push("A current Deriv proposal quote is required.");
   if (ev !== null && ev <= 0) reasons.push("Expected value is not positive at the quoted payout.");
   if (breakEven !== null && lower <= breakEven) reasons.push("The empirical lower confidence bound does not clear break-even.");
-  const v = d.validation;
+  const v = validation;
   const passed = Boolean(v && v.observations >= MIN_VALIDATION_OBSERVATIONS && Number.isFinite(v.modelBrier)
     && Number.isFinite(v.baselineBrier) && v.modelBrier + VALIDATION_MARGIN < v.baselineBrier);
   if (!passed) reasons.push("Walk-forward validation has not demonstrated improvement over baseline.");
@@ -49,8 +55,8 @@ export class WalkForwardValidator {
   }
   report(key:string):ValidationReport {
     const rows=this.settled.get(key) ?? [];
-    if (!rows.length) return {observations:0,modelBrier:1,baselineBrier:1};
-    return {observations:rows.length,
+    if (!rows.length) return {observations:0,wins:0,modelBrier:1,baselineBrier:1};
+    return {observations:rows.length,wins:rows.reduce((sum,row)=>sum+row.outcome,0),
       modelBrier:rows.reduce((s,r)=>s+(r.p-r.outcome)**2,0)/rows.length,
       baselineBrier:rows.reduce((s,r)=>s+(r.baseline-r.outcome)**2,0)/rows.length};
   }
