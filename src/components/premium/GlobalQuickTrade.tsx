@@ -75,7 +75,7 @@ const GlobalQuickTrade = ({ hidden = false }: { hidden?: boolean }) => {
                 const options = [...unique.values()].sort((a, b) => contractLabel(a.contract_type).localeCompare(contractLabel(b.contract_type)));
                 setContractOptions(options);
                 if (options.length) setContractType(current => options.some(option => option.contract_type === current) ? current : options[0].contract_type);
-                else setError(`Deriv reports no available contracts for ${symbol}. Choose another market or check trading permissions.`);
+                else setError(`No supported Quick Trade contracts are available for ${symbol}. This panel supports Rise/Fall and digit contracts; use the native trading interface for other contract families.`);
             })
             .catch(err => {
                 if (active) {
