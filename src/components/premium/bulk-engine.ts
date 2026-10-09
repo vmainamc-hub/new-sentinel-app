@@ -1,9 +1,10 @@
 // Pure, framework-free logic for the Apex Sentinel AI Bulk Trader (scanner + bulk-run bookkeeping).
 // No React, no network: everything here is deterministic and unit-tested in __tests__/bulk-engine.spec.ts.
 //
-// What the scanner does: for each of the 13 volatility indices it measures how far recent last-digit
+// What the scanner does: for each available volatility or Jump index it measures how far recent last-digit
 // frequencies sit from theory for every candidate trade in the chosen family, corrects for the number
-// of candidates examined, and ranks the result. It describes past ticks. It does not predict the next one.
+// of candidates examined, and ranks the result. Jump indices are included only if Deriv confirms digit-contract support.
+// It describes past ticks. It does not predict the next one.
 
 export type Family = 'evenodd' | 'overunder' | 'matchesdiffers';
 export type DigitContract = 'DIGITEVEN' | 'DIGITODD' | 'DIGITOVER' | 'DIGITUNDER' | 'DIGITMATCH' | 'DIGITDIFF';
@@ -27,7 +28,8 @@ export const FAMILY_ORDER: Family[] = ['evenodd', 'overunder', 'matchesdiffers']
 
 export type BulkMarket = { symbol: string; name: string; pip: number };
 
-// All 13 continuous volatility indices. `pip` is only a fallback: decimals are inferred from the ticks themselves.
+// Volatility and requested Jump indices. The page checks Deriv's live contract capabilities
+// before adding any Jump market to the digit scanner; `pip` is a fallback only.
 export const BULK_MARKETS: BulkMarket[] = [
     { symbol: 'R_10', name: 'Volatility 10', pip: 3 },
     { symbol: 'R_25', name: 'Volatility 25', pip: 3 },
@@ -42,6 +44,11 @@ export const BULK_MARKETS: BulkMarket[] = [
     { symbol: '1HZ75V', name: 'Volatility 75 (1s)', pip: 2 },
     { symbol: '1HZ90V', name: 'Volatility 90 (1s)', pip: 3 },
     { symbol: '1HZ100V', name: 'Volatility 100 (1s)', pip: 2 },
+    { symbol: 'JD10', name: 'Jump 10 Index', pip: 2 },
+    { symbol: 'JD25', name: 'Jump 25 Index', pip: 2 },
+    { symbol: 'JD50', name: 'Jump 50 Index', pip: 2 },
+    { symbol: 'JD75', name: 'Jump 75 Index', pip: 2 },
+    { symbol: 'JD100', name: 'Jump 100 Index', pip: 2 },
 ];
 
 export const MIN_SCAN_TICKS = 100;

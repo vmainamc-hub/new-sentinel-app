@@ -2,16 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApiBase } from '@/hooks/useApiBase';
 import { PremiumDerivApiService } from '@/services/premium-deriv-api.service';
 
-const CONTRACTS = [
-    ['CALL', 'Rise'],
-    ['PUT', 'Fall'],
-    ['DIGITEVEN', 'Even'],
-    ['DIGITODD', 'Odd'],
-    ['DIGITOVER', 'Digit Over'],
-    ['DIGITUNDER', 'Digit Under'],
-    ['DIGITMATCH', 'Digit Match'],
-    ['DIGITDIFF', 'Digit Diff'],
-];
+const CONTRACT_LABELS: Record<string, string> = {
+    CALL: 'Rise', PUT: 'Fall', CALLE: 'Rise Equals', PUTE: 'Fall Equals',
+    DIGITEVEN: 'Even', DIGITODD: 'Odd', DIGITOVER: 'Digit Over', DIGITUNDER: 'Digit Under',
+    DIGITMATCH: 'Digit Match', DIGITDIFF: 'Digit Diff',
+};
+// This compact interface collects tick duration and an optional digit barrier. Other contract
+// families need extra inputs (for example multiplier, selected tick, or expiry settings) and
+// remain available through the native interfaces that collect those fields.
+const QUICK_TRADE_TYPES = new Set(['CALL', 'PUT', 'CALLE', 'PUTE', 'DIGITEVEN', 'DIGITODD', 'DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF']);
+type AvailableContract = { contract_type: string; contract_category?: string; sentiment?: string };
+const contractLabel = (type: string) => CONTRACT_LABELS[type] || type;
 
 const needsBarrier = (type: string) => ['DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF'].includes(type);
 const symbolCode = (item: any) => item?.underlying_symbol || item?.symbol || '';
@@ -27,6 +28,8 @@ const GlobalQuickTrade = ({ hidden = false }: { hidden?: boolean }) => {
     const [symbols, setSymbols] = useState<any[]>([]);
     const [symbol, setSymbol] = useState('1HZ100V');
     const [contractType, setContractType] = useState('CALL');
+    const [contractOptions, setContractOptions] = useState<AvailableContract[]>([]);
+    const [loadingContracts, setLoadingContracts] = useState(false);
     const [stake, setStake] = useState(1);
     const [duration, setDuration] = useState(1);
     const [barrier, setBarrier] = useState('5');
@@ -48,12 +51,52 @@ const GlobalQuickTrade = ({ hidden = false }: { hidden?: boolean }) => {
             .catch(err => setError(err instanceof Error ? err.message : String(err)));
     }, [open, symbol, symbols.length]);
 
+    // Deriv exposes different contract types for different markets. Never offer a contract
+    // unless contracts_for confirms it is available for the currently selected symbol.
+    useEffect(() => {
+        if (!open || !symbol) return;
+        let active = true;
+        setLoadingContracts(true);
+        setContractOptions([]);
+        setProposal(null);
+        setError('');
+        PremiumDerivApiService.contractsFor(symbol)
+            .then(response => {
+                if (!active) return;
+                const available = Array.isArray(response?.available) ? response.available : [];
+                const unique = new Map<string, AvailableContract>();
+                available.forEach((item: any) => {
+                    const raw = item?.contract_type;
+                    (Array.isArray(raw) ? raw : [raw]).forEach((type: unknown) => {
+                        if (typeof type !== 'string' || !type || !QUICK_TRADE_TYPES.has(type)) return;
+                        if (!unique.has(type)) unique.set(type, { contract_type: type, contract_category: item.contract_category, sentiment: item.sentiment });
+                    });
+                });
+                const options = [...unique.values()].sort((a, b) => contractLabel(a.contract_type).localeCompare(contractLabel(b.contract_type)));
+                setContractOptions(options);
+                if (options.length) setContractType(current => options.some(option => option.contract_type === current) ? current : options[0].contract_type);
+                else setError(`No supported Quick Trade contracts are available for ${symbol}. This panel supports Rise/Fall and digit contracts; use the native trading interface for other contract families.`);
+            })
+            .catch(err => {
+                if (active) {
+                    setContractOptions([]);
+                    setError(err instanceof Error ? err.message : String(err));
+                }
+            })
+            .finally(() => { if (active) setLoadingContracts(false); });
+        return () => { active = false; };
+    }, [open, symbol]);
+
     useEffect(() => { setProposal(null); setMessage(''); }, [symbol, contractType, stake, duration, barrier]);
 
     const selectedName = useMemo(() => symbolName(symbols.find(item => symbolCode(item) === symbol)) || symbol, [symbol, symbols]);
+    const selectedContractIsAvailable = contractOptions.some(item => item.contract_type === contractType);
 
     const getPrice = async () => {
-        if (!symbol) return;
+        if (!symbol || loadingContracts || !selectedContractIsAvailable) {
+            setError('Wait for Deriv to confirm the contract types available for this market.');
+            return;
+        }
         setBusy('proposal'); setError(''); setMessage('');
         try {
             const quote = await PremiumDerivApiService.proposal({
@@ -97,13 +140,13 @@ const GlobalQuickTrade = ({ hidden = false }: { hidden?: boolean }) => {
             <p>Available from every section. Purchases use the selected Deriv account and are mirrored into the native Run Panel.</p>
             <div className='prodb-global-trade__fields'>
                 <label>Market<select value={symbol} onChange={event => setSymbol(event.target.value)}>{symbols.map(item => <option key={symbolCode(item)} value={symbolCode(item)}>{symbolName(item)}</option>)}</select></label>
-                <label>Contract<select value={contractType} onChange={event => setContractType(event.target.value)}>{CONTRACTS.map(([type, label]) => <option key={type} value={type}>{label}</option>)}</select></label>
+                <label>Contract<select value={contractType} onChange={event => setContractType(event.target.value)} disabled={loadingContracts || !contractOptions.length}>{contractOptions.map(item => <option key={item.contract_type} value={item.contract_type}>{contractLabel(item.contract_type)}</option>)}</select></label>
                 <label>Stake ({currency})<input type='number' min='.01' step='.01' value={stake} onChange={event => setStake(Math.max(.01, num(event.target.value, 1)))} /></label>
                 <label>Ticks<input type='number' min='1' value={duration} onChange={event => setDuration(Math.max(1, num(event.target.value, 1)))} /></label>
                 {needsBarrier(contractType) && <label>Digit barrier<input inputMode='numeric' value={barrier} onChange={event => setBarrier(event.target.value.replace(/\D/g, '').slice(0, 1))} /></label>}
             </div>
             <div className='prodb-global-trade__market'><span>{selectedName}</span>{proposal?.id && <b>Ask {num(proposal.ask_price, stake).toFixed(2)} {currency}</b>}</div>
-            <div className='prodb-global-trade__actions'><button type='button' onClick={getPrice} disabled={Boolean(busy)}>{busy === 'proposal' ? 'Pricing…' : 'Get live price'}</button>{proposal?.id && <button type='button' className='is-buy' onClick={buy} disabled={Boolean(busy)}>{busy === 'buy' ? 'Buying…' : 'Buy contract'}</button>}</div>
+            <div className='prodb-global-trade__actions'><button type='button' onClick={getPrice} disabled={Boolean(busy) || loadingContracts || !selectedContractIsAvailable}>{busy === 'proposal' ? 'Pricing…' : loadingContracts ? 'Loading contracts…' : 'Get live price'}</button>{proposal?.id && <button type='button' className='is-buy' onClick={buy} disabled={Boolean(busy)}>{busy === 'buy' ? 'Buying…' : 'Buy contract'}</button>}</div>
             {error && <div className='prodb-live-error'>{error}</div>}
             {message && <div className='prodb-live-success'>{message}</div>}
         </div>}
