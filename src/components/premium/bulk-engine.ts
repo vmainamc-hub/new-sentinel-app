@@ -1,5 +1,6 @@
 // Pure, framework-free logic for the Apex Sentinel AI Bulk Trader (scanner + bulk-run bookkeeping).
 // No React, no network: everything here is deterministic and unit-tested in __tests__/bulk-engine.spec.ts.
+import { analyseDiffers, analyseEvenOdd, analyseMatches, analyseOverUnder } from '../../lib/digit-engines';
 //
 // What the scanner does: for each of the 13 volatility indices it measures how far recent last-digit
 // frequencies sit from theory for every candidate trade in the chosen family, corrects for the number
@@ -198,6 +199,36 @@ export const gapOf = (digits: number[], d: number): number => {
     return digits.length;
 };
 
+type EngineRank = { candidateScore: number; reasons: string[] };
+
+/**
+ * Run the new digit engines on the exact digit history used by the scanner.
+ * Digits are encoded as integer quotes with pipSize=0, preserving the already
+ * precision-correct final digit while keeping the engine API shared with raw ticks.
+ * These are research rankings only: quote economics and walk-forward evidence are
+ * deliberately not fabricated, so every candidate remains unqualified for automation.
+ */
+const engineRanksFor = (family: Family, symbol: string, digits: number[]): Map<string, EngineRank> => {
+    const input = { symbol, ticks: digits.map(digit => ({ quote: digit, pipSize: 0 })) };
+    const results = family === 'evenodd'
+        ? [analyseEvenOdd(input)]
+        : family === 'overunder'
+            ? [analyseOverUnder(input)]
+            : [analyseMatches(input), analyseDiffers(input)];
+    const ranks = new Map<string, EngineRank>();
+    for (const result of results) {
+        for (const candidate of result.candidates) {
+            // Defense in depth for the user-requested Differs restriction.
+            if (candidate.contractType === 'DIGITDIFF' && ![2, 3, 4, 5, 6, 7].includes(Number(candidate.barrier))) continue;
+            ranks.set(`${candidate.contractType}:${candidate.barrier ?? ''}`, {
+                candidateScore: candidate.candidateScore,
+                reasons: candidate.reasons,
+            });
+        }
+    }
+    return ranks;
+};
+
 const candidatesFor = (family: Family, digits: number[]): Candidate[] => {
     if (family === 'evenodd') {
         return [
@@ -285,7 +316,19 @@ export const scanMarkets = (family: Family, inputs: MarketInput[], ticks: number
         const windows = scanWindows(digits.length, ticks);
         const hists = windows.map(window => histogram(digits, window));
         const used = windows[windows.length - 1];
-        const picks = candidatesFor(family, digits).map(c => evaluate(family, c, hists, windows, tests)).sort(byStrength);
+        const engineRanks = engineRanksFor(family, input.symbol, digits);
+        const picks = candidatesFor(family, digits).map(c => {
+            const pick = evaluate(family, c, hists, windows, tests);
+            const engineRank = engineRanks.get(`${pick.contract}:${pick.barrier ?? ''}`);
+            if (!engineRank) return pick;
+            return {
+                ...pick,
+                // The new engine score now drives the displayed ranking and market ordering.
+                // The legacy z/p-value fields remain independent diagnostics, not probabilities.
+                score: Math.round(clamp(engineRank.candidateScore, 0, 100)),
+                reason: `${pick.reason} Engine rationale: ${engineRank.reasons.slice(0, 2).join(' ')}`,
+            };
+        }).sort(byStrength);
         return {
             symbol: input.symbol, name: input.name, ready: true, n: digits.length, ticksUsed: used,
             lastDigit: digits[digits.length - 1], lastPrice: input.price ?? null, recent: digits.slice(-12),
