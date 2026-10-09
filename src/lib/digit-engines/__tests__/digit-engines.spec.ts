@@ -23,7 +23,7 @@ describe("Even/Odd",()=>{
 });
 describe("Matches",()=>{
   it("ranks a returning digit after low longer-window share",()=>{
-    const history=Array.from({length:216},(_,i)=>i%9), comeback=Array.from({length:24},(_,i)=>i<18?7:2);
+    const history=Array.from({length:216},(_,i)=>i%9), comeback=Array.from({length:24},(_,i)=>i<18?7:(i%2===0?0:1));
     const r=analyseMatches({ticks:ticks([...history,...comeback])});
     expect(r.bestCandidate?.barrier).toBe("7");
     expect(r.bestCandidate?.contractType).toBe("DIGITMATCH");
