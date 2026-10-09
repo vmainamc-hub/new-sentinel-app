@@ -3,6 +3,7 @@ import {
     lossLimitHit, normCdf, pairPercents, recordPlaced, recordSettled, sanitizeBulk, scanMarkets, scanWindows, zBinom,
     type Family, type MarketInput,
 } from '../bulk-engine';
+import { analyseDiffers, analyseEvenOdd, analyseMatches, analyseOverUnder } from '../../../lib/digit-engines';
 
 // Deterministic PRNG so the statistical tests never flake.
 const rng = (seed: number) => () => {
@@ -25,6 +26,47 @@ describe('bulk trader strategy families', () => {
     it('keeps all three families visible in the scanner selector', () => {
         expect(FAMILY_ORDER).toEqual(['evenodd', 'overunder', 'matchesdiffers']);
         expect(FAMILY_ORDER.map(family => FAMILIES[family].title)).toEqual(['Even / Odd', 'Over / Under', 'Matches / Differs']);
+    });
+});
+
+describe('digit engine integration', () => {
+    it('uses engine scores and rationale in the visible scanner picks for every family', () => {
+        const digits = Array.from({ length: 1200 }, (_, i) => [0, 2, 4, 6, 8, 7, 7, 1, 3, 5][i % 10]);
+        const marketInputs = BULK_MARKETS.map(market => ({
+            symbol: market.symbol, name: market.name, digits, price: 100.7,
+        }));
+        const directTicks = digits.map(digit => ({ quote: digit, pipSize: 0 }));
+        const engines = {
+            evenodd: analyseEvenOdd({ symbol: 'R_10', ticks: directTicks }).candidates,
+            overunder: analyseOverUnder({ symbol: 'R_10', ticks: directTicks }).candidates,
+            matchesdiffers: [
+                ...analyseMatches({ symbol: 'R_10', ticks: directTicks }).candidates,
+                ...analyseDiffers({ symbol: 'R_10', ticks: directTicks }).candidates,
+            ],
+        };
+        (Object.keys(engines) as Family[]).forEach(family => {
+            const result = scanMarkets(family, marketInputs, 1000);
+            const engineCandidates = engines[family];
+            const shown = result.markets.flatMap(market => [market.best, ...market.alternatives]).filter(Boolean);
+            expect(shown.length).toBeGreaterThan(0);
+            shown.forEach(pick => {
+                const candidate = engineCandidates.find(item =>
+                    item.contractType === pick!.contract && item.barrier === (pick!.barrier === null ? null : String(pick!.barrier)));
+                expect(candidate).toBeDefined();
+                expect(pick!.score).toBe(Math.round(candidate!.candidateScore));
+                expect(pick!.reason).toContain('Engine rationale:');
+            });
+        });
+    });
+
+    it('keeps all Differs targets within 2–7 after engine integration', () => {
+        const digits = Array.from({ length: 1200 }, (_, i) => i % 10);
+        const result = scanMarkets('matchesdiffers', BULK_MARKETS.map(market => ({
+            symbol: market.symbol, name: market.name, digits,
+        })), 1000);
+        result.markets.forEach(market => [market.best, ...market.alternatives].forEach(pick => {
+            if (pick?.contract === 'DIGITDIFF') expect([2, 3, 4, 5, 6, 7]).toContain(pick.barrier);
+        }));
     });
 });
 
