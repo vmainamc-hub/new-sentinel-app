@@ -9,6 +9,7 @@ describe("digit precision",()=>{
     expect(lastDigitFromQuote("123.456",3)).toBe(6);
     expect(lastDigitFromQuote(123.4,1)).toBe(4);
     expect(lastDigitFromQuote("bad",2)).toBeNull();
+    expect(lastDigitFromQuote("",2)).toBeNull();
   });
   it("filters invalid quotes",()=>expect(extractDigits([{quote:"1.23",pipSize:2},{quote:"bad",pipSize:2},{quote:"4.56",pipSize:2}])).toEqual([3,6]));
 });
