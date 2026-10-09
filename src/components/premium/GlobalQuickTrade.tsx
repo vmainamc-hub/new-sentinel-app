@@ -5,9 +5,12 @@ import { PremiumDerivApiService } from '@/services/premium-deriv-api.service';
 const CONTRACT_LABELS: Record<string, string> = {
     CALL: 'Rise', PUT: 'Fall', CALLE: 'Rise Equals', PUTE: 'Fall Equals',
     DIGITEVEN: 'Even', DIGITODD: 'Odd', DIGITOVER: 'Digit Over', DIGITUNDER: 'Digit Under',
-    DIGITMATCH: 'Digit Match', DIGITDIFF: 'Digit Diff', ONETOUCH: 'Touch', NOTOUCH: 'No Touch',
-    TICKHIGH: 'High Tick', TICKLOW: 'Low Tick', MULTUP: 'Multiplier Up', MULTDOWN: 'Multiplier Down',
+    DIGITMATCH: 'Digit Match', DIGITDIFF: 'Digit Diff',
 };
+// This compact interface collects tick duration and an optional digit barrier. Other contract
+// families need extra inputs (for example multiplier, selected tick, or expiry settings) and
+// remain available through the native interfaces that collect those fields.
+const QUICK_TRADE_TYPES = new Set(['CALL', 'PUT', 'CALLE', 'PUTE', 'DIGITEVEN', 'DIGITODD', 'DIGITOVER', 'DIGITUNDER', 'DIGITMATCH', 'DIGITDIFF']);
 type AvailableContract = { contract_type: string; contract_category?: string; sentiment?: string };
 const contractLabel = (type: string) => CONTRACT_LABELS[type] || type;
 
@@ -65,7 +68,7 @@ const GlobalQuickTrade = ({ hidden = false }: { hidden?: boolean }) => {
                 available.forEach((item: any) => {
                     const raw = item?.contract_type;
                     (Array.isArray(raw) ? raw : [raw]).forEach((type: unknown) => {
-                        if (typeof type !== 'string' || !type) return;
+                        if (typeof type !== 'string' || !type || !QUICK_TRADE_TYPES.has(type)) return;
                         if (!unique.has(type)) unique.set(type, { contract_type: type, contract_category: item.contract_category, sentiment: item.sentiment });
                     });
                 });
