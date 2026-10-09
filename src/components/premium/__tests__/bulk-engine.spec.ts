@@ -22,9 +22,10 @@ const markets = (make: (symbol: string, index: number) => number[]): MarketInput
     BULK_MARKETS.map((market, index) => ({ symbol: market.symbol, name: market.name, digits: make(market.symbol, index) }));
 
 describe('bulk markets', () => {
-    it('covers all 13 volatility indices once', () => {
-        expect(BULK_MARKETS).toHaveLength(13);
-        expect(new Set(BULK_MARKETS.map(m => m.symbol)).size).toBe(13);
+    it('includes the 13 volatility indices and all five requested Jump indices exactly once', () => {
+        expect(BULK_MARKETS).toHaveLength(18);
+        expect(new Set(BULK_MARKETS.map(m => m.symbol)).size).toBe(18);
+        expect(BULK_MARKETS.map(m => m.symbol)).toEqual(expect.arrayContaining(['JD10', 'JD25', 'JD50', 'JD75', 'JD100']));
     });
 });
 
