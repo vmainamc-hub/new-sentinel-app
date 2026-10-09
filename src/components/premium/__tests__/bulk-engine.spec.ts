@@ -154,6 +154,12 @@ describe('trader panel helpers', () => {
         expect(barrierError('DIGITMATCH', 0)).toBeNull();
         expect(barrierError('DIGITDIFF', 10)).not.toBeNull();
         expect(barrierError('DIGITDIFF', 2.5)).not.toBeNull();
+        expect(barrierError('DIGITDIFF', 0)).not.toBeNull();
+        expect(barrierError('DIGITDIFF', 1)).not.toBeNull();
+        expect(barrierError('DIGITDIFF', 8)).not.toBeNull();
+        expect(barrierError('DIGITDIFF', 9)).not.toBeNull();
+        expect(barrierError('DIGITDIFF', 2)).toBeNull();
+        expect(barrierError('DIGITDIFF', 7)).toBeNull();
     });
 });
 
