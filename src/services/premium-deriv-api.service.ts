@@ -71,13 +71,31 @@ export class PremiumDerivApiService {
     }
 
     static async request(payload: ApiPayload): Promise<ApiResponse> {
+        let timeoutId: number | undefined;
         try {
             const api = await this.getApi();
-            const result = unwrap(await api.send({ ...payload, req_id: ++this.requestId }));
+            // A missing WebSocket response must not leave the UI waiting forever.
+            // Never automatically retry a purchase after a timeout: Deriv may have
+            // accepted it even if the response was lost.
+            const isPurchase = payload.buy !== undefined;
+            const timeout = new Promise<never>((_, reject) => {
+                timeoutId = window.setTimeout(() => {
+                    reject(new Error(isPurchase
+                        ? 'Purchase response timed out. The result is uncertain; check your Deriv contract history before retrying to avoid placing a duplicate trade.'
+                        : 'Deriv did not respond within 15 seconds. Check your connection and try again.'));
+                }, 15000);
+            });
+            const response = await Promise.race([
+                Promise.resolve(api.send({ ...payload, req_id: ++this.requestId })),
+                timeout,
+            ]);
+            const result = unwrap(response);
             if (result?.error) throw result;
             return result;
         } catch (error) {
             throw toTradingError(error);
+        } finally {
+            if (timeoutId !== undefined) window.clearTimeout(timeoutId);
         }
     }
 
