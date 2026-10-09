@@ -83,12 +83,12 @@ const Scanner = ({ family, onFamily, ticks, onTicks, scan, live, onRescan, onLoa
             </div>
         </div>
 
-        <p className='apex-bt__engine-note'>Three analysis engines rank Even/Odd, Over/Under, and Matches/Differs candidates from live tick history. Scores are research rankings, not calibrated win probabilities or proof of an edge. The scanner never starts trades automatically; each purchase still requires your confirmation.</p>
+        <p className='apex-bt__engine-note'>Three analysis engines contribute to each rank alongside an independent statistical diagnostic for Even/Odd, Over/Under, and Matches/Differs. Neither score is a calibrated win probability or proof of an edge. The scanner never starts trades automatically; each purchase still requires your confirmation.</p>
 
         <div className='apex-bt__tablewrap'>
             <table>
                 <thead>
-                    <tr><th>#</th><th>Market</th><th>Pick</th><th>Engine score</th><th>Stat. evidence</th><th>Past hit</th><th>z</th><th /></tr>
+                    <tr><th>#</th><th>Market</th><th>Pick</th><th>Rank score</th><th>Stat. evidence</th><th>Past hit</th><th>z</th><th /></tr>
                 </thead>
                 <tbody>
                     {scan.ranked.length === 0 && <tr><td colSpan={8} className='apex-bt__empty'>Collecting ticks from all markets…</td></tr>}
@@ -100,7 +100,7 @@ const Scanner = ({ family, onFamily, ticks, onTicks, scan, live, onRescan, onLoa
                                 <td>{index + 1}</td>
                                 <td><b>{market.name}</b><small>{market.symbol} · last digit {market.lastDigit}</small></td>
                                 <td><b className='apex-bt__pick'>{best.label}</b><small>{best.agree} windows agree</small></td>
-                                <td><span className='apex-bt__meter'><i style={{ width: `${best.score}%` }} /></span><b>{best.score}</b></td>
+                                <td><span className='apex-bt__meter'><i style={{ width: `${best.score}%` }} /></span><b>{best.score}</b><small>engine {best.engineScore} · stats {best.statisticalScore}</small></td>
                                 <td><span className={`apex-bt__badge apex-bt__badge--${best.strength}`}>{STRENGTH_TEXT[best.strength]}</span></td>
                                 <td>{best.hitPct}%<small>vs {best.breakEvenPct}% to break even</small></td>
                                 <td>{best.z > 0 ? '+' : ''}{best.z}</td>
