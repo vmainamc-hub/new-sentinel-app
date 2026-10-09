@@ -28,7 +28,11 @@ export function buildCandidate(d: CandidateDraft): Candidate {
     canTrade:qualified, reasons:[...new Set(reasons)] };
 }
 export function sortCandidates(candidates: Candidate[]): Candidate[] {
-  return [...candidates].sort((a,b) => b.candidateScore-a.candidateScore || (a.qualification === "QUALIFIED" ? -1 : 1) || a.label.localeCompare(b.label));
+  return [...candidates].sort((a,b) => {
+    if (a.candidateScore !== b.candidateScore) return b.candidateScore - a.candidateScore;
+    if (a.qualification !== b.qualification) return a.qualification === "QUALIFIED" ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  });
 }
 /** Prequential ledger: forecasts must be recorded before their future outcomes are supplied. */
 export class WalkForwardValidator {
