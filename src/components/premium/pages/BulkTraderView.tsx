@@ -121,7 +121,11 @@ const Trader = (props: BulkViewProps) => {
     const barrierDigit = Math.trunc(Number(barrier)) || 0;
     const usesBarrier = needsBarrier(def.contracts[0]);
     const [pctA, pctB] = pairPercents(market?.digitPct ?? new Array<number>(10).fill(0), family, barrierDigit);
-    const labelFor = (side: 0 | 1) => (usesBarrier ? `${def.sides[side]} ${barrierDigit}` : def.sides[side]);
+    const invalidDiffersBarrier = family === 'matchesdiffers' && ![2, 3, 4, 5, 6, 7].includes(barrierDigit);
+    const labelFor = (side: 0 | 1) => {
+        if (family === 'matchesdiffers' && side === 1 && invalidDiffersBarrier) return 'Differs (2–7 only)';
+        return usesBarrier ? `${def.sides[side]} ${barrierDigit}` : def.sides[side];
+    };
     const params = sanitizeBulk({ stake: Number(form.stake), runs: Number(form.runs), duration: Number(form.duration), maxLoss: Number(form.maxLoss) });
 
     const isPick = (side: 0 | 1) => Boolean(
@@ -189,7 +193,7 @@ const Trader = (props: BulkViewProps) => {
 
             <div className='apex-bt__sides'>
                 {([0, 1] as const).map(side => (
-                    <button key={side} type='button' disabled={running || !ready}
+                    <button key={side} type='button' disabled={running || !ready || (family === 'matchesdiffers' && side === 1 && invalidDiffersBarrier)}
                         className={`apex-bt__side apex-bt__side--${side === 0 ? 'a' : 'b'}${isPick(side) ? ' is-pick' : ''}`}
                         onClick={() => props.onExecute(side)}>
                         {isPick(side) && <em>AI PICK</em>}
