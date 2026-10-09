@@ -5,6 +5,7 @@ export const DIGITS: Digit[] = [0,1,2,3,4,5,6,7,8,9];
 export function lastDigitFromQuote(quote: string | number, pipSize: number): Digit | null {
   if (!Number.isFinite(Number(quote)) || !Number.isInteger(pipSize) || pipSize < 0 || pipSize > 10) return null;
   const raw = String(quote).trim();
+  if (!raw) return null;
   let fixed: string;
   if (pipSize === 0) fixed = String(Math.abs(Math.trunc(Number(raw))));
   else if (/^[+-]?\d+(?:\.\d+)?$/.test(raw) && (raw.split(".")[1] ?? "").length <= pipSize) {
