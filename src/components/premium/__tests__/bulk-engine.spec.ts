@@ -101,9 +101,8 @@ describe('scanner', () => {
         const rand = rng(41);
         const result = scanMarkets('matchesdiffers', markets(() => uniform(1200, rand)), 1000);
         result.markets.forEach(market => {
-            const visible = [market.best, ...market.alternatives].filter((pick): pick is NonNullable<typeof pick> => Boolean(pick));
-            visible.filter(pick => pick.contract === 'DIGITDIFF').forEach(pick => {
-                expect([2, 3, 4, 5, 6, 7]).toContain(pick.barrier);
+            [market.best, ...market.alternatives].forEach(pick => {
+                if (pick?.contract === 'DIGITDIFF') expect([2, 3, 4, 5, 6, 7]).toContain(pick.barrier);
             });
         });
     });
