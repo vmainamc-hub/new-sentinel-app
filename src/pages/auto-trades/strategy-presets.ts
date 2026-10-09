@@ -1,3 +1,5 @@
+import { SUPPORTED_VOLATILITY_MARKETS } from '@/utils/digit-strategy';
+
 type AutoTradePresetTradeType =
     | 'DIGITOVER'
     | 'DIGITUNDER'
@@ -336,4 +338,3 @@ export const AUTO_TRADE_STRATEGY_PRESET_LOOKUP = new Map(
 
 export const AUTO_TRADE_STRATEGY_PRESET_COUNT = AUTO_TRADE_STRATEGY_PRESETS.length;
 export const AUTO_TRADE_STRATEGY_FAMILY_COUNT = AUTO_TRADE_STRATEGY_FAMILIES.length;
-import { SUPPORTED_VOLATILITY_MARKETS } from '@/utils/digit-strategy';

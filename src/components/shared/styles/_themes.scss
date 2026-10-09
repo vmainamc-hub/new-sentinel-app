@@ -110,6 +110,36 @@
     --brand-font-monospace: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
 
     /* Dynamic brand colors (set by brand configuration) */
+    /* Dynamic brand colors (set by brand configuration) */
+    --brand-primary: #059669;
+    --brand-secondary: #0f172a;
+    --brand-tertiary: #6d28d9;
+    --brand-success: #10b981;
+    --brand-danger: #ef4e43;
+    --brand-warning: #f59e0b;
+    --brand-info: #1597d4;
+    --brand-neutral: #64748b;
+
+    /* Brand typography - dynamically generated from brand.config.json */
+    --brand-font-primary: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --brand-font-secondary: Georgia, 'Times New Roman', Times, serif;
+    --brand-font-monospace: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+
+    /* Dynamic brand colors (set by brand configuration) */
+    --brand-primary: #059669;
+    --brand-secondary: #0f172a;
+    --brand-tertiary: #6d28d9;
+    --brand-success: #10b981;
+    --brand-danger: #ef4e43;
+    --brand-warning: #f59e0b;
+    --brand-info: #1597d4;
+    --brand-neutral: #64748b;
+
+    /* Brand typography - dynamically generated from brand.config.json */
+    --brand-font-primary: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --brand-font-secondary: Georgia, 'Times New Roman', Times, serif;
+    --brand-font-monospace: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+
     --brand-primary: #3b82f6;
     --brand-secondary: #64748b;
     --brand-tertiary: #8b5cf6;

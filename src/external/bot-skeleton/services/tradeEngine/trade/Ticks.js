@@ -91,6 +91,68 @@ export default Engine =>
             return new Promise(resolve => this.getTicks().then(ticks => resolve(this.getLastDigitsFromList(ticks))));
         }
 
+        // ---- Analysis Logics helpers (percentages over the last N ticks) ----
+        async getLastDigitsCondition({ n = 3, op = 'LESS', digit = 0 } = {}) {
+            const list = await this.getLastDigitList();
+            const last_n = list.slice(-Math.max(1, Number(n) || 1));
+            const target = Number(digit);
+            const compare =
+                {
+                    LESS: x => Number(x) < target,
+                    LEQ: x => Number(x) <= target,
+                    GREATER: x => Number(x) > target,
+                    GEQ: x => Number(x) >= target,
+                    EQ: x => Number(x) === target,
+                    NEQ: x => Number(x) !== target,
+                }[op] || (x => Number(x) === target);
+            return last_n.length > 0 && last_n.every(compare);
+        }
+
+        async getDigitFrequency({ rank = 'MOST', n = 1000 } = {}) {
+            const list = await this.getLastDigitList();
+            const last_n = list.slice(-Math.max(1, Number(n) || 1));
+            const counts = Array(10).fill(0);
+            last_n.forEach(value => {
+                const digit = Number(value);
+                if (digit >= 0 && digit <= 9) counts[digit] += 1;
+            });
+            const ranked = counts.map((count, digit) => ({ digit, count })).sort((a, b) => b.count - a.count || a.digit - b.digit);
+            return rank === 'LEAST' ? ranked[ranked.length - 1].digit : ranked[0].digit;
+        }
+
+        async getEvenOddPercent({ type = 'EVEN', n = 1000 } = {}) {
+            const list = await this.getLastDigitList();
+            const last_n = list.slice(-Math.max(1, Number(n) || 1));
+            const want_even = type === 'EVEN';
+            const count = last_n.filter(value => (Number(value) % 2 === 0) === want_even).length;
+            return Math.round((count / Math.max(1, last_n.length)) * 100);
+        }
+
+        async getOverUnderPercent({ threshold = 4, n = 1000, type = 'OVER' } = {}) {
+            const list = await this.getLastDigitList();
+            const last_n = list.slice(-Math.max(1, Number(n) || 1));
+            const limit = Number(threshold);
+            const count = last_n.filter(value => (type === 'UNDER' ? Number(value) < limit : Number(value) > limit)).length;
+            return Math.round((count / Math.max(1, last_n.length)) * 100);
+        }
+
+        async getMatchDiffPercent({ type = 'MATCH', val = 5, n = 1000 } = {}) {
+            const list = await this.getLastDigitList();
+            const last_n = list.slice(-Math.max(1, Number(n) || 1));
+            const want_match = type === 'MATCH';
+            const target = Number(val);
+            const count = last_n.filter(value => (Number(value) === target) === want_match).length;
+            return Math.round((count / Math.max(1, last_n.length)) * 100);
+        }
+
+        async getRiseFallPercent({ type = 'RISE', n = 1000 } = {}) {
+            const candles = (await this.getOhlc()) || [];
+            const last_n = candles.slice(-Math.max(1, Number(n) || 1));
+            const rises = last_n.filter(candle => Number(candle.close) > Number(candle.open)).length;
+            const falls = last_n.filter(candle => Number(candle.close) < Number(candle.open)).length;
+            return Math.round(((type === 'RISE' ? rises : falls) / Math.max(1, last_n.length)) * 100);
+        }
+
         async getDigitFrequencyAnalysis(analysis_type = 'MOST_FREQUENT', requested_n = 1000) {
             const digits = await this.getLastDigitList();
             const parsed_n = Math.floor(Number(requested_n));

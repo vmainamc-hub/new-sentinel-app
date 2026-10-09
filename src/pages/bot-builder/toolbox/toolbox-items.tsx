@@ -53,6 +53,18 @@ const Xml = ({ ...props }) => {
 export const ToolboxItems = () =>
     ReactDomServer.renderToStaticMarkup(
         <Xml xmlns='http://www.w3.org/1999/xhtml' id='toolbox'>
+            <Category id='virtual_hook' name={localize('Virtual hook')}>
+                <Block type='virtual_hook' />
+                <Block type='virtual_hook_fixed' />
+            </Category>
+            <Category id='analysis_logics' name={localize('Analysis Logics 🔥')}>
+                <Block type='last_digits_condition' />
+                <Block type='digit_frequency' />
+                <Block type='even_odd_percent' />
+                <Block type='over_under_percent' />
+                <Block type='match_diff_percent' />
+                <Block type='rise_fall_percent' />
+            </Category>
             <Category id='trade_parameters' name={localize('Trade parameters')}>
                 <Block type='trade_definition'>
                     <Statement name='TRADE_OPTIONS'>

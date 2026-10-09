@@ -8,12 +8,36 @@ import { BEFORE_PURCHASE } from './state/constants';
 let delayIndex = 0;
 let purchase_reference;
 
+// Slow execution mode (bottom bar switch): wait before each purchase. Fast (default) does not wait.
+const EXECUTION_SPEED_KEY = 'apex_execution_speed';
+const SLOW_DELAY_MS = 2000;
+const getExecutionDelay = () => {
+    try {
+        return typeof window !== 'undefined' && window.localStorage.getItem(EXECUTION_SPEED_KEY) === 'slow'
+            ? SLOW_DELAY_MS
+            : 0;
+    } catch {
+        return 0;
+    }
+};
+
 export default Engine =>
     class Purchase extends Engine {
         purchase(contract_type) {
+            const delay = getExecutionDelay();
+            if (!delay) return this.purchaseNow(contract_type);
+            return new Promise(resolve => setTimeout(resolve, delay)).then(() => this.purchaseNow(contract_type));
+        }
+
+        purchaseNow(contract_type) {
             // Prevent calling purchase twice
             if (this.store.getState().scope !== BEFORE_PURCHASE) {
                 return Promise.resolve();
+            }
+
+            // Virtual Hook: trade with zero stake while virtual mode is active.
+            if (this.vhIsVirtualNext?.()) {
+                return this.virtualPurchase(contract_type);
             }
 
             const onSuccess = response => {

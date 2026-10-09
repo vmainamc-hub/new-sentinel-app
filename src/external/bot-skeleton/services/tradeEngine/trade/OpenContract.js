@@ -34,7 +34,9 @@ export default Engine =>
                 clearTimeout(this.transaction_recovery_timeout);
                 clearTimeout(this.open_contract_recovery_timeout);
                 this.forgetOpenContractSubscription();
-                this.updateTotals(contract);
+                // Virtual Hook trades never change the real run totals.
+                if (!contract.is_virtual_hook) this.updateTotals(contract);
+                this.vhOnSettled?.(contract);
                 contractStatus({
                     id: 'contract.sold',
                     data: contract.transaction_ids?.sell ?? contract.contract_id,

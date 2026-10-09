@@ -3,6 +3,8 @@ import './Advanced/List';
 import './Advanced/Loops';
 import './Advanced/Variable';
 import './Binary/After Purchase';
+import './Binary/Analysis Logics';
+import './VirtualHook';
 import './Binary/Before Purchase';
 import './Binary/During Purchase';
 import './Binary/Indicators';

@@ -86,6 +86,13 @@ const PremiumLayout = observer(() => {
     const location = useLocation();
     const navigate = useNavigate();
     const customization = useSiteCustomization();
+
+    // Apply the saved theme (dark by default) to the document so Deriv components follow it.
+    useEffect(() => {
+        const dark = window.localStorage.getItem('theme') !== 'light';
+        document.body.classList.toggle('theme--dark', dark);
+        document.body.classList.toggle('theme--light', !dark);
+    }, []);
     const [section, setSection] = useState<PremiumSection>(() => sectionFromHash(location.hash));
     const [, setAuthProbe] = useState(0);
     const hasBootstrappedSession = useRef(false);

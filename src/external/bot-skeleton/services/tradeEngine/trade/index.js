@@ -16,6 +16,7 @@ import Purchase from './Purchase';
 import Sell from './Sell';
 import Ticks from './Ticks';
 import Total from './Total';
+import VirtualHook from './VirtualHook';
 
 const watchBefore = store =>
     watchScope({
@@ -62,7 +63,7 @@ const watchScope = ({ store, stopScope, passScope, passFlag }) => {
     });
 };
 
-export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Proposal(Ticks(Total(class {}))))))) {
+export default class TradeEngine extends Balance(Purchase(VirtualHook(Sell(OpenContract(Proposal(Ticks(Total(class {})))))))) {
     constructor($scope) {
         super();
         this.observer = $scope.observer;
@@ -83,6 +84,9 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
 
         this.initArgs = args;
         this.options = options;
+        // Virtual Hook state is per run; the Virtual Hook block re-enables it at start.
+        this.vhStop?.();
+        this._vh = null;
         this.startPromise = this.loginAndGetBalance(token);
 
         if (!this.checkTicksPromiseExists()) this.watchTicks(symbol);

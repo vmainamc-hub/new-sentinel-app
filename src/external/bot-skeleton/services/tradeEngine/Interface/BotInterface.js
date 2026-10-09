@@ -39,6 +39,7 @@ const getBotInterface = tradeEngine => {
         isResult: result => getDetail(10) === result,
         isTradeAgain: result => globalObserver.emit('bot.trade_again', result),
         readDetails: i => getDetail(i - 1),
+        setVirtualHook: settings => tradeEngine.setVirtualHook(settings),
     };
 };
 

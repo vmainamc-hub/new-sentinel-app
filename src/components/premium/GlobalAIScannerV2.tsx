@@ -48,8 +48,9 @@ const readPoint = (key: string, fallback: Point): Point => {
 };
 
 const defaultOrb = (): Point => ({
-    x: Math.max(GAP, window.innerWidth - ORB - 18),
-    y: clamp(Math.round(window.innerHeight * 0.22), 90, window.innerHeight - ORB - 90),
+    // Bottom-left, just above the status bar, so it never covers the tab bar or page content.
+    x: GAP + 10,
+    y: Math.max(GAP, window.innerHeight - ORB - 58),
 });
 
 const clampOrb = (point: Point): Point => ({

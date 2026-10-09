@@ -86,3 +86,25 @@ $gold: #e8b84a; $win: #19d38a; $loss: #ff4d6a;
             &.is-win { background: #12a05f; } &.is-loss { background: #d6204a; } } }
     &__note { margin: 16px 0 0; color: $muted; font-size: 12px; }
 }
+// ---------------- Bottom bar: execution speed switch, WS status, TRADE launcher ----------------
+.prodb-premium-shell {
+    .prodb-execution {
+        display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 100%;
+        small { color: $muted; letter-spacing: .1em; font-size: 9px; }
+        strong { color: #fff; font-size: 12px; min-width: 34px; }
+    }
+    .prodb-switch {
+        position: relative; width: 38px; height: 20px; padding: 0; border-radius: 999px; cursor: pointer;
+        border: 1px solid $line; background: #1a2a45; transition: background .15s;
+        i { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #8fa1c2; transition: left .15s, background .15s; }
+        &.is-on { background: #0e7f66; border-color: #13a37f; i { left: 20px; background: #fff; } }
+        &:focus-visible { outline: 2px solid $gold; outline-offset: 2px; }
+    }
+    .prodb-ws { margin: 0 8px 0 4px; font-size: 10px; font-weight: 800; letter-spacing: .08em; color: $muted; }
+}
+
+// Quick-trade launcher lives inside the bottom bar instead of floating over page content.
+@media (min-width: 901px) {
+    .prodb-global-trade { right: 270px; bottom: 4px; z-index: 115; }
+    .prodb-global-trade__launcher { height: 31px; width: 64px; box-shadow: none; }
+}
