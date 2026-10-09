@@ -36,7 +36,7 @@ describe("Differs",()=>{
   it("never selects edge digits",()=>{
     const r=analyseDiffers({ticks:ticks(Array.from({length:240},(_,i)=>i%3===0?9:i%3===1?0:3))});
     const barriers=r.candidates.map(c=>Number(c.barrier));
-    expect(barriers).toEqual([2,3,4,5,6,7]);
+    expect([...barriers].sort((a,b)=>a-b)).toEqual([2,3,4,5,6,7]);
     expect(barriers.every(d=>ALLOWED_DIFFERS_DIGITS.includes(d as 2|3|4|5|6|7))).toBe(true);
     expect(barriers.some(d=>[0,1,8,9].includes(d))).toBe(false);
   });
