@@ -1,10 +1,10 @@
 # Apex Sentinel digit engines
 
-This is the architecture layer for three separate signal engines sharing precision-correct tick ingestion and one conservative qualification gate. It is intentionally separate from Bulk Trader until engine tests and integration contracts are reviewed.
+This is the architecture layer for four contract engines sharing precision-correct tick ingestion and one conservative qualification gate. It is intentionally separate from Bulk Trader until engine tests and integration contracts are reviewed.
 
 ## Engines
-- Even/Odd combines recent parity rates with a smoothed conditional transition estimate.
-- Over/Under ranks legal barriers using short, medium and long window win rates, momentum, recovery and shrinkage toward theoretical contract rates. Estimates are shrunk toward the 50% theoretical prior.
+- Even/Odd combines recent parity rates with a smoothed conditional transition estimate. Estimates are shrunk toward the 50% theoretical prior.
+- Over/Under ranks legal barriers using short, medium and long window win rates, momentum, recovery and shrinkage toward theoretical contract rates.
 - Matches ranks resurgence using short-window momentum, medium-to-long recovery, and a small comeback-after-gap feature. A gap alone never creates evidence.
 - Differs ranks declining digit share and competitor gains. It only generates barriers 2, 3, 4, 5, 6, and 7; output is filtered a second time. Digits 0, 1, 8, and 9 are prohibited.
 
