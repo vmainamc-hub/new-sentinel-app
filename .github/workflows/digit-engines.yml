@@ -1,0 +1,25 @@
+name: Digit engine tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/lib/digit-engines/**"
+      - "src/components/premium/bulk-engine.ts"
+      - "src/components/premium/__tests__/bulk-engine.spec.ts"
+      - "src/components/premium/pages/BulkTraderView.tsx"
+      - ".github/workflows/digit-engines.yml"
+  push:
+    branches: ["feature/digit-engine-architectures"]
+
+jobs:
+  test-digit-engines:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test -- --runInBand src/lib/digit-engines/__tests__/digit-engines.spec.ts src/components/premium/__tests__/bulk-engine.spec.ts
