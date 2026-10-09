@@ -1,8 +1,8 @@
 export type Digit = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 export type ParityContract = "DIGITEVEN" | "DIGITODD";
-export type DigitContract = "DIGITMATCH" | "DIGITDIFF";
+export type DigitContract = "DIGITMATCH" | "DIGITDIFF" | "DIGITOVER" | "DIGITUNDER";
 export type DigitContractType = ParityContract | DigitContract;
-export type EngineName = "even-odd" | "matches" | "differs";
+export type EngineName = "even-odd" | "over-under" | "matches" | "differs";
 export interface DigitTick { quote: string | number; pipSize: number; epoch?: number; }
 export interface QuoteEconomics { stake: number; /** Total return if won, including returned stake. */ totalPayout: number; }
 export interface ValidationReport { observations: number; wins: number; modelBrier: number; baselineBrier: number; }
