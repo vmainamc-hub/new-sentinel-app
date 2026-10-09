@@ -53,7 +53,9 @@
 .apex-bt__controls label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--bt-muted); }
 .apex-bt__controls select { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--bt-line); background: #0b1830; color: var(--bt-text); min-width: 130px; }
 
-.apex-bt__tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.apex-bt__tabs { display: flex; gap: 6px; flex-wrap: wrap; max-width: 100%; }
+.apex-bt__tabs button { white-space: nowrap; }
+.apex-bt__engine-note { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--bt-line); border-radius: 9px; color: var(--bt-muted); background: rgba(42, 140, 240, .06); font-size: 12px; line-height: 1.5; }
 .apex-bt__tabs button,
 .apex-bt__ghost {
     padding: 9px 14px; border-radius: 8px; border: 1px solid var(--bt-line);
