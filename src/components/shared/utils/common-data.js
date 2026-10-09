@@ -42,6 +42,12 @@ export const TRADING_TIMES = {
         'R_25',
         'R_50',
         'R_75',
+        // Jump indices — keep these in the shared trading-times lookup as well.
+        'JD10',
+        'JD25',
+        'JD50',
+        'JD75',
+        'JD100',
         'RDBEAR',
         'RDBULL',
     ],
