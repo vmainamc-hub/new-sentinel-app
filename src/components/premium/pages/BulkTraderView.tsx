@@ -57,7 +57,7 @@ const Scanner = ({ family, onFamily, ticks, onTicks, scan, live, onRescan, onLoa
         <div className='apex-bt__head'>
             <div>
                 <small>STEP 1</small>
-                <h2>Market scanner · 13 volatility indices</h2>
+                <h2>Engine-ranked scanner · 13 volatility indices</h2>
                 <span className='apex-bt__live'>
                     <i className={live ? 'is-on' : ''} />
                     {scan.marketsReady > 0
@@ -83,10 +83,12 @@ const Scanner = ({ family, onFamily, ticks, onTicks, scan, live, onRescan, onLoa
             </div>
         </div>
 
+        <p className='apex-bt__engine-note'>Three analysis engines rank Even/Odd, Over/Under, and Matches/Differs candidates from live tick history. Scores are research rankings, not calibrated win probabilities or proof of an edge. The scanner never starts trades automatically; each purchase still requires your confirmation.</p>
+
         <div className='apex-bt__tablewrap'>
             <table>
                 <thead>
-                    <tr><th>#</th><th>Market</th><th>Pick</th><th>Signal</th><th>Strength</th><th>Past hit</th><th>z</th><th /></tr>
+                    <tr><th>#</th><th>Market</th><th>Pick</th><th>Engine score</th><th>Stat. evidence</th><th>Past hit</th><th>z</th><th /></tr>
                 </thead>
                 <tbody>
                     {scan.ranked.length === 0 && <tr><td colSpan={8} className='apex-bt__empty'>Collecting ticks from all markets…</td></tr>}
@@ -253,8 +255,7 @@ const BulkTraderView = (props: BulkViewProps) => (
         <Scanner {...props} />
         <Trader {...props} />
         <p className='apex-bt__foot'>
-            Statistics describe past ticks only and do not predict future results. Digit contracts on synthetic indices are random and
-            payouts include Deriv&apos;s margin, so the expected return is negative. The signal score ranks deviations from theory; it is not a win probability.
+            The scanner combines the new strategy engines with separate historical significance diagnostics. Engine scores rank hypotheses; they are not win probabilities and do not prove an edge. Synthetic-index digit contracts are random and payouts include Deriv&apos;s margin, so expected return is generally negative. Test on a demo account first.
             Test on a demo account first.
         </p>
     </div>
