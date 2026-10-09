@@ -53,7 +53,8 @@ describe('digit engine integration', () => {
                 const candidate = engineCandidates.find(item =>
                     item.contractType === pick!.contract && item.barrier === (pick!.barrier === null ? null : String(pick!.barrier)));
                 expect(candidate).toBeDefined();
-                expect(pick!.score).toBe(Math.round(candidate!.candidateScore));
+                expect(pick!.engineScore).toBe(Math.round(candidate!.candidateScore));
+                expect(pick!.score).toBe(Math.round(0.35 * candidate!.candidateScore + 0.65 * pick!.statisticalScore));
                 expect(pick!.reason).toContain('Engine rationale:');
             });
         });
