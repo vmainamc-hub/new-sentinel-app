@@ -1,21 +1,41 @@
 {
   "brand_name": "Apex Sentinel",
-  "brand_domain": "precisionapex.netlify.app",
+  "brand_domain": "precisionsentinel.netlify.app",
   "brand_hostname": {
-    "staging": "precisionapex.netlify.app",
-    "production": "precisionapex.netlify.app"
+    "staging": "precisionsentinel.netlify.app",
+    "production": "precisionsentinel.netlify.app"
   },
-  "domain_name": "precisionapex.netlify.app",
+  "domain_name": "precisionsentinel.netlify.app",
   "sites": {
     "default_site": "apex-sentinel",
     "entries": [
       {
         "id": "apex-sentinel",
         "hosts": [
-          "precisionapex.netlify.app",
+          "precisionsentinel.netlify.app",
           "localhost"
         ],
         "display_domain": "Apex Sentinel",
+        "website_url": "https://precisionsentinel.netlify.app",
+        "redirect_uri": "https://precisionsentinel.netlify.app/callback",
+        "client_id": "34BIr72thLXMJHaL9PQxN",
+        "scopes": [
+          "trade",
+          "application_read"
+        ],
+        "environment": "production",
+        "bot_library": {
+          "title": "Free Bots",
+          "manifest_url": "/free-bots/domains/apex-sentinel.json",
+          "base_url": "/free-bots"
+        }
+      },
+      {
+        "id": "apex-sentinel-previous",
+        "hosts": [
+          "precisionapex.netlify.app"
+        ],
+        "display_domain": "Apex Sentinel Previous",
         "website_url": "https://precisionapex.netlify.app",
         "redirect_uri": "https://precisionapex.netlify.app/callback",
         "client_id": "34BIr72thLXMJHaL9PQxN",
@@ -140,10 +160,10 @@
     },
     "hostname": {
       "production": {
-        "com": "precisionapex.netlify.app"
+        "com": "precisionsentinel.netlify.app"
       },
       "staging": {
-        "com": "precisionapex.netlify.app"
+        "com": "precisionsentinel.netlify.app"
       }
     },
     "auth2_url": {
