@@ -41,7 +41,9 @@ export default class LoadModalStore {
             preview_workspace: computed,
             selected_strategy: computed,
             tab_name: computed,
+            is_desktop_layout: observable,
             is_open_button_disabled: observable,
+            setIsDesktopLayout: action.bound,
             setOpenButtonDisabled: action.bound,
             getSelectedStrategyID: action.bound,
             refreshStrategies: action.bound,
@@ -103,6 +105,8 @@ export default class LoadModalStore {
     drop_zone: unknown;
 
     active_index = 0;
+    // Pre-mount guess; LoadModal synchronizes this with the layout it actually renders.
+    is_desktop_layout = typeof window === 'undefined' || window.innerWidth > 1024;
     is_load_modal_open = false;
     is_explanation_expand = false;
     is_open_button_loading = false;
@@ -131,7 +135,8 @@ export default class LoadModalStore {
     }
 
     get tab_name(): string {
-        if (this.core.ui.is_mobile) {
+        // Use the layout actually rendered: the premium layout may not update core.ui.is_mobile.
+        if (!this.is_desktop_layout) {
             if (this.active_index === 0) return tabs_title.TAB_LOCAL;
             if (this.active_index === 1) return tabs_title.TAB_GOOGLE;
         }
@@ -140,6 +145,10 @@ export default class LoadModalStore {
         if (this.active_index === 2) return tabs_title.TAB_GOOGLE;
         return '';
     }
+
+    setIsDesktopLayout = (is_desktop_layout: boolean) => {
+        this.is_desktop_layout = is_desktop_layout;
+    };
 
     setOpenButtonDisabled = (is_open_button_disabled: boolean) => {
         this.is_open_button_disabled = is_open_button_disabled;
