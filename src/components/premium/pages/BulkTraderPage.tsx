@@ -26,7 +26,6 @@ const errorText = (error: unknown) => (error instanceof Error ? error.message : 
 const BulkTraderPage = () => {
     const { authData } = useApiBase();
     const currency = authData?.currency || 'USD';
-    const accountKind = (typeof localStorage !== 'undefined' && localStorage.getItem('account_type')) || '';
 
     const [symbol, setSymbol] = useState('1HZ100V');
     const [overBarrier, setOverBarrier] = useState('2');
@@ -197,14 +196,6 @@ const BulkTraderPage = () => {
 
             const market = BULK_MARKETS.find(item => item.symbol === symbol) ?? BULK_MARKETS[0];
             const label = contractLabel(contract, barrier);
-            const accountText = accountKind ? `${accountKind} account` : 'the selected Deriv account';
-            const confirmed = window.confirm(
-                `Place ${params.runs} × ${label} on ${market.name} together?\n\nThis places real trades on ${accountText} (${currency}).\n` +
-                `Stake ${money(params.stake, currency)} each · ${params.duration} tick(s) · total exposure ${money(params.stake * params.runs, currency)}.\n` +
-                `${isPick ? 'This is the loaded AI recommendation.' : 'This is a manual choice, not an AI recommendation.'}\n\n` +
-                'A recommendation is not a prediction. Trading involves risk of loss. Test on a demo account first.'
-            );
-            if (!confirmed) return;
 
             stopRef.current = false;
             run.current = state;
@@ -243,24 +234,19 @@ const BulkTraderPage = () => {
             // Independent final guard in the execution path, immediately before anything is sent.
             assertAllowedContract(contract, barrier);
             setStatus(`Placing ${params.runs} trades together…`);
-            const request = () => PremiumDerivApiService.proposal({
-                amount: params.stake, basis: 'stake', contract_type: contract, currency, underlying_symbol: market.symbol,
-                duration: params.duration, duration_unit: 't', barrier: String(barrier),
-            });
-            const proposals = await Promise.allSettled(Array.from({ length: params.runs }, request));
-            if (stopRef.current) { setStatus('Stopped before any purchase was made.'); return; }
-
-            // All buys are sent in the same synchronous pass so they land on the same tick.
-            const buys = proposals.map(result => (result.status === 'fulfilled'
-                ? PremiumDerivApiService.buy(result.value.id, num(result.value.ask_price, params.stake)).then(bought => {
-                    const contractId = Math.trunc(Number(bought.contract_id));
-                    const rowId = (rowSeq.current += 1);
-                    state.owned.set(contractId, rowId);   // registered the moment the purchase is confirmed, before any update can arrive
-                    tallyRef.current = recordPlaced(tallyRef.current);
-                    setLog(rows => [...rows, { id: rowId, time: new Date().toLocaleTimeString(), label, stake: params.stake, state: 'open' as const, profit: 0 }]);
-                    return bought;
-                })
-                : Promise.reject(result.reason)));
+            // Every copy is bought directly from the same parameters (no shared proposal ID), all sent in one synchronous pass.
+            const buyParams = {
+                amount: params.stake, basis: 'stake' as const, contract_type: contract, currency, underlying_symbol: market.symbol,
+                duration: params.duration, duration_unit: 't' as const, barrier: String(barrier),
+            };
+            const buys = Array.from({ length: params.runs }, () => PremiumDerivApiService.buyNow(buyParams, params.stake).then(bought => {
+                const contractId = Math.trunc(Number(bought.contract_id));
+                const rowId = (rowSeq.current += 1);
+                state.owned.set(contractId, rowId);   // registered the moment the purchase is confirmed, before any update can arrive
+                tallyRef.current = recordPlaced(tallyRef.current);
+                setLog(rows => [...rows, { id: rowId, time: new Date().toLocaleTimeString(), label, stake: params.stake, state: 'open' as const, profit: 0 }]);
+                return bought;
+            }));
             const outcomes = await Promise.allSettled(buys);
             const failures = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
             failures.forEach(failure => {

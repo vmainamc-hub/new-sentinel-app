@@ -130,9 +130,12 @@ const BulkTraderView = (props: BulkViewProps) => {
                 </div>
 
                 <div className='apex-bt__strip'>
-                    {props.recent.slice(-8).map((digit, index) => (
-                        <span key={index} className={digit % 2 === 0 ? 'is-even' : 'is-odd'}>{digit % 2 === 0 ? 'E' : 'O'}</span>
-                    ))}
+                    {props.recent.slice(-8).map((digit, index) => {
+                        // Every digit is either O or U, split at the barrier of the loaded signal (Over barrier when nothing is loaded).
+                        // Over b: digits above b are O, b and below are U.  Under b: digits below b are U, b and above are O.
+                        const mark = props.pickSide === 1 ? (digit < under ? 'U' : 'O') : (digit > over ? 'O' : 'U');
+                        return <span key={index} className={mark === 'O' ? 'is-even' : 'is-odd'}>{mark}</span>;
+                    })}
                 </div>
 
                 <div className='apex-bt__form'>

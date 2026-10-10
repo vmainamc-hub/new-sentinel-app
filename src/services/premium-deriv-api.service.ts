@@ -250,6 +250,30 @@ export class PremiumDerivApiService {
         return result.buy;
     }
 
+
+    /**
+     * Buys a contract straight from its parameters, with no proposal ID. A proposal ID can be bought only once, and Deriv
+     * hands out the same ID for identical proposal requests, so N copies of one trade cannot share proposals.
+     * Each call here is an independent, valid purchase.
+     */
+    static async buyNow(parameters: {
+        amount: number;
+        basis?: 'stake' | 'payout';
+        contract_type: string;
+        currency: string;
+        underlying_symbol: string;
+        duration: number;
+        duration_unit: 'd' | 'm' | 's' | 'h' | 't';
+        barrier?: string;
+    }, maximumPrice: number) {
+        const clean = Object.fromEntries(Object.entries(parameters).filter(([, value]) => value !== '' && value !== undefined && value !== null));
+        const result = await this.request({ buy: '1', price: Math.max(0, Number(maximumPrice) || 0), parameters: clean });
+        if (!result.buy) throw new Error('Deriv did not return a purchased contract.');
+        const contractId = Math.trunc(Number(result.buy.contract_id || 0));
+        if (contractId > 0) void this.trackContract(contractId);
+        return result.buy;
+    }
+
     static async sell(contractId: number, price = 0) {
         const result = await this.request({ sell: contractId, price: Math.max(0, Number(price) || 0) });
         if (result?.sell) this.emitContractUpdate({ ...result.sell, contract_id: contractId, status: 'sold', is_sold: 1 });
