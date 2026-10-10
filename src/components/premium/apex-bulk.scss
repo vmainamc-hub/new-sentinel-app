@@ -193,3 +193,19 @@
     .apex-bt__tick strong { font-size: 34px; }
     .apex-bt__side { min-height: 96px; touch-action: manipulation; }
 }
+
+/* ---------- auto trader ---------- */
+.apex-bt__auto { margin-bottom: 18px; padding: 16px 20px; border-radius: 16px; background: var(--bt-panel); border: 1px solid var(--bt-line); }
+.apex-bt__auto.is-armed { border-color: var(--bt-win); box-shadow: 0 0 0 2px rgba(25, 211, 138, .16); }
+.apex-bt__auto-head { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+.apex-bt__auto-head small { color: var(--bt-muted); letter-spacing: .14em; font-weight: 800; font-size: 11px; }
+.apex-bt__auto-note { margin: 4px 0 0; color: var(--bt-muted); font-weight: 700; }
+.apex-bt__auto-note.is-on { color: var(--bt-win); }
+.apex-bt__arm { padding: 12px 20px; border-radius: 10px; border: 1px solid var(--bt-win); background: transparent; color: var(--bt-win); font-weight: 900; font-size: 15px; cursor: pointer; }
+.apex-bt__arm.is-on { background: var(--bt-loss); border-color: var(--bt-loss); color: #fff; }
+.apex-bt__auto-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 14px; }
+.apex-bt__auto-foot { margin: 12px 0 0; color: var(--bt-muted); font-size: 12px; line-height: 1.5; }
+.apex-bt__auto input,
+.apex-bt__auto select { width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid var(--bt-line); background: #0b1830; color: var(--bt-text); font-size: 15px; font-weight: 700; }
+.apex-bt__auto input:disabled,
+.apex-bt__auto select:disabled { opacity: .6; }

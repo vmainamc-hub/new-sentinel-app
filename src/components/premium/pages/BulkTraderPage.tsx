@@ -10,7 +10,11 @@ import {
     DEFAULT_BULK, RunGuard, emptyTally, limitError, recordFailed, recordPlaced, recordSettled, sanitizeBulk, syncReport, syncText,
     type Fill, type Tally,
 } from '../bulk-run';
-import BulkTraderView, { type BulkForm, type LogRow } from './BulkTraderView';
+import {
+    DEFAULT_AUTO, armSession, disarmSession, newSession, recordAutoRun, sanitizeAuto, stepAuto, waitingNote,
+    type AutoConfig, type AutoGrade, type AutoSession,
+} from '../auto-trader';
+import BulkTraderView, { type AutoForm, type BulkForm, type LogRow } from './BulkTraderView';
 
 type MarketStore = { prices: number[]; times: number[]; digits: number[]; decimals: number };
 
@@ -47,6 +51,11 @@ const BulkTraderPage = () => {
     const [form, setForm] = useState<BulkForm>({ duration: String(DEFAULT_BULK.duration), stake: String(DEFAULT_BULK.stake), runs: String(DEFAULT_BULK.runs) });
     const [loaded, setLoaded] = useState<Recommendation | null>(null);
     const [locked, setLocked] = useState<Recommendation | null>(readLock);
+    // Auto trader is always OFF on page load; arming is never persisted between visits.
+    const [autoForm, setAutoForm] = useState<AutoForm>({ grade: DEFAULT_AUTO.grade, cooldownSec: String(DEFAULT_AUTO.cooldownSec), maxRuns: String(DEFAULT_AUTO.maxRuns), maxLoss: String(DEFAULT_AUTO.maxLoss) });
+    const [autoSession, setAutoSession] = useState<AutoSession>(newSession());
+    const [autoNote, setAutoNote] = useState('Off.');
+    const [pendingAuto, setPendingAuto] = useState<{ rec: Recommendation; nonce: number } | null>(null);
     const [live, setLive] = useState(false);
     const [tickVersion, setTickVersion] = useState(0);
     const [, setClock] = useState(0);
@@ -64,6 +73,10 @@ const BulkTraderPage = () => {
     const recRef = useRef<Recommendation | null>(null);
     const engine = useRef(new OverUnderEngine());
     const stability = useRef(new SignalStability());
+    const autoRef = useRef<{ session: AutoSession; config: AutoConfig }>({ session: newSession(), config: DEFAULT_AUTO });
+    const lockedRef = useRef<Recommendation | null>(null);
+    const autoBusy = useRef(false);
+    const applyRef = useRef<(target: Recommendation, scroll?: boolean) => void>(() => undefined);
     const symbolRef = useRef(symbol);
     const waiters = useRef<Record<string, Array<() => void>>>({});
     const mounted = useRef(true);
@@ -75,6 +88,9 @@ const BulkTraderPage = () => {
     const traderRef = useRef<HTMLElement>(null);
 
     symbolRef.current = symbol;
+    lockedRef.current = locked;
+    const autoConfig = sanitizeAuto({ grade: autoForm.grade as AutoGrade, cooldownSec: Number(autoForm.cooldownSec), maxRuns: Number(autoForm.maxRuns), maxLoss: Number(autoForm.maxLoss) });
+    autoRef.current.config = autoConfig;
     useEffect(() => () => { mounted.current = false; stopRef.current = true; }, []);
 
     // ------------------------------------------------------------------
@@ -142,6 +158,23 @@ const BulkTraderPage = () => {
             recRef.current = next;
             const version = next ? `${next.id}|${next.action}|${next.score}` : '';
             setRecVersion(previous => (previous === version ? previous : version));
+            // Evaluate the same live recommendation shown to the user (the locked one while locked).
+            const auto = autoRef.current;
+            if (auto.session.armed) {
+                const held = lockedRef.current;
+                const target = held ? refreshLocked(held, verdicts.current, now) : next;
+                const valid = target ? validateRecommendation(target, verdicts.current, now, Boolean(held)).ok : false;
+                const result = stepAuto(auto.session, auto.config, { target, valid, busy: guard.current.busy || autoBusy.current, now });
+                const shown = result.session.armed !== auto.session.armed || result.session.runs !== auto.session.runs
+                    || result.session.pnl !== auto.session.pnl || result.session.stopReason !== auto.session.stopReason;
+                auto.session = result.session;
+                if (shown) setAutoSession(result.session);
+                setAutoNote(previous => (previous === result.note ? previous : result.note));
+                if (result.fire && target) {
+                    applyRef.current(target, false);
+                    setPendingAuto({ rec: target, nonce: now });
+                }
+            }
             const ready = Object.values(verdicts.current).filter(v => v.ready).length;
             setMarketsReady(previous => (previous === ready ? previous : ready));
         }, ENGINE_STEP_MS);
@@ -157,12 +190,13 @@ const BulkTraderPage = () => {
     void recVersion;
     const rec = locked ? refreshLocked(locked, verdicts.current, now) : offered;
     const watch = rec ? null : watching(verdicts.current);
-    const applyToDeck = (target: Recommendation) => {
+    const applyToDeck = (target: Recommendation, scroll = true) => {
         setLoaded(target); setSymbol(target.symbol);
         if (target.contract === 'DIGITOVER') setOverBarrier(String(target.barrier)); else setUnderBarrier(String(target.barrier));
         setError('');
-        window.setTimeout(() => traderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+        if (scroll) window.setTimeout(() => traderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     };
+    applyRef.current = applyToDeck;
     const loadRecommendation = () => { if (rec) applyToDeck(rec); };
     const toggleLock = () => {
         if (locked) { setLocked(null); writeLock(null); return; }
@@ -304,6 +338,12 @@ const BulkTraderPage = () => {
     // One Stop/Exit: no further purchases; ask Deriv to sell what it will sell; keep monitoring the rest.
     const stop = async () => {
         stopRef.current = true;
+        if (autoRef.current.session.armed) {
+            const off = disarmSession(autoRef.current.session, 'Stopped by you.');
+            autoRef.current.session = off;
+            setAutoSession(off);
+            setAutoNote(off.stopReason);
+        }
         const state = run.current;
         if (!state) return;
         const open = [...state.owned.keys()].filter(id => !state.settled.has(id));
@@ -319,9 +359,42 @@ const BulkTraderPage = () => {
         }
     };
 
+    // A qualifying signal follows the exact same execution path as a manual Run.
+    useEffect(() => {
+        if (!pendingAuto) return;
+        const { rec: target } = pendingAuto;
+        setPendingAuto(null);
+        void (async () => {
+            autoBusy.current = true;
+            tallyRef.current = emptyTally();
+            setAutoNote(`Running ${target.label} on ${target.market}…`);
+            try { await execute(target.side); } finally { autoBusy.current = false; }
+            const t = tallyRef.current;
+            const finished = recordAutoRun(autoRef.current.session, { placed: t.placed, failed: t.failed, pnl: t.pnl });
+            autoRef.current.session = finished;
+            if (!mounted.current) return;
+            setAutoSession(finished);
+            setAutoNote(finished.armed ? waitingNote(autoRef.current.config) : finished.stopReason);
+        })();
+    }, [pendingAuto]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const toggleAuto = () => {
+        const current = autoRef.current.session;
+        const onScreen = lockedRef.current
+            ? refreshLocked(lockedRef.current, verdicts.current, Date.now())
+            : (recRef.current && recRef.current.expiresAt >= Date.now() ? recRef.current : null);
+        const next = current.armed ? disarmSession(current, 'Off.') : armSession(onScreen, autoRef.current.config.grade);
+        autoRef.current.session = next;
+        setAutoSession(next);
+        setAutoNote(next.armed ? waitingNote(autoRef.current.config) : 'Off.');
+    };
+    const onAutoForm = (key: keyof AutoForm, value: string) => setAutoForm(current => ({ ...current, [key]: value }));
+
     return <BulkTraderView
         live={live} marketsReady={marketsReady} rec={rec} watch={watch ? { market: watch.market, label: watch.label } : null} onLoadRec={loadRecommendation}
         locked={Boolean(locked)} canLock={Boolean(offered)} onToggleLock={toggleLock}
+        auto={{ armed: autoSession.armed, form: autoForm, runs: autoSession.runs, pnl: autoSession.pnl, note: autoNote, maxRuns: autoConfig.maxRuns, maxLoss: autoConfig.maxLoss, account: authData?.is_virtual === 1 ? 'DEMO' : authData?.is_virtual === 0 ? 'REAL' : '' }}
+        onAutoToggle={toggleAuto} onAutoForm={onAutoForm}
         symbol={symbol} onSymbol={setSymbol} price={price} digit={digit} digitPct={digitPct} recent={recent}
         form={form} onForm={onForm} overBarrier={overBarrier} underBarrier={underBarrier} onOverBarrier={setOverBarrier} onUnderBarrier={setUnderBarrier}
         pickSide={pickSide} loadedNote={loadedNote} currency={currency} running={running} status={status} error={error}
