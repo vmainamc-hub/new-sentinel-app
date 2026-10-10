@@ -20,10 +20,14 @@ const make = (options = {}) => {
     engine.accountInfo = { currency: 'USD' };
     engine.getPipSize = () => 2;
     engine.store = { dispatch: jest.fn() };
+    engine.contracts = [];
     engine.settled = [];
     engine.handleOpenContract = jest.fn(contract => {
-        engine.settled.push(contract);
-        engine.vhOnSettled(contract);
+        engine.contracts.push(contract);
+        if (contract.is_sold) {
+            engine.settled.push(contract);
+            engine.vhOnSettled(contract);
+        }
     });
     return engine;
 };
@@ -89,14 +93,27 @@ describe('Virtual Hook state machine', () => {
 });
 
 describe('virtualPurchase', () => {
-    it('settles a digit contract on the tick after entry without touching real totals', async () => {
+    it('publishes an open virtual contract immediately without announcing a result', async () => {
+        const e = make({ duration: 2 });
+        e.setVirtualHook({ enabled: true, startVirtual: true });
+        await e.virtualPurchase('DIGITOVER');
+
+        expect(e.contracts).toHaveLength(1);
+        expect(e.contracts[0]).toMatchObject({
+            is_virtual_hook: 1,
+            is_sold: 0,
+            status: 'open',
+            profit: 0,
+        });
+        expect(e.settled).toHaveLength(0);
+    });
+
+    it('settles a one-tick digit contract on the first tick without touching real totals', async () => {
         const e = make({ prediction: 2 });
         e.setVirtualHook({ enabled: true, startVirtual: true });
         await e.virtualPurchase('DIGITOVER');
         expect(e.store.dispatch).toHaveBeenCalledWith({ type: 'PURCHASE_SUCCESSFUL' });
-        tick(100.11, 1); // entry
-        expect(e.settled).toHaveLength(0);
-        tick(100.17, 2); // exit digit 7 > 2 -> win
+        tick(100.17, 2); // tick 1 is both entry and exit; digit 7 > 2 -> win
         expect(e.settled).toHaveLength(1);
         const c = e.settled[0];
         expect(c.is_virtual_hook).toBe(1);
@@ -110,7 +127,6 @@ describe('virtualPurchase', () => {
         const e = make({ prediction: 5 });
         e.setVirtualHook({ enabled: true, startVirtual: true });
         await e.virtualPurchase('DIGITOVER');
-        tick(10.0, 1);
         tick(10.03, 2);
         expect(e.settled[0].status).toBe('lost');
         expect(e.settled[0].profit).toBe(-1);
@@ -120,27 +136,26 @@ describe('virtualPurchase', () => {
         const e = make({ duration: 3, prediction: 1 });
         e.setVirtualHook({ enabled: true, startVirtual: true });
         await e.virtualPurchase('DIGITUNDER');
-        tick(1.5, 1);
+        tick(1.5, 1); // tick 1
         tick(1.0, 1); // duplicate epoch ignored
         tick(9.99, 5, 'R_50'); // other symbol ignored
-        tick(1.5, 2);
-        tick(1.5, 3);
+        tick(1.5, 2); // tick 2
         expect(e.settled).toHaveLength(0);
-        tick(1.50, 4); // 3rd tick after entry, digit 0 < 1 -> win
+        tick(1.50, 3); // tick 3, digit 0 < 1 -> win
         expect(e.settled).toHaveLength(1);
         expect(e.settled[0].status).toBe('won');
     });
 
     it('settles rise/fall by comparing exit with entry', async () => {
-        const e = make({ duration: 1 });
+        const e = make({ duration: 2 });
         e.setVirtualHook({ enabled: true, startVirtual: true });
         await e.virtualPurchase('CALL');
-        tick(100, 1);
-        tick(101, 2);
+        tick(100, 1); // entry (tick 1)
+        tick(101, 2); // exit (tick 2)
         expect(e.settled[0].status).toBe('won');
         await e.virtualPurchase('PUT');
-        tick(101, 3);
-        tick(102, 4);
+        tick(101, 3); // entry (tick 1)
+        tick(102, 4); // exit (tick 2)
         expect(e.settled[1].status).toBe('lost');
     });
 

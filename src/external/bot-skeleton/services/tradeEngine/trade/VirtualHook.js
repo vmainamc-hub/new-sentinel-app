@@ -176,10 +176,8 @@ export default Engine =>
                 const quote = Number(tick.quote);
                 if (!Number.isFinite(quote)) return;
 
-                if (entry === null) {
-                    entry = quote;
-                    return;
-                }
+                if (entry === null) entry = quote;
+                // The first tick after purchase is tick 1, including for one-tick contracts.
                 count += 1;
                 if (count < duration) return;
 
@@ -210,6 +208,23 @@ export default Engine =>
                 });
             });
             api_base.pushSubscription(this.vh.subscription);
+
+            // Publish an open virtual contract immediately, without claiming an outcome before settlement.
+            this.handleOpenContract({
+                contract_id,
+                contract_type,
+                is_virtual_hook: 1,
+                is_sold: 0,
+                is_expired: 0,
+                status: 'open',
+                currency: this.accountInfo?.currency,
+                buy_price: stake,
+                sell_price: 0,
+                profit: 0,
+                barrier: String(barrier),
+                transaction_ids: { buy: contract_id },
+                display_name: 'Virtual',
+            });
             return Promise.resolve();
         }
     };

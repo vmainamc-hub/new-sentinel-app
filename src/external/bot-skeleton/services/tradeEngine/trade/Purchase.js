@@ -24,7 +24,8 @@ const getExecutionDelay = () => {
 export default Engine =>
     class Purchase extends Engine {
         purchase(contract_type) {
-            const delay = getExecutionDelay();
+            // Virtual trades must follow the live tick stream immediately; only real trades use slow mode.
+            const delay = this.vhIsVirtualNext?.() ? 0 : getExecutionDelay();
             if (!delay) return this.purchaseNow(contract_type);
             return new Promise(resolve => setTimeout(resolve, delay)).then(() => this.purchaseNow(contract_type));
         }

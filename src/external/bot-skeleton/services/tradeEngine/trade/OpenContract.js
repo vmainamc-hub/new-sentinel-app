@@ -37,7 +37,7 @@ export default Engine =>
                       payout: 0,
                       bid_price: 0,
                       profit: 0,
-                      virtual_result: String(contract.status).toLowerCase() === 'won' ? 'win' : 'loss',
+                      virtual_result: contract.is_sold ? (String(contract.status).toLowerCase() === 'won' ? 'win' : 'loss') : undefined,
                   }
                 : contract;
             broadcastContract({ accountID: api_base.account_info.loginid, ...display_contract });
