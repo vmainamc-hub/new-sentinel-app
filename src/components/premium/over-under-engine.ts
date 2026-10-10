@@ -156,8 +156,35 @@ export const ACTION_RANK: Record<VerdictAction, number> = { EXECUTE: 3, PREPARE:
 export const RECOMMENDABLE: readonly VerdictAction[] = ['EXECUTE', 'PREPARE'];
 /** A recommendation is kept this long after the engine last confirmed it. */
 export const RECOMMENDATION_TTL_MS = 30_000;
-/** Challenger must beat the current recommendation's score by this much to replace it. */
-export const STICKY_MARGIN = 5;
+/**
+ * Adapter-level quality filters; the underlying engine is unchanged.
+ */
+export type QualityOptions = {
+    minScore: number; maxDanger: number; minIndependence: number; minStreak: number;
+    stickyMargin: number; holdMs: number; holdBypassMargin: number;
+};
+export const LEGACY_QUALITY: QualityOptions = {
+    minScore: 0, maxDanger: 101, minIndependence: 0, minStreak: 1, stickyMargin: 5, holdMs: 0, holdBypassMargin: Infinity,
+};
+export const SIGNAL_QUALITY: QualityOptions = {
+    minScore: 66, maxDanger: 40, minIndependence: 0, minStreak: 3, stickyMargin: 8, holdMs: 20_000, holdBypassMargin: 12,
+};
+export const passesQuality = (item: PropositionVerdict, quality: QualityOptions = SIGNAL_QUALITY): boolean =>
+    RECOMMENDABLE.includes(item.action) && (item.action === 'EXECUTE' || item.score >= quality.minScore)
+    && item.danger < quality.maxDanger && item.independence >= quality.minIndependence;
+export class SignalStability {
+    private streaks = new Map<string, number>();
+    observe(symbol: string, verdict: CombinedVerdict, quality: QualityOptions = SIGNAL_QUALITY): void {
+        for (const proposition of PROPOSITIONS) {
+            const item = verdict.verdicts.find(v => v.proposition === proposition);
+            const key = `${symbol}:${proposition}`;
+            const ok = verdict.ready && !!item && passesQuality(item, quality);
+            this.streaks.set(key, ok ? (this.streaks.get(key) ?? 0) + 1 : 0);
+        }
+    }
+    streak(symbol: string, proposition: Proposition): number { return this.streaks.get(`${symbol}:${proposition}`) ?? 0; }
+    reset(): void { this.streaks.clear(); }
+};
 
 export type Candidate = { symbol: string; verdict: CombinedVerdict; item: PropositionVerdict };
 
@@ -185,7 +212,8 @@ export type Recommendation = {
     barrier: number;
     side: 0 | 1;
     label: string;
-    action: 'EXECUTE' | 'PREPARE';
+    /** A locked signal can later reflect OBSERVE or STAND_DOWN. */
+    action: VerdictAction;
     score: number;
     danger: number;
     independence: number;
@@ -196,6 +224,7 @@ export type Recommendation = {
     createdAt: number;
     refreshedAt: number;
     expiresAt: number;
+    locked?: boolean;
 };
 
 const marketName = (symbol: string) => BULK_MARKETS.find(market => market.symbol === symbol)?.name ?? symbol;
@@ -206,25 +235,32 @@ const toRecommendation = (c: Candidate, now: number, createdAt = now, id?: strin
         id: id ?? `${c.symbol}:${c.item.proposition}:${now}`,
         engine: 'insight-fusion', symbol: c.symbol, market: marketName(c.symbol),
         proposition: c.item.proposition, contract, barrier, side, label: contractLabel(contract, barrier),
-        action: c.item.action as 'EXECUTE' | 'PREPARE', score: c.item.score, danger: c.item.danger, independence: c.item.independence,
+        action: c.item.action, score: c.item.score, danger: c.item.danger, independence: c.item.independence,
         confirmed: c.item.digitpulse.confirmed, ripe: c.item.digitpulse.ripe, sample: c.verdict.sample,
         reasons: c.item.reasons.slice(0, 4), createdAt, refreshedAt: now, expiresAt: now + RECOMMENDATION_TTL_MS,
     };
 };
 
 /**
- * Best actionable (EXECUTE/PREPARE) verdict across all markets, or null when nothing qualifies.
- * Sticky: the current recommendation is refreshed in place while the engine still rates it actionable and no
- * challenger beats it by STICKY_MARGIN, so the pick does not flicker between near-equal markets.
+ * Stable recommendation selection with quality, streak, grade, margin, and hold-time rules.
  */
-export const recommend = (verdicts: Record<string, CombinedVerdict>, now: number, previous: Recommendation | null = null): Recommendation | null => {
-    const actionable = candidates(verdicts).filter(c => RECOMMENDABLE.includes(c.item.action)).sort(compareCandidates);
-    const best = actionable[0];
+export const recommend = (
+    verdicts: Record<string, CombinedVerdict>, now: number, previous: Recommendation | null = null,
+    stability: SignalStability | null = null, quality: QualityOptions = SIGNAL_QUALITY,
+): Recommendation | null => {
+    const all = candidates(verdicts);
+    const offered = all.filter(c => passesQuality(c.item, quality)
+        && (!stability || stability.streak(c.symbol, c.item.proposition) >= quality.minStreak)).sort(compareCandidates);
+    const best = offered[0];
     if (previous) {
-        const current = actionable.find(c => c.symbol === previous.symbol && c.item.proposition === previous.proposition);
-        if (current && (!best || best === current
-            || (ACTION_RANK[best.item.action] <= ACTION_RANK[current.item.action] && best.item.score - current.item.score < STICKY_MARGIN))) {
-            return toRecommendation(current, now, previous.createdAt, previous.id);
+        const current = all.find(c => c.symbol === previous.symbol && c.item.proposition === previous.proposition && passesQuality(c.item, quality));
+        if (current) {
+            const challenger = best && best !== current ? best : null;
+            const lead = challenger ? challenger.item.score - current.item.score : 0;
+            const higherGrade = challenger ? ACTION_RANK[challenger.item.action] > ACTION_RANK[current.item.action] : false;
+            const held = now - previous.createdAt >= quality.holdMs;
+            const replace = Boolean(challenger) && (higherGrade || (lead >= quality.stickyMargin && (held || lead >= quality.holdBypassMargin)));
+            if (!replace) return toRecommendation(current, now, previous.createdAt, previous.id);
         }
     }
     return best ? toRecommendation(best, now) : null;
@@ -248,7 +284,9 @@ export type Validity = { ok: true } | { ok: false; reason: string };
  * A loaded recommendation must be re-checked against the LIVE engine state immediately before it is traded.
  * Returns the reason in plain words so the UI can ask for a refreshed recommendation.
  */
-export const validateRecommendation = (rec: Recommendation | null, verdicts: Record<string, CombinedVerdict>, now: number): Validity => {
+export const validateRecommendation = (
+    rec: Recommendation | null, verdicts: Record<string, CombinedVerdict>, now: number, locked = false,
+): Validity => {
     if (!rec) return { ok: false, reason: 'No recommendation is loaded.' };
     if (!isAllowedContract(rec.contract, rec.barrier) || propositionFor(rec.contract, rec.barrier) !== rec.proposition) {
         return { ok: false, reason: `${rec.label} is not a permitted contract.` };
@@ -258,8 +296,17 @@ export const validateRecommendation = (rec: Recommendation | null, verdicts: Rec
     if (now - verdict.generatedAt > RECOMMENDATION_TTL_MS) return { ok: false, reason: 'The analysis is stale. Wait for a refreshed recommendation.' };
     const item = verdict.verdicts.find(v => v.proposition === rec.proposition);
     if (!item) return { ok: false, reason: `${rec.label} is no longer produced by the engine.` };
-    if (!RECOMMENDABLE.includes(item.action)) {
-        return { ok: false, reason: `The engine now says ${item.action.replace('_', ' ')} for ${rec.label} on ${rec.market}. Load a refreshed recommendation.` };
+    const allowed: readonly VerdictAction[] = locked ? [...RECOMMENDABLE, 'OBSERVE'] : RECOMMENDABLE;
+    if (!allowed.includes(item.action)) {
+        return { ok: false, reason: `The engine now says ${item.action.replace('_', ' ')} for ${rec.label} on ${rec.market}. ${locked ? 'Unlock to see current signals.' : 'Load a refreshed recommendation.'}` };
     }
     return { ok: true };
+};
+export const refreshLocked = (locked: Recommendation, verdicts: Record<string, CombinedVerdict>, now: number): Recommendation => {
+    const verdict = verdicts[locked.symbol];
+    const item = verdict?.verdicts.find(v => v.proposition === locked.proposition);
+    if (!verdict || !item) return { ...locked, locked: true, expiresAt: Infinity };
+    return { ...locked, locked: true, action: item.action, score: item.score, danger: item.danger, independence: item.independence,
+        confirmed: item.digitpulse.confirmed, ripe: item.digitpulse.ripe, sample: verdict.sample, reasons: item.reasons.slice(0, 4),
+        refreshedAt: now, expiresAt: Infinity };
 };

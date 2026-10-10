@@ -21,6 +21,9 @@ export type BulkViewProps = {
     rec: Recommendation | null;
     watch: { market: string; label: string } | null;
     onLoadRec: () => void;
+    locked: boolean;
+    canLock: boolean;
+    onToggleLock: () => void;
     symbol: string;
     onSymbol: (symbol: string) => void;
     price: number | null;
@@ -51,16 +54,19 @@ export type BulkViewProps = {
 const ringStyle = (pct: number, color: string) => ({ '--p': Math.min(100, pct * 3), '--c': color }) as CSSProperties;
 const money = (value: number, currency: string) => `${value.toFixed(2)} ${currency}`;
 
-const RecommendationBar = ({ rec, watch, onLoadRec, marketsReady, live }: Pick<BulkViewProps, 'rec' | 'watch' | 'onLoadRec' | 'marketsReady' | 'live'>) => (
-    <section className='apex-bt__rec' aria-label='Recommendation'>
+const RecommendationBar = ({ rec, watch, onLoadRec, marketsReady, live, locked, canLock, onToggleLock }: Pick<BulkViewProps, 'rec' | 'watch' | 'onLoadRec' | 'marketsReady' | 'live' | 'locked' | 'canLock' | 'onToggleLock'>) => (
+    <section className={`apex-bt__rec${locked ? ' is-locked' : ''}`} aria-label='Recommendation'>
         <div className='apex-bt__rec-main'>
-            <small>AI RECOMMENDATION · OVER / UNDER</small>
+            <small>{locked ? 'LOCKED SIGNAL · OVER / UNDER' : 'AI RECOMMENDATION · OVER / UNDER'}</small>
             {rec ? (
                 <>
                     <h2>
                         {rec.market} <b>{rec.label}</b>
-                        <span className={`apex-bt__tag apex-bt__tag--${rec.action.toLowerCase()}`}>{rec.action}</span>
+                        <span className={`apex-bt__tag apex-bt__tag--${rec.action.toLowerCase()}`}>{rec.action.replace('_', ' ')}</span>
+                        {locked && <span className='apex-bt__tag apex-bt__tag--locked'>LOCKED</span>}
                     </h2>
+                    {locked && <p className='apex-bt__hint'>No other signals will appear until you unlock.
+                        {rec.action === 'OBSERVE' || rec.action === 'STAND_DOWN' ? ` The engine currently reads ${rec.action.replace('_', ' ')} for this signal.` : ''}</p>}
                     <details className='apex-bt__why'>
                         <summary>Why this one?</summary>
                         <p>Engine verdict {rec.score}/100 (a ranking score, not a win probability) · danger {rec.danger}/100 · {rec.sample} ticks analysed.</p>
@@ -70,14 +76,18 @@ const RecommendationBar = ({ rec, watch, onLoadRec, marketsReady, live }: Pick<B
             ) : (
                 <>
                     <h2 className='is-idle'>{live ? 'No qualified setup right now' : 'Connecting to the live feed…'}</h2>
-                    <p className='apex-bt__hint'>
-                        {marketsReady}/{BULK_MARKETS.length} markets analysed.{' '}
-                        {watch ? `Closest: ${watch.market} ${watch.label}, not yet actionable.` : 'The engine recommends only when a setup qualifies.'}
-                    </p>
+                    <p className='apex-bt__hint'>{marketsReady}/{BULK_MARKETS.length} markets analysed.{' '}
+                        {watch ? `Closest: ${watch.market} ${watch.label}, not yet actionable.` : 'The engine recommends only when a setup qualifies.'}</p>
                 </>
             )}
         </div>
-        <button type='button' className='apex-bt__loadrec' disabled={!rec} onClick={onLoadRec}>Load to Trading Deck</button>
+        <div className='apex-bt__rec-actions'>
+            <button type='button' className={`apex-bt__lock${locked ? ' is-on' : ''}`} disabled={!locked && !canLock} onClick={onToggleLock}
+                aria-pressed={locked} title={locked ? 'Unlock to let new signals through' : 'Hold this signal in place and put it in the Trading Deck'}>
+                {locked ? '🔓 Unlock signal' : '🔒 Lock signal'}
+            </button>
+            <button type='button' className='apex-bt__loadrec' disabled={!rec} onClick={onLoadRec}>Load to Trading Deck</button>
+        </div>
     </section>
 );
 
@@ -96,7 +106,8 @@ const BulkTraderView = (props: BulkViewProps) => {
 
     return (
         <div className='apex-bt'>
-            <RecommendationBar rec={props.rec} watch={props.watch} onLoadRec={props.onLoadRec} marketsReady={props.marketsReady} live={props.live} />
+            <RecommendationBar rec={props.rec} watch={props.watch} onLoadRec={props.onLoadRec} marketsReady={props.marketsReady} live={props.live}
+                locked={props.locked} canLock={props.canLock} onToggleLock={props.onToggleLock} />
 
             <section className='apex-bt__panel' ref={props.traderRef} aria-label='Trading Deck'>
                 <div className='apex-bt__head'>

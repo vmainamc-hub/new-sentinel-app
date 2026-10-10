@@ -3,7 +3,7 @@ import { useApiBase } from '@/hooks/useApiBase';
 import { PremiumDerivApiService } from '@/services/premium-deriv-api.service';
 import {
     BULK_MARKETS, ENGINE_TICKS, MIN_ENGINE_TICKS, OverUnderEngine, assertAllowedContract, buildEngineTicks, contractLabel, digitPercents,
-    digitsFromPrices, inferDecimals, lastDigit, recommend, validateRecommendation, watching,
+    digitsFromPrices, inferDecimals, lastDigit, recommend, refreshLocked, SignalStability, validateRecommendation, watching,
     type CombinedVerdict, type OverUnderContract, type Recommendation,
 } from '../over-under-engine';
 import {
@@ -15,6 +15,20 @@ import BulkTraderView, { type BulkForm, type LogRow } from './BulkTraderView';
 type MarketStore = { prices: number[]; times: number[]; digits: number[]; decimals: number };
 
 const IDLE = 'Bot is not running.';
+const LOCK_KEY = 'apex_bulk_locked_signal';
+const readLock = (): Recommendation | null => {
+    try {
+        const raw = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(LOCK_KEY) : null;
+        const parsed = raw ? (JSON.parse(raw) as Recommendation) : null;
+        return parsed && parsed.id && parsed.symbol && parsed.proposition ? { ...parsed, locked: true, expiresAt: Infinity } : null;
+    } catch { return null; }
+};
+const writeLock = (value: Recommendation | null) => {
+    try {
+        if (typeof sessionStorage === 'undefined') return;
+        if (value) sessionStorage.setItem(LOCK_KEY, JSON.stringify(value)); else sessionStorage.removeItem(LOCK_KEY);
+    } catch { /* storage unavailable: the lock simply lasts for this visit */ }
+};
 const ENGINE_STEP_MS = 150;
 const SETTLE_WAIT_MS = 90_000;
 const sleep = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
@@ -32,6 +46,7 @@ const BulkTraderPage = () => {
     const [underBarrier, setUnderBarrier] = useState('7');
     const [form, setForm] = useState<BulkForm>({ duration: String(DEFAULT_BULK.duration), stake: String(DEFAULT_BULK.stake), runs: String(DEFAULT_BULK.runs) });
     const [loaded, setLoaded] = useState<Recommendation | null>(null);
+    const [locked, setLocked] = useState<Recommendation | null>(readLock);
     const [live, setLive] = useState(false);
     const [tickVersion, setTickVersion] = useState(0);
     const [, setClock] = useState(0);
@@ -48,6 +63,7 @@ const BulkTraderPage = () => {
     const verdicts = useRef<Record<string, CombinedVerdict>>({});
     const recRef = useRef<Recommendation | null>(null);
     const engine = useRef(new OverUnderEngine());
+    const stability = useRef(new SignalStability());
     const symbolRef = useRef(symbol);
     const waiters = useRef<Record<string, Array<() => void>>>({});
     const mounted = useRef(true);
@@ -118,10 +134,11 @@ const BulkTraderPage = () => {
                 const entry = store.current[market.symbol];
                 if (!entry || entry.prices.length < MIN_ENGINE_TICKS) continue;
                 verdicts.current[market.symbol] = engine.current.analyse(market.symbol, buildEngineTicks(entry.prices, entry.times, entry.decimals));
+                stability.current.observe(market.symbol, verdicts.current[market.symbol]);
                 break;
             }
             const now = Date.now();
-            const next = recommend(verdicts.current, now, recRef.current);
+            const next = recommend(verdicts.current, now, recRef.current, stability.current);
             recRef.current = next;
             const version = next ? `${next.id}|${next.action}|${next.score}` : '';
             setRecVersion(previous => (previous === version ? previous : version));
@@ -136,17 +153,22 @@ const BulkTraderPage = () => {
     // Recommendation -> Trading Deck. Loading never purchases anything.
     // ------------------------------------------------------------------
     const now = Date.now();
-    const rec = recRef.current && recRef.current.expiresAt >= now ? recRef.current : null;
+    const offered = recRef.current && recRef.current.expiresAt >= now ? recRef.current : null;
     void recVersion;
+    const rec = locked ? refreshLocked(locked, verdicts.current, now) : offered;
     const watch = rec ? null : watching(verdicts.current);
-
-    const loadRecommendation = () => {
-        if (!rec) return;
-        setLoaded(rec);
-        setSymbol(rec.symbol);
-        if (rec.contract === 'DIGITOVER') setOverBarrier(String(rec.barrier)); else setUnderBarrier(String(rec.barrier));
+    const applyToDeck = (target: Recommendation) => {
+        setLoaded(target); setSymbol(target.symbol);
+        if (target.contract === 'DIGITOVER') setOverBarrier(String(target.barrier)); else setUnderBarrier(String(target.barrier));
         setError('');
         window.setTimeout(() => traderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    };
+    const loadRecommendation = () => { if (rec) applyToDeck(rec); };
+    const toggleLock = () => {
+        if (locked) { setLocked(null); writeLock(null); return; }
+        if (!offered) return;
+        const held = { ...offered, locked: true, expiresAt: Infinity };
+        setLocked(held); writeLock(held); applyToDeck(held);
     };
 
     const entry = store.current[symbol];
@@ -161,7 +183,8 @@ const BulkTraderPage = () => {
         ? (loaded.side === 0 && Number(overBarrier) === loaded.barrier ? 0 : loaded.side === 1 && Number(underBarrier) === loaded.barrier ? 1 : null)
         : null;
 
-    const loadedCheck = loaded ? validateRecommendation(loaded, verdicts.current, now) : null;
+    const loadedIsLocked = Boolean(locked && loaded && loaded.id === locked.id);
+    const loadedCheck = loaded ? validateRecommendation(loaded, verdicts.current, now, loadedIsLocked) : null;
     const loadedNote = !loaded
         ? 'Load the recommendation, or choose your own market and barrier. Nothing is purchased until you press Over or Under.'
         : loadedCheck && !loadedCheck.ok
@@ -190,7 +213,7 @@ const BulkTraderPage = () => {
 
             const isPick = Boolean(loaded && loaded.symbol === symbol && loaded.contract === contract && loaded.barrier === barrier);
             if (isPick) {
-                const check = validateRecommendation(loaded, verdicts.current, Date.now());
+                const check = validateRecommendation(loaded, verdicts.current, Date.now(), Boolean(locked && loaded && loaded.id === locked.id));
                 if (!check.ok) { setError(check.reason); return; }
             }
 
@@ -298,6 +321,7 @@ const BulkTraderPage = () => {
 
     return <BulkTraderView
         live={live} marketsReady={marketsReady} rec={rec} watch={watch ? { market: watch.market, label: watch.label } : null} onLoadRec={loadRecommendation}
+        locked={Boolean(locked)} canLock={Boolean(offered)} onToggleLock={toggleLock}
         symbol={symbol} onSymbol={setSymbol} price={price} digit={digit} digitPct={digitPct} recent={recent}
         form={form} onForm={onForm} overBarrier={overBarrier} underBarrier={underBarrier} onOverBarrier={setOverBarrier} onUnderBarrier={setUnderBarrier}
         pickSide={pickSide} loadedNote={loadedNote} currency={currency} running={running} status={status} error={error}

@@ -162,6 +162,16 @@
 .apex-bt__tag { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 900; letter-spacing: .06em; }
 .apex-bt__tag--execute { background: rgba(25, 211, 138, .16); color: var(--bt-win); }
 .apex-bt__tag--prepare { background: rgba(232, 184, 74, .16); color: var(--bt-gold); }
+.apex-bt__rec-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.apex-bt__rec.is-locked { border-color: var(--bt-win); box-shadow: 0 0 0 2px rgba(25, 211, 138, .18); }
+.apex-bt__rec.is-locked .apex-bt__rec-main small { color: var(--bt-win); }
+.apex-bt__lock { padding: 13px 18px; border-radius: 10px; border: 1px solid var(--bt-gold); background: transparent; color: var(--bt-gold); font-weight: 900; font-size: 15px; cursor: pointer; }
+.apex-bt__lock:hover { background: rgba(232, 184, 74, .12); }
+.apex-bt__lock.is-on { background: var(--bt-win); border-color: var(--bt-win); color: #04140d; }
+.apex-bt__lock:disabled { opacity: .35; cursor: not-allowed; }
+.apex-bt__tag--observe { background: rgba(143, 161, 194, .16); color: #a9b8d8; }
+.apex-bt__tag--stand_down { background: rgba(255, 77, 106, .16); color: var(--bt-loss); }
+.apex-bt__tag--locked { background: rgba(25, 211, 138, .16); color: var(--bt-win); }
 .apex-bt__hint { margin: 0; color: var(--bt-muted); font-size: 13px; }
 .apex-bt__why { color: var(--bt-muted); font-size: 13px; }
 .apex-bt__why summary { cursor: pointer; color: var(--bt-muted); }

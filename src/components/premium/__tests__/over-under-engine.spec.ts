@@ -2,9 +2,9 @@ import { lastDigit as engineLastDigit } from '@/lib/analytics';
 import { computeCombinedVerdict } from '@/lib/fusion/verdict';
 import { PROPOSITIONS } from '@/lib/propositions';
 import {
-    ACTION_RANK, ALLOWED_BARRIERS, BULK_MARKETS, OverUnderEngine, RECOMMENDATION_TTL_MS, STICKY_MARGIN, assertAllowedContract,
+    ACTION_RANK, ALLOWED_BARRIERS, BULK_MARKETS, LEGACY_QUALITY, OverUnderEngine, RECOMMENDATION_TTL_MS, SIGNAL_QUALITY, SignalStability, assertAllowedContract,
     buildEngineTicks, compareCandidates, contractFor, digitPercents, digitsFromPrices, engineTick, hitRate, inferDecimals,
-    isAllowedContract, lastDigit, propositionFor, recommend, validateRecommendation, watching,
+    isAllowedContract, lastDigit, passesQuality, propositionFor, recommend, refreshLocked, validateRecommendation, watching,
     type CombinedVerdict, type Proposition, type VerdictAction,
 } from '../over-under-engine';
 import { propositionSpec } from '@/lib/propositions';
@@ -153,20 +153,31 @@ describe('cross-market comparison', () => {
         expect(recommend({ R_10: fakeVerdict('R_10', [{ proposition: 'OVER2', action: 'EXECUTE', score: 99 }], { ready: false }) }, 1)).toBeNull();
         expect(recommend({}, 1)).toBeNull();
     });
-    it('keeps the current recommendation unless a challenger wins by the sticky margin', () => {
-        const first = recommend({ R_10: fakeVerdict('R_10', [{ proposition: 'OVER2', action: 'PREPARE', score: 66 }]) }, 100)!;
-        const close = {
-            R_10: fakeVerdict('R_10', [{ proposition: 'OVER2', action: 'PREPARE', score: 66 }]),
-            R_25: fakeVerdict('R_25', [{ proposition: 'UNDER7', action: 'PREPARE', score: 66 + STICKY_MARGIN - 1 }]),
-        };
-        const kept = recommend(close, 200, first)!;
-        expect(kept.id).toBe(first.id);
-        expect(kept.createdAt).toBe(100);
-        expect(kept.refreshedAt).toBe(200);
-        const clear = { ...close, R_25: fakeVerdict('R_25', [{ proposition: 'UNDER7', action: 'PREPARE', score: 66 + STICKY_MARGIN }]) };
-        expect(recommend(clear, 300, first)?.symbol).toBe('R_25');
-        const dropped = recommend({ R_10: fakeVerdict('R_10', [{ proposition: 'OVER2', action: 'STAND_DOWN', score: 40 }]) }, 400, first);
-        expect(dropped).toBeNull();
+    it('keeps the current recommendation until a same-grade challenger is clearly better AND the hold time has passed', () => {
+        const { stickyMargin, holdMs } = SIGNAL_QUALITY;
+        const first = recommend({ R_10: fakeVerdict('R_10', [{ proposition: 'OVER2', action: 'PREPARE', score: 67 }]) }, 100)!;
+        const rival = (lead: number) => ({
+            R_10: fakeVerdict('R_10', [{ proposition: 'OVER2', action: 'PREPARE', score: 67 }]),
+            R_25: fakeVerdict('R_25', [{ proposition: 'UNDER7', action: 'PREPARE', score: 67 + lead }]),
+        });
+        const kept = recommend(rival(stickyMargin - 1), 100 + holdMs + 1, first)!;
+        expect(kept.id).toBe(first.id); expect(kept.createdAt).toBe(100);
+        expect(kept.refreshedAt).toBe(100 + holdMs + 1);
+        expect(recommend(rival(stickyMargin), 100 + holdMs - 1, first)?.id).toBe(first.id);
+        expect(recommend(rival(stickyMargin), 100 + holdMs, first)?.symbol).toBe('R_25');
+        expect(recommend(rival(SIGNAL_QUALITY.holdBypassMargin), 200, first)?.symbol).toBe('R_25');
+        expect(recommend({ R_10: fakeVerdict('R_10', [{ proposition: 'OVER2', action: 'STAND_DOWN', score: 40 }]) }, 400, first)).toBeNull();
+    });
+    it('a higher grade (EXECUTE) replaces a shown PREPARE immediately', () => {
+        const first = recommend({ R_10: fakeVerdict('R_10', [{ proposition: 'OVER2', action: 'PREPARE', score: 70 }]) }, 100)!;
+        const next = recommend({ R_10: fakeVerdict('R_10', [{ proposition: 'OVER2', action: 'PREPARE', score: 70 }]), R_25: fakeVerdict('R_25', [{ proposition: 'UNDER7', action: 'EXECUTE', score: 73 }]) }, 150, first);
+        expect(next?.symbol).toBe('R_25'); expect(next?.action).toBe('EXECUTE');
+    });
+    it('the old behaviour is reproducible with LEGACY_QUALITY (margin 5, no hold, no floor)', () => {
+        const first = recommend({ R_10: fakeVerdict('R_10', [{ proposition: 'OVER2', action: 'PREPARE', score: 61 }]) }, 100, null, null, LEGACY_QUALITY)!;
+        expect(first.score).toBe(61);
+        const next = recommend({ R_10: fakeVerdict('R_10', [{ proposition: 'OVER2', action: 'PREPARE', score: 61 }]), R_25: fakeVerdict('R_25', [{ proposition: 'UNDER7', action: 'PREPARE', score: 66 }]) }, 101, first, null, LEGACY_QUALITY);
+        expect(next?.symbol).toBe('R_25');
     });
     it('offers an OBSERVE-grade hint when nothing is actionable', () => {
         const hint = watching({ R_25: fakeVerdict('R_25', [{ proposition: 'UNDER7', action: 'OBSERVE', score: 52 }, { proposition: 'OVER1', action: 'STAND_DOWN', score: 80 }]) });
@@ -207,6 +218,74 @@ describe('re-validation before execution', () => {
         }
         // consistent contract/barrier but a mismatched proposition id is also rejected
         expect(validateRecommendation({ ...rec, proposition: 'OVER1' }, live, 1_000_500).ok).toBe(false);
+    });
+});
+
+describe('signal quality filter', () => {
+    const item = (over: Partial<Item> & { action?: VerdictAction }) => fakeVerdict('X', [{ proposition: 'OVER2', action: 'PREPARE', score: 70, ...over }]).verdicts[0];
+    it('filters PREPARE and leaves EXECUTE to the engine', () => {
+        expect(passesQuality(item({ score: SIGNAL_QUALITY.minScore - 1 }))).toBe(false);
+        expect(passesQuality(item({ score: SIGNAL_QUALITY.minScore }))).toBe(true);
+        expect(passesQuality(item({ action: 'EXECUTE', score: 72 }))).toBe(true);
+        expect(passesQuality(item({ action: 'OBSERVE', score: 99 }))).toBe(false);
+        expect(passesQuality(item({ action: 'STAND_DOWN', score: 99 }))).toBe(false);
+    });
+    it('caps danger at the EXECUTE line', () => {
+        expect(passesQuality(item({ danger: SIGNAL_QUALITY.maxDanger - 1 }))).toBe(true);
+        expect(passesQuality(item({ danger: SIGNAL_QUALITY.maxDanger }))).toBe(false);
+    });
+    it('slightly tightens the engine bar', () => {
+        expect(SIGNAL_QUALITY.minScore - 60).toBeLessThan(8);
+        expect(SIGNAL_QUALITY.maxDanger).toBeGreaterThanOrEqual(40);
+        expect(passesQuality(item({ score: 60 }), LEGACY_QUALITY)).toBe(true);
+    });
+    it('requires consecutive qualifying scans and resets when a scan fails', () => {
+        const good = { R_50: fakeVerdict('R_50', [{ proposition: 'OVER3', action: 'PREPARE', score: 70 }]) };
+        const stability = new SignalStability();
+        expect(recommend(good, 1, null, stability)).toBeNull();
+        stability.observe('R_50', good.R_50); stability.observe('R_50', good.R_50);
+        expect(stability.streak('R_50', 'OVER3')).toBe(2);
+        expect(recommend(good, 2, null, stability)).toBeNull();
+        stability.observe('R_50', good.R_50);
+        expect(recommend(good, 3, null, stability)?.label).toBe('Over 3');
+        stability.observe('R_50', fakeVerdict('R_50', [{ proposition: 'OVER3', action: 'OBSERVE', score: 55 }]));
+        expect(stability.streak('R_50', 'OVER3')).toBe(0);
+        expect(recommend(good, 4, null, stability)).toBeNull();
+    });
+    it('an established signal needs no new streak', () => {
+        const good = { R_50: fakeVerdict('R_50', [{ proposition: 'OVER3', action: 'PREPARE', score: 70 }]) };
+        const stability = new SignalStability(); [1, 2, 3].forEach(() => stability.observe('R_50', good.R_50));
+        const shown = recommend(good, 10, null, stability)!;
+        expect(recommend(good, 11, shown, new SignalStability())?.id).toBe(shown.id);
+    });
+});
+describe('locking a signal', () => {
+    const base = { R_50: fakeVerdict('R_50', [{ proposition: 'OVER3', action: 'PREPARE', score: 70 }], { generatedAt: 1_000_000 }) };
+    const locked = recommend(base, 1_000_000)!;
+    it('refreshes engine values without swapping the signal', () => {
+        const later = {
+            R_50: fakeVerdict('R_50', [{ proposition: 'OVER3', action: 'OBSERVE', score: 58, danger: 35 }], { generatedAt: 1_005_000 }),
+            R_10: fakeVerdict('R_10', [{ proposition: 'UNDER7', action: 'EXECUTE', score: 90 }], { generatedAt: 1_005_000 }),
+        };
+        const shown = refreshLocked(locked, later, 1_005_000);
+        expect(shown.id).toBe(locked.id); expect(shown.symbol).toBe('R_50'); expect(shown.label).toBe('Over 3');
+        expect(shown.action).toBe('OBSERVE'); expect(shown.score).toBe(58); expect(shown.locked).toBe(true); expect(shown.expiresAt).toBe(Infinity);
+    });
+    it('keeps a locked signal visible if its market disappears', () => {
+        const shown = refreshLocked(locked, {}, 2_000_000);
+        expect(shown.id).toBe(locked.id); expect(shown.locked).toBe(true);
+    });
+    it('allows a locked signal to trade on OBSERVE, but not unlocked', () => {
+        const observe = { R_50: fakeVerdict('R_50', [{ proposition: 'OVER3', action: 'OBSERVE', score: 58 }], { generatedAt: 1_000_400 }) };
+        expect(validateRecommendation(locked, observe, 1_000_500, true)).toEqual({ ok: true });
+        expect(validateRecommendation(locked, observe, 1_000_500, false).ok).toBe(false);
+    });
+    it('still refuses STAND_DOWN, stale data, and forbidden contracts when locked', () => {
+        const down = { R_50: fakeVerdict('R_50', [{ proposition: 'OVER3', action: 'STAND_DOWN', score: 20 }], { generatedAt: 1_000_400 }) };
+        const refused = validateRecommendation(locked, down, 1_000_500, true);
+        expect(refused.ok).toBe(false); expect(JSON.stringify(refused)).toMatch(/Unlock/);
+        expect(validateRecommendation(locked, base, 1_000_000 + RECOMMENDATION_TTL_MS + 1, true).ok).toBe(false);
+        expect(validateRecommendation({ ...locked, contract: 'DIGITOVER', barrier: 5 } as unknown as typeof locked, base, 1_000_500, true).ok).toBe(false);
     });
 });
 
