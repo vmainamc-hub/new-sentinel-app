@@ -51,6 +51,7 @@ export default Engine =>
                     realLosses: 0,
                     virtualWins: 0,
                     fixedDone: 0,
+                    lastWasVirtual: false,
                     subscription: null,
                 };
             }
@@ -74,6 +75,12 @@ export default Engine =>
             s.virtualNow = s.enabled && Boolean(settings.startVirtual);
         }
 
+        // True when the trade that just settled was virtual. The after-purchase block uses this to skip the
+        // strategy's win/loss, martingale and recovery logic for virtual trades.
+        vhIsVirtualResult() {
+            return Boolean(this._vh?.lastWasVirtual);
+        }
+
         vhIsVirtualNext() {
             return this.vh.enabled && this.vh.virtualNow;
         }
@@ -81,10 +88,11 @@ export default Engine =>
         // Called for every settled contract (real and virtual).
         vhOnSettled(contract) {
             const s = this.vh;
+            const was_virtual = Boolean(contract?.is_virtual_hook);
+            s.lastWasVirtual = was_virtual;
             if (!s.enabled) return;
             const status = String(contract?.status || '').toLowerCase();
             const won = status === 'won' || (status !== 'lost' && Number(contract?.profit) > 0);
-            const was_virtual = Boolean(contract?.is_virtual_hook);
 
             if (!was_virtual) {
                 if (won) {

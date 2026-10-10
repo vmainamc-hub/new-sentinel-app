@@ -24,7 +24,9 @@ export default Engine =>
 
             this.last_open_contract_update = Date.now();
             this.setContractFlags(contract);
-            this.data.contract = contract;
+            // Virtual Hook trades are invisible to the strategy: this.data.contract keeps describing the
+            // last REAL trade, so martingale and recovery logic resume from where real trading stopped.
+            if (!contract.is_virtual_hook) this.data.contract = contract;
 
             // Virtual Hook trades are displayed as outcomes only; preserve the original contract for bot logic.
             const display_contract = contract.is_virtual_hook

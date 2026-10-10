@@ -76,6 +76,11 @@ window.Blockly.JavaScript.javascriptGenerator.forBlock.after_purchase = block =>
     const code = `
     BinaryBotPrivateAfterPurchase = function BinaryBotPrivateAfterPurchase() {
         Bot.highlightBlock('${block.id}');
+        // Virtual Hook: a virtual trade never runs the strategy's win/loss, martingale or recovery logic.
+        if (Bot.isVirtualResult()) {
+            Bot.isTradeAgain(true);
+            return true;
+        }
         ${stack}
         Bot.isTradeAgain(false);
         return false;
