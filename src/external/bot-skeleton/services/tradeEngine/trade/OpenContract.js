@@ -26,7 +26,19 @@ export default Engine =>
             this.setContractFlags(contract);
             this.data.contract = contract;
 
-            broadcastContract({ accountID: api_base.account_info.loginid, ...contract });
+            // Virtual Hook trades are displayed as outcomes only; preserve the original contract for bot logic.
+            const display_contract = contract.is_virtual_hook
+                ? {
+                      ...contract,
+                      buy_price: 0,
+                      sell_price: 0,
+                      payout: 0,
+                      bid_price: 0,
+                      profit: 0,
+                      virtual_result: String(contract.status).toLowerCase() === 'won' ? 'win' : 'loss',
+                  }
+                : contract;
+            broadcastContract({ accountID: api_base.account_info.loginid, ...display_contract });
 
             if (this.isSold) {
                 const settledContractId = this.contractId;
