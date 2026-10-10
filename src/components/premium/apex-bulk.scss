@@ -28,10 +28,8 @@
 .apex-bt *::after { box-sizing: border-box; }
 
 .apex-bt .is-win { color: var(--bt-win); }
-.apex-bt .is-loss { color: var(--bt-loss); }
 
-.apex-bt__title h1 { margin: 0 0 4px; font-size: 26px; color: #fff; }
-.apex-bt__title p { margin: 0 0 18px; color: var(--bt-muted); }
+.apex-bt .is-loss { color: var(--bt-loss); }
 
 .apex-bt__panel {
     margin-bottom: 18px;
@@ -42,127 +40,140 @@
 }
 
 .apex-bt__head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+
 .apex-bt__head small { color: var(--bt-muted); letter-spacing: .12em; font-weight: 700; }
+
 .apex-bt__head h2 { margin: 2px 0 6px; font-size: 20px; color: #fff; }
 
-.apex-bt__live { display: inline-flex; align-items: center; gap: 8px; color: var(--bt-muted); font-size: 13px; }
-.apex-bt__live i { width: 9px; height: 9px; border-radius: 50%; background: #5f7396; }
-.apex-bt__live i.is-on { background: var(--bt-win); }
-
-.apex-bt__controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
-.apex-bt__controls label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--bt-muted); }
-.apex-bt__controls select { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--bt-line); background: #0b1830; color: var(--bt-text); min-width: 130px; }
-
-.apex-bt__tabs { display: flex; gap: 6px; flex-wrap: wrap; }
-.apex-bt__tabs button,
-.apex-bt__ghost {
-    padding: 9px 14px; border-radius: 8px; border: 1px solid var(--bt-line);
-    background: var(--bt-panel-2); color: var(--bt-text); font-weight: 800; cursor: pointer;
-}
-.apex-bt__tabs button:hover,
-.apex-bt__ghost:hover { border-color: var(--bt-gold); }
-.apex-bt__tabs button.is-active { background: var(--bt-gold); border-color: var(--bt-gold); color: #1a1203; }
-
 .apex-bt__tablewrap { overflow-x: auto; border: 1px solid var(--bt-line); border-radius: 12px; }
-.apex-bt table { width: 100%; border-collapse: collapse; min-width: 720px; }
-.apex-bt th {
-    padding: 10px; text-align: left; color: var(--bt-muted); font-size: 11px;
-    letter-spacing: .08em; text-transform: uppercase; border-bottom: 1px solid var(--bt-line);
-}
-.apex-bt td { padding: 10px; border-bottom: 1px solid var(--bt-line); font-weight: 700; vertical-align: middle; }
-.apex-bt tr:last-child td { border-bottom: 0; }
-.apex-bt td small { display: block; margin-top: 2px; color: var(--bt-muted); font-weight: 500; font-size: 12px; }
-.apex-bt tr.is-best td { background: rgba(232, 184, 74, .07); }
-.apex-bt tr.is-loaded td { box-shadow: inset 0 0 0 9999px rgba(25, 211, 138, .06); }
-.apex-bt__empty { color: var(--bt-muted); text-align: center; padding: 18px !important; }
-.apex-bt__pick { color: var(--bt-gold); }
-
-.apex-bt__meter { display: inline-block; width: 84px; height: 8px; margin-right: 8px; border-radius: 6px; background: #13223f; overflow: hidden; vertical-align: middle; }
-.apex-bt__meter i { display: block; height: 100%; background: linear-gradient(90deg, #2a8cf0, var(--bt-win)); }
-
-.apex-bt__badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
-.apex-bt__badge--strong { background: rgba(25, 211, 138, .14); color: var(--bt-win); }
-.apex-bt__badge--moderate { background: rgba(232, 184, 74, .16); color: var(--bt-gold); }
-.apex-bt__badge--weak { background: rgba(143, 161, 194, .14); color: #a9b8d8; }
-.apex-bt__badge--none { background: rgba(95, 115, 150, .14); color: #6f82a8; }
-
-.apex-bt__load {
-    padding: 7px 14px; border-radius: 8px; border: 1px solid var(--bt-gold);
-    background: transparent; color: var(--bt-gold); font-weight: 800; cursor: pointer;
-}
-.apex-bt__load:hover { background: rgba(232, 184, 74, .12); }
-
-.apex-bt__note { margin: 12px 0 0; color: var(--bt-muted); font-size: 13px; }
 
 /* ---------- trader ---------- */
+
 .apex-bt__state { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--bt-line); font-weight: 800; color: var(--bt-muted); }
+
 .apex-bt__state.is-running { color: var(--bt-win); border-color: var(--bt-win); }
 
 .apex-bt__grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
 .apex-bt label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--bt-muted); }
+
 .apex-bt__panel input,
 .apex-bt__panel select { width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid var(--bt-line); background: #0b1830; color: var(--bt-text); font-size: 15px; font-weight: 700; }
+
 .apex-bt__panel input:disabled,
 .apex-bt__panel select:disabled { opacity: .6; }
 
 .apex-bt__tick { margin: 18px 0 4px; text-align: center; }
+
 .apex-bt__tick small { display: block; color: var(--bt-muted); letter-spacing: .2em; font-size: 11px; font-weight: 700; }
+
 .apex-bt__tick strong { font-size: 44px; line-height: 1.15; color: #ff6a4a; }
 
 .apex-bt__rings { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 8px; margin: 14px 0; }
+
 .apex-bt__ring {
     --p: 0; --c: #2a8cf0;
     position: relative; width: 100%; max-width: 96px; aspect-ratio: 1; margin: 0 auto; border-radius: 50%;
     display: grid; place-items: center; background: conic-gradient(var(--c) calc(var(--p) * 1%), #13223f 0);
 }
+
 .apex-bt__ring::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: var(--bt-panel); }
+
 .apex-bt__ring span { position: relative; text-align: center; font-weight: 800; font-size: 16px; color: #fff; }
+
 .apex-bt__ring span small { display: block; font-size: 11px; color: var(--bt-muted); font-weight: 700; }
+
 .apex-bt__ring.is-current { outline: 2px solid rgba(232, 184, 74, .7); outline-offset: 2px; }
 
 .apex-bt__strip { display: flex; justify-content: center; gap: 6px; margin-bottom: 18px; }
+
 .apex-bt__strip span { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 6px; color: #fff; font-size: 12px; font-weight: 800; }
+
 .apex-bt__strip .is-even { background: var(--bt-teal); }
+
 .apex-bt__strip .is-odd { background: var(--bt-red); }
 
 .apex-bt__form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 
 .apex-bt__sides { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+
 .apex-bt__side {
     position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px 10px;
     border-radius: 12px; border: 2px solid transparent; color: #fff; cursor: pointer; font: inherit;
 }
+
 .apex-bt__side span { font-size: 18px; font-weight: 800; }
+
 .apex-bt__side strong { font-size: 26px; color: #fff; }
+
 .apex-bt__side small { color: rgba(255, 255, 255, .78); font-size: 12px; }
+
 .apex-bt__side em {
     position: absolute; top: 8px; right: 8px; padding: 2px 8px; border-radius: 999px;
     background: var(--bt-gold); color: #1a1203; font-size: 10px; font-style: normal; font-weight: 900; letter-spacing: .06em;
 }
-.apex-bt__side--a { background: var(--bt-teal); }
-.apex-bt__side--b { background: var(--bt-red); }
-.apex-bt__side.is-pick { border-color: var(--bt-gold); box-shadow: 0 0 0 3px rgba(232, 184, 74, .25); }
-.apex-bt__side:disabled { opacity: .5; cursor: not-allowed; }
 
-.apex-bt__pickinfo { margin: 14px 0 0; color: var(--bt-muted); font-size: 13px; line-height: 1.5; }
-.apex-bt__pickinfo b { color: var(--bt-gold); }
+.apex-bt__side--a { background: var(--bt-teal); }
+
+.apex-bt__side--b { background: var(--bt-red); }
+
+.apex-bt__side.is-pick { border-color: var(--bt-gold); box-shadow: 0 0 0 3px rgba(232, 184, 74, .25); }
+
+.apex-bt__side:disabled { opacity: .5; cursor: not-allowed; }
 
 .apex-bt__status {
     display: flex; justify-content: center; align-items: center; gap: 14px; flex-wrap: wrap;
     margin-top: 14px; padding: 12px; border-radius: 10px; border: 1px solid var(--bt-line); background: var(--bt-panel-2); font-weight: 700;
 }
+
 .apex-bt__stop { padding: 8px 22px; border-radius: 8px; border: 0; background: var(--bt-loss); color: #fff; font-weight: 800; cursor: pointer; }
+
 .apex-bt__error { margin: 12px 0 0; color: var(--bt-loss); }
 
 .apex-bt__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 14px; }
+
 .apex-bt__stats div { padding: 10px 12px; border-radius: 10px; background: var(--bt-panel-2); border: 1px solid var(--bt-line); }
+
 .apex-bt__stats small { display: block; margin-bottom: 4px; color: var(--bt-muted); }
+
 .apex-bt__stats strong { font-size: 16px; color: #fff; }
 
 .apex-bt__log { margin-top: 14px; max-height: 260px; overflow-y: auto; }
+
 .apex-bt__log table { min-width: 0; }
 
 .apex-bt__foot { margin: 4px 0 0; color: var(--bt-muted); font-size: 12px; line-height: 1.5; }
+
+.apex-bt__tablewrap { overflow-x: auto; border: 1px solid var(--bt-line); border-radius: 12px; }
+.apex-bt table { width: 100%; border-collapse: collapse; min-width: 520px; }
+.apex-bt th { padding: 10px; text-align: left; color: var(--bt-muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; border-bottom: 1px solid var(--bt-line); }
+.apex-bt td { padding: 10px; border-bottom: 1px solid var(--bt-line); font-weight: 700; }
+.apex-bt tr:last-child td { border-bottom: 0; }
+
+/* ---------- recommendation bar ---------- */
+.apex-bt__rec {
+    display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+    margin-bottom: 18px; padding: 18px 20px; border-radius: 16px; background: var(--bt-panel); border: 1px solid var(--bt-gold);
+}
+.apex-bt__rec-main small { color: var(--bt-gold); letter-spacing: .14em; font-weight: 800; font-size: 11px; }
+.apex-bt__rec-main h2 { margin: 4px 0 6px; font-size: 22px; color: #fff; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.apex-bt__rec-main h2 b { color: var(--bt-gold); }
+.apex-bt__rec-main h2.is-idle { color: var(--bt-muted); font-size: 18px; }
+.apex-bt__tag { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 900; letter-spacing: .06em; }
+.apex-bt__tag--execute { background: rgba(25, 211, 138, .16); color: var(--bt-win); }
+.apex-bt__tag--prepare { background: rgba(232, 184, 74, .16); color: var(--bt-gold); }
+.apex-bt__hint { margin: 0; color: var(--bt-muted); font-size: 13px; }
+.apex-bt__why { color: var(--bt-muted); font-size: 13px; }
+.apex-bt__why summary { cursor: pointer; color: var(--bt-muted); }
+.apex-bt__why p { margin: 8px 0 4px; }
+.apex-bt__why ul { margin: 4px 0 0; padding-left: 18px; }
+.apex-bt__loadrec {
+    padding: 13px 22px; border-radius: 10px; border: 0; background: var(--bt-gold); color: #1a1203; font-weight: 900; font-size: 15px; cursor: pointer;
+}
+.apex-bt__loadrec:disabled { opacity: .35; cursor: not-allowed; }
+.apex-bt__sync { margin: 10px 0 0; color: var(--bt-win); font-size: 13px; font-weight: 700; }
+.apex-bt__lower { margin-top: 0; }
+
 
 @media (max-width: 900px) {
     .apex-bt { padding: 14px 12px 70px; }
