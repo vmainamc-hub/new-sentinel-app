@@ -225,7 +225,16 @@ const Transaction = ({ contract, active_transaction_id, onClickTransaction }: TT
                     )}
                 </div>
                 <div className='transactions__cell transactions__profit'>
-                    {contract?.is_completed ? (
+                    {contract?.is_completed && (contract as any).is_virtual_hook ? (
+                        <div
+                            className={classNames({
+                                'transactions__profit--win': (contract as any).virtual_result === 'win',
+                                'transactions__profit--loss': (contract as any).virtual_result !== 'win',
+                            })}
+                        >
+                            {(contract as any).virtual_result === 'win' ? localize('Virtual Win') : localize('Virtual Loss')}
+                        </div>
+                    ) : contract?.is_completed ? (
                         <div
                             className={classNames({
                                 'transactions__profit--win': contract?.profit && contract?.profit >= 0,
