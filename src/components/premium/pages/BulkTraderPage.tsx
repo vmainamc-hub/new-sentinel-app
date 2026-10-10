@@ -393,7 +393,7 @@ const BulkTraderPage = () => {
     return <BulkTraderView
         live={live} marketsReady={marketsReady} rec={rec} watch={watch ? { market: watch.market, label: watch.label } : null} onLoadRec={loadRecommendation}
         locked={Boolean(locked)} canLock={Boolean(offered)} onToggleLock={toggleLock}
-        auto={{ armed: autoSession.armed, form: autoForm, runs: autoSession.runs, pnl: autoSession.pnl, note: autoNote, maxRuns: autoConfig.maxRuns, maxLoss: autoConfig.maxLoss, account: authData?.is_virtual ? 'DEMO' : authData?.is_virtual === false ? 'REAL' : '' }}
+        auto={{ armed: autoSession.armed, form: autoForm, runs: autoSession.runs, pnl: autoSession.pnl, note: autoNote, maxRuns: autoConfig.maxRuns, maxLoss: autoConfig.maxLoss, account: authData?.is_virtual === 1 ? 'DEMO' : authData?.is_virtual === 0 ? 'REAL' : '' }}
         onAutoToggle={toggleAuto} onAutoForm={onAutoForm}
         symbol={symbol} onSymbol={setSymbol} price={price} digit={digit} digitPct={digitPct} recent={recent}
         form={form} onForm={onForm} overBarrier={overBarrier} underBarrier={underBarrier} onOverBarrier={setOverBarrier} onUnderBarrier={setUnderBarrier}
