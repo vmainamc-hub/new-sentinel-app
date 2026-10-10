@@ -14,6 +14,8 @@ export type LogRow = {
 };
 
 export type BulkForm = { duration: string; stake: string; runs: string };
+export type AutoForm = { grade: string; cooldownSec: string; maxRuns: string; maxLoss: string };
+export type AutoView = { armed: boolean; form: AutoForm; runs: number; pnl: number; note: string; maxRuns: number; maxLoss: number; account: string };
 
 export type BulkViewProps = {
     live: boolean;
@@ -24,6 +26,9 @@ export type BulkViewProps = {
     locked: boolean;
     canLock: boolean;
     onToggleLock: () => void;
+    auto: AutoView;
+    onAutoToggle: () => void;
+    onAutoForm: (key: keyof AutoForm, value: string) => void;
     symbol: string;
     onSymbol: (symbol: string) => void;
     price: number | null;
@@ -91,6 +96,38 @@ const RecommendationBar = ({ rec, watch, onLoadRec, marketsReady, live, locked, 
     </section>
 );
 
+const AutoPanel = ({ auto, running, currency, onAutoToggle, onAutoForm }: Pick<BulkViewProps, 'auto' | 'currency' | 'onAutoToggle' | 'onAutoForm'> & { running: boolean }) => (
+    <section className={`apex-bt__auto${auto.armed ? ' is-armed' : ''}`} aria-label='Auto trader'>
+        <div className='apex-bt__auto-head'>
+            <div>
+                <small>AUTO TRADER</small>
+                <p className={`apex-bt__auto-note${auto.armed ? ' is-on' : ''}`}>{auto.note}</p>
+            </div>
+            <button type='button' className={`apex-bt__arm${auto.armed ? ' is-on' : ''}`} onClick={onAutoToggle} aria-pressed={auto.armed}>
+                {auto.armed ? 'Disarm auto trader' : 'Arm auto trader'}
+            </button>
+        </div>
+        <div className='apex-bt__auto-form'>
+            <label>Trade on
+                <select value={auto.form.grade} disabled={auto.armed} onChange={event => onAutoForm('grade', event.target.value)}>
+                    <option value='EXECUTE'>EXECUTE signals only</option>
+                    <option value='ANY'>EXECUTE + PREPARE</option>
+                </select>
+            </label>
+            <label>Max auto runs<input value={auto.form.maxRuns} disabled={auto.armed} inputMode='numeric' onChange={event => onAutoForm('maxRuns', event.target.value)} /></label>
+            <label>Stop at loss ({currency})<input value={auto.form.maxLoss} disabled={auto.armed} inputMode='decimal' onChange={event => onAutoForm('maxLoss', event.target.value)} /></label>
+            <label>Cooldown (s)<input value={auto.form.cooldownSec} disabled={auto.armed} inputMode='numeric' onChange={event => onAutoForm('cooldownSec', event.target.value)} /></label>
+        </div>
+        <p className='apex-bt__auto-foot'>
+            Runs {auto.runs}/{auto.maxRuns} · Session P/L <b className={auto.pnl >= 0 ? 'is-win' : 'is-loss'}>{auto.pnl.toFixed(2)} {currency}</b>
+            {auto.account ? ` · ${auto.account} account` : ''}{running ? ' · run in progress' : ''}
+            <br />
+            Fires once for each new signal using the deck&apos;s stake, ticks and number of bulk trades. It trades the locked signal if you lock one.
+            It switches itself off at the run or loss limit, or if any purchase fails. Settings are fixed while armed, and it is always off when the page loads.
+        </p>
+    </section>
+);
+
 const BulkTraderView = (props: BulkViewProps) => {
     const { symbol, digitPct, form, currency, running, tally, log } = props;
     const params = sanitizeBulk({ stake: Number(form.stake), runs: Number(form.runs), duration: Number(form.duration) });
@@ -108,6 +145,8 @@ const BulkTraderView = (props: BulkViewProps) => {
         <div className='apex-bt'>
             <RecommendationBar rec={props.rec} watch={props.watch} onLoadRec={props.onLoadRec} marketsReady={props.marketsReady} live={props.live}
                 locked={props.locked} canLock={props.canLock} onToggleLock={props.onToggleLock} />
+
+            <AutoPanel auto={props.auto} running={props.running} currency={currency} onAutoToggle={props.onAutoToggle} onAutoForm={props.onAutoForm} />
 
             <section className='apex-bt__panel' ref={props.traderRef} aria-label='Trading Deck'>
                 <div className='apex-bt__head'>
