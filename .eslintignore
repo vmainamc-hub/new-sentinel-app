@@ -4,3 +4,8 @@ src/_common/lib/**/*.js
 .eslintrc.js
 .eslintrc.cjs
 rsbuild.config.ts
+
+# Insight Fusion engine, vendored byte-for-byte. Do not reformat or lint; see src/lib/README.vendored.md
+src/lib/
+src/types/sentinel.ts
+src/hooks/useDerivStream.ts
