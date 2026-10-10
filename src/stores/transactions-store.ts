@@ -68,7 +68,11 @@ export default class TransactionsStore {
     get statistics() {
         let total_runs = 0;
         const trxs = this.transactions.filter(
-            trx => trx.type === transaction_elements.CONTRACT && typeof trx.data === 'object'
+            trx =>
+                trx.type === transaction_elements.CONTRACT &&
+                typeof trx.data === 'object' &&
+                // Virtual Hook trades remain visible in history but do not affect real-money totals.
+                !(trx.data as any)?.is_virtual_hook
         );
         const statistics = trxs.reduce(
             (stats, { data }) => {
