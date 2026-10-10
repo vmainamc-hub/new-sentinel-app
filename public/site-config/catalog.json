@@ -20,6 +20,10 @@
       "label": "Auto Trades"
     },
     {
+      "id": "sentinel_ai",
+      "label": "Sentinel AI"
+    },
+    {
       "id": "manual_trading",
       "label": "DTrader"
     },
@@ -66,6 +70,7 @@
       "bot_builder",
       "free_bots",
       "auto_trader",
+      "sentinel_ai",
       "manual_trading",
       "tradingview",
       "bulk_trader",

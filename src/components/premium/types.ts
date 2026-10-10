@@ -6,6 +6,7 @@ export type PremiumSection =
     | 'free_bots'
     | 'signal_ai'
     | 'auto_trader'
+    | 'sentinel_ai'
     | 'manual_trading'
     | 'bulk_trader'
     | 'batch_trader'

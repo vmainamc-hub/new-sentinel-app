@@ -4,7 +4,7 @@ import { observer } from 'mobx-react-lite';
 import useThemeSwitcher from '@/hooks/useThemeSwitcher';
 import BrandMark from './BrandMark';
 import PremiumAccountSwitcher from './PremiumAccountSwitcher';
-import { BoltIcon, CalculatorIcon, CopyIcon, GearIcon, GridIcon, HomeIcon, MoonIcon, RobotIcon, SearchIcon, SunIcon } from './icons';
+import { BoltIcon, CalculatorIcon, CopyIcon, GearIcon, GridIcon, HomeIcon, MoonIcon, RobotIcon, SearchIcon, ShieldIcon, SunIcon } from './icons';
 import { NAVIGATION_CATALOG } from './site-customization';
 import PremiumTicker from './PremiumTicker';
 import type { PremiumSection } from './types';
@@ -14,6 +14,7 @@ const NAV_ICONS: Partial<Record<PremiumSection, typeof HomeIcon>> = {
     bot_builder: GearIcon,
     free_bots: RobotIcon,
     auto_trader: RobotIcon,
+    sentinel_ai: ShieldIcon,
     manual_trading: BoltIcon,
     tradingview: SearchIcon,
     bulk_trader: GridIcon,

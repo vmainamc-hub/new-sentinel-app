@@ -1,0 +1,454 @@
+{
+ "source": "Sentinel-Signal-Engine-and-Sentinel-Forge-source.zip / apexsentinel-main",
+ "note": "Only import specifiers were rewritten (@/lib -> @/sentinel-engine/lib etc.). sourceSha256 is of the ORIGINAL file.",
+ "files": [
+  {
+   "file": "hooks/useDerivStream.ts",
+   "sourceSha256": "9191bd5a2ad91096ac674635a9a7af114ac3fb57362a2ef675aaf7050c93018c"
+  },
+  {
+   "file": "lib/apex/bars.ts",
+   "sourceSha256": "5f750e86023a0def8a9c7ecec6d78a4cd3ef86a5e26512611c723ce3071ed8c2"
+  },
+  {
+   "file": "lib/apex/battle.ts",
+   "sourceSha256": "72c411ad8b2445f87c81e0ee8abc19cacc8f3782a2461a539d3b4fec64580eba"
+  },
+  {
+   "file": "lib/apex/clearance.ts",
+   "sourceSha256": "76b67cb14a6eece99e246a2ea113e739a033dcbd663e30deaa31a43796fb50ec"
+  },
+  {
+   "file": "lib/apex/confluence.ts",
+   "sourceSha256": "f63378f68e82be63bb4ae2f1efe98508f78fd3b92c073192623aa2134d33674c"
+  },
+  {
+   "file": "lib/apex/contracts.ts",
+   "sourceSha256": "86c46d0b73d986090baedb8b44747a582d981ec5cbfc3f0257aed5e8a4aeaa9a"
+  },
+  {
+   "file": "lib/apex/core.ts",
+   "sourceSha256": "033c2d41cbe61b0e1e9e381f73581ea4fbe78190da480fca8eb666f9fe01f954"
+  },
+  {
+   "file": "lib/apex/critical.ts",
+   "sourceSha256": "cd51fb0c6c5aeecf616aab85f14b6d963c26ba74d1c22a3e5508eb4935068c4e"
+  },
+  {
+   "file": "lib/apex/digit-intel.ts",
+   "sourceSha256": "d76dd1b51afe600e605105b44aa8c336fc58477f448176fc4069d6defa4557e7"
+  },
+  {
+   "file": "lib/apex/engine-effectiveness.ts",
+   "sourceSha256": "375644e621456e0e68477fc1f328fb60a9404516a2a5d9450d556269ff014967"
+  },
+  {
+   "file": "lib/apex/engines.ts",
+   "sourceSha256": "b39a01949d45a04411904e8f9c62710d97b36407d4720237f5b552c66dba9066"
+  },
+  {
+   "file": "lib/apex/entry-conditions.ts",
+   "sourceSha256": "7f3970f25f5c33e15328f8ad4cdb5a027360d8a4401031cd577552c2f5df4b8b"
+  },
+  {
+   "file": "lib/apex/evidence-status.ts",
+   "sourceSha256": "348e6cade69ea16ef3da2f6f8a069da4557be1e2c6098c32237ef69cb2c66b3c"
+  },
+  {
+   "file": "lib/apex/exposure.ts",
+   "sourceSha256": "7da7aece4f2dd522da9d1311f30f5ccd0022ebdbd477106383e151dd6986fb85"
+  },
+  {
+   "file": "lib/apex/final-rank.ts",
+   "sourceSha256": "cf8f1bee1fc342bf57b337fa7eff07d7ea5bfd039c14d2a14d535236f1287bc5"
+  },
+  {
+   "file": "lib/apex/fluctuation.ts",
+   "sourceSha256": "ee6060c53eb993dbc95b40a667243c93971b84cd5a19855b231c1f1a22a28a06"
+  },
+  {
+   "file": "lib/apex/forward.ts",
+   "sourceSha256": "e8e3417067ffa7011fc470cfae0408e044375342f2b35beb1e1b28ca9acd820d"
+  },
+  {
+   "file": "lib/apex/health.ts",
+   "sourceSha256": "673901e4503df1d6f05193f89606ad81321be98c98934b9d9e3a46feb9f6a590"
+  },
+  {
+   "file": "lib/apex/memory.ts",
+   "sourceSha256": "964218c1eb79da2be4d98ac2d3ba9c83df76415351fc80595ec3d0fb20f63903"
+  },
+  {
+   "file": "lib/apex/ml.ts",
+   "sourceSha256": "f8e0f63a87e324e479b9d0341c9d86634c40f39e8494c45f8f87aa206744bd95"
+  },
+  {
+   "file": "lib/apex/operator-surface-gate.ts",
+   "sourceSha256": "ba143f67b7497982443d62bd9d30fde892323fb91cbede85d4cb24d1f768a6fa"
+  },
+  {
+   "file": "lib/apex/operator-surface-thresholds.ts",
+   "sourceSha256": "735f88b85be63675b5afb2668d1c21d9c202d8bbd4be40df7c9e1a56b09a660e"
+  },
+  {
+   "file": "lib/apex/profiles.ts",
+   "sourceSha256": "390d978c56a21f41000bfca87484bdcdccf1b5ae8ed8561ce5deb426bd708a77"
+  },
+  {
+   "file": "lib/apex/psychology.ts",
+   "sourceSha256": "8f13c265aa0265945d968a3531c8aac80a5978551e55be53fae9251efceb9f24"
+  },
+  {
+   "file": "lib/apex/scan.ts",
+   "sourceSha256": "d05cb28eae329304be3b7f8a549feb8a3a76254ec21327fddcb1c8381ca85693"
+  },
+  {
+   "file": "lib/apex/settings.ts",
+   "sourceSha256": "16bd7a1fcafd4650b6039628459a197e777323c8e432e35c891c0885159a38b0"
+  },
+  {
+   "file": "lib/apex/simulator.ts",
+   "sourceSha256": "af4667a05f8c7142f251c9296a2da03dfe7248709e268b4c13bccd4c0ee51216"
+  },
+  {
+   "file": "lib/apex/special-digits.ts",
+   "sourceSha256": "2926f7362f15fba0cf4dc83ff06e23ad8bd002f90c543f3310cbf33f434ebc55"
+  },
+  {
+   "file": "lib/apex/statistics.ts",
+   "sourceSha256": "3baa3ac0a5207614ce1ee6c4151db0a4059e73395eb8c875708b76ad218ca0c1"
+  },
+  {
+   "file": "lib/apex/surface-vetting.ts",
+   "sourceSha256": "d4360d048faf2cf3dcdb96da036c1f9b37e0109e202f016ab5c9eab08909927d"
+  },
+  {
+   "file": "lib/apex/threat.ts",
+   "sourceSha256": "23e0b48f71e9748252a64cc2b4d776bb3db4d58358b6018e72fde68593d18373"
+  },
+  {
+   "file": "lib/apex/types.ts",
+   "sourceSha256": "4dcc40cbec8e80a1d15cbcf5fb853f83a8ed889d54bc5a8b5fd33791bb771aa0"
+  },
+  {
+   "file": "lib/apex/universe.ts",
+   "sourceSha256": "0ac0a33829cddb2d5ebed74d730a565d1d18a5957cea182ab068834fa9679db3"
+  },
+  {
+   "file": "lib/deriv/canonical-distribution.ts",
+   "sourceSha256": "c3eeae4985969da9b10f6986893054dc2944f4137b5fd4d942bb645f051c2142"
+  },
+  {
+   "file": "lib/deriv/tick-bus.ts",
+   "sourceSha256": "619aef3f616dc7ea448912bec75a901baadab8973d933057be633f03b2ae06d7"
+  },
+  {
+   "file": "lib/digit-roles.ts",
+   "sourceSha256": "7f766ad704dbe83c85e867bb7cd740fc143541c01d9f8894895bf750d8f706d6"
+  },
+  {
+   "file": "lib/precision-edge-v2/pressure-engine.ts",
+   "sourceSha256": "14022dfb985f178c809238ad1ac98137022d26cee0a4f2d165efd85d0b9bebd7"
+  },
+  {
+   "file": "lib/precision-edge/bot/simulator.ts",
+   "sourceSha256": "8b022bb1ad5a3599f4eb94e80fab52906566abf5887b20fe83a981a68f1b1207"
+  },
+  {
+   "file": "lib/precision-edge/bot/spec.ts",
+   "sourceSha256": "aa8496fd7b692dba5117e147f4f14550da1e6eea8edcf716bcf1853319623caa"
+  },
+  {
+   "file": "lib/precision-scanner/scoring.ts",
+   "sourceSha256": "acd1d43bb025e9a4cfe64c050cbfbae16b0711d13b97c59aed3d1be126c9881b"
+  },
+  {
+   "file": "lib/risk/circuit-breaker.ts",
+   "sourceSha256": "0916b199af4b63daee5206e5c21e01fd2d59bfcc9aae59fb1e0bb7339c89eaf7"
+  },
+  {
+   "file": "lib/risk/portfolio-exposure.ts",
+   "sourceSha256": "8318daed2069a750cd8e8fe4385f4861210f5e4eb8494a1877c841ba20df0cb3"
+  },
+  {
+   "file": "lib/risk/position-sizing.ts",
+   "sourceSha256": "14b506eabbd0a7e82aa77a1a739708baa6f525b0c5dd4e7a5110b7c9f7235ca6"
+  },
+  {
+   "file": "lib/risk/significance-guard.ts",
+   "sourceSha256": "aaed31be6ec952e8cb00e19e53d3a4c3f73bbd9bc205cd112a187dc08724bc36"
+  },
+  {
+   "file": "lib/sentinel/calibration.ts",
+   "sourceSha256": "596d59424bcee3d7c3099fb7fdf9f9040e116b87ada1388d5dc92302a1bf439c"
+  },
+  {
+   "file": "lib/sentinel/canonical-distribution.ts",
+   "sourceSha256": "68e9071a738d3f9635cdc9615e56c53a5dd35ad729d02a275ddfa88ad3059514"
+  },
+  {
+   "file": "lib/sentinel/combination-learning.ts",
+   "sourceSha256": "c068417306706e5a8da1a30b96f998630115a47fc488e65c8000604ba9d3d9f4"
+  },
+  {
+   "file": "lib/sentinel/context-engine.ts",
+   "sourceSha256": "df5603997fcf82a3550224ab8e2ffbc672eed85bd9f28932f222626f7ed8bd99"
+  },
+  {
+   "file": "lib/sentinel/continuous-regime.ts",
+   "sourceSha256": "b8b8377aa37b4390ae8949c437194abe93b72345be375254199cb04e2954fd78"
+  },
+  {
+   "file": "lib/sentinel/convergence.ts",
+   "sourceSha256": "5c9508062ee5b0c6a800ed09b9a085efead44c241c33fd5c874c230ce71f2d57"
+  },
+  {
+   "file": "lib/sentinel/danger.ts",
+   "sourceSha256": "8d1230b240bfd05899cda99a0591ce7c1304e99b0aa6b8c82658a3c2ce9823e6"
+  },
+  {
+   "file": "lib/sentinel/digit-psychology.ts",
+   "sourceSha256": "743da21b4c84f6075565ba5047bfa1a1606c257183339cd083bf14804f36b6f5"
+  },
+  {
+   "file": "lib/sentinel/direction.ts",
+   "sourceSha256": "9a33aa531f599a4481c0e08bb9611457902209e9a80e40927916e4636a10f858"
+  },
+  {
+   "file": "lib/sentinel/entry-clearance.ts",
+   "sourceSha256": "fcf7d9acf2a722262b23b715dfccf503f0cf27f9a9cea226c308c3be153f6551"
+  },
+  {
+   "file": "lib/sentinel/entry-point.ts",
+   "sourceSha256": "bbdd70edf66c163ea3fcd6e0379090e8304936ee64c3c4d5269b802c918fca59"
+  },
+  {
+   "file": "lib/sentinel/entry-trigger.ts",
+   "sourceSha256": "f57a590cbc7bf7299ba489878a9d1571d35433d273482c9554f6a06b7a0599b6"
+  },
+  {
+   "file": "lib/sentinel/evidence-fusion.ts",
+   "sourceSha256": "50aa0083cca5c19c16acbd7b2f1a3c8b2ec1d546447f8cf889ca4c53d0353065"
+  },
+  {
+   "file": "lib/sentinel/execution-instruction.ts",
+   "sourceSha256": "21385152d5ecf357483b0a0b7c146a961de1269eb93e71301445586af1e6009a"
+  },
+  {
+   "file": "lib/sentinel/execution-integration.ts",
+   "sourceSha256": "9174784902b25a2a808aa916e0aeb401a18992a0aeff10403b3f349074108032"
+  },
+  {
+   "file": "lib/sentinel/execution-ready.ts",
+   "sourceSha256": "7b537491d1f1522531b28f838754702b8d58e24ca05617c4fd6b79808cd603d2"
+  },
+  {
+   "file": "lib/sentinel/execution-survival.ts",
+   "sourceSha256": "9c2d1cbb94124cdc726f45b383c417700163d65394f10872ea0b40da3ff540e7"
+  },
+  {
+   "file": "lib/sentinel/final-decision.ts",
+   "sourceSha256": "06c3ecebc3cb424701b5ef1c6465d6c753ce907fe11762bd88b3dfcf175cb389"
+  },
+  {
+   "file": "lib/sentinel/global-veto.ts",
+   "sourceSha256": "e6f32ed2c9231289fd3933e09f8aead04bea9f241d52d42a7a5f74acff40fe3b"
+  },
+  {
+   "file": "lib/sentinel/immediate-guidance.ts",
+   "sourceSha256": "b7c9f955cbf9b151b2be69f875a3c2ed3dfd612a62ca28fdbd83ac2ff54d06ff"
+  },
+  {
+   "file": "lib/sentinel/liquidity-sweep.ts",
+   "sourceSha256": "3942a061772dee6407dacc267939e44e2840321658a51ae925419fbac343411f"
+  },
+  {
+   "file": "lib/sentinel/losing-side-pressure.ts",
+   "sourceSha256": "7a54c75788c07a08137ac07dc458f316e5fad91fa4a318ee00f86289a596de68"
+  },
+  {
+   "file": "lib/sentinel/market-state-evidence.ts",
+   "sourceSha256": "eeb05c748586bbe8bef4c29bb3ac8f8f1722eb4ef9ce74aa1133e98d814b79f9"
+  },
+  {
+   "file": "lib/sentinel/near-signal.ts",
+   "sourceSha256": "8e66f950cbb7f9d151f876e6d0881c5653a56bdde3f6f63367e18143aad76487"
+  },
+  {
+   "file": "lib/sentinel/observation-layer.ts",
+   "sourceSha256": "b0b8aafa5b0217edc7b872dbaa3112a40fefd0b2f0bac8b6003033d08ff21489"
+  },
+  {
+   "file": "lib/sentinel/observation-persistence.ts",
+   "sourceSha256": "b19b4d0d759f20b718be672d6bbe8de0ee6a7c71d73c6b26c7b1be00d08940dd"
+  },
+  {
+   "file": "lib/sentinel/observation/cellIdentity.ts",
+   "sourceSha256": "30a34fd98d9052785da55f439435b75a72659767e2eb83d9d1c7bb201a7a68e5"
+  },
+  {
+   "file": "lib/sentinel/observation/constants.ts",
+   "sourceSha256": "d13d691a88f80b406161916960d7523d9a3a927a4ea017b461d0a3f96910d51d"
+  },
+  {
+   "file": "lib/sentinel/observation/engineAdapter.ts",
+   "sourceSha256": "a81e8db7b6673a9b714b01bb8297bfdf74fecc96e8faf625431baaaedbe3e68f"
+  },
+  {
+   "file": "lib/sentinel/observation/explain.ts",
+   "sourceSha256": "18287231360fb26b4e70fe3d278f526be0e87b777b7506dd7087f2182f8e2b03"
+  },
+  {
+   "file": "lib/sentinel/observation/identityIntegrationContract.ts",
+   "sourceSha256": "ee9633769f722cd6dab7a56e98563c8cbad8f332a8f58468049f2ae82a980107"
+  },
+  {
+   "file": "lib/sentinel/observation/index.ts",
+   "sourceSha256": "993e32c8cba5a274ae5a1738455dd5d645b4f5b4866d49f6fb6b34b9a7ef5cdf"
+  },
+  {
+   "file": "lib/sentinel/observation/momentumLayer.ts",
+   "sourceSha256": "47894515f921a383750389f48296f8cefe1eec83564f83d9566883868b99e268"
+  },
+  {
+   "file": "lib/sentinel/observation/observationCell.ts",
+   "sourceSha256": "8d780e4aa7c3390e10fead6c165471dfa5fa941a4a34cab9f1a8e9d7b5c2dc5e"
+  },
+  {
+   "file": "lib/sentinel/observation/observationEngine.ts",
+   "sourceSha256": "62da7eaba62befabdeeac490fa4ee9bd6808f186d8e41ef17c0202531b6c8075"
+  },
+  {
+   "file": "lib/sentinel/observation/persistence.ts",
+   "sourceSha256": "c821edcc3a99d8131642605acbffd90de46a28026dea8ec33e0c3a6d20fb5940"
+  },
+  {
+   "file": "lib/sentinel/observation/qualification.ts",
+   "sourceSha256": "38a1680a93c423123c061035b1cfce9a2f0eab0c6d50e869b52c749b83d2386a"
+  },
+  {
+   "file": "lib/sentinel/observation/regimeLayer.ts",
+   "sourceSha256": "60c97ce9e33d235a1df4c220cd3a4dc0f29a0b07e5a40e9fe7e90c80cbe29f84"
+  },
+  {
+   "file": "lib/sentinel/observation/scoring.ts",
+   "sourceSha256": "149917c5d60e29bdfd6c1d7a304eed059b4692f32a150bd306b860c92c18e6cb"
+  },
+  {
+   "file": "lib/sentinel/observation/selectivity.ts",
+   "sourceSha256": "52962e5e238771a9a730a44ae8c0aa920c25f1170e6bd8d2c7411c4953a9bd4b"
+  },
+  {
+   "file": "lib/sentinel/observation/supabasePersistence.ts",
+   "sourceSha256": "1789102f6a4afa0b511358c093d69d01b41921399ac9d9ecab5a40007fbc23a9"
+  },
+  {
+   "file": "lib/sentinel/observation/tickConfirmationEngine.ts",
+   "sourceSha256": "ed5aee4af4f1b2d2205ba80f1549603aff7025587b4da7eb7b236867d5a83885"
+  },
+  {
+   "file": "lib/sentinel/observation/types.ts",
+   "sourceSha256": "9b60fea92dc4107b94a6ac3bec8b4222e25864e0492dfb5f4fa3f4cabc11533d"
+  },
+  {
+   "file": "lib/sentinel/observationThresholds.ts",
+   "sourceSha256": "2ef6117586859676e4c5c83f1d5c9cd061185837ccc52b8c9bebcbdf24374c71"
+  },
+  {
+   "file": "lib/sentinel/operator-learning.ts",
+   "sourceSha256": "6daad2e5babba24cf0c5e79d7ad8d1f854f7af231040081d4876a2056bacdd79"
+  },
+  {
+   "file": "lib/sentinel/operator-special-digits.ts",
+   "sourceSha256": "0999f101a2863dac63f52b2522119c272fd10c1869ed916850390ea4bae71f2d"
+  },
+  {
+   "file": "lib/sentinel/opportunity-alert.ts",
+   "sourceSha256": "b9a1775003ca1b4cdb83f51ace8f166b22bb89618678376568f2fe1b0dd4acec"
+  },
+  {
+   "file": "lib/sentinel/pattern-tags.ts",
+   "sourceSha256": "d6321d7730874c3c1b29298ebc3332203b94fcbdcd9785c34174b60a3fd91119"
+  },
+  {
+   "file": "lib/sentinel/price-action-psychology.ts",
+   "sourceSha256": "0afd01245ceb2dcde37b3e276c0f38e71507ebf8cea14dcd4eab29d8520d1f84"
+  },
+  {
+   "file": "lib/sentinel/proposal/index.ts",
+   "sourceSha256": "f4cd76a419c0e88d49c2c437b9f4b81abfa2bbadb544d8678498366a3227bef8"
+  },
+  {
+   "file": "lib/sentinel/proposal/pressure-validator.ts",
+   "sourceSha256": "035235f1b1ad23140852e5d31fac6817ff59ebc3bc050dee90a1f819e3b9bae6"
+  },
+  {
+   "file": "lib/sentinel/proposal/pressure-windows.ts",
+   "sourceSha256": "6a6160aa79a766597a9df9089c2b6877d84aa3405ae21b4a75989bd111363c45"
+  },
+  {
+   "file": "lib/sentinel/proposal/structural-direction.ts",
+   "sourceSha256": "4c46c7a38b5ff12698c05f9cae03124f01c64f285704f0a591c092bedd3ad905"
+  },
+  {
+   "file": "lib/sentinel/proposal/types.ts",
+   "sourceSha256": "d0b9427c6ba5f7d9bf89982f76df2d9c0eca690bdf749ad8e8ff52de5fd6ab1a"
+  },
+  {
+   "file": "lib/sentinel/proposal/veto-engine.ts",
+   "sourceSha256": "fc7b59da4e5f8c01fa6a6e761542da272e9f0301df5a83244ce0ce08aca75284"
+  },
+  {
+   "file": "lib/sentinel/red-semantics.ts",
+   "sourceSha256": "927608cb89516c9621d9d70a273ee75132fb45de5dd2a4ed958e5a4fb2db6e24"
+  },
+  {
+   "file": "lib/sentinel/regime-detector.ts",
+   "sourceSha256": "690553ac8c765f0e0a34b4f502ca8d8a60b8fb9658516a3fa628249303710062"
+  },
+  {
+   "file": "lib/sentinel/relative-edge.ts",
+   "sourceSha256": "e3a7d56e664f110d394da667ebe382bc9e5a0787800eef64e828ceb7a866f2d0"
+  },
+  {
+   "file": "lib/sentinel/scan-memory.ts",
+   "sourceSha256": "7cfb8932c09ca3c7577ff34d4529edf630f9ef5202875797146d7a92e3064e10"
+  },
+  {
+   "file": "lib/sentinel/sequential-test.ts",
+   "sourceSha256": "3424309cfd77fd7f9fc37b5fe2d5242f7a8d1c0f55527fd8e34531651e5dbd65"
+  },
+  {
+   "file": "lib/sentinel/setup.ts",
+   "sourceSha256": "51a25f19c2f94b8aec58570005531dc4a8b3f68ee4504bede76d6d60d55c8ae8"
+  },
+  {
+   "file": "lib/sentinel/signal-state.ts",
+   "sourceSha256": "a31f2915c140348455d2e42112211c738f5be645f9a7a110a50b8bb4bb984687"
+  },
+  {
+   "file": "lib/sentinel/touch-classification.ts",
+   "sourceSha256": "6fe4a8ff897b64f6dff9eb6a18b0002f1d85bf714fcc2a9cbc186c8b7081d6fd"
+  },
+  {
+   "file": "lib/sentinel/trade-feedback.ts",
+   "sourceSha256": "38d087b5c2fb94331578346cb60094db978694db93843a795dde1a991a4eea61"
+  },
+  {
+   "file": "lib/sentinel/veto-resolver.ts",
+   "sourceSha256": "e3edef3625860fc2f908ba5795b99a75f77270a152bfe6a4588c292e5b3e7df3"
+  },
+  {
+   "file": "lib/sentinel/winning-side-momentum.ts",
+   "sourceSha256": "798d490930ddc557337086b2e0a32d084a3aae989a4b77ee4b8a62c92243920d"
+  },
+  {
+   "file": "lib/storage-fallback.ts",
+   "sourceSha256": "cf5decabb7dde573576ebeab67ed385b6b3ef5e86b2ee351b56a365d8fff8695"
+  },
+  {
+   "file": "types/sentinel.ts",
+   "sourceSha256": "e2647804d842b23f526e3c54401842dffd5993d574336a245b0d747a832362ea"
+  }
+ ]
+}

@@ -4,3 +4,6 @@
 src/lib/
 src/types/sentinel.ts
 src/hooks/useDerivStream.ts
+
+# Sentinel AI engine (zip copy, isolated), vendored byte-for-byte except import paths. See src/sentinel-engine/README.md
+src/sentinel-engine/

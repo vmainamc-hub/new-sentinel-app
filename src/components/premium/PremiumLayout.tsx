@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -66,8 +66,12 @@ import './apex-theme.scss';
 import './apex-pages.scss';
 import './apex-bulk.scss';
 
+// Sentinel AI pulls in the whole Sentinel engine, so it loads on demand instead of with the shell.
+const SentinelAiPage = lazy(() => import('@/pages/sentinel-ai'));
+const SentinelAiBridge = lazy(() => import('@/pages/sentinel-ai/sentinel-ai-bridge'));
+
 const validSections: PremiumSection[] = [
-    'dashboard', 'bot_ideas', 'quick_bot', 'bot_builder', 'free_bots', 'signal_ai', 'auto_trader',
+    'dashboard', 'bot_ideas', 'quick_bot', 'bot_builder', 'free_bots', 'signal_ai', 'auto_trader', 'sentinel_ai',
     'manual_trading', 'bulk_trader', 'batch_trader', 'copy_trading', 'speedbot', 'calculator', 'pro_ai', 'analysis_tools',
     'analysis_hub', 'charts', 'tradingview', 'dtrader', 'ai_bots', 'digits_analysis',
 ];
@@ -157,6 +161,7 @@ const PremiumLayout = observer(() => {
     useEffect(() => {
         if (!isAuthenticated) return;
         if (section === 'auto_trader') dashboard?.setActiveTab(DBOT_TABS.AUTO_TRADES);
+        if (section === 'sentinel_ai') dashboard?.setActiveTab(DBOT_TABS.SENTINEL_AI);
         if (section === 'manual_trading') dashboard?.setActiveTab(DBOT_TABS.MANUAL_TRADING);
     }, [dashboard, isAuthenticated, section]);
 
@@ -210,6 +215,7 @@ const PremiumLayout = observer(() => {
             case 'free_bots': return <FreeBotsPage openBotBuilder={openBotBuilder} />;
             case 'signal_ai': return <SignalAIPage />;
             case 'auto_trader': return <AutoTradesPage />;
+            case 'sentinel_ai': return <Suspense fallback={<PremiumLoader />}><SentinelAiPage /></Suspense>;
             case 'manual_trading': return <ManualTradingPage />;
             case 'bulk_trader': return <BulkTraderPage />;
             case 'batch_trader': return <BatchTraderPage />;
@@ -243,6 +249,7 @@ const PremiumLayout = observer(() => {
         style={themeStyle}
     >
         <GlobalContractBridge />
+        <Suspense fallback={null}><SentinelAiBridge /></Suspense>
         <PremiumHeader active={section} navigation={customization.navigation} onChange={changeSection} />
         <main className='prodb-premium-content'>
             {!isBotBuilder && renderSection()}

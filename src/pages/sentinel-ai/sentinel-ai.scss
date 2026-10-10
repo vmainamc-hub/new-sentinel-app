@@ -1,0 +1,752 @@
+// SENTINEL AI — page styles. Shares the Auto Trades navy palette so the two tabs feel like one product;
+// the gold accent is the site's primary colour and is reserved for "the entry digit" (the one thing that
+// matters on this page).
+
+.sentinel-ai-page,
+.sentinel-ai-notice {
+    --sai-bg: #080e1d;
+    --sai-card: #0c1627;
+    --sai-card-2: #101e35;
+    --sai-border: #1b2e4e;
+    --sai-border-soft: #122038;
+    --sai-text: #d6e4f7;
+    --sai-dim: #8aa8cc;
+    --sai-muted: #5c7ba3;
+    --sai-accent: var(--site-primary, #e8b84a);
+    --sai-blue: #2e7fd8;
+    --sai-win: #00cc7a;
+    --sai-loss: #e0304e;
+    --sai-warn: #d9921a;
+}
+
+.sentinel-ai-page {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--sai-bg);
+    color: var(--sai-text);
+
+    &__scroll {
+        flex: 1;
+        min-height: 0;
+        height: 100%;
+        max-height: 100%;
+        overflow-y: auto;
+    }
+
+    &__inner {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 20px 16px 96px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p,
+    dl,
+    dd,
+    ul {
+        margin: 0;
+    }
+
+    button,
+    input {
+        font: inherit;
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--sai-accent);
+        outline-offset: 2px;
+    }
+}
+
+// ── header ─────────────────────────────────────────────────────────────────────────────────────
+.sentinel-ai-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+
+    h1 {
+        font-size: 2.2rem;
+        line-height: 1.2;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+    }
+
+    p {
+        margin-top: 2px;
+        color: var(--sai-dim);
+        font-size: 1.4rem;
+        max-width: 56ch;
+    }
+}
+
+.sentinel-ai-chip {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--sai-border);
+    border-radius: 8px;
+    background: var(--sai-card);
+    font-size: 1.3rem;
+
+    &__dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--sai-muted);
+    }
+
+    &__flags {
+        color: var(--sai-muted);
+        font-size: 1.2rem;
+    }
+
+    &.is-live &__dot {
+        background: var(--sai-win);
+        box-shadow: 0 0 0 3px rgba(0, 204, 122, 0.18);
+    }
+
+    &.is-warn {
+        border-color: var(--sai-warn);
+    }
+
+    &.is-warn &__dot {
+        background: var(--sai-warn);
+    }
+}
+
+.sentinel-ai-banner {
+    padding: 10px 14px;
+    border: 1px solid var(--sai-border);
+    border-left: 3px solid var(--sai-blue);
+    border-radius: 8px;
+    background: var(--sai-card);
+    font-size: 1.35rem;
+
+    &.is-error {
+        border-left-color: var(--sai-loss);
+    }
+}
+
+// ── run bar ────────────────────────────────────────────────────────────────────────────────────
+.sentinel-ai-runbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 12px;
+}
+
+.sentinel-ai-run {
+    min-width: 132px;
+    min-height: 56px;
+    padding: 0 28px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--sai-accent);
+    color: #1a1204;
+    font-size: 1.7rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+
+    &:hover:not(:disabled) {
+        filter: brightness(1.08);
+    }
+
+    &.is-stop {
+        background: var(--sai-loss);
+        color: #fff;
+    }
+
+    &:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+}
+
+.sentinel-ai-kpis {
+    flex: 1;
+    min-width: 260px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1px;
+    border: 1px solid var(--sai-border);
+    border-radius: 8px;
+    background: var(--sai-border);
+    overflow: hidden;
+
+    > div {
+        padding: 10px 14px;
+        background: var(--sai-card);
+    }
+
+    dt {
+        color: var(--sai-muted);
+        font-size: 1.2rem;
+    }
+
+    dd {
+        margin-top: 2px;
+        font-size: 1.8rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+
+        &.win {
+            color: var(--sai-win);
+        }
+
+        &.loss {
+            color: var(--sai-loss);
+        }
+
+        small {
+            display: block;
+            min-height: 1.2em;
+            color: var(--sai-muted);
+            font-size: 1.15rem;
+            font-weight: 400;
+        }
+    }
+}
+
+// ── layout ─────────────────────────────────────────────────────────────────────────────────────
+.sentinel-ai-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+
+    @media (min-width: 980px) {
+        grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    }
+}
+
+.sentinel-ai-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+
+.sentinel-ai-card {
+    margin: 0;
+    padding: 16px;
+    border: 1px solid var(--sai-border);
+    border-radius: 10px;
+    background: var(--sai-card);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+
+    h3,
+    legend {
+        padding: 0;
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--sai-text);
+        float: left;
+        width: 100%;
+    }
+
+    legend + * {
+        clear: both;
+    }
+
+    &:disabled {
+        opacity: 0.6;
+    }
+}
+
+.sentinel-ai-muted {
+    color: var(--sai-muted);
+    font-size: 1.3rem;
+}
+
+// ── the signal (the one memorable element: the entry-digit strip) ──────────────────────────────
+.sentinel-ai-signal {
+    padding: 18px;
+    border: 1px solid var(--sai-border);
+    border-radius: 12px;
+    background: linear-gradient(180deg, var(--sai-card-2), var(--sai-card));
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+
+    &.is-fresh {
+        animation: sai-arrive 2.4s ease-out 1;
+    }
+
+    &__top {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 10px;
+
+        h2 {
+            font-size: 2.6rem;
+            line-height: 1.15;
+            font-weight: 700;
+        }
+
+        p {
+            margin-top: 2px;
+            color: var(--sai-dim);
+            font-size: 1.4rem;
+        }
+    }
+
+    &__scores {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 14px;
+        color: var(--sai-dim);
+        font-size: 1.3rem;
+
+        b {
+            color: var(--sai-text);
+            font-variant-numeric: tabular-nums;
+        }
+    }
+
+    &__status {
+        padding: 2px 8px;
+        border: 1px solid var(--sai-border);
+        border-radius: 999px;
+        color: var(--sai-text);
+        font-size: 1.2rem;
+    }
+
+    &__state {
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+
+    &__reason {
+        color: var(--sai-dim);
+        font-size: 1.3rem;
+        max-width: 68ch;
+    }
+}
+
+.sentinel-ai-digits {
+    display: grid;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: clamp(3px, 1vw, 8px);
+
+    &__legend {
+        color: var(--sai-muted);
+        font-size: 1.2rem;
+        max-width: 68ch;
+    }
+}
+
+.sentinel-ai-digit {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 3 / 4;
+    min-height: 44px;
+    border: 1px solid var(--sai-border);
+    border-radius: 8px;
+    background: var(--sai-bg);
+    color: var(--sai-dim);
+    font-size: clamp(1.6rem, 3.6vw, 2.8rem);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    transition:
+        background-color 0.12s ease,
+        color 0.12s ease;
+
+    &.is-win::after {
+        content: '';
+        position: absolute;
+        left: 18%;
+        right: 18%;
+        bottom: 6px;
+        height: 3px;
+        border-radius: 2px;
+        background: var(--sai-win);
+    }
+
+    &.is-last {
+        background: var(--sai-blue);
+        border-color: var(--sai-blue);
+        color: #fff;
+    }
+
+    &.is-required {
+        border: 2px solid var(--sai-accent);
+        box-shadow: 0 0 0 3px rgba(232, 184, 74, 0.2);
+        color: var(--sai-accent);
+    }
+
+    &.is-required.is-last {
+        color: #fff;
+    }
+}
+
+.sentinel-ai-entry {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 10px 16px;
+
+    dt {
+        color: var(--sai-muted);
+        font-size: 1.2rem;
+    }
+
+    dd {
+        margin-top: 2px;
+        font-size: 1.5rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+    }
+}
+
+.sentinel-ai-empty {
+    padding: 28px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    h2 {
+        font-size: 2rem;
+    }
+
+    p {
+        color: var(--sai-dim);
+        font-size: 1.4rem;
+        max-width: 56ch;
+    }
+}
+
+// ── lists ──────────────────────────────────────────────────────────────────────────────────────
+.sentinel-ai-list {
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+
+    li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 9px 0;
+        border-top: 1px solid var(--sai-border-soft);
+
+        &:first-child {
+            border-top: 0;
+        }
+    }
+
+    &__main {
+        min-width: 0;
+        font-size: 1.35rem;
+
+        small {
+            display: block;
+            color: var(--sai-muted);
+            font-size: 1.15rem;
+        }
+    }
+}
+
+.sentinel-ai-pill {
+    flex: none;
+    padding: 3px 9px;
+    border: 1px solid var(--sai-border);
+    border-radius: 999px;
+    color: var(--sai-dim);
+    font-size: 1.2rem;
+    font-variant-numeric: tabular-nums;
+
+    &.is-won,
+    &.is-traded {
+        color: var(--sai-win);
+        border-color: rgba(0, 204, 122, 0.4);
+    }
+
+    &.is-lost {
+        color: var(--sai-loss);
+        border-color: rgba(224, 48, 78, 0.45);
+    }
+
+    &.is-active {
+        color: var(--sai-accent);
+        border-color: rgba(232, 184, 74, 0.5);
+    }
+}
+
+// ── form controls ──────────────────────────────────────────────────────────────────────────────
+.sentinel-ai-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 12px;
+}
+
+.sentinel-ai-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+
+    &__label {
+        color: var(--sai-dim);
+        font-size: 1.25rem;
+    }
+
+    &__hint {
+        color: var(--sai-muted);
+        font-size: 1.15rem;
+    }
+
+    input {
+        min-height: 40px;
+        padding: 0 10px;
+        border: 1px solid var(--sai-border);
+        border-radius: 6px;
+        background: var(--sai-bg);
+        color: var(--sai-text);
+        font-size: 1.5rem;
+        font-variant-numeric: tabular-nums;
+
+        &:focus {
+            border-color: var(--sai-accent);
+        }
+
+        &:disabled {
+            cursor: not-allowed;
+        }
+    }
+}
+
+.sentinel-ai-segment {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    button {
+        min-height: 36px;
+        padding: 0 12px;
+        border: 1px solid var(--sai-border);
+        border-radius: 6px;
+        background: var(--sai-bg);
+        color: var(--sai-dim);
+        font-size: 1.3rem;
+        cursor: pointer;
+
+        &.is-on {
+            border-color: var(--sai-accent);
+            color: var(--sai-accent);
+            background: rgba(232, 184, 74, 0.08);
+        }
+
+        &:disabled {
+            cursor: not-allowed;
+        }
+    }
+}
+
+.sentinel-ai-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+
+    input {
+        position: absolute;
+        opacity: 0;
+        width: 1px;
+        height: 1px;
+    }
+
+    &__track {
+        position: relative;
+        flex: none;
+        width: 36px;
+        height: 20px;
+        margin-top: 1px;
+        border-radius: 999px;
+        background: var(--sai-border);
+        transition: background-color 0.15s ease;
+
+        &::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--sai-text);
+            transition: transform 0.15s ease;
+        }
+    }
+
+    input:checked + &__track {
+        background: var(--sai-accent);
+
+        &::after {
+            transform: translateX(16px);
+            background: #1a1204;
+        }
+    }
+
+    input:focus-visible + &__track {
+        outline: 2px solid var(--sai-accent);
+        outline-offset: 2px;
+    }
+
+    &__text {
+        font-size: 1.35rem;
+
+        small {
+            display: block;
+            color: var(--sai-muted);
+            font-size: 1.15rem;
+        }
+    }
+}
+
+.sentinel-ai-secondary {
+    align-self: flex-start;
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid var(--sai-border);
+    border-radius: 6px;
+    background: var(--sai-card-2);
+    color: var(--sai-text);
+    font-size: 1.3rem;
+    cursor: pointer;
+}
+
+// ── global notice (shown on any tab; replaces the beep) ────────────────────────────────────────
+.sentinel-ai-notice {
+    position: fixed;
+    right: 16px;
+    bottom: 76px;
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: min(420px, calc(100vw - 24px));
+    padding: 12px 14px;
+    border: 1px solid var(--sai-accent);
+    border-radius: 10px;
+    background: var(--sai-card-2);
+    color: var(--sai-text);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    animation: sai-notice-in 0.25s ease-out 1;
+
+    &__pulse {
+        flex: none;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--sai-accent);
+        box-shadow: 0 0 0 0 rgba(232, 184, 74, 0.6);
+        animation: sai-pulse 1.4s ease-out infinite;
+    }
+
+    &__text {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        font-size: 1.3rem;
+
+        strong {
+            font-size: 1.4rem;
+        }
+
+        span {
+            color: var(--sai-dim);
+        }
+    }
+
+    &__open {
+        flex: none;
+        min-height: 34px;
+        padding: 0 14px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--sai-accent);
+        color: #1a1204;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    &__close {
+        flex: none;
+        width: 28px;
+        height: 28px;
+        border: 0;
+        background: transparent;
+        color: var(--sai-muted);
+        font-size: 2rem;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    @media (max-width: 600px) {
+        left: 12px;
+        right: 12px;
+        max-width: none;
+    }
+}
+
+@keyframes sai-arrive {
+    0% {
+        border-color: var(--sai-accent);
+        box-shadow: 0 0 0 0 rgba(232, 184, 74, 0.55);
+    }
+    40% {
+        border-color: var(--sai-accent);
+        box-shadow: 0 0 0 10px rgba(232, 184, 74, 0);
+    }
+    100% {
+        border-color: var(--sai-border);
+        box-shadow: 0 0 0 0 rgba(232, 184, 74, 0);
+    }
+}
+
+@keyframes sai-notice-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes sai-pulse {
+    to {
+        box-shadow: 0 0 0 10px rgba(232, 184, 74, 0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sentinel-ai-signal.is-fresh,
+    .sentinel-ai-notice,
+    .sentinel-ai-notice__pulse {
+        animation: none;
+    }
+}
