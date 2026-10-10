@@ -93,6 +93,7 @@ class ApexCore {
   private pendingCycle = false;
   /** Rolling average cost of one cycle (ms) — drives adaptive back-off. */
   private avgCycleMs = 0;
+  private analyseFailures = new Map<string, number>();
 
 
   /** Deep digit history for a market (up to 5000 ticks). */
@@ -290,7 +291,15 @@ class ApexCore {
       this.cursor = (this.cursor + BATCH) % APEX_UNIVERSE.length;
       for (const sym of slice) {
         if (this.refs <= 0) break;
-        this.analyse(sym);
+        try {
+          this.analyse(sym);
+        } catch (err) {
+          // One market throwing used to abort the whole slice (and skip its emit), so the remaining markets in
+          // it went stale for good. Contain it and carry on.
+          const n = (this.analyseFailures.get(sym) ?? 0) + 1;
+          this.analyseFailures.set(sym, n);
+          if (n === 1 || n % 50 === 0) console.warn(`[apex] analyse(${sym}) failed (${n}x):`, err);
+        }
         // One market per task: keeps every chunk of work short instead of
         // blocking the main thread for the whole batch.
         await this.yieldToBrowser();

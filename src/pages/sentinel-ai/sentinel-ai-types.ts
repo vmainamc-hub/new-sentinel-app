@@ -5,7 +5,14 @@
 
 export type MartingaleMode = 'off' | 'after_1' | 'after_2' | 'custom';
 
+/**
+ * `entry_digit` (default): a signal waits for its entry digit to print, then buys.
+ * `immediate`: a signal is traded the moment it arrives; the entry digit is not waited for.
+ */
+export type ExecutionMode = 'entry_digit' | 'immediate';
+
 export type SentinelAiSettings = {
+    executionMode: ExecutionMode;
     /** Base stake per trade. */
     stake: number;
     martingaleMode: MartingaleMode;
@@ -21,7 +28,7 @@ export type SentinelAiSettings = {
     recoveryDigit: number;
     /** After a win, keep the recovery stake until the session P/L is back above zero. */
     recoverToBreakeven: boolean;
-    /** How many consecutive trades are taken for each signal (each waits for the entry digit). */
+    /** How many consecutive trades are taken for each signal (each waits for the entry digit unless mode is immediate). */
     runsPerSignal: number;
     /** 0 = off. */
     takeProfit: number;
@@ -42,6 +49,7 @@ export type SentinelAiSettings = {
 export const MIN_STAKE = 0.35;
 
 export const DEFAULT_SETTINGS: SentinelAiSettings = {
+    executionMode: 'entry_digit',
     stake: 1,
     martingaleMode: 'after_1',
     martingaleCustomLosses: 3,
@@ -75,11 +83,15 @@ const num = (value: unknown, fallback: number, min: number, max: number, integer
 const bool = (value: unknown, fallback: boolean) => (typeof value === 'boolean' ? value : fallback);
 
 const MODES: MartingaleMode[] = ['off', 'after_1', 'after_2', 'custom'];
+const EXECUTION_MODES: ExecutionMode[] = ['entry_digit', 'immediate'];
 
 /** Validates and clamps a (possibly partial / hand-edited / stale) settings object. */
 export const normalizeSettings = (raw: unknown, base: SentinelAiSettings = DEFAULT_SETTINGS): SentinelAiSettings => {
     const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
     return {
+        executionMode: EXECUTION_MODES.includes(r.executionMode as ExecutionMode)
+            ? (r.executionMode as ExecutionMode)
+            : base.executionMode,
         stake: num(r.stake, base.stake, MIN_STAKE, 100000),
         martingaleMode: MODES.includes(r.martingaleMode as MartingaleMode)
             ? (r.martingaleMode as MartingaleMode)
@@ -148,7 +160,7 @@ export type SentinelAiSignal = {
     receivedAt: number;
 };
 
-export type SignalOutcome = 'ACTIVE' | 'TRADED' | 'EXPIRED' | 'REPLACED' | 'STOPPED' | 'WATCHED';
+export type SignalOutcome = 'ACTIVE' | 'TRADED' | 'EXPIRED' | 'REPLACED' | 'STOPPED' | 'WATCHED' | 'SKIPPED';
 
 export type SignalRecord = {
     signal: SentinelAiSignal;
@@ -191,6 +203,7 @@ export type EngineInfo = {
 export type RunnerStatus = 'IDLE' | 'WATCHING' | 'RUNNING';
 
 export type ActiveSignalState =
+    | 'READY'
     | 'WAITING_ENTRY'
     | 'NO_ENTRY_DIGIT'
     | 'TRADING'

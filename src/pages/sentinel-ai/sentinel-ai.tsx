@@ -12,6 +12,7 @@ import { getNotificationPermission, requestNotificationPermission } from './sent
 import { sentinelAiRunner } from './sentinel-ai-runner-instance';
 import type {
     ActiveSignalState,
+    ExecutionMode,
     MartingaleMode,
     SentinelAiSettings,
     SentinelAiSignal,
@@ -38,6 +39,7 @@ const OUTCOME_LABEL: Record<SignalOutcome, string> = {
     REPLACED: 'Replaced',
     STOPPED: 'Stopped',
     WATCHED: 'Not traded',
+    SKIPPED: 'Skipped',
 };
 
 const stateText = (
@@ -49,6 +51,8 @@ const stateText = (
     runsTotal: number
 ) => {
     switch (state) {
+        case 'READY':
+            return 'Immediate mode: trading this signal now, without waiting for the entry digit.';
         case 'WAITING_ENTRY':
             return `Waiting for digit ${required}${recovering ? ' (recovery digit)' : ''} · ${secondsLeft}s left`;
         case 'NO_ENTRY_DIGIT':
@@ -56,7 +60,7 @@ const stateText = (
         case 'TRADING':
             return 'Trade in progress';
         case 'WATCHING':
-            return 'Not running. Press Run to trade this signal on its entry digit.';
+            return 'Not running. Press Run to trade this signal.';
         case 'EXPIRED':
             return 'Expired before the entry digit printed.';
         case 'DONE':
@@ -137,6 +141,11 @@ const Toggle = ({
         </span>
     </label>
 );
+
+const EXECUTION_OPTIONS: Array<{ value: ExecutionMode; label: string; hint: string }> = [
+    { value: 'entry_digit', label: 'Wait for entry digit', hint: 'Each trade waits for the signal\'s entry digit to print' },
+    { value: 'immediate', label: 'Immediate', hint: 'Trades the moment a signal arrives, without waiting for the entry digit' },
+];
 
 const MARTINGALE_OPTIONS: Array<{ value: MartingaleMode; label: string }> = [
     { value: 'off', label: 'Off' },
@@ -403,6 +412,27 @@ const SentinelAi = observer(() => {
                         </div>
 
                         <div className='sentinel-ai-col'>
+                            <fieldset className='sentinel-ai-card' disabled={running}>
+                                <legend>Execution mode</legend>
+                                <div className='sentinel-ai-segment' role='radiogroup' aria-label='Execution mode'>
+                                    {EXECUTION_OPTIONS.map(option => (
+                                        <button
+                                            key={option.value}
+                                            type='button'
+                                            role='radio'
+                                            aria-checked={settings.executionMode === option.value}
+                                            className={classNames({ 'is-on': settings.executionMode === option.value })}
+                                            onClick={() => set({ executionMode: option.value })}
+                                        >
+                                            {option.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className='sentinel-ai-muted'>
+                                    {EXECUTION_OPTIONS.find(option => option.value === settings.executionMode)?.hint}
+                                </p>
+                            </fieldset>
+
                             <fieldset className='sentinel-ai-card' disabled={running}>
                                 <legend>Stake</legend>
                                 <div className='sentinel-ai-row'>

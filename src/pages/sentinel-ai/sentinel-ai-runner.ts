@@ -8,6 +8,7 @@
 // It is a singleton service (not tied to a mounted page), so a session keeps running while you look at
 // other tabs. All I/O is injected, which keeps it unit-testable.
 import { contract_stages } from '@/constants/contract-stage';
+import { describeTradeFailure } from '@/utils/trade-errors';
 import type { RankedOpportunity } from '@/sentinel-engine/lib/apex/types';
 import type { SentinelAiEngine } from './sentinel-ai-engine-types';
 import { initialStakeState, nextStakeState, requiredEntryDigit, sessionStopReason } from './sentinel-ai-money';
@@ -33,6 +34,12 @@ const TRADE_LIMIT = 40;
 const LOOP_MS = 1000;
 const EMIT_THROTTLE_MS = 120;
 const MAX_CONSECUTIVE_BUY_ERRORS = 3;
+/** A contract Deriv refused stays out of the feed for this long (market hours / offerings change, so not forever). */
+const BLOCK_TTL_MS = 5 * 60_000;
+/** Stop (instead of looping silently) when Deriv refuses this many signals in a row without a single purchase. */
+const MAX_SKIPS_IN_A_ROW = 6;
+/** Pause after a transient failure so Immediate mode cannot hammer the API. */
+const RETRY_COOLDOWN_MS = 3_000;
 
 type Loose = Record<string, any>;
 
@@ -110,8 +117,6 @@ const EMPTY_ENGINE: EngineInfo = {
     dangerLabel: 'CALM',
 };
 
-const FATAL_BUY_ERROR = /balance|authori[sz]|not logged|log in|insufficient|account/i;
-
 export class SentinelAiRunner {
     private readonly io: RunnerIO;
     private stores: RunnerStores | null = null;
@@ -138,6 +143,10 @@ export class SentinelAiRunner {
     private lastKey: string | null = null;
     private tradeInFlight = false;
     private buyErrors = 0;
+    private skipStreak = 0;
+    private cooldownUntil = 0;
+    /** `${symbol}|${contractId}` -> time the block lapses. Cells Deriv refused this session. */
+    private blocked = new Map<string, number>();
     private aborts = new Set<AbortController>();
 
     private history: SignalRecord[] = [];
@@ -220,6 +229,9 @@ export class SentinelAiRunner {
         this.lastError = null;
         this.stopReason = null;
         this.buyErrors = 0;
+        this.skipStreak = 0;
+        this.cooldownUntil = 0;
+        this.blocked.clear();
         this.session = this.freshSession();
         this.runToken += 1;
         this.running = true;
@@ -256,6 +268,7 @@ export class SentinelAiRunner {
             if (record && record.outcome === 'WATCHED') record.outcome = 'ACTIVE';
         }
         this.emit();
+        this.tryImmediate();
     }
 
     stop(reason = 'Stopped') {
@@ -329,7 +342,7 @@ export class SentinelAiRunner {
 
     private loop() {
         try {
-            const sample = this.io.engine.sample();
+            const sample = this.io.engine.sample((symbol, contractId) => this.isBlocked(`${symbol}|${contractId}`));
             this.engineInfo = sample.info;
             this.ingest(sample.surfaced);
         } catch (error) {
@@ -338,6 +351,17 @@ export class SentinelAiRunner {
         }
         this.checkExpiry();
         this.emit();
+        this.tryImmediate();
+    }
+
+    private isBlocked(key: string) {
+        const until = this.blocked.get(key);
+        if (until === undefined) return false;
+        if (this.io.now() >= until) {
+            this.blocked.delete(key);
+            return false;
+        }
+        return true;
     }
 
     /** One NEW signal event per newly surfaced market × contract cell (same rule the Forge used). */
@@ -422,7 +446,7 @@ export class SentinelAiRunner {
 
     // ── entry trigger ────────────────────────────────────────────────────────────────────────────
     private requiredDigit(): number | null {
-        if (!this.active) return null;
+        if (!this.active || this.settings.executionMode === 'immediate') return null;
         return requiredEntryDigit(this.active.signal.entryDigit, this.session.consecutiveLosses, this.settings);
     }
 
@@ -432,6 +456,10 @@ export class SentinelAiRunner {
             return;
         }
         this.scheduleEmit();
+        if (this.settings.executionMode === 'immediate') {
+            this.tryImmediate();
+            return;
+        }
         if (!this.running || this.tradeInFlight || active.done || active.expired) return;
         if (this.io.now() >= active.expiresAt) {
             this.checkExpiry();
@@ -442,6 +470,24 @@ export class SentinelAiRunner {
         const digit = this.io.engine.getLastDigit(symbol);
         if (digit === null || digit !== required) return;
         void this.execute(required);
+    }
+
+    /**
+     * Immediate mode: trade the live signal right away instead of waiting for its entry digit. Still never trades
+     * blind: it holds off while a trade is in flight, during a retry cool-down, or while the engine reports that its
+     * market feed is stale.
+     */
+    private tryImmediate() {
+        if (!this.running || this.settings.executionMode !== 'immediate') return;
+        const active = this.active;
+        if (!active || active.done || active.expired || this.tradeInFlight) return;
+        if (this.io.now() < this.cooldownUntil) return;
+        if (this.io.now() >= active.expiresAt) {
+            this.checkExpiry();
+            return;
+        }
+        if (this.engineInfo.failsafes.includes('FEED STALE')) return;
+        void this.execute(active.signal.entryDigit);
     }
 
     // ── trade ────────────────────────────────────────────────────────────────────────────────────
@@ -457,7 +503,7 @@ export class SentinelAiRunner {
         }
     }
 
-    private async execute(entryDigit: number) {
+    private async execute(entryDigit: number | null) {
         const active = this.active;
         if (!active) return;
         const token = this.runToken;
@@ -497,6 +543,7 @@ export class SentinelAiRunner {
             const buy = await this.io.buy({ parameters, price: stake });
             contractId = buy.contract_id;
             this.buyErrors = 0;
+            this.skipStreak = 0;
             const opened: Loose = {
                 ...baseContract,
                 buy_price: buy.buy_price,
@@ -549,18 +596,50 @@ export class SentinelAiRunner {
             this.aborts.delete(abort);
             this.tradeInFlight = false;
             if (token !== this.runToken) return;
-            const message =
-                error instanceof Error && error.message
-                    ? error.message
-                    : (error as { error?: { message?: string } })?.error?.message || 'Contract purchase failed.';
-            this.lastError = message;
+            // The purchase went through but something after it failed: never count that as a failed buy.
+            if (contractId) {
+                this.lastError = 'Lost track of the open contract; its result was not recorded. Check your Deriv statement.';
+                this.finishTrade(contractId, null, active);
+                return;
+            }
+            const failure = describeTradeFailure(error);
+            this.lastError = failure.message;
+
+            // A purchase was sent and never answered: it may exist. Never retry; stop and tell the user.
+            if (failure.outcomeUnknown || failure.kind === 'fatal') {
+                this.stop(`Stopped: ${failure.message}`);
+                return;
+            }
+            // Deriv explicitly refused this contract (nothing was bought): drop the signal, keep the session alive.
+            if (failure.kind === 'rejected') {
+                this.skipSignal(active, failure.message);
+                return;
+            }
             this.buyErrors += 1;
-            if (FATAL_BUY_ERROR.test(message) || this.buyErrors >= MAX_CONSECUTIVE_BUY_ERRORS) {
-                this.stop(`Stopped: ${message}`);
+            this.cooldownUntil = this.io.now() + RETRY_COOLDOWN_MS;
+            if (this.buyErrors >= MAX_CONSECUTIVE_BUY_ERRORS) {
+                this.stop(`Stopped after ${this.buyErrors} failed attempts: ${failure.message}`);
                 return;
             }
             this.emit();
         }
+    }
+
+    /** Deriv refused this exact contract. Block it for a while so the next-best signal can surface. */
+    private skipSignal(active: ActiveSignal, message: string) {
+        const { signal } = active;
+        this.blocked.set(signal.key, this.io.now() + BLOCK_TTL_MS);
+        this.skipStreak += 1;
+        active.done = true;
+        const record = this.history.find(r => r.signal.id === signal.id);
+        if (record) record.outcome = 'SKIPPED';
+        this.lastError = `Skipped ${signal.label} on ${signal.marketName}: ${message}`;
+        if (this.skipStreak >= MAX_SKIPS_IN_A_ROW) {
+            this.stop(`Stopped: Deriv refused ${this.skipStreak} signals in a row. Last: ${message}`);
+            return;
+        }
+        if (this.pending) this.activate(this.pending);
+        this.emit();
     }
 
     private recordTrade(trade: TradeRecord) {
@@ -614,6 +693,7 @@ export class SentinelAiRunner {
             active.expiresAt = this.io.now() + this.settings.signalWaitSeconds * 1000;
         }
         this.emit();
+        this.tryImmediate();
     }
 
     // ── snapshot ─────────────────────────────────────────────────────────────────────────────────
@@ -644,6 +724,7 @@ export class SentinelAiRunner {
             else if (active.expired) signalState = 'EXPIRED';
             else if (this.tradeInFlight) signalState = 'TRADING';
             else if (!this.running) signalState = 'WATCHING';
+            else if (this.settings.executionMode === 'immediate') signalState = 'READY';
             else signalState = required === null ? 'NO_ENTRY_DIGIT' : 'WAITING_ENTRY';
         }
         const secondsLeft =

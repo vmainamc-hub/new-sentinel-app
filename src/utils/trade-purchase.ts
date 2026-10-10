@@ -1,5 +1,7 @@
 import { api_base } from '@/external/bot-skeleton';
 
+import { classifyApiError, TradeRequestError, type TradeStage } from './trade-errors';
+
 type TradeParameters = Record<string, any>;
 
 export const normalizeTradeParameters = (parameters: TradeParameters) => ({
@@ -27,14 +29,60 @@ export const getErrorMessage = (err: unknown, fallback: string): string => {
     return fallback;
 };
 
-const sendRequest = async (request: Record<string, any>) => {
+/** A request that gets no answer must not leave the UI (or a trading session) waiting forever. */
+export const TRADE_REQUEST_TIMEOUT_MS = 15_000;
+
+const sendRequest = async (request: Record<string, any>, stage: TradeStage, timeoutMs = TRADE_REQUEST_TIMEOUT_MS) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+            const sentBuy = stage === 'buy';
+            reject(
+                new TradeRequestError(
+                    sentBuy
+                        ? 'Purchase request timed out. The result is unknown: check your Deriv statement before trading again.'
+                        : `Deriv did not answer the ${stage} request in time.`,
+                    { stage, kind: 'timeout', outcomeUnknown: sentBuy }
+                )
+            );
+        }, timeoutMs);
+    });
     try {
-        return await (api_base.api as any).send(request);
+        return await Promise.race([(api_base.api as any).send(request), timeout]);
     } catch (err) {
-        throw new Error(getErrorMessage(err, 'Deriv request failed.'));
+        if (err instanceof TradeRequestError) throw err;
+        const candidate = err as { error?: { code?: string }; code?: string } | null;
+        const code = candidate?.error?.code ?? candidate?.code;
+        const message = getErrorMessage(err, 'Deriv request failed.');
+        // A buy that fails WITHOUT a Deriv error code (socket dropped, connection lost) was sent but never answered, so
+        // the contract may exist. Only an explicit Deriv error response proves nothing was bought.
+        if (stage === 'buy' && !code) {
+            throw new TradeRequestError(
+                `${message} The purchase result is unknown: check your Deriv statement before trading again.`,
+                { stage, kind: 'timeout', outcomeUnknown: true }
+            );
+        }
+        throw new TradeRequestError(message, { stage, kind: classifyApiError(code, message), code });
+    } finally {
+        if (timer) clearTimeout(timer);
     }
 };
 
+const raiseIfError = (response: any, stage: TradeStage, fallback: string) => {
+    if (!response?.error) return;
+    const code: string | undefined = response.error.code;
+    const message = response.error.message || fallback;
+    const text = code && !message.includes(code) ? `${message} (${code})` : message;
+    throw new TradeRequestError(text, { stage, kind: classifyApiError(code, text), code });
+};
+
+/**
+ * Proposal -> buy. A fresh proposal is requested for every purchase and bought immediately, so a quote can never go
+ * stale while the caller waits for an entry point.
+ *
+ * Retry rule: if Deriv EXPLICITLY answers the buy with "unknown / expired proposal" the contract was not bought, so one
+ * retry with a fresh proposal is safe. A buy that times out is never retried (it may have been bought).
+ */
 export const buyContractForUi = async ({
     parameters,
     price,
@@ -43,24 +91,43 @@ export const buyContractForUi = async ({
     price: number;
     source?: string;
 }) => {
-    if (!api_base.api) throw new Error('Deriv connection is not ready yet.');
+    if (!api_base.api) {
+        throw new TradeRequestError('Deriv connection is not ready yet.', { stage: 'request', kind: 'transient' });
+    }
 
-    const proposalResponse = await sendRequest({
-        proposal: 1,
-        ...normalizeTradeParameters(parameters),
-    });
+    const attempt = async () => {
+        const proposalResponse = await sendRequest(
+            { proposal: 1, ...normalizeTradeParameters(parameters) },
+            'proposal'
+        );
+        raiseIfError(proposalResponse, 'proposal', 'Proposal request failed.');
 
-    if (proposalResponse?.error) throw new Error(proposalResponse.error.message || 'Proposal request failed.');
+        const proposalId = proposalResponse?.proposal?.id;
+        if (!proposalId) {
+            throw new TradeRequestError('No proposal id was returned for this contract.', {
+                stage: 'proposal',
+                kind: 'rejected',
+            });
+        }
 
-    const proposalId = proposalResponse?.proposal?.id;
-    if (!proposalId) throw new Error('No proposal id was returned for this contract.');
+        const response = await sendRequest({ buy: proposalId, price }, 'buy');
+        raiseIfError(response, 'buy', 'Contract purchase failed.');
+        return response;
+    };
 
-    const buyResponse = await sendRequest({
-        buy: proposalId,
-        price,
-    });
-
-    if (buyResponse?.error) throw new Error(buyResponse.error.message || 'Contract purchase failed.');
+    let buyResponse: any;
+    try {
+        buyResponse = await attempt();
+    } catch (error) {
+        const retriable =
+            error instanceof TradeRequestError &&
+            error.stage === 'buy' &&
+            error.kind === 'rejected' &&
+            !error.outcomeUnknown &&
+            (error.code === 'InvalidContractProposal' || error.code === 'ProposalExpired');
+        if (!retriable) throw error;
+        buyResponse = await attempt();
+    }
 
     return {
         buy_price: Number(buyResponse?.buy?.buy_price ?? price),

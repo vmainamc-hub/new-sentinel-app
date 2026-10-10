@@ -1,5 +1,6 @@
 import type { RankedOpportunity } from '@/sentinel-engine/lib/apex/types';
-import type { EngineSample, SentinelAiEngine } from '../sentinel-ai-engine-types';
+import { TradeRequestError } from '@/utils/trade-errors';
+import type { EngineSample, SentinelAiEngine, SignalExclusion } from '../sentinel-ai-engine-types';
 import { MODULE_ID, SentinelAiRunner, type RunnerIO, type RunnerStores } from '../sentinel-ai-runner';
 import { DEFAULT_SETTINGS, type SentinelAiSettings } from '../sentinel-ai-types';
 
@@ -33,6 +34,7 @@ class FakeEngine implements SentinelAiEngine {
     digits: Record<string, number | null> = {};
     listeners = new Set<(symbol: string) => void>();
     retained = 0;
+    failsafes: string[] = [];
 
     retain() {
         this.retained += 1;
@@ -41,10 +43,18 @@ class FakeEngine implements SentinelAiEngine {
         };
     }
 
-    sample(): EngineSample {
+    sample(exclude?: SignalExclusion): EngineSample {
+        const hidden = Boolean(this.surfaced && exclude?.(this.surfaced.symbol, String(this.surfaced.contract.id)));
         return {
-            info: { status: 'live', online: 20, total: 20, degraded: false, failsafes: [], dangerLabel: 'CALM' },
-            surfaced: this.surfaced,
+            info: {
+                status: 'live',
+                online: 20,
+                total: 20,
+                degraded: this.failsafes.length > 0,
+                failsafes: this.failsafes,
+                dangerLabel: 'CALM',
+            },
+            surfaced: hidden ? null : this.surfaced,
         };
     }
 
@@ -470,5 +480,205 @@ describe('SentinelAiRunner', () => {
         expect(local.engine.retained).toBe(1);
         local.cleanup();
         expect(local.engine.retained).toBe(0);
+    });
+});
+
+describe('SentinelAiRunner: Immediate mode', () => {
+    let h: Harness | null = null;
+    afterEach(() => {
+        h?.cleanup();
+        h = null;
+    });
+
+    it('trades a live signal right away, without waiting for the entry digit', async () => {
+        h = makeHarness({ executionMode: 'immediate' });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        await flush();
+
+        expect(h.buy.mock.calls.length).toBe(1); // no tick was ever printed
+        expect(h.buy.mock.calls[0][0].parameters.contract_type).toBe('DIGITUNDER');
+        expect(h.runner.getSnapshot().session.trades).toBe(1);
+    });
+
+    it('trades even when the engine has no validated entry digit', async () => {
+        h = makeHarness({ executionMode: 'immediate' });
+        h.surface(opportunity('UNDER7', null));
+        h.runner.start();
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+    });
+
+    it('trades a signal that arrives after Run was pressed', async () => {
+        h = makeHarness({ executionMode: 'immediate' });
+        h.runner.start();
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(0);
+
+        h.surface(opportunity('OVER2', 5));
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+        expect(h.buy.mock.calls[0][0].parameters.contract_type).toBe('DIGITOVER');
+    });
+
+    it('takes every run of a signal back to back, one at a time', async () => {
+        h = makeHarness({ executionMode: 'immediate', runsPerSignal: 3 });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        await flush();
+        await flush();
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(3);
+        expect(h.runner.getSnapshot().runsDone).toBe(3);
+    });
+
+    it('requires no entry digit', () => {
+        h = makeHarness({ executionMode: 'immediate' });
+        h.surface(opportunity('UNDER7', 4));
+        expect(h.runner.getSnapshot().requiredDigit).toBeNull();
+    });
+
+    it('does not trade blind while the engine reports a stale feed', async () => {
+        h = makeHarness({ executionMode: 'immediate' });
+        h.engine.failsafes = ['FEED STALE'];
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(0);
+
+        h.engine.failsafes = [];
+        h.loop();
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+    });
+
+    it('leaves the default entry-digit behaviour untouched', async () => {
+        h = makeHarness();
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(0);
+        expect(h.runner.getSnapshot().signalState).toBe('WAITING_ENTRY');
+    });
+});
+
+describe('SentinelAiRunner: failed purchases', () => {
+    let h: Harness | null = null;
+    afterEach(() => {
+        h?.cleanup();
+        h = null;
+    });
+
+    const rejected = () =>
+        new TradeRequestError('Unknown contract proposal (InvalidContractProposal)', {
+            stage: 'proposal',
+            kind: 'rejected',
+            code: 'InvalidContractProposal',
+        });
+
+    it('skips a contract Deriv refuses and keeps the session running', async () => {
+        h = makeHarness({ executionMode: 'immediate' });
+        h.buy.mockRejectedValueOnce(rejected());
+        h.surface(opportunity('UNDER8', 4, 'JD50'));
+        h.runner.start();
+        await flush();
+
+        expect(h.runner.isRunning()).toBe(true);
+        const snap = h.runner.getSnapshot();
+        expect(snap.history[0].outcome).toBe('SKIPPED');
+        expect(snap.lastError).toMatch(/Skipped Under 8/);
+        expect(h.buy.mock.calls.length).toBe(1);
+
+        // The refused cell is hidden from the feed; the next signal trades normally.
+        h.loop();
+        h.surface(opportunity('UNDER7', 4, SYMBOL));
+        await flush();
+        expect(h.runner.isRunning()).toBe(true);
+        expect(h.buy.mock.calls.length).toBe(2);
+        expect(h.runner.getSnapshot().session.trades).toBe(1);
+    });
+
+    it('does not re-offer a refused cell until its block lapses', async () => {
+        h = makeHarness({ executionMode: 'immediate' });
+        h.buy.mockRejectedValueOnce(rejected());
+        h.surface(opportunity('UNDER8', 4, 'JD50'));
+        h.runner.start();
+        await flush();
+        h.loop();
+        h.loop();
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+
+        h.advance(6 * 60_000);
+        h.surface(opportunity('UNDER8', 4, 'JD50'));
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(2);
+    });
+
+    it('stops with a clear reason if Deriv keeps refusing every signal', async () => {
+        h = makeHarness({ executionMode: 'immediate' });
+        h.buy.mockImplementation(async () => {
+            throw rejected();
+        });
+        h.runner.start();
+        for (let i = 0; i < 8 && h.runner.isRunning(); i += 1) {
+            h.surface(opportunity(`UNDER${i + 1}`, 4, 'JD50'));
+            await flush();
+        }
+        expect(h.runner.isRunning()).toBe(false);
+        expect(h.runner.getSnapshot().stopReason).toMatch(/refused 6 signals in a row/);
+    });
+
+    it('never retries a purchase whose outcome is unknown', async () => {
+        h = makeHarness({ executionMode: 'immediate', runsPerSignal: 3 });
+        h.buy.mockRejectedValueOnce(
+            new TradeRequestError('Purchase request timed out. The result is unknown.', {
+                stage: 'buy',
+                kind: 'timeout',
+                outcomeUnknown: true,
+            })
+        );
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        await flush();
+        h.loop();
+        await flush();
+
+        expect(h.runner.isRunning()).toBe(false);
+        expect(h.runner.getSnapshot().stopReason).toMatch(/unknown/i);
+        expect(h.buy.mock.calls.length).toBe(1);
+    });
+
+    it('stops on an account error', async () => {
+        h = makeHarness({ executionMode: 'immediate' });
+        h.buy.mockRejectedValueOnce(new Error('Your account has insufficient balance.'));
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        await flush();
+        expect(h.runner.isRunning()).toBe(false);
+        expect(h.runner.getSnapshot().stopReason).toMatch(/insufficient balance/i);
+    });
+
+    it('retries a transient failure after a cool-down, then gives up after 3', async () => {
+        h = makeHarness({ executionMode: 'immediate' });
+        h.buy.mockImplementation(async () => {
+            throw new Error('Network hiccup');
+        });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+
+        h.loop(); // still inside the cool-down: no hammering
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+
+        for (let i = 0; i < 2; i += 1) {
+            h.advance(3_100);
+            h.loop();
+            await flush();
+        }
+        expect(h.buy.mock.calls.length).toBe(3);
+        expect(h.runner.isRunning()).toBe(false);
     });
 });
