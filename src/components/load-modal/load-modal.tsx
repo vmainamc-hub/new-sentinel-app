@@ -24,12 +24,18 @@ const LoadModal: React.FC = observer(() => {
         onEntered,
         recent_strategies,
         setActiveTabIndex,
+        setIsDesktopLayout,
         toggleLoadModal,
         tab_name,
     } = load_modal;
     const { setPreviewOnPopup } = dashboard;
     const { isDesktop } = useDevice();
     const header_text = localize('Load strategy');
+
+    // Keep the store's tab mapping aligned with the actual layout rendered by this modal.
+    React.useLayoutEffect(() => {
+        setIsDesktopLayout(isDesktop);
+    }, [isDesktop, setIsDesktopLayout]);
 
     const handleTabItemClick = (active_index: number) => {
         setActiveTabIndex(active_index);
