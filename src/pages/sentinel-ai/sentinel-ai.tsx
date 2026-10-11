@@ -68,6 +68,11 @@ const stateText = (snapshot: SentinelAiSnapshot) => {
         case 'EXPIRED':
             return 'Expired before the entry digit printed.';
         case 'DONE':
+            if (settings.executionMode === 'touch_once' || runsDone === 0) {
+                return runsDone > 0
+                    ? `Closed after ${runsDone} trade${runsDone === 1 ? '' : 's'}.`
+                    : 'Closed without a trade. Waiting for the next signal.';
+            }
             return `Done: ${runsDone} of ${runsTotal} run${runsTotal === 1 ? '' : 's'} traded.`;
         default:
             return '';

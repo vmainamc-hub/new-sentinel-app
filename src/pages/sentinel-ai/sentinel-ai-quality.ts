@@ -20,17 +20,19 @@ export const dangerOf = (opp: Pick<RankedOpportunity, 'dangerComposition' | 'int
 
 export const qualityVerdict = (
     opp: Pick<RankedOpportunity, 'score' | 'blocked' | 'dangerComposition' | 'intel'>,
-    settings: Pick<SentinelAiSettings, 'minScore' | 'maxDanger' | 'skipBlocked'>
+    settings: Pick<SentinelAiSettings, 'minScore' | 'maxDanger' | 'skipBlocked'>,
+    /** Widens the score and danger limits by this many points (used for a signal that is already waiting). */
+    tolerance = 0
 ): QualityVerdict => {
     if (settings.skipBlocked && (opp.blocked || opp.dangerComposition?.isHardBlocked)) {
         return { ok: false, reason: 'blocked by the engine' };
     }
     const score = finite(opp.score) ?? 0;
-    if (settings.minScore > 0 && score < settings.minScore) {
+    if (settings.minScore > 0 && score < settings.minScore - tolerance) {
         return { ok: false, reason: `score ${Math.round(score)} is below ${settings.minScore}` };
     }
     const danger = dangerOf(opp);
-    if (settings.maxDanger > 0 && danger !== null && danger > settings.maxDanger) {
+    if (settings.maxDanger > 0 && danger !== null && danger > settings.maxDanger + tolerance) {
         return { ok: false, reason: `danger ${Math.round(danger)} is above ${settings.maxDanger}` };
     }
     return { ok: true, reason: null };

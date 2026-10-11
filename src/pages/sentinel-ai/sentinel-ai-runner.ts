@@ -44,6 +44,8 @@ const MAX_SKIPS_IN_A_ROW = 6;
 const MAX_MARKET_REFUSALS = 2;
 /** A waiting signal that fails the quality gate is held (never traded) and dropped only if it stays bad this long. */
 const DROP_GRACE_MS = 5_000;
+/** A waiting signal is paused only when it is this many points beyond the score / danger limit (or engine-blocked). */
+const HOLD_TOLERANCE = 10;
 /** Pause after a transient failure so Immediate mode cannot hammer the API. */
 const RETRY_COOLDOWN_MS = 3_000;
 
@@ -163,6 +165,10 @@ export class SentinelAiRunner {
     private aborts = new Set<AbortController>();
     /** Quality-gate rejections seen in the latest engine sample: `symbol|contractId` -> reason (rank order). */
     private qualityRejected = new Map<string, string>();
+    /** The engine's live figures for the signal being traded, captured during the latest sample. */
+    private activeOpp: RankedOpportunity | null = null;
+    /** Touch-once: the market being traded was refused by Deriv, so the next signal continues nonstop without a new touch. */
+    private carryLock = false;
     /** Deriv refusals per market this session; a market refused repeatedly is quarantined. */
     private marketRefusals = new Map<string, number>();
     private quarantined = new Set<string>();
@@ -264,6 +270,7 @@ export class SentinelAiRunner {
         this.blocked.clear();
         this.marketRefusals.clear();
         this.quarantined.clear();
+        this.carryLock = false;
         this.session = this.freshSession();
         this.runToken += 1;
         this.running = true;
@@ -377,6 +384,7 @@ export class SentinelAiRunner {
     private loop() {
         try {
             this.qualityRejected = new Map();
+            this.activeOpp = null;
             const sample = this.io.engine.sample((symbol, contractId, opp) => this.excludeCell(symbol, contractId, opp));
             this.engineInfo = sample.info;
             this.ingest(sample.surfaced);
@@ -393,6 +401,8 @@ export class SentinelAiRunner {
     /** True when a market x contract cell must not be traded: Deriv refused it, the market is out, or it fails the gate. */
     private excludeCell(symbol: string, contractId: string, opp: RankedOpportunity) {
         const key = `${symbol}|${contractId}`;
+        // Remember the engine's live figures for the cell being traded, whatever the gate says about it.
+        if (this.active && this.active.signal.key === key) this.activeOpp = opp;
         if (this.isBlocked(key)) return true;
         if (this.settings.excludedMarkets.includes(symbol) || this.quarantined.has(symbol)) return true;
         const verdict = qualityVerdict(opp, this.settings);
@@ -404,28 +414,40 @@ export class SentinelAiRunner {
     }
 
     /**
-     * A signal that was fine when it surfaced can turn bad while it waits (score falls, danger rises, engine blocks it).
-     * Before its entry digit: drop it. In a touch-once run: pause the nonstop trades until it qualifies again.
+     * Keeps the signal on screen in step with the engine and guards a signal that is still waiting for its entry digit.
+     *  - The figures shown are always the engine's current ones for that signal (never a stale snapshot).
+     *  - A waiting signal is only paused when it falls CLEARLY out of bounds (HOLD_TOLERANCE points past a limit, or
+     *    the engine blocks it) and is dropped only if that lasts DROP_GRACE_MS. Small dips around a limit are ignored.
+     *  - Once a Touch-once run has touched its entry, or a trade is in flight, quality never pauses or drops it:
+     *    execution is continuous and only its own stop conditions end it.
      */
     private applyQualityToActive() {
         const active = this.active;
+        const opp = this.activeOpp;
+        this.activeOpp = null;
         if (!active || active.done) return;
-        const rejected = this.qualityRejected.get(active.signal.key);
-        if (!rejected) {
+        if (opp && !this.tradeInFlight && opp.contract && String(opp.contract.id) === active.signal.contractId) {
+            const live = toSentinelAiSignal(opp, active.signal.receivedAt);
+            active.signal = { ...live, id: active.signal.id, receivedAt: active.signal.receivedAt };
+            const record = this.history.find(r => r.signal.id === active.signal.id);
+            if (record) record.signal = active.signal;
+        }
+        const verdict = opp ? qualityVerdict(opp, this.settings, HOLD_TOLERANCE) : { ok: true, reason: null };
+        if (verdict.ok || active.locked || this.tradeInFlight) {
             active.held = false;
             active.holdReason = null;
             active.rejectedSince = null;
             return;
         }
-        // Never trade while the gate rejects it. A brief dip is tolerated (held); a lasting one drops the signal.
+        // Clearly out of bounds: never trade it, and drop it if it stays that way.
         active.held = true;
-        active.holdReason = rejected.replace(/^.*?: /, '');
+        active.holdReason = verdict.reason;
         active.rejectedSince = active.rejectedSince ?? this.io.now();
-        if (active.locked || this.tradeInFlight || this.io.now() - active.rejectedSince < DROP_GRACE_MS) return;
+        if (this.io.now() - active.rejectedSince < DROP_GRACE_MS) return;
         active.done = true;
         const record = this.history.find(r => r.signal.id === active.signal.id);
         if (record && record.outcome === 'ACTIVE') record.outcome = active.runsDone > 0 ? 'TRADED' : 'SKIPPED';
-        this.dropNotice = `Dropped ${rejected}`;
+        this.dropNotice = `Dropped ${active.signal.label} on ${active.signal.marketName}: ${verdict.reason}`;
         if (this.pending) this.activate(this.pending);
     }
 
@@ -494,12 +516,13 @@ export class SentinelAiRunner {
             pnl: 0,
             expired: false,
             done: false,
-            locked: false,
+            locked: this.carryLock && this.settings.executionMode === 'touch_once',
             held: false,
             holdReason: null,
             rejectedSince: null,
         };
         this.dropNotice = null;
+        this.carryLock = false;
         const existing = this.history.find(r => r.signal.id === signal.id);
         if (!existing) this.pushHistory({ signal, outcome: this.running ? 'ACTIVE' : 'WATCHED', runsDone: 0, pnl: 0 });
         else if (existing.outcome === 'WATCHED' && this.running) existing.outcome = 'ACTIVE';
@@ -730,6 +753,7 @@ export class SentinelAiRunner {
         this.marketRefusals.set(signal.symbol, refusals);
         if (refusals >= MAX_MARKET_REFUSALS) this.quarantined.add(signal.symbol);
         this.skipStreak += 1;
+        if (active.locked) this.carryLock = true; // Touch-once keeps going on the next signal, no new touch needed.
         active.done = true;
         const record = this.history.find(r => r.signal.id === signal.id);
         if (record) record.outcome = 'SKIPPED';

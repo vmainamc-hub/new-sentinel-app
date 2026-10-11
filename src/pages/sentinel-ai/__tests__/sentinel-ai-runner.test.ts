@@ -1237,30 +1237,76 @@ describe('SentinelAiRunner: score, danger and market filters', () => {
         expect(h.runner.getSnapshot().history.some(r => r.signal.contractId === 'UNDER5')).toBe(false);
     });
 
-    it('a touch-once run pauses while the market fails the gate and resumes when it qualifies', async () => {
+    it('a touch-once run is never paused or dropped by score / danger after its entry was touched', async () => {
         h = makeHarness({ executionMode: 'touch_once', martingaleMode: 'off', takeProfit: 2.4 });
         h.surface(opportunity('UNDER7', 4));
         h.runner.start();
         let calls = 0;
         h.buy.mockImplementation(async ({ parameters }: { parameters: Record<string, any> }) => {
             calls += 1;
-            if (calls === 1) h.surface(weak({ dangerComposition: { total: 90, isHardBlocked: false } }));
+            if (calls === 1) h.surface(weak({ score: 5, dangerComposition: { total: 95, isHardBlocked: false } }));
             return { buy_price: Number(parameters.amount), contract_id: 900 + calls, transaction_id: 1900 + calls };
         });
         h.engine.tick(SYMBOL, 4);
         await flush();
-        h.advance(1000); // the sample now rejects the market
+        h.advance(10_000);
+        h.loop();
         await flush();
-        expect(h.runner.getSnapshot().signalState).toBe('HELD');
-        const heldAt = h.buy.mock.calls.length;
-        h.advance(1000);
-        await flush();
-        expect(h.buy.mock.calls.length).toBe(heldAt);
+        expect(h.buy.mock.calls.length).toBe(3); // kept firing to the target profit
+        expect(h.runner.getSnapshot().stopReason).toMatch(/Take profit/);
+        expect(h.runner.getSnapshot().dropNotice).toBeNull();
+    });
 
-        h.surface(opportunity('UNDER7', 4)); // qualifies again
-        h.advance(1000);
+    it('touch-once keeps going nonstop on the next signal when Deriv refuses the touched market', async () => {
+        h = makeHarness({ executionMode: 'touch_once', martingaleMode: 'off', takeProfit: 2.4, excludedMarkets: [] });
+        h.surface(opportunity('UNDER7', 4, 'JD50'));
+        h.runner.start();
+        let first = true;
+        h.buy.mockImplementation(async ({ parameters }: { parameters: Record<string, any> }) => {
+            if (parameters.symbol === 'JD50' && first) {
+                first = false;
+                throw new TradeRequestError('Unknown contract proposal (InvalidContractProposal)', {
+                    stage: 'buy',
+                    kind: 'rejected',
+                    code: 'InvalidContractProposal',
+                });
+            }
+            return { buy_price: Number(parameters.amount), contract_id: 500 + Math.floor(Math.random() * 1e6), transaction_id: 1 };
+        });
+        h.engine.tick('JD50', 4); // the one touch; Deriv refuses this market
         await flush();
-        expect(h.buy.mock.calls.length).toBe(3);
+        expect(h.buy.mock.calls.length).toBe(1);
+        h.surface(opportunity('OVER2', 5, 'R_50')); // next signal: no new touch required
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(4);
+        expect(h.buy.mock.calls[1][0].parameters.symbol).toBe('R_50');
+    });
+
+    it('a waiting signal slightly outside a limit is NOT paused or dropped (tolerance), and still trades', async () => {
+        h = makeHarness({ minScore: 70 });
+        h.surface(opportunity('UNDER7', 4)); // score 72
+        h.runner.start();
+        h.surface(weak({ score: 65 })); // below 70 but within the tolerance
+        h.advance(10_000);
+        h.loop();
+        const snap = h.runner.getSnapshot();
+        expect(snap.signalState).toBe('WAITING_ENTRY');
+        expect(snap.dropNotice).toBeNull();
+        expect(snap.signal?.score).toBe(65); // the card shows the live figure, not a stale one
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+    });
+
+    it('the card always shows the figures the gate evaluated', () => {
+        h = makeHarness({ minScore: 70 });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.surface(weak({ score: 35, dangerComposition: { total: 33, isHardBlocked: false } }));
+        const snap = h.runner.getSnapshot();
+        expect(snap.signal?.score).toBe(35);
+        expect(snap.signal?.danger).toBe(33);
+        expect(snap.holdReason).toMatch(/score 35/);
     });
 });
 

@@ -64,3 +64,9 @@ Not done / unverified:
 - [x] Pressing Run on a signal that is already waiting now trades it: while not running, a signal stays fresh as long as the engine keeps surfacing it, and its wait window restarts at Run. A digit that printed before Run does not count. 108 tests pass.
 
 - [x] Score mismatch fix: a waiting signal that fails the score/danger gate is now HELD at once (never traded, reason shown) and dropped only after 5s of staying bad; the drop note is informational and clears when another signal takes over (it used to stay as a red error). 110 tests pass.
+
+## Alignment pass (latest)
+- [x] The signal card now always shows the engine's LIVE score/danger for the signal (previously it could keep stale figures while the gate judged newer ones, so "score 65" on screen vs "score 35 dropped" in the note).
+- [x] A waiting signal is paused/dropped only when CLEARLY out of bounds (10 points past the score/danger limit, or engine-blocked) for 5s; dips around a limit are ignored. New signals are still admitted strictly at the limits.
+- [x] Touch-once: after the touch, quality never pauses or drops it; no "runs" wording; if Deriv refuses the touched market it carries on with the next signal without a new touch. Only target profit, stop loss, max losses in a row and Stop end it.
+- 113 tests pass. Still unverified: full build / live run (registry blocked here).
