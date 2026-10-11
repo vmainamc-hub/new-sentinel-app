@@ -35,7 +35,7 @@ Done (85 Sentinel AI unit tests pass; rebased on 15213c0 "Repair Auto Trades pur
 - [x] Default entry digits for signals the engine gave no entry: Over = 2 or 4, Under = 5 or 7, first to print wins. Editable ("Default entry digits").
 - [x] Target profit (default 100, 0 = off): own panel under the run bar with progress bar, editable while running; stops the session when reached.
 - [x] Recovery split by side: Over signals recover on the Over recovery digit(s) (default 3), Under signals on the Under ones (default 6). Old saved single `recoveryDigit` migrates to both sides.
-- [x] New mode "Touch once, then nonstop": waits for the entry digit once, then fires trades back to back like a bot (martingale still applies) until target profit / stop loss / max trades / max losses / Stop. Ignores runs-per-signal and recovery-digit waiting; a newer signal does not interrupt it (logged as "Not traded").
+- [x] New mode "Touch once, then nonstop": waits for the entry digit once, then fires trades back to back like a bot (martingale still applies) until target profit / stop loss / max trades / max losses / Stop. Ignores runs-per-signal; after a loss (recovery digits on) the next trade waits for the recovery digit of its side, nonstop again after a win; a newer signal does not interrupt it (logged as "Not traded").
 - [x] "Contract offers no return" error: left alone as instructed (fixed separately on main).
 
 Not done / unverified:
@@ -44,3 +44,5 @@ Not done / unverified:
 - [ ] Under recovery default digit 6 is a guess; change it if you want another.
 
 Next: run demo, tune defaults, then real account.
+
+- [x] Fix: Touch-once now honours recovery digits (waits for the side's recovery digit after a loss, martingale stake kept). 86 tests pass.

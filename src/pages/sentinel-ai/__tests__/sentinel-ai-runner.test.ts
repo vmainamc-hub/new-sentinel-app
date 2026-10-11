@@ -953,14 +953,41 @@ describe('SentinelAiRunner: Touch-once mode', () => {
         expect(h.runner.getSnapshot().stopReason).toMatch(/Stop loss/);
     });
 
-    it('does not wait for a recovery digit after a loss; martingale still applies', async () => {
+    it('after a loss it waits for the recovery digit of that side, with martingale stake, then goes nonstop again after a win', async () => {
         h = touchHarness({
-            maxTrades: 3,
+            maxTrades: 4,
             martingaleMode: 'after_1',
             martingaleMultiplier: 2,
             recoveryDigitEnabled: true,
             recoveryUnderDigits: [8],
+            recoveryOverDigits: [3],
         });
+        h.profits.push(-1);
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 4); // the one entry touch -> trade 1 loses
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+        let snap = h.runner.getSnapshot();
+        expect(snap.signalState).toBe('WAITING_ENTRY');
+        expect(snap.requiredDigits).toEqual([8]); // Under signal -> Under recovery digit, not the Over one
+        expect(snap.entrySource).toBe('recovery');
+
+        h.engine.tick(SYMBOL, 3); // the Over recovery digit and the entry digit are both wrong for this signal
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+
+        h.engine.tick(SYMBOL, 8); // recovery digit -> trade 2 (stake doubled) wins, then nonstop to the limit
+        await flush();
+        expect(h.buy.mock.calls.map(call => call[0].parameters.amount)).toEqual([1, 2, 1, 1]);
+        snap = h.runner.getSnapshot();
+        expect(snap.session.trades).toBe(4);
+        expect(snap.stopReason).toMatch(/Max trades/);
+    });
+
+    it('without recovery digits switched on, a loss does not pause the nonstop run (martingale only)', async () => {
+        h = touchHarness({ maxTrades: 3, martingaleMode: 'after_1', martingaleMultiplier: 2, recoveryDigitEnabled: false });
         h.profits.push(-1);
         h.surface(opportunity('UNDER7', 4));
         h.runner.start();

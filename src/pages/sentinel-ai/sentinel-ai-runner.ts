@@ -466,8 +466,25 @@ export class SentinelAiRunner {
     /** The digit(s) the next trade waits for. Empty when nothing is waited for (immediate mode, or already touched). */
     private requirement(): { digits: number[]; source: EntrySource | null } {
         const active = this.active;
-        if (!active || this.settings.executionMode === 'immediate' || active.locked) return { digits: [], source: null };
+        if (!active || this.settings.executionMode === 'immediate') return { digits: [], source: null };
+        if (active.locked && !this.waitingRecoveryDigit()) return { digits: [], source: null };
         return requiredEntry(active.signal, this.session.consecutiveLosses, this.settings);
+    }
+
+    /**
+     * Touch-once, entry already touched, but the last trade lost and recovery digits are on for this signal's side:
+     * the next trade waits for a recovery digit (once per recovering trade) before it fires. After a win it is nonstop again.
+     */
+    private waitingRecoveryDigit() {
+        const active = this.active;
+        if (!active || !active.locked || !this.settings.recoveryDigitEnabled || this.session.consecutiveLosses <= 0) {
+            return false;
+        }
+        const list =
+            active.signal.contractType === 'DIGITOVER'
+                ? this.settings.recoveryOverDigits
+                : this.settings.recoveryUnderDigits;
+        return list.length > 0;
     }
 
     private onTick(symbol: string) {
@@ -477,12 +494,12 @@ export class SentinelAiRunner {
         }
         this.scheduleEmit();
         const mode = this.settings.executionMode;
-        if (mode === 'immediate' || active.locked) {
+        if (mode === 'immediate' || (active.locked && !this.waitingRecoveryDigit())) {
             this.tryFire();
             return;
         }
         if (!this.running || this.tradeInFlight || active.done || active.expired) return;
-        if (this.io.now() >= active.expiresAt) {
+        if (!active.locked && this.io.now() >= active.expiresAt) {
             this.checkExpiry();
             return;
         }
@@ -506,6 +523,7 @@ export class SentinelAiRunner {
         const active = this.active;
         if (!active || active.done || active.expired || this.tradeInFlight) return;
         if (!(mode === 'immediate' || (mode === 'touch_once' && active.locked))) return;
+        if (this.waitingRecoveryDigit()) return; // Fires from onTick when a recovery digit prints.
         if (this.io.now() < this.cooldownUntil) return;
         if (!active.locked && this.io.now() >= active.expiresAt) {
             this.checkExpiry();
@@ -751,7 +769,7 @@ export class SentinelAiRunner {
             else if (active.expired) signalState = 'EXPIRED';
             else if (this.tradeInFlight) signalState = 'TRADING';
             else if (!this.running) signalState = 'WATCHING';
-            else if (active.locked) signalState = 'LOCKED';
+            else if (active.locked && !this.waitingRecoveryDigit()) signalState = 'LOCKED';
             else if (this.settings.executionMode === 'immediate') signalState = 'READY';
             else signalState = requiredDigits.length === 0 ? 'NO_ENTRY_DIGIT' : 'WAITING_ENTRY';
         }

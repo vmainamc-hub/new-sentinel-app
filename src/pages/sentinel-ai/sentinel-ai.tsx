@@ -662,8 +662,8 @@ const SentinelAi = observer(() => {
                                 ) : null}
                                 {settings.recoveryDigitEnabled && touchOnce ? (
                                     <p className='sentinel-ai-muted'>
-                                        Touch-once mode trades nonstop after its first touch, so recovery digits are not waited
-                                        for. Martingale still applies.
+                                        In Touch-once mode, trades run nonstop after the first touch, but after a loss the next
+                                        trade waits for the recovery digit of its side. After a win it is nonstop again.
                                     </p>
                                 ) : null}
                                 <Toggle
