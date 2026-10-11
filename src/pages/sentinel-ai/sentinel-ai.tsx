@@ -797,7 +797,7 @@ const SentinelAi = observer(() => {
                                         value={settings.maxTrades}
                                         min={0}
                                         step={1}
-                                        hint='0 means off'
+                                        hint={touchOnce ? 'Not used in Touch-once mode' : '0 means off'}
                                         onCommit={value => set({ maxTrades: value })}
                                     />
                                 </div>

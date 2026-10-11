@@ -886,7 +886,7 @@ describe('SentinelAiRunner: Touch-once mode', () => {
         makeHarness({ executionMode: 'touch_once', martingaleMode: 'off', ...patch });
 
     it('waits for the entry digit once, then fires back to back without waiting for it again', async () => {
-        h = touchHarness({ maxTrades: 5 });
+        h = touchHarness({ takeProfit: 4.5 });
         h.surface(opportunity('UNDER7', 4));
         h.runner.start();
 
@@ -900,11 +900,11 @@ describe('SentinelAiRunner: Touch-once mode', () => {
         await flush(); // no further ticks are sent
         expect(h.buy.mock.calls.length).toBe(5);
         expect(h.runner.getSnapshot().session.trades).toBe(5);
-        expect(h.runner.getSnapshot().stopReason).toMatch(/Max trades/);
+        expect(h.runner.getSnapshot().stopReason).toMatch(/Take profit/);
     });
 
     it('uses the default digits for the single touch when the signal has no entry digit', async () => {
-        h = touchHarness({ maxTrades: 3 });
+        h = touchHarness({ takeProfit: 2.4 });
         h.surface(opportunity('OVER2', null));
         h.runner.start();
         h.engine.tick(SYMBOL, 6);
@@ -917,7 +917,7 @@ describe('SentinelAiRunner: Touch-once mode', () => {
     });
 
     it('trades the same market and contract on every shot', async () => {
-        h = touchHarness({ maxTrades: 4 });
+        h = touchHarness({ takeProfit: 3.3 });
         h.surface(opportunity('UNDER7', 4));
         h.runner.start();
         h.engine.tick(SYMBOL, 4);
@@ -951,7 +951,7 @@ describe('SentinelAiRunner: Touch-once mode', () => {
 
     it('after a loss it keeps firing nonstop on the recovery barrier, then returns to the signal barrier after a win', async () => {
         h = touchHarness({
-            maxTrades: 4,
+            takeProfit: 1.5,
             martingaleMode: 'after_1',
             martingaleMultiplier: 2,
             recoveryBarrierEnabled: true,
@@ -966,8 +966,38 @@ describe('SentinelAiRunner: Touch-once mode', () => {
         expect(h.buy.mock.calls.map(call => call[0].parameters.amount)).toEqual([1, 2, 1, 1]);
     });
 
+    it('is not stopped by Max trades or Runs per signal; target profit ends it', async () => {
+        h = touchHarness({ maxTrades: 2, runsPerSignal: 1, takeProfit: 4.5 });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(5); // well past 2 trades
+        expect(h.runner.getSnapshot().stopReason).toMatch(/Take profit/);
+    });
+
+    it('is still ended by max consecutive losses', async () => {
+        h = touchHarness({ maxConsecutiveLosses: 3 });
+        h.profits.push(-1, -1, -1);
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(3);
+        expect(h.runner.getSnapshot().stopReason).toMatch(/consecutive losses/);
+    });
+
+    it('Max trades still ends the other two modes', async () => {
+        h = makeHarness({ executionMode: 'immediate', martingaleMode: 'off', maxTrades: 2, runsPerSignal: 10 });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(2);
+        expect(h.runner.getSnapshot().stopReason).toMatch(/Max trades/);
+    });
+
     it('ignores runs per signal and does not stop after the first trade', async () => {
-        h = touchHarness({ maxTrades: 4, runsPerSignal: 1 });
+        h = touchHarness({ takeProfit: 3.3, runsPerSignal: 1 });
         h.surface(opportunity('UNDER7', 4));
         h.runner.start();
         h.engine.tick(SYMBOL, 4);
@@ -976,7 +1006,7 @@ describe('SentinelAiRunner: Touch-once mode', () => {
     });
 
     it('never expires after the entry was touched, and does not drop the market for a newer signal', async () => {
-        h = touchHarness({ signalWaitSeconds: 10, maxTrades: 4 });
+        h = touchHarness({ signalWaitSeconds: 10, takeProfit: 3.3 });
         let calls = 0;
         h.buy.mockImplementation(async ({ parameters }: { parameters: Record<string, any> }) => {
             calls += 1;
@@ -1004,7 +1034,7 @@ describe('SentinelAiRunner: Touch-once mode', () => {
     });
 
     it('Stop ends a nonstop run immediately', async () => {
-        h = touchHarness({ maxTrades: 3 });
+        h = touchHarness({ takeProfit: 2.4 });
         let release: () => void = () => undefined;
         h.surface(opportunity('UNDER7', 4));
         h.runner.start();
@@ -1024,7 +1054,7 @@ describe('SentinelAiRunner: Touch-once mode', () => {
     });
 
     it('reports the touch state in the snapshot', async () => {
-        h = touchHarness({ maxTrades: 2 });
+        h = touchHarness({ takeProfit: 1.4 });
         h.surface(opportunity('UNDER7', 4));
         h.runner.start();
         expect(h.runner.getSnapshot().locked).toBe(false);
@@ -1172,7 +1202,7 @@ describe('SentinelAiRunner: score, danger and market filters', () => {
     });
 
     it('a touch-once run pauses while the market fails the gate and resumes when it qualifies', async () => {
-        h = makeHarness({ executionMode: 'touch_once', martingaleMode: 'off', maxTrades: 3 });
+        h = makeHarness({ executionMode: 'touch_once', martingaleMode: 'off', takeProfit: 2.4 });
         h.surface(opportunity('UNDER7', 4));
         h.runner.start();
         let calls = 0;

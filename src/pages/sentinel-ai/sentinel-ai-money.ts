@@ -117,7 +117,8 @@ export const sessionStopReason = (session: SessionStats, settings: SentinelAiSet
     if (settings.stopLoss > 0 && session.pnl <= -settings.stopLoss) {
         return `Stop loss reached (${session.pnl.toFixed(2)})`;
     }
-    if (settings.maxTrades > 0 && session.trades >= settings.maxTrades) {
+    // Touch-once has its own stop conditions (target profit, stop loss, max losses in a row, Stop): a trade count does not end it.
+    if (settings.executionMode !== 'touch_once' && settings.maxTrades > 0 && session.trades >= settings.maxTrades) {
         return `Max trades reached (${session.trades})`;
     }
     if (settings.maxConsecutiveLosses > 0 && session.consecutiveLosses >= settings.maxConsecutiveLosses) {

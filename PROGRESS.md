@@ -58,3 +58,5 @@ Done (100 Sentinel AI tests pass):
 Not done / unverified:
 - [ ] The real Deriv error for Jump 100 could not be reproduced here (no Deriv access). If you re-enable it, send the exact message shown under the signal and we can repair it properly.
 - [ ] Score/danger defaults may be too strict or loose in live use; tune on a demo account.
+
+- [x] Touch-once is no longer ended by Max trades (nor Runs per signal). Its own stops: target profit, stop loss, max losses in a row, Stop. The other two modes keep Max trades / Runs per signal. 103 tests pass.
