@@ -221,6 +221,49 @@
     }
 }
 
+// ── target profit ──────────────────────────────────────────────────────────────────────────────
+.sentinel-ai-target {
+    display: grid;
+    grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+    gap: 16px;
+    align-items: center;
+    padding: 12px 14px;
+    border: 1px solid var(--sai-border);
+    border-radius: 8px;
+    background: var(--sai-card);
+
+    @media (max-width: 640px) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    &__progress {
+        min-width: 0;
+
+        p {
+            margin: 6px 0 0;
+            color: var(--sai-dim);
+            font-size: 1.25rem;
+            font-variant-numeric: tabular-nums;
+        }
+    }
+
+    &__bar {
+        height: 10px;
+        border-radius: 999px;
+        background: var(--sai-card-2);
+        border: 1px solid var(--sai-border-soft);
+        overflow: hidden;
+
+        > span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: var(--sai-win);
+            transition: width 0.3s ease;
+        }
+    }
+}
+
 // ── layout ─────────────────────────────────────────────────────────────────────────────────────
 .sentinel-ai-grid {
     display: grid;
@@ -514,6 +557,10 @@
     &__hint {
         color: var(--sai-muted);
         font-size: 1.15rem;
+
+        &.is-error {
+            color: var(--sai-loss);
+        }
     }
 
     input {

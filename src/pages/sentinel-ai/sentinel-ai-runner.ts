@@ -11,12 +11,13 @@ import { contract_stages } from '@/constants/contract-stage';
 import { describeTradeFailure } from '@/utils/trade-errors';
 import type { RankedOpportunity } from '@/sentinel-engine/lib/apex/types';
 import type { SentinelAiEngine } from './sentinel-ai-engine-types';
-import { initialStakeState, nextStakeState, requiredEntryDigit, sessionStopReason } from './sentinel-ai-money';
+import { initialStakeState, nextStakeState, requiredEntry, sessionStopReason } from './sentinel-ai-money';
 import { toSentinelAiSignal } from './sentinel-ai-signal';
 import {
     DEFAULT_SETTINGS,
     type ActiveSignalState,
     type EngineInfo,
+    type EntrySource,
     type SentinelAiSettings,
     type SentinelAiSignal,
     type SentinelAiSnapshot,
@@ -104,6 +105,8 @@ type ActiveSignal = {
     pnl: number;
     expired: boolean;
     done: boolean;
+    /** Touch-once mode: the entry digit has been touched, so trades now fire back to back without waiting for it. */
+    locked: boolean;
 };
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
@@ -198,7 +201,16 @@ export class SentinelAiRunner {
     updateSettings(patch: Partial<SentinelAiSettings>) {
         this.settings = normalizeSettings({ ...this.settings, ...patch }, this.settings);
         this.io.saveSettings(this.settings);
-        if (!this.running) this.session = this.freshSession();
+        if (!this.running) {
+            this.session = this.freshSession();
+        } else {
+            // Target profit (and the other limits) can be changed while running and apply straight away.
+            const reason = sessionStopReason(this.session, this.settings);
+            if (reason) {
+                this.stop(reason);
+                return;
+            }
+        }
         this.emit();
     }
 
@@ -264,11 +276,12 @@ export class SentinelAiRunner {
             this.active.runsTotal = this.settings.runsPerSignal;
             this.active.runsDone = 0;
             this.active.pnl = 0;
+            this.active.locked = false;
             const record = this.history.find(r => r.signal.id === this.active?.signal.id);
             if (record && record.outcome === 'WATCHED') record.outcome = 'ACTIVE';
         }
         this.emit();
-        this.tryImmediate();
+        this.tryFire();
     }
 
     stop(reason = 'Stopped') {
@@ -351,7 +364,7 @@ export class SentinelAiRunner {
         }
         this.checkExpiry();
         this.emit();
-        this.tryImmediate();
+        this.tryFire();
     }
 
     private isBlocked(key: string) {
@@ -394,10 +407,12 @@ export class SentinelAiRunner {
             // Alerts are best effort.
         }
 
-        if (this.running && this.tradeInFlight && this.active && !this.active.done) {
-            // Never abandon an in-flight trade. The newest signal waits its turn.
+        const current = this.active;
+        if (this.running && current && !current.done && (this.tradeInFlight || current.locked)) {
+            // Never abandon an in-flight trade, and never pull a touch-once run off the market it is trading.
+            // The newest signal waits its turn.
             this.pending = signal;
-            this.pushHistory({ signal, outcome: 'ACTIVE', runsDone: 0, pnl: 0 });
+            this.pushHistory({ signal, outcome: current.locked ? 'WATCHED' : 'ACTIVE', runsDone: 0, pnl: 0 });
             return;
         }
         this.activate(signal);
@@ -414,9 +429,11 @@ export class SentinelAiRunner {
             pnl: 0,
             expired: false,
             done: false,
+            locked: false,
         };
         const existing = this.history.find(r => r.signal.id === signal.id);
         if (!existing) this.pushHistory({ signal, outcome: this.running ? 'ACTIVE' : 'WATCHED', runsDone: 0, pnl: 0 });
+        else if (existing.outcome === 'WATCHED' && this.running) existing.outcome = 'ACTIVE';
     }
 
     /** Marks the current signal's final outcome when something else takes its place. */
@@ -432,7 +449,8 @@ export class SentinelAiRunner {
 
     private checkExpiry() {
         const active = this.active;
-        if (!active || active.done || active.expired || this.tradeInFlight) return;
+        // Once the entry digit has been touched (touch-once mode) the signal no longer expires.
+        if (!active || active.done || active.expired || active.locked || this.tradeInFlight) return;
         if (this.io.now() < active.expiresAt) return;
         active.expired = true;
         const record = this.history.find(r => r.signal.id === active.signal.id);
@@ -445,9 +463,11 @@ export class SentinelAiRunner {
     }
 
     // ── entry trigger ────────────────────────────────────────────────────────────────────────────
-    private requiredDigit(): number | null {
-        if (!this.active || this.settings.executionMode === 'immediate') return null;
-        return requiredEntryDigit(this.active.signal.entryDigit, this.session.consecutiveLosses, this.settings);
+    /** The digit(s) the next trade waits for. Empty when nothing is waited for (immediate mode, or already touched). */
+    private requirement(): { digits: number[]; source: EntrySource | null } {
+        const active = this.active;
+        if (!active || this.settings.executionMode === 'immediate' || active.locked) return { digits: [], source: null };
+        return requiredEntry(active.signal, this.session.consecutiveLosses, this.settings);
     }
 
     private onTick(symbol: string) {
@@ -456,8 +476,9 @@ export class SentinelAiRunner {
             return;
         }
         this.scheduleEmit();
-        if (this.settings.executionMode === 'immediate') {
-            this.tryImmediate();
+        const mode = this.settings.executionMode;
+        if (mode === 'immediate' || active.locked) {
+            this.tryFire();
             return;
         }
         if (!this.running || this.tradeInFlight || active.done || active.expired) return;
@@ -465,29 +486,33 @@ export class SentinelAiRunner {
             this.checkExpiry();
             return;
         }
-        const required = this.requiredDigit();
-        if (required === null) return; // The engine has not validated an entry digit — never invented.
+        const { digits } = this.requirement();
+        if (digits.length === 0) return; // No entry digit and no default digits configured: nothing is traded.
         const digit = this.io.engine.getLastDigit(symbol);
-        if (digit === null || digit !== required) return;
-        void this.execute(required);
+        if (digit === null || !digits.includes(digit)) return; // The first required digit to print triggers the trade.
+        // Touch-once: this is the one touch. From here on trades fire back to back without waiting for a digit.
+        if (mode === 'touch_once') active.locked = true;
+        void this.execute(digit);
     }
 
     /**
-     * Immediate mode: trade the live signal right away instead of waiting for its entry digit. Still never trades
-     * blind: it holds off while a trade is in flight, during a retry cool-down, or while the engine reports that its
-     * market feed is stale.
+     * Fires the next trade without waiting for a digit: Immediate mode, or Touch-once mode after the entry was
+     * touched. Trades go one at a time (the next only starts once the last has settled). It never trades blind: it
+     * holds off during a retry cool-down and while the engine reports that its market feed is stale.
      */
-    private tryImmediate() {
-        if (!this.running || this.settings.executionMode !== 'immediate') return;
+    private tryFire() {
+        if (!this.running) return;
+        const mode = this.settings.executionMode;
         const active = this.active;
         if (!active || active.done || active.expired || this.tradeInFlight) return;
+        if (!(mode === 'immediate' || (mode === 'touch_once' && active.locked))) return;
         if (this.io.now() < this.cooldownUntil) return;
-        if (this.io.now() >= active.expiresAt) {
+        if (!active.locked && this.io.now() >= active.expiresAt) {
             this.checkExpiry();
             return;
         }
         if (this.engineInfo.failsafes.includes('FEED STALE')) return;
-        void this.execute(active.signal.entryDigit);
+        void this.execute(active.locked ? null : active.signal.entryDigit);
     }
 
     // ── trade ────────────────────────────────────────────────────────────────────────────────────
@@ -684,7 +709,9 @@ export class SentinelAiRunner {
             return;
         }
 
-        if (active.runsDone >= active.runsTotal) {
+        if (active.locked) {
+            // Touch-once: keep firing until a limit, the target or Stop ends the session (runs per signal is ignored).
+        } else if (active.runsDone >= active.runsTotal) {
             active.done = true;
             if (record) record.outcome = 'TRADED';
             if (this.pending) this.activate(this.pending);
@@ -693,7 +720,7 @@ export class SentinelAiRunner {
             active.expiresAt = this.io.now() + this.settings.signalWaitSeconds * 1000;
         }
         this.emit();
-        this.tryImmediate();
+        this.tryFire();
     }
 
     // ── snapshot ─────────────────────────────────────────────────────────────────────────────────
@@ -717,18 +744,19 @@ export class SentinelAiRunner {
 
     private buildSnapshot(): SentinelAiSnapshot {
         const active = this.active;
-        const required = this.requiredDigit();
+        const { digits: requiredDigits, source: entrySource } = this.requirement();
         let signalState: ActiveSignalState | null = null;
         if (active) {
             if (active.done) signalState = 'DONE';
             else if (active.expired) signalState = 'EXPIRED';
             else if (this.tradeInFlight) signalState = 'TRADING';
             else if (!this.running) signalState = 'WATCHING';
+            else if (active.locked) signalState = 'LOCKED';
             else if (this.settings.executionMode === 'immediate') signalState = 'READY';
-            else signalState = required === null ? 'NO_ENTRY_DIGIT' : 'WAITING_ENTRY';
+            else signalState = requiredDigits.length === 0 ? 'NO_ENTRY_DIGIT' : 'WAITING_ENTRY';
         }
         const secondsLeft =
-            active && !active.done && !active.expired
+            active && !active.done && !active.expired && !active.locked
                 ? Math.max(0, Math.ceil((active.expiresAt - this.io.now()) / 1000))
                 : 0;
 
@@ -737,7 +765,9 @@ export class SentinelAiRunner {
             engine: this.engineInfo,
             signal: active ? active.signal : null,
             signalState,
-            requiredDigit: required,
+            requiredDigits,
+            entrySource: active ? entrySource : null,
+            locked: Boolean(active?.locked),
             recovering: this.settings.recoveryDigitEnabled && this.session.consecutiveLosses > 0,
             lastDigit: active ? this.io.engine.getLastDigit(active.signal.symbol) : null,
             runsDone: active ? active.runsDone : 0,

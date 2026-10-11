@@ -1,5 +1,5 @@
 // SENTINEL AI — stake, martingale and recovery logic. Pure functions (no I/O) so they are unit-testable.
-import { MIN_STAKE, type SentinelAiSettings, type SessionStats } from './sentinel-ai-types';
+import { MIN_STAKE, type EntrySource, type SentinelAiSettings, type SessionStats } from './sentinel-ai-types';
 
 export type StakeState = Pick<SessionStats, 'currentStake' | 'consecutiveLosses' | 'martingaleStep'>;
 
@@ -73,13 +73,28 @@ export const nextStakeState = (
     };
 };
 
-/** The digit the next trade must enter on: the recovery digit while recovering, else the signal's own. */
-export const requiredEntryDigit = (
-    signalDigit: number | null,
+export type EntryRequirement = { digits: number[]; source: EntrySource };
+
+/**
+ * The digit(s) the next trade enters on; the first one to print triggers it.
+ *  1. While recovering from a loss (and recovery is on): the recovery digit(s) of the SIGNAL'S side, so an Over signal
+ *     recovers on the Over recovery digit and an Under signal on the Under one. An empty list falls through to 2.
+ *  2. The signal's own entry digit from the engine.
+ *  3. When the engine gave none: the default digits of the signal's side (Over 2/4, Under 5/7 unless changed).
+ */
+export const requiredEntry = (
+    signal: { entryDigit: number | null; contractType: 'DIGITOVER' | 'DIGITUNDER' },
     consecutiveLosses: number,
     settings: SentinelAiSettings
-): number | null =>
-    settings.recoveryDigitEnabled && consecutiveLosses > 0 ? settings.recoveryDigit : signalDigit;
+): EntryRequirement => {
+    const isOver = signal.contractType === 'DIGITOVER';
+    if (settings.recoveryDigitEnabled && consecutiveLosses > 0) {
+        const recovery = isOver ? settings.recoveryOverDigits : settings.recoveryUnderDigits;
+        if (recovery.length > 0) return { digits: [...recovery], source: 'recovery' };
+    }
+    if (signal.entryDigit !== null) return { digits: [signal.entryDigit], source: 'engine' };
+    return { digits: [...(isOver ? settings.defaultOverDigits : settings.defaultUnderDigits)], source: 'default' };
+};
 
 /** Returns a human-readable reason when the session must stop, otherwise null. */
 export const sessionStopReason = (session: SessionStats, settings: SentinelAiSettings): string | null => {

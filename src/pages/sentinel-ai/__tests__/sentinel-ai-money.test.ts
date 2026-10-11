@@ -2,10 +2,17 @@ import {
     clampStake,
     initialStakeState,
     nextStakeState,
-    requiredEntryDigit,
+    requiredEntry,
     sessionStopReason,
 } from '../sentinel-ai-money';
-import { DEFAULT_SETTINGS, MIN_STAKE, normalizeSettings, type SentinelAiSettings } from '../sentinel-ai-types';
+import {
+    DEFAULT_SETTINGS,
+    MIN_STAKE,
+    normalizeDigitList,
+    normalizeSettings,
+    parseDigitList,
+    type SentinelAiSettings,
+} from '../sentinel-ai-types';
 
 const settings = (patch: Partial<SentinelAiSettings> = {}): SentinelAiSettings => ({
     ...DEFAULT_SETTINGS,
@@ -115,18 +122,74 @@ describe('Sentinel AI stake logic', () => {
     });
 });
 
-describe('Sentinel AI recovery digit', () => {
-    it("uses the signal's own digit normally and the recovery digit while recovering", () => {
-        const s = settings({ recoveryDigitEnabled: true, recoveryDigit: 8 });
-        expect(requiredEntryDigit(4, 0, s)).toBe(4);
-        expect(requiredEntryDigit(4, 1, s)).toBe(8);
-        expect(requiredEntryDigit(null, 1, s)).toBe(8);
+const over = (entryDigit: number | null) => ({ entryDigit, contractType: 'DIGITOVER' as const });
+const under = (entryDigit: number | null) => ({ entryDigit, contractType: 'DIGITUNDER' as const });
+
+describe('Sentinel AI entry digits', () => {
+    it("uses the engine's own entry digit when it has one", () => {
+        const s = settings();
+        expect(requiredEntry(under(4), 0, s)).toEqual({ digits: [4], source: 'engine' });
+        expect(requiredEntry(over(9), 0, s)).toEqual({ digits: [9], source: 'engine' });
     });
 
-    it('ignores the recovery digit when it is disabled', () => {
-        const s = settings({ recoveryDigitEnabled: false, recoveryDigit: 8 });
-        expect(requiredEntryDigit(4, 3, s)).toBe(4);
-        expect(requiredEntryDigit(null, 3, s)).toBeNull();
+    it('falls back to the default digits of the signal side: Over 2/4, Under 5/7', () => {
+        const s = settings();
+        expect(requiredEntry(over(null), 0, s)).toEqual({ digits: [2, 4], source: 'default' });
+        expect(requiredEntry(under(null), 0, s)).toEqual({ digits: [5, 7], source: 'default' });
+    });
+
+    it('honours custom default digits, and an empty list means nothing is traded', () => {
+        const s = settings({ defaultOverDigits: [3], defaultUnderDigits: [] });
+        expect(requiredEntry(over(null), 0, s).digits).toEqual([3]);
+        expect(requiredEntry(under(null), 0, s).digits).toEqual([]);
+    });
+});
+
+describe('Sentinel AI recovery digits (separate for Over and Under)', () => {
+    const s = settings({ recoveryDigitEnabled: true, recoveryOverDigits: [3], recoveryUnderDigits: [8] });
+
+    it('does not use recovery before a loss', () => {
+        expect(requiredEntry(over(5), 0, s)).toEqual({ digits: [5], source: 'engine' });
+        expect(requiredEntry(under(5), 0, s)).toEqual({ digits: [5], source: 'engine' });
+    });
+
+    it('an Over signal recovers on the Over digit and an Under signal on the Under digit', () => {
+        expect(requiredEntry(over(5), 1, s)).toEqual({ digits: [3], source: 'recovery' });
+        expect(requiredEntry(under(5), 1, s)).toEqual({ digits: [8], source: 'recovery' });
+        expect(requiredEntry(over(null), 2, s)).toEqual({ digits: [3], source: 'recovery' });
+    });
+
+    it('accepts several recovery digits (the first to print triggers)', () => {
+        const multi = settings({ recoveryDigitEnabled: true, recoveryOverDigits: [3, 6] });
+        expect(requiredEntry(over(5), 1, multi).digits).toEqual([3, 6]);
+    });
+
+    it('ignores recovery digits when recovery is off', () => {
+        const off = settings({ recoveryDigitEnabled: false, recoveryOverDigits: [3] });
+        expect(requiredEntry(over(5), 4, off)).toEqual({ digits: [5], source: 'engine' });
+    });
+
+    it('an empty list for a side recovers on that side\'s normal entry', () => {
+        const empty = settings({ recoveryDigitEnabled: true, recoveryOverDigits: [] });
+        expect(requiredEntry(over(5), 1, empty)).toEqual({ digits: [5], source: 'engine' });
+        expect(requiredEntry(over(null), 1, empty)).toEqual({ digits: [2, 4], source: 'default' });
+    });
+});
+
+describe('Sentinel AI digit lists', () => {
+    it('normalises to unique ascending digits 0-9', () => {
+        expect(normalizeDigitList([7, 5, 5, 12, -1, 'x', '3', 2.5], [])).toEqual([3, 5, 7]);
+        expect(normalizeDigitList('nope', [1, 2])).toEqual([1, 2]);
+        expect(normalizeDigitList([], [1, 2])).toEqual([]);
+    });
+
+    it('parses typed text and rejects anything that is not a digit', () => {
+        expect(parseDigitList('2, 4')).toEqual([2, 4]);
+        expect(parseDigitList('7 5;5')).toEqual([5, 7]);
+        expect(parseDigitList('')).toEqual([]);
+        expect(parseDigitList('2, x')).toBeNull();
+        expect(parseDigitList('12')).toBeNull();
+        expect(parseDigitList('-1')).toBeNull();
     });
 });
 
@@ -158,17 +221,37 @@ describe('Sentinel AI settings validation', () => {
         const s = normalizeSettings({
             stake: -5,
             martingaleMultiplier: 0,
-            recoveryDigit: 42,
+            recoveryOverDigits: [3, 42, 'a'],
             runsPerSignal: 99,
             martingaleMode: 'nonsense',
             alertVisual: 'yes',
         });
         expect(s.stake).toBe(MIN_STAKE);
         expect(s.martingaleMultiplier).toBeCloseTo(1.01, 2);
-        expect(s.recoveryDigit).toBe(9);
+        expect(s.recoveryOverDigits).toEqual([3]);
         expect(s.runsPerSignal).toBe(10);
         expect(s.martingaleMode).toBe(DEFAULT_SETTINGS.martingaleMode);
         expect(s.alertVisual).toBe(DEFAULT_SETTINGS.alertVisual);
+    });
+
+    it('carries a legacy single recovery digit over to both sides', () => {
+        const s = normalizeSettings({ recoveryDigit: 8 });
+        expect(s.recoveryOverDigits).toEqual([8]);
+        expect(s.recoveryUnderDigits).toEqual([8]);
+        const mixed = normalizeSettings({ recoveryDigit: 8, recoveryOverDigits: [3] });
+        expect(mixed.recoveryOverDigits).toEqual([3]);
+        expect(mixed.recoveryUnderDigits).toEqual([8]);
+    });
+
+    it('defaults: entry digits Over 2/4 and Under 5/7, target profit 100', () => {
+        expect(DEFAULT_SETTINGS.defaultOverDigits).toEqual([2, 4]);
+        expect(DEFAULT_SETTINGS.defaultUnderDigits).toEqual([5, 7]);
+        expect(DEFAULT_SETTINGS.takeProfit).toBe(100);
+    });
+
+    it('accepts the touch-once execution mode', () => {
+        expect(normalizeSettings({ executionMode: 'touch_once' }).executionMode).toBe('touch_once');
+        expect(normalizeSettings({ executionMode: 'bogus' }).executionMode).toBe(DEFAULT_SETTINGS.executionMode);
     });
 
     it('falls back to defaults for empty input', () => {

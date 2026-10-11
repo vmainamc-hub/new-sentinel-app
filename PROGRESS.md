@@ -4,7 +4,7 @@ Goal: a **Sentinel AI** tab between Auto Trades and TradingView. The Sentinel Si
 backend, untouched. A new frontend and runner trade its signals on their entry digit, the same way Auto Trades runs,
 and every trade shows on the Run Panel (the main deck).
 
-Target repo: vmainamc-hub/new-sentinel-app (live: https://precisionapex.netlify.app). Branch: `feat/sentinel-ai`.
+Target repo: vmainamc-hub/new-sentinel-app (live: https://precisionapex.netlify.app). Deployed from `main` (auto-publish) to https://precisionsentinel.netlify.app.
 
 ## Done
 - [x] Studied the repo: Auto Trades run flow (`buyContractForUi` -> transactions / run_panel / summary_card), Run Panel, nav (`PremiumLayout`, `site-customization`).
@@ -29,3 +29,18 @@ Target repo: vmainamc-hub/new-sentinel-app (live: https://precisionapex.netlify.
 - Engine only runs while the Sentinel AI page is open or a session is running (it needs the logged-in Deriv socket).
 - Test on a DEMO account first.
 - Nothing committed or pushed: changes are in the working tree of `feat/sentinel-ai`.
+
+## Repairs batch (latest)
+Done (85 Sentinel AI unit tests pass; rebased on 15213c0 "Repair Auto Trades purchase flow" - `buyContractForUi` signature unchanged, so no code change needed):
+- [x] Default entry digits for signals the engine gave no entry: Over = 2 or 4, Under = 5 or 7, first to print wins. Editable ("Default entry digits").
+- [x] Target profit (default 100, 0 = off): own panel under the run bar with progress bar, editable while running; stops the session when reached.
+- [x] Recovery split by side: Over signals recover on the Over recovery digit(s) (default 3), Under signals on the Under ones (default 6). Old saved single `recoveryDigit` migrates to both sides.
+- [x] New mode "Touch once, then nonstop": waits for the entry digit once, then fires trades back to back like a bot (martingale still applies) until target profit / stop loss / max trades / max losses / Stop. Ignores runs-per-signal and recovery-digit waiting; a newer signal does not interrupt it (logged as "Not traded").
+- [x] "Contract offers no return" error: left alone as instructed (fixed separately on main).
+
+Not done / unverified:
+- [ ] `npm run build`, repo jest/eslint, SCSS compile (registry blocked here) - check the Netlify deploy.
+- [ ] Live run on a demo account in each mode.
+- [ ] Under recovery default digit 6 is a guess; change it if you want another.
+
+Next: run demo, tune defaults, then real account.

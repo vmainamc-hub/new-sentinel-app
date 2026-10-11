@@ -285,7 +285,7 @@ describe('SentinelAiRunner', () => {
             martingaleMode: 'after_1',
             martingaleMultiplier: 2,
             recoveryDigitEnabled: true,
-            recoveryDigit: 8,
+            recoveryUnderDigits: [8],
             runsPerSignal: 3,
         });
         h.profits.push(-1);
@@ -298,7 +298,7 @@ describe('SentinelAiRunner', () => {
         expect(snap.session.losses).toBe(1);
         expect(snap.session.currentStake).toBe(2);
         expect(snap.recovering).toBe(true);
-        expect(snap.requiredDigit).toBe(8);
+        expect(snap.requiredDigits).toEqual([8]);
 
         h.engine.tick(SYMBOL, 4); // the signal's own digit no longer triggers
         await flush();
@@ -313,7 +313,7 @@ describe('SentinelAiRunner', () => {
         expect(snap.session.wins).toBe(1);
         expect(snap.session.currentStake).toBe(1);
         expect(snap.recovering).toBe(false);
-        expect(snap.requiredDigit).toBe(4);
+        expect(snap.requiredDigits).toEqual([4]);
     });
 
     it('stops at take profit and releases the Run Panel', async () => {
@@ -344,8 +344,8 @@ describe('SentinelAiRunner', () => {
         expect(h.runner.getSnapshot().stopReason).toMatch(/Stop loss/);
     });
 
-    it('never trades a signal that has no validated entry digit', async () => {
-        h = makeHarness();
+    it('never trades a signal that has no entry digit when no default digits are set', async () => {
+        h = makeHarness({ defaultOverDigits: [], defaultUnderDigits: [] });
         h.surface(opportunity('UNDER7', null));
         h.runner.start();
         for (let digit = 0; digit <= 9; digit += 1) h.engine.tick(SYMBOL, digit);
@@ -535,7 +535,7 @@ describe('SentinelAiRunner: Immediate mode', () => {
     it('requires no entry digit', () => {
         h = makeHarness({ executionMode: 'immediate' });
         h.surface(opportunity('UNDER7', 4));
-        expect(h.runner.getSnapshot().requiredDigit).toBeNull();
+        expect(h.runner.getSnapshot().requiredDigits).toEqual([]);
     });
 
     it('does not trade blind while the engine reports a stale feed', async () => {
@@ -680,5 +680,390 @@ describe('SentinelAiRunner: failed purchases', () => {
         }
         expect(h.buy.mock.calls.length).toBe(3);
         expect(h.runner.isRunning()).toBe(false);
+    });
+});
+
+describe('SentinelAiRunner: default entry digits', () => {
+    let h: Harness | null = null;
+    afterEach(() => {
+        h?.cleanup();
+        h = null;
+    });
+
+    it('an Under signal without an entry digit trades on 5 or 7, whichever prints first', async () => {
+        h = makeHarness({ martingaleMode: 'off' });
+        h.surface(opportunity('UNDER7', null));
+        h.runner.start();
+
+        const snap = h.runner.getSnapshot();
+        expect(snap.requiredDigits).toEqual([5, 7]);
+        expect(snap.entrySource).toBe('default');
+        expect(snap.signalState).toBe('WAITING_ENTRY');
+
+        h.engine.tick(SYMBOL, 3);
+        h.engine.tick(SYMBOL, 9);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(0);
+
+        h.engine.tick(SYMBOL, 7);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+        expect(h.buy.mock.calls[0][0].parameters.contract_type).toBe('DIGITUNDER');
+        expect(h.runner.getSnapshot().trades[0].entryDigit).toBe(7);
+    });
+
+    it('an Over signal without an entry digit trades on 2 or 4, whichever prints first', async () => {
+        h = makeHarness({ martingaleMode: 'off' });
+        h.surface(opportunity('OVER3', null));
+        h.runner.start();
+        expect(h.runner.getSnapshot().requiredDigits).toEqual([2, 4]);
+
+        h.engine.tick(SYMBOL, 5);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(0);
+
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+        expect(h.buy.mock.calls[0][0].parameters.contract_type).toBe('DIGITOVER');
+        expect(h.runner.getSnapshot().trades[0].entryDigit).toBe(4);
+    });
+
+    it('the first of the two default digits to print wins (2 before 4, 5 before 7)', async () => {
+        h = makeHarness({ martingaleMode: 'off', runsPerSignal: 1 });
+        h.surface(opportunity('OVER3', null));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 2);
+        h.engine.tick(SYMBOL, 4); // already in flight: must not fire a second trade
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+        expect(h.runner.getSnapshot().trades[0].entryDigit).toBe(2);
+    });
+
+    it("never overrides the engine's own entry digit", async () => {
+        h = makeHarness({ martingaleMode: 'off' });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        expect(h.runner.getSnapshot().requiredDigits).toEqual([4]);
+        expect(h.runner.getSnapshot().entrySource).toBe('engine');
+
+        h.engine.tick(SYMBOL, 5); // a default digit, but the engine gave its own entry
+        h.engine.tick(SYMBOL, 7);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(0);
+
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+    });
+
+    it('uses custom default digits', async () => {
+        h = makeHarness({ martingaleMode: 'off', defaultUnderDigits: [1, 9] });
+        h.surface(opportunity('UNDER7', null));
+        h.runner.start();
+        expect(h.runner.getSnapshot().requiredDigits).toEqual([1, 9]);
+        h.engine.tick(SYMBOL, 5);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(0);
+        h.engine.tick(SYMBOL, 9);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+    });
+});
+
+describe('SentinelAiRunner: recovery per side', () => {
+    let h: Harness | null = null;
+    afterEach(() => {
+        h?.cleanup();
+        h = null;
+    });
+
+    const recoveryHarness = (patch: Partial<SentinelAiSettings> = {}) =>
+        makeHarness({
+            martingaleMode: 'off',
+            runsPerSignal: 3,
+            recoveryDigitEnabled: true,
+            recoveryOverDigits: [3],
+            recoveryUnderDigits: [6],
+            ...patch,
+        });
+
+    it('after a loss on an Over signal it waits for the Over recovery digit (3) and trades Over', async () => {
+        h = recoveryHarness();
+        h.profits.push(-1);
+        h.surface(opportunity('OVER2', 5));
+        h.runner.start();
+
+        h.engine.tick(SYMBOL, 5);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+        let snap = h.runner.getSnapshot();
+        expect(snap.recovering).toBe(true);
+        expect(snap.entrySource).toBe('recovery');
+        expect(snap.requiredDigits).toEqual([3]);
+
+        h.engine.tick(SYMBOL, 5); // the signal's own digit and the Under recovery digit do not trigger
+        h.engine.tick(SYMBOL, 6);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+
+        h.engine.tick(SYMBOL, 3);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(2);
+        expect(h.buy.mock.calls[1][0].parameters.contract_type).toBe('DIGITOVER');
+        snap = h.runner.getSnapshot();
+        expect(snap.recovering).toBe(false);
+        expect(snap.requiredDigits).toEqual([5]); // back to the signal's own entry after the win
+    });
+
+    it('after a loss on an Under signal it waits for the Under recovery digit (6) and trades Under', async () => {
+        h = recoveryHarness();
+        h.profits.push(-1);
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.runner.getSnapshot().requiredDigits).toEqual([6]);
+
+        h.engine.tick(SYMBOL, 3); // the Over recovery digit does not trigger an Under signal
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+
+        h.engine.tick(SYMBOL, 6);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(2);
+        expect(h.buy.mock.calls[1][0].parameters.contract_type).toBe('DIGITUNDER');
+    });
+
+    it('keeps recovering with the digit of whichever side the next signal is', async () => {
+        h = recoveryHarness();
+        h.profits.push(-1);
+        h.surface(opportunity('OVER2', 5));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 5);
+        await flush();
+        expect(h.runner.getSnapshot().requiredDigits).toEqual([3]);
+
+        h.surface(opportunity('UNDER7', 4)); // a different, Under signal arrives while still recovering
+        expect(h.runner.getSnapshot().signal?.contractId).toBe('UNDER7');
+        expect(h.runner.getSnapshot().requiredDigits).toEqual([6]);
+    });
+
+    it('recovery works for a signal that has no engine entry digit as well', async () => {
+        h = recoveryHarness();
+        h.profits.push(-1);
+        h.surface(opportunity('OVER2', null));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 2); // default Over digit
+        await flush();
+        expect(h.runner.getSnapshot().requiredDigits).toEqual([3]);
+        h.engine.tick(SYMBOL, 4); // a default digit no longer triggers during recovery
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+        h.engine.tick(SYMBOL, 3);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(2);
+    });
+
+    it('martingale still raises the stake while recovering', async () => {
+        h = recoveryHarness({ martingaleMode: 'after_1', martingaleMultiplier: 2 });
+        h.profits.push(-1);
+        h.surface(opportunity('OVER2', 5));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 5);
+        await flush();
+        h.engine.tick(SYMBOL, 3);
+        await flush();
+        expect(h.buy.mock.calls[1][0].parameters.amount).toBe(2);
+    });
+});
+
+describe('SentinelAiRunner: Touch-once mode', () => {
+    let h: Harness | null = null;
+    afterEach(() => {
+        h?.cleanup();
+        h = null;
+    });
+
+    // The fake buy/settle resolve instantly, so a nonstop run is always ended by a limit in these tests.
+    const touchHarness = (patch: Partial<SentinelAiSettings> = {}) =>
+        makeHarness({ executionMode: 'touch_once', martingaleMode: 'off', ...patch });
+
+    it('waits for the entry digit once, then fires back to back without waiting for it again', async () => {
+        h = touchHarness({ maxTrades: 5 });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+
+        h.engine.tick(SYMBOL, 9); // not the entry digit
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(0);
+        expect(h.runner.getSnapshot().signalState).toBe('WAITING_ENTRY');
+        expect(h.runner.getSnapshot().locked).toBe(false);
+
+        h.engine.tick(SYMBOL, 4); // the one and only touch
+        await flush(); // no further ticks are sent
+        expect(h.buy.mock.calls.length).toBe(5);
+        expect(h.runner.getSnapshot().session.trades).toBe(5);
+        expect(h.runner.getSnapshot().stopReason).toMatch(/Max trades/);
+    });
+
+    it('uses the default digits for the single touch when the signal has no entry digit', async () => {
+        h = touchHarness({ maxTrades: 3 });
+        h.surface(opportunity('OVER2', null));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 6);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(0);
+        h.engine.tick(SYMBOL, 2);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(3);
+        expect(h.buy.mock.calls[0][0].parameters.contract_type).toBe('DIGITOVER');
+    });
+
+    it('trades the same market and contract on every shot', async () => {
+        h = touchHarness({ maxTrades: 4 });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        const sent = h.buy.mock.calls.map(call => `${call[0].parameters.symbol}|${call[0].parameters.contract_type}|${call[0].parameters.barrier}`);
+        expect(new Set(sent)).toEqual(new Set([`${SYMBOL}|DIGITUNDER|7`]));
+    });
+
+    it('stops at the target profit and releases the Run Panel', async () => {
+        h = touchHarness({ takeProfit: 2 }); // each win is +0.95, so the third trade crosses it
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(3);
+        expect(h.runner.isRunning()).toBe(false);
+        expect(h.runner.getSnapshot().stopReason).toMatch(/Take profit/);
+        expect(h.dashboard.active_trading_module).toBeNull();
+    });
+
+    it('stops at the stop loss', async () => {
+        h = touchHarness({ stopLoss: 2 });
+        h.profits.push(-1, -1);
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(2);
+        expect(h.runner.getSnapshot().stopReason).toMatch(/Stop loss/);
+    });
+
+    it('does not wait for a recovery digit after a loss; martingale still applies', async () => {
+        h = touchHarness({
+            maxTrades: 3,
+            martingaleMode: 'after_1',
+            martingaleMultiplier: 2,
+            recoveryDigitEnabled: true,
+            recoveryUnderDigits: [8],
+        });
+        h.profits.push(-1);
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.map(call => call[0].parameters.amount)).toEqual([1, 2, 1]);
+    });
+
+    it('ignores runs per signal and does not stop after the first trade', async () => {
+        h = touchHarness({ maxTrades: 4, runsPerSignal: 1 });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(4);
+    });
+
+    it('never expires after the entry was touched, and does not drop the market for a newer signal', async () => {
+        h = touchHarness({ signalWaitSeconds: 10, maxTrades: 4 });
+        let calls = 0;
+        h.buy.mockImplementation(async ({ parameters }: { parameters: Record<string, any> }) => {
+            calls += 1;
+            if (calls === 2) throw new Error('Temporary network blip.'); // transient: cool-down, then carry on
+            return { buy_price: Number(parameters.amount), contract_id: 700 + calls, transaction_id: 1700 + calls };
+        });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(calls).toBe(2); // first trade settled, second hit the blip and is cooling down
+        expect(h.runner.getSnapshot().locked).toBe(true);
+
+        h.advance(60_000); // far beyond the 10 second signal wait
+        h.surface(opportunity('OVER2', 6)); // a different signal arrives mid-run
+        const snap = h.runner.getSnapshot();
+        expect(snap.signal?.contractId).toBe('UNDER7'); // still on the touched market
+        expect(snap.signalState).not.toBe('EXPIRED');
+        expect(snap.history.find(r => r.signal.contractId === 'OVER2')?.outcome).toBe('WATCHED');
+
+        await flush(); // cool-down over: it carries on without a new touch
+        expect(calls).toBeGreaterThan(2);
+        expect(h.runner.getSnapshot().session.trades).toBe(4);
+        expect(h.runner.getSnapshot().history.find(r => r.signal.contractId === 'UNDER7')?.outcome).toBe('TRADED');
+    });
+
+    it('Stop ends a nonstop run immediately', async () => {
+        h = touchHarness({ maxTrades: 3 });
+        let release: () => void = () => undefined;
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.gate.hold = new Promise<void>(resolve => {
+            release = resolve;
+        });
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+
+        h.runner.stop('Stopped by you');
+        h.gate.hold = null;
+        release();
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+        expect(h.runner.isRunning()).toBe(false);
+    });
+
+    it('reports the touch state in the snapshot', async () => {
+        h = touchHarness({ maxTrades: 2 });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        expect(h.runner.getSnapshot().locked).toBe(false);
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        const snap = h.runner.getSnapshot();
+        expect(snap.requiredDigits).toEqual([]); // nothing is waited for any more
+    });
+});
+
+describe('SentinelAiRunner: target profit can change while running', () => {
+    let h: Harness | null = null;
+    afterEach(() => {
+        h?.cleanup();
+        h = null;
+    });
+
+    it('lowering the target below the current profit ends the session straight away', async () => {
+        h = makeHarness({ martingaleMode: 'off', runsPerSignal: 3 });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.runner.isRunning()).toBe(true); // +0.95 and no target set (the harness turns it off)
+
+        h.runner.updateSettings({ takeProfit: 0.5 });
+        expect(h.runner.isRunning()).toBe(false);
+        expect(h.runner.getSnapshot().stopReason).toMatch(/Take profit/);
+    });
+
+    it('raising the target keeps the session running', async () => {
+        h = makeHarness({ martingaleMode: 'off', runsPerSignal: 3, takeProfit: 0.5 });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.runner.updateSettings({ takeProfit: 50 });
+        expect(h.runner.isRunning()).toBe(true);
+        expect(h.runner.getSnapshot().settings.takeProfit).toBe(50);
     });
 });

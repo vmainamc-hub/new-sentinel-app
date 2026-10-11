@@ -11,14 +11,14 @@ import { useStore } from '@/hooks/useStore';
 import { getNotificationPermission, requestNotificationPermission } from './sentinel-ai-alerts';
 import { sentinelAiRunner } from './sentinel-ai-runner-instance';
 import type {
-    ActiveSignalState,
     ExecutionMode,
     MartingaleMode,
     SentinelAiSettings,
     SentinelAiSignal,
+    SentinelAiSnapshot,
     SignalOutcome,
 } from './sentinel-ai-types';
-import { MIN_STAKE } from './sentinel-ai-types';
+import { MIN_STAKE, parseDigitList } from './sentinel-ai-types';
 import { useSentinelAi } from './use-sentinel-ai';
 import './sentinel-ai.scss';
 
@@ -42,21 +42,23 @@ const OUTCOME_LABEL: Record<SignalOutcome, string> = {
     SKIPPED: 'Skipped',
 };
 
-const stateText = (
-    state: ActiveSignalState | null,
-    required: number | null,
-    recovering: boolean,
-    secondsLeft: number,
-    runsDone: number,
-    runsTotal: number
-) => {
-    switch (state) {
+const digitsText = (digits: number[]) => digits.join(' or ');
+
+const SOURCE_LABEL = { engine: '', default: ' (default entry digit)', recovery: ' (recovery digit)' } as const;
+
+const stateText = (snapshot: SentinelAiSnapshot) => {
+    const { signalState, requiredDigits, entrySource, secondsLeft, runsDone, runsTotal, settings } = snapshot;
+    switch (signalState) {
+        case 'LOCKED':
+            return 'Entry touched. Trading nonstop on this signal until you stop it or a limit is reached.';
         case 'READY':
             return 'Immediate mode: trading this signal now, without waiting for the entry digit.';
         case 'WAITING_ENTRY':
-            return `Waiting for digit ${required}${recovering ? ' (recovery digit)' : ''} · ${secondsLeft}s left`;
+            return `Waiting for digit ${digitsText(requiredDigits)}${entrySource ? SOURCE_LABEL[entrySource] : ''} · ${secondsLeft}s left${
+                settings.executionMode === 'touch_once' ? ' · the first touch starts nonstop trading' : ''
+            }`;
         case 'NO_ENTRY_DIGIT':
-            return 'The engine has not validated an entry digit for this signal yet, so nothing is traded.';
+            return 'The engine gave no entry digit and no default digits are set for this side, so nothing is traded.';
         case 'TRADING':
             return 'Trade in progress';
         case 'WATCHING':
@@ -121,6 +123,59 @@ const NumberField = ({
     );
 };
 
+/** Digits 0-9 typed as "2, 4". Invalid text is flagged and never saved. */
+const DigitListField = ({
+    label,
+    value,
+    onCommit,
+    hint,
+}: {
+    label: string;
+    value: number[];
+    onCommit: (value: number[]) => void;
+    hint?: string;
+}) => {
+    const text = value.join(', ');
+    const [draft, setDraft] = useState(text);
+    const [invalid, setInvalid] = useState(false);
+    useEffect(() => {
+        setDraft(text);
+        setInvalid(false);
+    }, [text]);
+
+    const commit = () => {
+        const parsed = parseDigitList(draft);
+        if (parsed === null) {
+            setInvalid(true);
+            return;
+        }
+        setInvalid(false);
+        setDraft(parsed.join(', '));
+        if (parsed.join(',') !== value.join(',')) onCommit(parsed);
+    };
+
+    return (
+        <label className='sentinel-ai-field'>
+            <span className='sentinel-ai-field__label'>{label}</span>
+            <input
+                type='text'
+                inputMode='numeric'
+                value={draft}
+                placeholder='none'
+                aria-invalid={invalid}
+                onChange={event => setDraft(event.target.value)}
+                onBlur={commit}
+                onKeyDown={event => {
+                    if (event.key === 'Enter') (event.target as HTMLInputElement).blur();
+                }}
+            />
+            <span className={classNames('sentinel-ai-field__hint', { 'is-error': invalid })}>
+                {invalid ? 'Use digits 0-9 separated by commas, for example 2, 4' : hint}
+            </span>
+        </label>
+    );
+};
+
 const Toggle = ({
     label,
     checked,
@@ -145,6 +200,11 @@ const Toggle = ({
 const EXECUTION_OPTIONS: Array<{ value: ExecutionMode; label: string; hint: string }> = [
     { value: 'entry_digit', label: 'Wait for entry digit', hint: 'Each trade waits for the signal\'s entry digit to print' },
     { value: 'immediate', label: 'Immediate', hint: 'Trades the moment a signal arrives, without waiting for the entry digit' },
+    {
+        value: 'touch_once',
+        label: 'Touch once, then nonstop',
+        hint: 'Waits for the entry digit once. After that, trades fire back to back like a bot (one at a time) until you stop it, the target profit is reached, or a limit hits',
+    },
 ];
 
 const MARTINGALE_OPTIONS: Array<{ value: MartingaleMode; label: string }> = [
@@ -186,6 +246,11 @@ const SentinelAi = observer(() => {
 
     const pnlTone = session.pnl > 0 ? 'win' : session.pnl < 0 ? 'loss' : '';
     const martingaleOn = settings.martingaleMode !== 'off';
+    const targetPercent =
+        settings.takeProfit > 0 ? Math.min(100, Math.max(0, Math.round((session.pnl / settings.takeProfit) * 100))) : 0;
+    const touchOnce = settings.executionMode === 'touch_once';
+    const signalDefaults =
+        signal && (signal.contractType === 'DIGITOVER' ? settings.defaultOverDigits : settings.defaultUnderDigits);
 
     return (
         <div className='sentinel-ai-page'>
@@ -254,7 +319,9 @@ const SentinelAi = observer(() => {
                                 <dt>Recovery</dt>
                                 <dd>
                                     {snapshot.recovering
-                                        ? `On digit ${settings.recoveryDigit}`
+                                        ? snapshot.entrySource === 'recovery' && snapshot.requiredDigits.length > 0
+                                            ? `On digit ${digitsText(snapshot.requiredDigits)}`
+                                            : 'Recovering'
                                         : martingaleOn && session.martingaleStep > 0
                                           ? `Step ${session.martingaleStep}`
                                           : 'Idle'}{' '}
@@ -266,6 +333,38 @@ const SentinelAi = observer(() => {
                                 </dd>
                             </div>
                         </dl>
+                    </section>
+
+                    <section className='sentinel-ai-target' aria-label='Target profit'>
+                        <NumberField
+                            label={`Target profit (${currency})`}
+                            value={settings.takeProfit}
+                            min={0}
+                            step={1}
+                            hint='The session stops when profit reaches this. 0 turns it off. Editable while running.'
+                            onCommit={value => set({ takeProfit: value })}
+                        />
+                        <div className='sentinel-ai-target__progress'>
+                            {settings.takeProfit > 0 ? (
+                                <>
+                                    <div
+                                        className='sentinel-ai-target__bar'
+                                        role='progressbar'
+                                        aria-valuemin={0}
+                                        aria-valuemax={100}
+                                        aria-valuenow={targetPercent}
+                                    >
+                                        <span style={{ width: `${targetPercent}%` }} />
+                                    </div>
+                                    <p>
+                                        {money(session.pnl, true)} of +{money(settings.takeProfit)} {currency} ·{' '}
+                                        {targetPercent}%
+                                    </p>
+                                </>
+                            ) : (
+                                <p className='sentinel-ai-muted'>No target set: the session runs until you stop it or a limit hits.</p>
+                            )}
+                        </div>
                     </section>
 
                     <div className='sentinel-ai-grid'>
@@ -295,7 +394,7 @@ const SentinelAi = observer(() => {
                                                     key={digit}
                                                     className={classNames('sentinel-ai-digit', {
                                                         'is-win': winsOnDigit(signal, digit),
-                                                        'is-required': snapshot.requiredDigit === digit,
+                                                        'is-required': snapshot.requiredDigits.includes(digit),
                                                         'is-last': snapshot.lastDigit === digit,
                                                     })}
                                                 >
@@ -309,20 +408,18 @@ const SentinelAi = observer(() => {
                                         </p>
 
                                         <p className='sentinel-ai-signal__state'>
-                                            {stateText(
-                                                snapshot.signalState,
-                                                snapshot.requiredDigit,
-                                                snapshot.recovering,
-                                                snapshot.secondsLeft,
-                                                snapshot.runsDone,
-                                                snapshot.runsTotal
-                                            )}
+                                            {stateText(snapshot)}
                                         </p>
 
                                         <dl className='sentinel-ai-entry'>
                                             <div>
                                                 <dt>Entry digit</dt>
-                                                <dd>{signal.entryDigit ?? 'Not set'}</dd>
+                                                <dd>
+                                                    {signal.entryDigit ??
+                                                        (signalDefaults && signalDefaults.length > 0
+                                                            ? `${digitsText(signalDefaults)} (default)`
+                                                            : 'Not set')}
+                                                </dd>
                                             </div>
                                             <div>
                                                 <dt>Historical win rate on entry</dt>
@@ -335,7 +432,9 @@ const SentinelAi = observer(() => {
                                             <div>
                                                 <dt>Runs</dt>
                                                 <dd>
-                                                    {snapshot.runsDone} / {snapshot.runsTotal}
+                                                    {touchOnce
+                                                        ? `${snapshot.runsDone} (nonstop)`
+                                                        : `${snapshot.runsDone} / ${snapshot.runsTotal}`}
                                                 </dd>
                                             </div>
                                         </dl>
@@ -392,7 +491,7 @@ const SentinelAi = observer(() => {
                                                 <span className='sentinel-ai-list__main'>
                                                     {trade.label} · {trade.symbol}
                                                     <small>
-                                                        digit {trade.entryDigit ?? '-'} · stake {money(trade.stake)} ·{' '}
+                                                        digit {trade.entryDigit ?? 'auto'} · stake {money(trade.stake)} ·{' '}
                                                         {timeOf(trade.at)}
                                                     </small>
                                                 </span>
@@ -434,6 +533,28 @@ const SentinelAi = observer(() => {
                             </fieldset>
 
                             <fieldset className='sentinel-ai-card' disabled={running}>
+                                <legend>Default entry digits</legend>
+                                <p className='sentinel-ai-muted'>
+                                    Used only when a signal arrives without an entry digit. The first listed digit to print
+                                    triggers the trade.
+                                </p>
+                                <div className='sentinel-ai-row'>
+                                    <DigitListField
+                                        label='Over signals'
+                                        value={settings.defaultOverDigits}
+                                        hint='Default 2, 4'
+                                        onCommit={value => set({ defaultOverDigits: value })}
+                                    />
+                                    <DigitListField
+                                        label='Under signals'
+                                        value={settings.defaultUnderDigits}
+                                        hint='Default 5, 7'
+                                        onCommit={value => set({ defaultUnderDigits: value })}
+                                    />
+                                </div>
+                            </fieldset>
+
+                            <fieldset className='sentinel-ai-card' disabled={running}>
                                 <legend>Stake</legend>
                                 <div className='sentinel-ai-row'>
                                     <NumberField
@@ -458,7 +579,11 @@ const SentinelAi = observer(() => {
                                     min={1}
                                     max={10}
                                     step={1}
-                                    hint='Trades taken on one signal, each on its own entry digit'
+                                    hint={
+                                        touchOnce
+                                            ? 'Not used in Touch-once mode, which trades nonstop'
+                                            : 'Trades taken on one signal, each on its own entry digit'
+                                    }
                                     onCommit={value => set({ runsPerSignal: value })}
                                 />
                             </fieldset>
@@ -515,19 +640,31 @@ const SentinelAi = observer(() => {
                                 <legend>Recovery</legend>
                                 <Toggle
                                     label='Enter on a recovery digit after a loss'
-                                    hint="Replaces the signal's entry digit until a win"
+                                    hint="Replaces the signal's entry digit until a win. Over signals use the Over digit, Under signals the Under digit"
                                     checked={settings.recoveryDigitEnabled}
                                     onChange={checked => set({ recoveryDigitEnabled: checked })}
                                 />
                                 {settings.recoveryDigitEnabled ? (
-                                    <NumberField
-                                        label='Recovery digit'
-                                        value={settings.recoveryDigit}
-                                        min={0}
-                                        max={9}
-                                        step={1}
-                                        onCommit={value => set({ recoveryDigit: value })}
-                                    />
+                                    <div className='sentinel-ai-row'>
+                                        <DigitListField
+                                            label='Over recovery digit(s)'
+                                            value={settings.recoveryOverDigits}
+                                            hint='Used when the signal is Over'
+                                            onCommit={value => set({ recoveryOverDigits: value })}
+                                        />
+                                        <DigitListField
+                                            label='Under recovery digit(s)'
+                                            value={settings.recoveryUnderDigits}
+                                            hint='Used when the signal is Under'
+                                            onCommit={value => set({ recoveryUnderDigits: value })}
+                                        />
+                                    </div>
+                                ) : null}
+                                {settings.recoveryDigitEnabled && touchOnce ? (
+                                    <p className='sentinel-ai-muted'>
+                                        Touch-once mode trades nonstop after its first touch, so recovery digits are not waited
+                                        for. Martingale still applies.
+                                    </p>
                                 ) : null}
                                 <Toggle
                                     label='Keep the recovery stake until the session is in profit'
@@ -540,14 +677,6 @@ const SentinelAi = observer(() => {
                                 <legend>Risk limits</legend>
                                 <div className='sentinel-ai-row'>
                                     <NumberField
-                                        label={`Take profit (${currency})`}
-                                        value={settings.takeProfit}
-                                        min={0}
-                                        step={1}
-                                        hint='0 means off'
-                                        onCommit={value => set({ takeProfit: value })}
-                                    />
-                                    <NumberField
                                         label={`Stop loss (${currency})`}
                                         value={settings.stopLoss}
                                         min={0}
@@ -555,8 +684,6 @@ const SentinelAi = observer(() => {
                                         hint='0 means off'
                                         onCommit={value => set({ stopLoss: value })}
                                     />
-                                </div>
-                                <div className='sentinel-ai-row'>
                                     <NumberField
                                         label='Max trades'
                                         value={settings.maxTrades}
@@ -565,6 +692,8 @@ const SentinelAi = observer(() => {
                                         hint='0 means off'
                                         onCommit={value => set({ maxTrades: value })}
                                     />
+                                </div>
+                                <div className='sentinel-ai-row'>
                                     <NumberField
                                         label='Max losses in a row'
                                         value={settings.maxConsecutiveLosses}
@@ -581,7 +710,11 @@ const SentinelAi = observer(() => {
                                     min={10}
                                     max={600}
                                     step={5}
-                                    hint='How long a signal waits for its entry digit'
+                                    hint={
+                                        touchOnce
+                                            ? 'How long a signal waits for its first entry touch'
+                                            : 'How long a signal waits for its entry digit'
+                                    }
                                     onCommit={value => set({ signalWaitSeconds: value })}
                                 />
                             </fieldset>
