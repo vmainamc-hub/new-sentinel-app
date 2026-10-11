@@ -77,11 +77,11 @@ const raiseIfError = (response: any, stage: TradeStage, fallback: string) => {
 };
 
 /**
- * Proposal -> buy. A fresh proposal is requested for every purchase and bought immediately, so a quote can never go
- * stale while the caller waits for an entry point.
+ * Buy directly from normalized contract parameters. This avoids a separate proposal round-trip and uses a new
+ * parameterized purchase request for each trade.
  *
- * Retry rule: if Deriv EXPLICITLY answers the buy with "unknown / expired proposal" the contract was not bought, so one
- * retry with a fresh proposal is safe. A buy that times out is never retried (it may have been bought).
+ * Retry rule: never retry a buy request automatically. A timeout or lost socket can leave the purchase outcome
+ * unknown, so the caller must stop rather than risk placing a duplicate contract.
  */
 export const buyContractForUi = async ({
     parameters,
@@ -95,44 +95,16 @@ export const buyContractForUi = async ({
         throw new TradeRequestError('Deriv connection is not ready yet.', { stage: 'request', kind: 'transient' });
     }
 
-    const attempt = async () => {
-        const proposalResponse = await sendRequest(
-            { proposal: 1, ...normalizeTradeParameters(parameters) },
-            'proposal'
-        );
-        raiseIfError(proposalResponse, 'proposal', 'Proposal request failed.');
-
-        const proposalId = proposalResponse?.proposal?.id;
-        if (!proposalId) {
-            throw new TradeRequestError('No proposal id was returned for this contract.', {
-                stage: 'proposal',
-                kind: 'rejected',
-            });
-        }
-
-        const response = await sendRequest({ buy: proposalId, price }, 'buy');
-        raiseIfError(response, 'buy', 'Contract purchase failed.');
-        return response;
-    };
-
-    let buyResponse: any;
-    try {
-        buyResponse = await attempt();
-    } catch (error) {
-        const retriable =
-            error instanceof TradeRequestError &&
-            error.stage === 'buy' &&
-            error.kind === 'rejected' &&
-            !error.outcomeUnknown &&
-            (error.code === 'InvalidContractProposal' || error.code === 'ProposalExpired');
-        if (!retriable) throw error;
-        buyResponse = await attempt();
-    }
+    const response = await sendRequest(
+        { buy: '1', price, parameters: normalizeTradeParameters(parameters) },
+        'buy'
+    );
+    raiseIfError(response, 'buy', 'Contract purchase failed.');
 
     return {
-        buy_price: Number(buyResponse?.buy?.buy_price ?? price),
-        contract_id: Number(buyResponse?.buy?.contract_id),
-        transaction_id: Number(buyResponse?.buy?.transaction_id ?? 0),
+        buy_price: Number(response?.buy?.buy_price ?? price),
+        contract_id: Number(response?.buy?.contract_id),
+        transaction_id: Number(response?.buy?.transaction_id ?? 0),
     };
 };
 
