@@ -2,22 +2,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApiBase } from '@/hooks/useApiBase';
 import { PremiumDerivApiService } from '@/services/premium-deriv-api.service';
 import {
-    BULK_MARKETS, ENGINE_TICKS, MIN_ENGINE_TICKS, OverUnderEngine, assertAllowedContract, buildEngineTicks, contractLabel, digitPercents,
-    digitsFromPrices, inferDecimals, lastDigit, recommend, refreshLocked, SignalStability, validateRecommendation, watching,
-    type CombinedVerdict, type OverUnderContract, type Recommendation,
+    BULK_MARKETS, ENGINE_TICKS, assertAllowedContract, contractLabel, digitPercents, refreshLocked, validateRecommendation, watching,
+    type OverUnderContract, type Recommendation,
 } from '../over-under-engine';
 import {
-    DEFAULT_BULK, RunGuard, emptyTally, exposure, limitError, recordFailed, recordPlaced, recordSettled, sanitizeBulk, syncReport, syncText,
+    DEFAULT_BULK, RunGuard, emptyTally, exitDigitFrom, exposure, limitError, recordFailed, recordPlaced, recordSettled, sanitizeBulk, settlementText,
     type Fill, type Tally,
 } from '../bulk-run';
+import { bulkFeed } from '../bulk-feed';
 import {
     DEFAULT_AUTO, armSession, disarmSession, lossLimitError, modeText, newSession, planTrade, recordAutoRun, sanitizeAuto, stakeFor, stepAuto, tickSymbols,
     waitingNote,
     type AutoConfig, type AutoSession,
 } from '../auto-trader';
 import BulkTraderView, { type AutoForm, type BulkForm, type LogRow } from './BulkTraderView';
-
-type MarketStore = { prices: number[]; times: number[]; digits: number[]; decimals: number };
 
 const IDLE = 'Bot is not running.';
 const LOCK_KEY = 'apex_bulk_locked_signal';
@@ -34,8 +32,9 @@ const writeLock = (value: Recommendation | null) => {
         if (value) sessionStorage.setItem(LOCK_KEY, JSON.stringify(value)); else sessionStorage.removeItem(LOCK_KEY);
     } catch { /* storage unavailable: the lock simply lasts for this visit */ }
 };
-const ENGINE_STEP_MS = 150;
 const SETTLE_WAIT_MS = 90_000;
+/** Deriv sometimes closes a contract before its exit tick is attached. These are the follow-up lookups (ms from settlement). */
+const EXIT_LOOKUP_DELAYS_MS = [400, 1200, 2500, 4500];
 const sleep = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 const num = (value: unknown, fallback = 0) => { const n = Number(value); return Number.isFinite(n) ? n : fallback; };
 const numOrNull = (value: unknown) => { const n = Number(value); return value !== undefined && value !== null && Number.isFinite(n) ? n : null; };
@@ -62,7 +61,6 @@ const BulkTraderPage = () => {
     const [autoSession, setAutoSession] = useState<AutoSession>(newSession());
     const [autoNote, setAutoNote] = useState('Off.');
     const [pendingAuto, setPendingAuto] = useState<{ rec: Recommendation; nonce: number } | null>(null);
-    const [live, setLive] = useState(false);
     const [tickVersion, setTickVersion] = useState(0);
     const [, setClock] = useState(0);
     const [recVersion, setRecVersion] = useState('');
@@ -74,11 +72,6 @@ const BulkTraderPage = () => {
     const [syncNote, setSyncNote] = useState('');
     const [log, setLog] = useState<LogRow[]>([]);
 
-    const store = useRef<Record<string, MarketStore>>({});
-    const verdicts = useRef<Record<string, CombinedVerdict>>({});
-    const recRef = useRef<Recommendation | null>(null);
-    const engine = useRef(new OverUnderEngine());
-    const stability = useRef(new SignalStability());
     const autoRef = useRef<{ session: AutoSession; config: AutoConfig }>({ session: newSession(), config: DEFAULT_AUTO });
     const lockedRef = useRef<Recommendation | null>(null);
     const autoBusy = useRef(false);
@@ -87,7 +80,6 @@ const BulkTraderPage = () => {
     const baseStakeRef = useRef(String(DEFAULT_BULK.stake));
     const formRef = useRef(form);
     const symbolRef = useRef(symbol);
-    const waiters = useRef<Record<string, Array<() => void>>>({});
     const mounted = useRef(true);
     const guard = useRef(new RunGuard());
     const stopRef = useRef(false);
@@ -106,84 +98,33 @@ const BulkTraderPage = () => {
         martingale: Number(autoForm.martingale), maxSteps: Number(autoForm.maxSteps), onCap: autoForm.onCap === 'RESET' ? 'RESET' : 'STOP',
     });
     autoRef.current.config = autoConfig;
-    useEffect(() => () => { mounted.current = false; stopRef.current = true; }, []);
-
-    // ------------------------------------------------------------------
-    // Live data: 1000 ticks of history (prices AND times), then the live tick stream, for all 13 markets.
-    // ------------------------------------------------------------------
     useEffect(() => {
-        let alive = true;
-        const disposers: Array<() => void> = [];
-        const loadMarket = async (market: (typeof BULK_MARKETS)[number]) => {
-            try {
-                const result = await PremiumDerivApiService.request({ ticks_history: market.symbol, end: 'latest', count: ENGINE_TICKS, style: 'ticks' });
-                if (!alive) return;
-                const prices: number[] = (result.history?.prices ?? []).map(Number);
-                const times: number[] = (result.history?.times ?? []).map((t: unknown) => Number(t) * 1000);
-                const decimals = inferDecimals(prices, market.pip);
-                store.current[market.symbol] = { prices, times, digits: digitsFromPrices(prices, decimals), decimals };
-                const dispose = await PremiumDerivApiService.subscribeTicks(market.symbol, tick => {
-                    const entry = store.current[market.symbol];
-                    const quote = Number(tick?.quote);
-                    if (!entry || !Number.isFinite(quote)) return;
-                    const pip = Number(tick?.pip_size);
-                    if (Number.isInteger(pip) && pip > entry.decimals) entry.decimals = pip;
-                    entry.prices.push(quote);
-                    entry.times.push(num(tick?.epoch, Date.now() / 1000) * 1000);
-                    entry.digits.push(lastDigit(quote, entry.decimals));
-                    if (entry.prices.length > ENGINE_TICKS) {
-                        const extra = entry.prices.length - ENGINE_TICKS;
-                        entry.prices.splice(0, extra); entry.times.splice(0, extra); entry.digits.splice(0, extra);
-                    }
-                    const pending = waiters.current[market.symbol];
-                    if (pending?.length) { waiters.current[market.symbol] = []; pending.forEach(resolve => resolve()); }
-                    if (market.symbol === symbolRef.current) setTickVersion(value => value + 1);
-                });
-                if (alive) disposers.push(dispose); else dispose();
-            } catch (err) {
-                if (alive) setError(errorText(err));
-            }
-        };
-        const queue = [...BULK_MARKETS];
-        const worker = async () => { for (let m = queue.shift(); m && alive; m = queue.shift()) await loadMarket(m); };
-        void Promise.all([worker(), worker(), worker(), worker()]).then(() => { if (alive) setLive(true); });
-        return () => {
-            alive = false;
-            disposers.forEach(dispose => { try { dispose(); } catch { /* already closed */ } });
-        };
+        mounted.current = true;
+        return () => { mounted.current = false; stopRef.current = true; };
     }, []);
 
     // ------------------------------------------------------------------
-    // Backend analysis: Insight Fusion, one market per step, round-robin (so the page never blocks for long).
+    // Live data + signal engine live in `bulkFeed` (app level): they keep running whatever this page does or however you
+    // navigate. The page only attaches to it for rendering and for the auto trader's decisions.
     // ------------------------------------------------------------------
     useEffect(() => {
-        let index = 0;
-        const timer = window.setInterval(() => {
-            for (let tries = 0; tries < BULK_MARKETS.length; tries += 1) {
-                const market = BULK_MARKETS[index % BULK_MARKETS.length];
-                index += 1;
-                const entry = store.current[market.symbol];
-                if (!entry || entry.prices.length < MIN_ENGINE_TICKS) continue;
-                verdicts.current[market.symbol] = engine.current.analyse(market.symbol, buildEngineTicks(entry.prices, entry.times, entry.decimals));
-                stability.current.observe(market.symbol, verdicts.current[market.symbol]);
-                break;
-            }
-            const now = Date.now();
-            const next = recommend(verdicts.current, now, recRef.current, stability.current);
-            recRef.current = next;
+        bulkFeed.start();
+        const offTick = bulkFeed.onTick(tickSymbol => { if (tickSymbol === symbolRef.current) setTickVersion(value => value + 1); });
+        const offStep = bulkFeed.onStep(({ now, ready }) => {
+            const next = bulkFeed.rec;
             const version = next ? `${next.id}|${next.action}|${next.score}` : '';
             setRecVersion(previous => (previous === version ? previous : version));
             // Evaluate the same live recommendation shown to the user (the locked one while locked).
             const auto = autoRef.current;
             if (auto.session.armed) {
                 const held = lockedRef.current;
-                const target = held ? refreshLocked(held, verdicts.current, now) : next;
-                const valid = target ? validateRecommendation(target, verdicts.current, now, Boolean(held)).ok : false;
+                const target = held ? refreshLocked(held, bulkFeed.verdicts, now) : next;
+                const valid = target ? validateRecommendation(target, bulkFeed.verdicts, now, Boolean(held)).ok : false;
                 // Base stake and trades per run let the loss-limit guard price the run BEFORE it is fired.
                 const sized = sanitizeBulk({ stake: Number(baseStakeRef.current), runs: Number(formRef.current.runs), duration: Number(formRef.current.duration) });
                 const result = stepAuto(auto.session, auto.config, {
                     target, valid, busy: guard.current.busy || autoBusy.current, now,
-                    digits: target ? store.current[target.symbol]?.digits : undefined, baseStake: sized.stake, bulkRuns: sized.runs,
+                    digits: target ? bulkFeed.store[target.symbol]?.digits : undefined, baseStake: sized.stake, bulkRuns: sized.runs,
                 });
                 const shown = result.session.armed !== auto.session.armed || result.session.runs !== auto.session.runs
                     || result.session.pnl !== auto.session.pnl || result.session.stopReason !== auto.session.stopReason
@@ -200,21 +141,21 @@ const BulkTraderPage = () => {
                     setPendingAuto({ rec: target, nonce: now });
                 }
             }
-            const ready = Object.values(verdicts.current).filter(v => v.ready).length;
             setMarketsReady(previous => (previous === ready ? previous : ready));
-        }, ENGINE_STEP_MS);
+        });
         const clock = window.setInterval(() => setClock(value => value + 1), 1000);
-        return () => { window.clearInterval(timer); window.clearInterval(clock); };
+        return () => { offTick(); offStep(); window.clearInterval(clock); };
     }, []);
 
     // ------------------------------------------------------------------
     // Recommendation -> Trading Deck. Loading never purchases anything.
     // ------------------------------------------------------------------
     const now = Date.now();
-    const offered = recRef.current && recRef.current.expiresAt >= now ? recRef.current : null;
+    const offered = bulkFeed.rec && bulkFeed.rec.expiresAt >= now ? bulkFeed.rec : null;
+    const live = bulkFeed.liveCount(now) > 0;
     void recVersion;
-    const rec = locked ? refreshLocked(locked, verdicts.current, now) : offered;
-    const watch = rec ? null : watching(verdicts.current);
+    const rec = locked ? refreshLocked(locked, bulkFeed.verdicts, now) : offered;
+    const watch = rec ? null : watching(bulkFeed.verdicts);
     const applyToDeck = (target: Recommendation, scroll = true, barrier = target.barrier) => {
         setLoaded(target); setSymbol(target.symbol);
         if (target.contract === 'DIGITOVER') setOverBarrier(String(barrier)); else setUnderBarrier(String(barrier));
@@ -230,7 +171,7 @@ const BulkTraderPage = () => {
         setLocked(held); writeLock(held); applyToDeck(held);
     };
 
-    const entry = store.current[symbol];
+    const entry = bulkFeed.store[symbol];
     const lastIndex = entry ? entry.prices.length - 1 : -1;
     const price = lastIndex >= 0 ? entry.prices[lastIndex] : null;
     const digit = lastIndex >= 0 ? entry.digits[lastIndex] : null;
@@ -243,7 +184,7 @@ const BulkTraderPage = () => {
         : null;
 
     const loadedIsLocked = Boolean(locked && loaded && loaded.id === locked.id);
-    const loadedCheck = loaded ? validateRecommendation(loaded, verdicts.current, now, loadedIsLocked) : null;
+    const loadedCheck = loaded ? validateRecommendation(loaded, bulkFeed.verdicts, now, loadedIsLocked) : null;
     const loadedNote = !loaded
         ? 'Load the recommendation, or choose your own market and barrier. Nothing is purchased until you press Over or Under.'
         : loadedCheck && !loadedCheck.ok
@@ -251,7 +192,7 @@ const BulkTraderPage = () => {
             : `Loaded ${loaded.label} on ${loaded.market} (${loaded.action}). Press ${loaded.label} to run it. Nothing is purchased until you do.`;
 
     const onForm = (key: keyof BulkForm) => (event: { target: { value: string } }) => setForm(current => ({ ...current, [key]: event.target.value }));
-    const nextTick = (target: string) => new Promise<void>(resolve => { (waiters.current[target] ||= []).push(resolve); });
+    const nextTick = (target: string) => bulkFeed.nextTick(target);
 
     // ------------------------------------------------------------------
     // Switch the auto trader off from inside the page (fail-safe), keeping the reason on screen.
@@ -262,6 +203,29 @@ const BulkTraderPage = () => {
         setAutoNote(reason);
     };
 
+    // Fills in a settled contract's exit digit when the closing update arrived without one.
+    const resolveExitDigit = async (contractId: number, rowId: number | undefined, marketSymbol: string, state: { fills: Map<number, Fill> }) => {
+        let digit: number | null = null;
+        let waited = 0;
+        for (const delay of EXIT_LOOKUP_DELAYS_MS) {
+            await sleep(delay - waited);
+            waited = delay;
+            const places = bulkFeed.store[marketSymbol]?.decimals ?? 2;
+            try {
+                const result = await PremiumDerivApiService.request({ proposal_open_contract: 1, contract_id: contractId });
+                digit = exitDigitFrom(result?.proposal_open_contract, places, epoch => bulkFeed.digitAt(marketSymbol, epoch));
+            } catch { /* try again on the next pass; the tick history lookup below still runs */ }
+            const fill = state.fills.get(contractId);
+            if (digit === null && fill?.exitTime) digit = bulkFeed.digitAt(marketSymbol, fill.exitTime);
+            if (digit !== null) break;
+        }
+        const fill = state.fills.get(contractId);
+        if (fill && digit !== null) fill.exitDigit = digit;
+        if (!mounted.current) return;
+        setSyncNote(settlementText([...state.fills.values()]));
+        setLog(rows => rows.map(row => (row.id === rowId ? { ...row, exitDigit: digit, exitFinal: true } : row)));
+    };
+
     // One Run: all N contracts are requested and bought in the same instant, on one tick.
     // ------------------------------------------------------------------
     const execute = async (side: 0 | 1) => {
@@ -269,6 +233,7 @@ const BulkTraderPage = () => {
         if (!token) return;
         const state = { owned: new Map<number, number>(), settled: new Set<number>(), fills: new Map<number, Fill>(), stake: 0 };
         let off: (() => void) | null = null;
+        const lookups: Array<Promise<void>> = [];
         try {
             setError('');
             const contract: OverUnderContract = side === 0 ? 'DIGITOVER' : 'DIGITUNDER';
@@ -280,7 +245,7 @@ const BulkTraderPage = () => {
 
             const isPick = Boolean(loaded && loaded.symbol === symbol && loaded.contract === contract && loaded.barrier === barrier);
             if (isPick) {
-                const check = validateRecommendation(loaded, verdicts.current, Date.now(), Boolean(locked && loaded && loaded.id === locked.id));
+                const check = validateRecommendation(loaded, bulkFeed.verdicts, Date.now(), Boolean(locked && loaded && loaded.id === locked.id));
                 if (!check.ok) { setError(check.reason); return; }
             }
 
@@ -301,20 +266,21 @@ const BulkTraderPage = () => {
                 if (!state.owned.has(id) || state.settled.has(id) || !PremiumDerivApiService.isContractClosed(update)) return;
                 state.settled.add(id);                // duplicate events for the same contract are ignored
                 const profit = update.profit !== undefined ? num(update.profit) : num(update.sold_for) - state.stake;
-                const exitValue = update.exit_tick_display_value ?? update.exit_tick ?? update.sell_spot_display_value ?? update.sell_spot;
-                const places = store.current[market.symbol]?.decimals ?? market.pip;
-                const exitDigit = exitValue === undefined || exitValue === null ? null
-                    : typeof exitValue === 'string' ? Number(exitValue.slice(-1)) : lastDigit(Number(exitValue), places);
+                const places = bulkFeed.store[market.symbol]?.decimals ?? market.pip;
+                // Every known exit field, then the contract's tick audit, then the market's own tick history at the exit time.
+                const exitDigit = exitDigitFrom(update, places, epoch => bulkFeed.digitAt(market.symbol, epoch));
                 state.fills.set(id, {
-                    contractId: id, entryTime: numOrNull(update.entry_tick_time), exitTime: numOrNull(update.exit_tick_time ?? update.sell_spot_time),
-                    exitDigit: exitDigit !== null && Number.isFinite(exitDigit) ? exitDigit : null,
+                    contractId: id, entryTime: numOrNull(update.entry_tick_time ?? update.entry_spot_time),
+                    exitTime: numOrNull(update.exit_tick_time ?? update.exit_spot_time ?? update.sell_spot_time), exitDigit,
                 });
                 tallyRef.current = recordSettled(tallyRef.current, profit);
                 if (!mounted.current) return;
                 setTally(tallyRef.current);
-                setSyncNote(syncText(syncReport([...state.fills.values()])));
+                setSyncNote(settlementText([...state.fills.values()]));
                 const rowId = state.owned.get(id);
-                setLog(rows => rows.map(row => (row.id === rowId ? { ...row, profit, state: profit > 0 ? 'won' : 'lost', exitDigit: state.fills.get(id)?.exitDigit ?? null } : row)));
+                setLog(rows => rows.map(row => (row.id === rowId ? { ...row, profit, state: profit > 0 ? 'won' : 'lost', exitDigit, exitFinal: exitDigit !== null } : row)));
+                // The closing update did not carry the exit tick yet: ask Deriv again (and re-read the tick history) until it shows.
+                if (exitDigit === null) lookups.push(resolveExitDigit(id, rowId, market.symbol, state));
             });
 
             setStatus('Waiting for the next tick…');
@@ -357,9 +323,10 @@ const BulkTraderPage = () => {
                 setStatus(`Placed ${state.owned.size}/${params.runs}${failures.length ? ` (${failures.length} failed)` : ''}. Waiting for ${state.owned.size - state.settled.size} to settle…`);
                 await sleep(500);
             }
+            await Promise.allSettled(lookups);   // every settlement digit is in before the run is reported as done
             const open = state.owned.size - state.settled.size;
             if (mounted.current) {
-                setSyncNote(syncText(syncReport([...state.fills.values()])));
+                setSyncNote(settlementText([...state.fills.values()]));
                 setStatus(open > 0
                     ? `${open} contract(s) still open. They keep being monitored by your Deriv account; check the statement.`
                     : `Done. ${state.owned.size}/${params.runs} placed${failures.length ? `, ${failures.length} failed` : ''} · P/L ${money(tallyRef.current.pnl, currency)}.`);
@@ -437,8 +404,8 @@ const BulkTraderPage = () => {
     const toggleAuto = () => {
         const current = autoRef.current.session;
         const onScreen = lockedRef.current
-            ? refreshLocked(lockedRef.current, verdicts.current, Date.now())
-            : (recRef.current && recRef.current.expiresAt >= Date.now() ? recRef.current : null);
+            ? refreshLocked(lockedRef.current, bulkFeed.verdicts, Date.now())
+            : (bulkFeed.rec && bulkFeed.rec.expiresAt >= Date.now() ? bulkFeed.rec : null);
         if (!current.armed && (autoBusy.current || guard.current.busy)) { setAutoNote('A run is in progress. Arm the auto trader when it has finished.'); return; }
         if (!current.armed) baseStakeRef.current = form.stake;          // the deck stake at arming is the base stake
         const next = current.armed ? disarmSession(current, 'Off.') : armSession(onScreen, autoRef.current.config.grade);
@@ -449,15 +416,16 @@ const BulkTraderPage = () => {
     const onAutoForm = (key: keyof AutoForm, value: string) => setAutoForm(current => ({ ...current, [key]: value }));
 
     // What the auto trader would do next, shown in the panel.
-    const watched = autoSession.armed ? (locked ? refreshLocked(locked, verdicts.current, now) : offered) : null;
+    const watched = autoSession.armed ? (locked ? refreshLocked(locked, bulkFeed.verdicts, now) : offered) : null;
     const nextPlan = watched ? planTrade(watched, autoSession.lossStreak, autoConfig) : null;
     const baseStake = sanitizeBulk({ stake: Number(autoSession.armed ? baseStakeRef.current : form.stake) }).stake;
     const entryView = nextPlan && autoConfig.entryTicks > 0 && watched
         ? {
             need: autoConfig.entryTicks, want: nextPlan.contract === 'DIGITOVER' ? 'O' : 'U', waiting: Boolean(autoSession.pending),
-            symbols: tickSymbols(store.current[watched.symbol]?.digits ?? [], nextPlan.barrier, Math.max(autoConfig.entryTicks, 6)),
+            symbols: tickSymbols(bulkFeed.store[watched.symbol]?.digits ?? [], nextPlan.barrier, Math.max(autoConfig.entryTicks, 6)),
         }
         : null;
+
 
     return <BulkTraderView
         live={live} marketsReady={marketsReady} rec={rec} watch={watch ? { market: watch.market, label: watch.label } : null} onLoadRec={loadRecommendation}

@@ -53,6 +53,53 @@ export const recordSettled = (tally: Tally, profit: number): Tally => ({
 /** Entry/exit data Deriv reports for one contract (epoch seconds; exitDigit = last digit of the exit spot). */
 export type Fill = { contractId: number; entryTime: number | null; exitTime: number | null; exitDigit: number | null };
 
+/** Last digit of a price, from Deriv's display string (keeps trailing zeros) or from a number at `decimals` places. */
+export const digitOfValue = (value: unknown, decimals: number): number | null => {
+    if (value === undefined || value === null || value === '') return null;
+    if (typeof value === 'string') {
+        const match = value.trim().match(/(\d)\D*$/);
+        return match ? Number(match[1]) : null;
+    }
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    const places = Number.isInteger(decimals) && decimals >= 0 && decimals <= 8 ? decimals : 2;
+    return Number(n.toFixed(places).slice(-1));
+};
+
+/** Looks a tick up by epoch (seconds) and returns its last digit, if that tick is known. */
+export type TickLookup = (epochSeconds: number) => number | null;
+
+const FINAL_VALUE_FIELDS = [
+    'exit_tick_display_value', 'exit_spot_display_value', 'sell_spot_display_value',
+    'exit_tick', 'exit_spot', 'sell_spot',
+] as const;
+
+export const exitTimeOf = (update: any): number | null => {
+    const raw = update?.exit_tick_time ?? update?.exit_spot_time ?? update?.sell_spot_time;
+    const n = Number(raw);
+    return raw !== undefined && raw !== null && Number.isFinite(n) && n > 0 ? n : null;
+};
+
+/**
+ * The exit (settlement) digit of a closed contract. Deriv has used several field names for the exit price, and the
+ * final update does not always carry it, so this tries every known field, then the contract's own tick audit, then the
+ * market's tick history at the exit time. Null only when none of them has it yet.
+ */
+export const exitDigitFrom = (update: any, decimals: number, lookup?: TickLookup): number | null => {
+    for (const field of FINAL_VALUE_FIELDS) {
+        const digit = digitOfValue(update?.[field], decimals);
+        if (digit !== null) return digit;
+    }
+    const exitTime = exitTimeOf(update);
+    const audited: any[] = Array.isArray(update?.audit_details?.all_ticks) ? update.audit_details.all_ticks : [];
+    const exitTick = audited.find(t => t?.flag === 'exit') ?? (exitTime !== null ? audited.find(t => Number(t?.epoch) === exitTime) : undefined);
+    if (exitTick) {
+        const digit = digitOfValue(exitTick.tick_display_value ?? exitTick.tick, decimals);
+        if (digit !== null) return digit;
+    }
+    return exitTime !== null && lookup ? lookup(exitTime) : null;
+};
+
 export type SyncReport = {
     total: number;
     /** Contracts that reported both an entry and an exit time. */
@@ -74,9 +121,26 @@ export const syncReport = (fills: Fill[]): SyncReport => {
     return { total: fills.length, known: known.length, entryTicks, exitTicks, synced, exitDigit: synced ? known[0].exitDigit : null };
 };
 
+/** Every distinct exit digit the contracts settled on, with counts: "3 (×5), 7 (×2)". Empty when none is known yet. */
+export const exitDigitsText = (fills: Fill[]): string => {
+    const counts = new Map<number, number>();
+    fills.forEach(f => { if (f.exitDigit !== null) counts.set(f.exitDigit, (counts.get(f.exitDigit) ?? 0) + 1); });
+    return [...counts.entries()].sort((a, b) => a[0] - b[0]).map(([digit, count]) => (count > 1 ? `${digit} (×${count})` : String(digit))).join(', ');
+};
+
+/** The one-liner plus EVERY exit digit (the plain report only names the digit when all trades shared one exit tick). */
+export const settlementText = (fills: Fill[]): string => {
+    const base = syncText(syncReport(fills));
+    if (!base) return '';
+    const digits = exitDigitsText(fills);
+    const report = syncReport(fills);
+    return digits && !(report.synced && report.exitDigit !== null) ? `${base} Exit digits: ${digits}.` : base;
+};
+
 /** Plain-English one-liner for the UI. */
 export const syncText = (report: SyncReport): string => {
     if (report.total === 0) return '';
+
     if (report.known < report.total) return `Waiting for entry/exit ticks (${report.known}/${report.total} reported).`;
     return report.synced
         ? `All ${report.total} trades entered and exited on the same tick${report.exitDigit !== null ? ` · exit digit ${report.exitDigit}` : ''}.`

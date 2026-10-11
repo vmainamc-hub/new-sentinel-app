@@ -13,6 +13,28 @@ type TrackedContract = {
     timeoutId: number;
 };
 
+type TickHub = {
+    symbol: string;
+    callbacks: Set<(tick: any) => void>;
+    api: any;
+    observer: { unsubscribe?: () => void } | null;
+    /** Stream id, kept only when WE opened the stream (so we may forget it). */
+    subscriptionId: string;
+    owns: boolean;
+    lastTickAt: number;
+    lastTick: any;
+    ready: Promise<void> | null;
+    /** True once the stream is open. Listeners that join after this get the latest tick replayed. */
+    opened: boolean;
+    refreshing: boolean;
+};
+
+/** A tick stream that has been silent this long is considered dead and is re-established. */
+export const TICK_STALE_MS = 10_000;
+const TICK_WATCHDOG_MS = 5_000;
+const FORGET_TIMEOUT_MS = 4_000;
+const isAlreadySubscribed = (error: unknown) => /already ?subscribed/i.test(`${tradingErrorMessage(error, '')} ${JSON.stringify(error ?? '')}`);
+
 const sleep = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 const unwrap = (value: any): ApiResponse => (value?.data && typeof value.data === 'object' ? value.data : value || {});
 
@@ -48,6 +70,8 @@ export class PremiumDerivApiService {
     private static contractListeners = new Set<ContractUpdateListener>();
     private static trackedContracts = new Map<number, TrackedContract>();
     private static trackingInFlight = new Set<number>();
+    private static tickHubs = new Map<string, TickHub>();
+    private static tickWatchdog: number | null = null;
 
     private static async getApi(): Promise<any> {
         if (!api_base.api) await api_base.init(true);
@@ -104,31 +128,147 @@ export class PremiumDerivApiService {
         return Array.isArray(result.history?.prices) ? result.history.prices.map(Number).filter(Number.isFinite) : [];
     }
 
+    /**
+     * Live ticks for one market. Many pages and engines want the same market, but Deriv allows ONE stream per market
+     * per connection and `forget` kills it for everybody. So this keeps one hub per market:
+     *  - one real Deriv subscription, fanned out to every listener;
+     *  - the stream is forgotten only when the LAST listener leaves;
+     *  - "already subscribed" (someone else owns the stream) is not an error: we simply listen to the shared feed;
+     *  - a watchdog re-establishes any stream that goes silent or whose socket was replaced (reconnect, or another
+     *    part of the app calling forget / forgetAll on ticks).
+     */
     static async subscribeTicks(underlyingSymbol: string, callback: (tick: any) => void): Promise<() => void> {
-        const api = await this.getApi();
-        let subscriptionId = '';
-        const observer = api.onMessage().subscribe((event: any) => {
-            const message = unwrap(event);
-            if (message.msg_type === 'tick' && message.tick?.symbol === underlyingSymbol) {
-                subscriptionId = message.subscription?.id || message.tick?.id || subscriptionId;
-                callback(message.tick);
-            }
-        });
-
+        let hub = this.tickHubs.get(underlyingSymbol);
+        if (!hub) {
+            hub = { symbol: underlyingSymbol, callbacks: new Set(), api: null, observer: null, subscriptionId: '', owns: false, lastTickAt: Date.now(), lastTick: null, ready: null, opened: false, refreshing: false };
+            this.tickHubs.set(underlyingSymbol, hub);
+        }
+        const current = hub;
+        const joinedOpenHub = current.opened;
+        current.callbacks.add(callback);
         try {
-            const response = unwrap(await api.send({ ticks: underlyingSymbol, subscribe: 1, req_id: ++this.requestId }));
-            if (response?.error) throw response;
-            subscriptionId = response.subscription?.id || response.tick?.id || subscriptionId;
-            if (response.tick) callback(response.tick);
+            if (!current.ready) current.ready = this.openTickHub(current).catch(error => { current.ready = null; throw error; });
+            await current.ready;
         } catch (error) {
-            observer.unsubscribe();
+            current.callbacks.delete(callback);
+            if (!current.callbacks.size) this.closeTickHub(current);
+            throw error;
+        }
+        // Listeners present while the stream opened already got its first tick; only later joiners need the replay.
+        if (joinedOpenHub && current.lastTick) { try { callback(current.lastTick); } catch { /* listener errors never break the feed */ } }
+        this.ensureTickWatchdog();
+
+        let disposed = false;
+        return () => {
+            if (disposed) return;
+            disposed = true;
+            current.callbacks.delete(callback);
+            if (!current.callbacks.size) this.closeTickHub(current);
+        };
+    }
+
+    private static emitTick(hub: TickHub, tick: any) {
+        hub.lastTickAt = Date.now();
+        hub.lastTick = tick;
+        hub.callbacks.forEach(listener => {
+            try { listener(tick); } catch (error) { console.warn('[PremiumDerivAPI] Tick listener failed:', tradingErrorMessage(error)); }
+        });
+    }
+
+    private static async openTickHub(hub: TickHub) {
+        const api = await this.getApi();
+        hub.api = api;
+        hub.observer?.unsubscribe?.();
+        hub.observer = api.onMessage().subscribe((event: any) => {
+            const message = unwrap(event);
+            if (message.msg_type !== 'tick' || message.tick?.symbol !== hub.symbol) return;
+            if (hub.owns) hub.subscriptionId = message.subscription?.id || message.tick?.id || hub.subscriptionId;
+            this.emitTick(hub, message.tick);
+        });
+        hub.lastTickAt = Date.now();
+        try {
+            const response = unwrap(await api.send({ ticks: hub.symbol, subscribe: 1, req_id: ++this.requestId }));
+            if (response?.error) throw response;
+            hub.owns = true;
+            hub.subscriptionId = response.subscription?.id || response.tick?.id || hub.subscriptionId;
+            if (response.tick) this.emitTick(hub, response.tick);
+            hub.opened = true;
+        } catch (error) {
+            if (isAlreadySubscribed(error)) {
+                // Another part of the app owns the stream. Its ticks still reach our listener; we just must not forget it.
+                hub.owns = false;
+                hub.subscriptionId = '';
+                hub.opened = true;
+                return;
+            }
+            hub.observer?.unsubscribe?.();
+            hub.observer = null;
             throw toTradingError(error, 'Unable to subscribe to ticks.');
         }
+    }
 
-        return () => {
-            observer.unsubscribe();
-            if (subscriptionId) void Promise.resolve(api.send({ forget: subscriptionId })).catch(() => undefined);
-        };
+    private static closeTickHub(hub: TickHub) {
+        if (this.tickHubs.get(hub.symbol) === hub) this.tickHubs.delete(hub.symbol);
+        try { hub.observer?.unsubscribe?.(); } catch { /* already closed */ }
+        hub.observer = null;
+        if (hub.owns && hub.subscriptionId) void Promise.resolve(hub.api?.send?.({ forget: hub.subscriptionId })).catch(() => undefined);
+        hub.owns = false;
+        hub.subscriptionId = '';
+    }
+
+    /** Re-establishes one market's tick stream on the CURRENT socket. Safe to call at any time. */
+    static async refreshTicks(underlyingSymbol: string): Promise<void> {
+        const hub = this.tickHubs.get(underlyingSymbol);
+        if (!hub || hub.refreshing) return;
+        hub.refreshing = true;
+        try {
+            if (hub.owns && hub.subscriptionId && hub.api) {
+                // Never wait on a dead socket: a forget that gets no answer must not wedge the recovery.
+                await Promise.race([Promise.resolve(hub.api.send({ forget: hub.subscriptionId })).catch(() => undefined), sleep(FORGET_TIMEOUT_MS)]);
+            }
+            hub.owns = false;
+            hub.subscriptionId = '';
+            await this.openTickHub(hub);
+        } catch (error) {
+            console.warn(`[PremiumDerivAPI] Could not refresh the ${underlyingSymbol} tick stream:`, tradingErrorMessage(error));
+        } finally {
+            hub.lastTickAt = Date.now(); // back off a full stale window before trying again
+            hub.refreshing = false;
+        }
+    }
+
+    /** How long a market's stream has been silent (null when nobody listens to it). */
+    static tickAgeMs(underlyingSymbol: string, now = Date.now()): number | null {
+        const hub = this.tickHubs.get(underlyingSymbol);
+        return hub ? Math.max(0, now - hub.lastTickAt) : null;
+    }
+
+    /** One watchdog pass (exposed for tests). Returns the markets it re-established. */
+    static sweepTickHubs(now = Date.now()): string[] {
+        const current = api_base.api;
+        const revived: string[] = [];
+        this.tickHubs.forEach(hub => {
+            if (hub.refreshing || !hub.ready) return;
+            const socketReplaced = Boolean(current) && Boolean(hub.api) && current !== hub.api;
+            const silent = now - hub.lastTickAt > TICK_STALE_MS;
+            if (socketReplaced || silent) {
+                revived.push(hub.symbol);
+                void this.refreshTicks(hub.symbol);
+            }
+        });
+        return revived;
+    }
+
+    private static ensureTickWatchdog() {
+        if (this.tickWatchdog !== null || typeof window === 'undefined') return;
+        this.tickWatchdog = window.setInterval(() => {
+            if (!this.tickHubs.size) {
+                window.clearInterval(this.tickWatchdog as number);
+                this.tickWatchdog = null;
+                return;
+            }
+            this.sweepTickHubs();
+        }, TICK_WATCHDOG_MS);
     }
 
     static async proposal(parameters: {

@@ -10,6 +10,8 @@ export type LogRow = {
     state: 'open' | 'won' | 'lost' | 'failed';
     profit: number;
     exitDigit?: number | null;
+    /** True once the exit digit is known, or every lookup for it has been tried. */
+    exitFinal?: boolean;
     note?: string;
 };
 
@@ -304,6 +306,16 @@ const BulkTraderView = (props: BulkViewProps) => {
                     <div><small>Realised P/L</small><strong className={tally.pnl >= 0 ? 'is-win' : 'is-loss'}>{money(tally.pnl, currency)}</strong></div>
                 </div>
                 {props.syncNote && <p className='apex-bt__sync'>{props.syncNote}</p>}
+                {log.some(row => row.state === 'won' || row.state === 'lost') && (
+                    <div className='apex-bt__exits' aria-label='Settlement digits'>
+                        <small>Settlement digits</small>
+                        {log.filter(row => row.state === 'won' || row.state === 'lost').map(row => (
+                            <span key={row.id} className={row.state === 'won' ? 'is-win' : 'is-loss'} title={row.state === 'won' ? 'Won' : 'Lost'}>
+                                {row.exitDigit ?? (row.exitFinal ? '?' : '…')}
+                            </span>
+                        ))}
+                    </div>
+                )}
 
                 {log.length > 0 && (
                     <div className='apex-bt__tablewrap apex-bt__log'>
@@ -313,10 +325,11 @@ const BulkTraderView = (props: BulkViewProps) => {
                                 {log.map(row => (
                                     <tr key={row.id}>
                                         <td>{row.time}</td><td>{row.label}</td><td>{row.stake.toFixed(2)}</td>
-                                        <td>{row.exitDigit ?? '—'}</td>
+                                        <td>{row.exitDigit ?? (row.state === 'failed' ? '—' : row.exitFinal ? 'n/a' : '…')}</td>
                                         <td className={row.state === 'won' ? 'is-win' : row.state === 'open' ? '' : 'is-loss'}>
                                             {row.state === 'open' ? 'Open…' : row.state === 'failed' ? `Failed: ${row.note ?? ''}` : `${row.profit >= 0 ? '+' : ''}${row.profit.toFixed(2)}`}
                                         </td>
+
                                     </tr>
                                 ))}
                             </tbody>

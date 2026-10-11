@@ -1,6 +1,6 @@
 import {
     MAX_BULK_RUNS, MAX_EXPOSURE, MAX_STAKE, MIN_STAKE, RunGuard, emptyTally, exposure, limitError, recordFailed, recordPlaced,
-    recordSettled, sanitizeBulk, syncReport, syncText,
+    recordSettled, sanitizeBulk, syncReport, syncText, digitOfValue, exitDigitFrom, exitDigitsText, settlementText,
 } from '../bulk-run';
 
 describe('input limits', () => {
@@ -71,3 +71,42 @@ describe('run guard', () => {
         expect(guard.begin()).not.toBeNull();
     });
 });
+
+describe('exit (settlement) digits', () => {
+    it('reads the digit from Deriv display strings, keeping trailing zeros', () => {
+        expect(digitOfValue('1238.47', 2)).toBe(7);
+        expect(digitOfValue('1238.50', 2)).toBe(0);
+        expect(digitOfValue(1238.5, 2)).toBe(0);
+        expect(digitOfValue(613.63, 2)).toBe(3);
+        expect(digitOfValue(undefined, 2)).toBeNull();
+        expect(digitOfValue('', 2)).toBeNull();
+    });
+
+    it('tries every field Deriv has used for the exit price', () => {
+        expect(exitDigitFrom({ exit_tick_display_value: '9464.87' }, 2)).toBe(7);
+        expect(exitDigitFrom({ exit_spot_display_value: '9464.21' }, 2)).toBe(1);
+        expect(exitDigitFrom({ exit_spot: 9464.3 }, 2)).toBe(0);
+        expect(exitDigitFrom({ sell_spot_display_value: '9464.55' }, 2)).toBe(5);
+    });
+
+    it('falls back to the contract tick audit, then to the market tick history', () => {
+        const audited = { exit_tick_time: 200, audit_details: { all_ticks: [{ epoch: 199, tick_display_value: '1.10' }, { epoch: 200, tick_display_value: '1.23' }] } };
+        expect(exitDigitFrom(audited, 2)).toBe(3);
+        const timeOnly = { exit_spot_time: 300, status: 'won' };
+        expect(exitDigitFrom(timeOnly, 2)).toBeNull();
+        expect(exitDigitFrom(timeOnly, 2, epoch => (epoch === 300 ? 4 : null))).toBe(4);
+        expect(exitDigitFrom({ status: 'won' }, 2, () => 9)).toBeNull(); // no exit time: never guess
+    });
+
+    it('lists EVERY exit digit, not only a shared one', () => {
+        const fills = [3, 3, 7].map((digit, i) => ({ contractId: i, entryTime: 100, exitTime: 101 + i, exitDigit: digit }));
+        expect(exitDigitsText(fills)).toBe('3 (×2), 7');
+        expect(settlementText(fills)).toMatch(/Exit digits: 3 \(×2\), 7\./);
+        const same = [1, 2].map(id => ({ contractId: id, entryTime: 100, exitTime: 101, exitDigit: 4 }));
+        expect(settlementText(same)).toMatch(/exit digit 4/);
+        expect(settlementText([])).toBe('');
+        const waiting = [{ contractId: 1, entryTime: 100, exitTime: 101, exitDigit: 6 }, { contractId: 2, entryTime: null, exitTime: null, exitDigit: null }];
+        expect(settlementText(waiting)).toMatch(/Exit digits: 6/);
+    });
+});
+

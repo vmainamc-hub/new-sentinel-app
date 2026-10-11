@@ -222,3 +222,28 @@
 .apex-bt__ticks i.is-over { background: var(--bt-teal, #0e9f8e); }
 .apex-bt__ticks i.is-under { background: var(--bt-red, #d6204a); }
 .apex-bt__ticks i.is-eq { background: #31405f; }
+
+/* Settlement (exit) digits of the last run: one chip per settled contract. */
+.apex-bt__exits {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0;
+
+    small { opacity: 0.7; margin-right: 4px; }
+
+    span {
+        min-width: 28px;
+        padding: 4px 8px;
+        border-radius: 8px;
+        text-align: center;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        border: 1px solid currentColor;
+    }
+
+    .is-win { color: #19d38a; }
+    .is-loss { color: #ff4d6a; }
+}
+
