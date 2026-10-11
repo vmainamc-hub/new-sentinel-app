@@ -1148,18 +1148,54 @@ describe('SentinelAiRunner: score, danger and market filters', () => {
         expect(h.runner.getSnapshot().signal).not.toBeNull();
     });
 
-    it('a signal that turns bad while it waits for its entry digit is dropped, not traded', async () => {
+    it('a signal that turns bad while it waits is held at once, never traded, and dropped if it stays bad', async () => {
         h = makeHarness({});
         h.surface(opportunity('UNDER7', 4));
         h.runner.start();
-        expect(h.runner.getSnapshot().signal?.contractId).toBe('UNDER7');
-        h.surface(weak({ score: 10 })); // same cell, now failing the gate
-        h.advance(1000);
-        h.engine.tick(SYMBOL, 4);
+        h.surface(weak({ score: 35 })); // same cell, now failing the gate (min 70)
+        let snap = h.runner.getSnapshot();
+        expect(snap.signalState).toBe('HELD');
+        expect(snap.holdReason).toMatch(/score 35 is below 70/);
+        h.engine.tick(SYMBOL, 4); // the entry digit prints while it is held: no trade
         await flush();
         expect(h.buy.mock.calls.length).toBe(0);
-        expect(h.runner.getSnapshot().history[0].outcome).toBe('SKIPPED');
-        expect(h.runner.getSnapshot().lastError).toMatch(/Dropped/);
+
+        h.advance(6000);
+        h.loop();
+        snap = h.runner.getSnapshot();
+        expect(snap.history[0].outcome).toBe('SKIPPED');
+        expect(snap.dropNotice).toMatch(/Dropped .*score 35 is below 70/);
+        expect(snap.lastError).toBeNull(); // informational, not an error
+    });
+
+    it('a brief dip is tolerated: the signal resumes and trades, and nothing was dropped', async () => {
+        h = makeHarness({});
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.surface(weak({ score: 35 }));
+        h.advance(2000);
+        h.loop();
+        expect(h.runner.getSnapshot().signalState).toBe('HELD');
+        h.surface(opportunity('UNDER7', 4)); // back above the limit
+        expect(h.runner.getSnapshot().signalState).toBe('WAITING_ENTRY');
+        expect(h.runner.getSnapshot().signal?.score).toBe(72);
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+        expect(h.runner.getSnapshot().dropNotice).toBeNull();
+    });
+
+    it('the dropped note disappears when another signal takes over', () => {
+        h = makeHarness({});
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.surface(weak({ score: 35 }));
+        h.advance(6000);
+        h.loop();
+        expect(h.runner.getSnapshot().dropNotice).not.toBeNull();
+        h.surface(opportunity('OVER2', 5));
+        expect(h.runner.getSnapshot().dropNotice).toBeNull();
+        expect(h.runner.getSnapshot().signal?.contractId).toBe('OVER2');
     });
 
     it('JD100 is excluded by default and other markets are not', async () => {

@@ -314,6 +314,10 @@ export type SentinelAiSnapshot = {
     history: SignalRecord[];
     trades: TradeRecord[];
     lastError: string | null;
+    /** Informational note about the last signal the quality gate dropped. */
+    dropNotice: string | null;
+    /** Why the active signal is paused by the quality gate (state HELD). */
+    holdReason: string | null;
     stopReason: string | null;
     /** Increments for every new signal event so the UI can flash/animate. */
     alertSeq: number;

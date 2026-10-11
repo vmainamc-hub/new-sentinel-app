@@ -42,6 +42,8 @@ const BLOCK_TTL_MS = 5 * 60_000;
 const MAX_SKIPS_IN_A_ROW = 6;
 /** A market Deriv refuses this many times in one session is taken out of the feed until the next Run. */
 const MAX_MARKET_REFUSALS = 2;
+/** A waiting signal that fails the quality gate is held (never traded) and dropped only if it stays bad this long. */
+const DROP_GRACE_MS = 5_000;
 /** Pause after a transient failure so Immediate mode cannot hammer the API. */
 const RETRY_COOLDOWN_MS = 3_000;
 
@@ -112,6 +114,9 @@ type ActiveSignal = {
     locked: boolean;
     /** The quality gate rejects this market right now (a touch-once run is paused until it qualifies again). */
     held: boolean;
+    /** Why the quality gate currently rejects this signal, and since when. */
+    holdReason: string | null;
+    rejectedSince: number | null;
 };
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
@@ -165,6 +170,8 @@ export class SentinelAiRunner {
     private history: SignalRecord[] = [];
     private trades: TradeRecord[] = [];
     private lastError: string | null = null;
+    /** Informational: the last signal dropped by the quality gate. Cleared when a new signal takes over. */
+    private dropNotice: string | null = null;
     private stopReason: string | null = null;
     private alertSeq = 0;
 
@@ -249,6 +256,7 @@ export class SentinelAiRunner {
         }
 
         this.lastError = null;
+        this.dropNotice = null;
         this.stopReason = null;
         this.buyErrors = 0;
         this.skipStreak = 0;
@@ -403,12 +411,21 @@ export class SentinelAiRunner {
         const active = this.active;
         if (!active || active.done) return;
         const rejected = this.qualityRejected.get(active.signal.key);
-        active.held = Boolean(rejected) && active.locked;
-        if (!rejected || active.locked || this.tradeInFlight) return;
+        if (!rejected) {
+            active.held = false;
+            active.holdReason = null;
+            active.rejectedSince = null;
+            return;
+        }
+        // Never trade while the gate rejects it. A brief dip is tolerated (held); a lasting one drops the signal.
+        active.held = true;
+        active.holdReason = rejected.replace(/^.*?: /, '');
+        active.rejectedSince = active.rejectedSince ?? this.io.now();
+        if (active.locked || this.tradeInFlight || this.io.now() - active.rejectedSince < DROP_GRACE_MS) return;
         active.done = true;
         const record = this.history.find(r => r.signal.id === active.signal.id);
         if (record && record.outcome === 'ACTIVE') record.outcome = active.runsDone > 0 ? 'TRADED' : 'SKIPPED';
-        this.lastError = `Dropped ${rejected}.`;
+        this.dropNotice = `Dropped ${rejected}`;
         if (this.pending) this.activate(this.pending);
     }
 
@@ -479,7 +496,10 @@ export class SentinelAiRunner {
             done: false,
             locked: false,
             held: false,
+            holdReason: null,
+            rejectedSince: null,
         };
+        this.dropNotice = null;
         const existing = this.history.find(r => r.signal.id === signal.id);
         if (!existing) this.pushHistory({ signal, outcome: this.running ? 'ACTIVE' : 'WATCHED', runsDone: 0, pnl: 0 });
         else if (existing.outcome === 'WATCHED' && this.running) existing.outcome = 'ACTIVE';
@@ -535,6 +555,7 @@ export class SentinelAiRunner {
             this.checkExpiry();
             return;
         }
+        if (active.held) return; // The quality gate rejects this signal right now: never trade it.
         const { digits } = this.requirement();
         if (digits.length === 0) return; // No entry digit and no default digits configured: nothing is traded.
         const digit = this.io.engine.getLastDigit(symbol);
@@ -839,6 +860,8 @@ export class SentinelAiRunner {
             history: this.history,
             trades: this.trades,
             lastError: this.lastError,
+            dropNotice: this.dropNotice,
+            holdReason: active?.holdReason ?? null,
             stopReason: this.stopReason,
             alertSeq: this.alertSeq,
             settings: this.settings,

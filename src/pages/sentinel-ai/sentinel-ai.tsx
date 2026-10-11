@@ -52,7 +52,7 @@ const stateText = (snapshot: SentinelAiSnapshot) => {
         case 'LOCKED':
             return 'Entry touched. Trading nonstop on this signal until you stop it or a limit is reached.';
         case 'HELD':
-            return 'Paused: the engine now rates this market below your score / danger limits. Trading resumes when it qualifies again.';
+            return `Paused: ${snapshot.holdReason ?? 'it fails your score / danger limits'}. The figures shown may be out of date. It trades again if it qualifies, and is dropped if it stays bad.`;
         case 'READY':
             return 'Immediate mode: trading this signal now, without waiting for the entry digit.';
         case 'WAITING_ENTRY':
@@ -331,6 +331,7 @@ const SentinelAi = observer(() => {
                     </header>
 
                     {snapshot.lastError ? <div className='sentinel-ai-banner is-error'>{snapshot.lastError}</div> : null}
+                    {snapshot.dropNotice ? <p className='sentinel-ai-muted'>Last dropped: {snapshot.dropNotice.replace(/^Dropped /, '')}</p> : null}
                     {!running && snapshot.stopReason ? (
                         <div className='sentinel-ai-banner'>Session ended: {snapshot.stopReason}</div>
                     ) : null}
