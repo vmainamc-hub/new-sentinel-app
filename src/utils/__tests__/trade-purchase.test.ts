@@ -11,62 +11,74 @@ const apiError = (code: string, message: string) => ({ error: { code, message } 
 describe('buyContractForUi', () => {
     beforeEach(() => send().mockReset());
 
-    it('requests a fresh proposal and buys it', async () => {
-        send()
-            .mockResolvedValueOnce({ proposal: { id: 'p1' } })
-            .mockResolvedValueOnce({ buy: { buy_price: 1, contract_id: 7, transaction_id: 9 } });
+    it('buys directly from parameters without requesting a proposal id', async () => {
+        send().mockResolvedValueOnce({ buy: { buy_price: 1, contract_id: 7, transaction_id: 9 } });
         const result = await buyContractForUi({ parameters: params, price: 1 });
         expect(result.contract_id).toBe(7);
-        expect(send().mock.calls[0][0].underlying_symbol).toBe('JD50');
-        expect(send().mock.calls[1][0]).toEqual({ buy: 'p1', price: 1 });
+        expect(send().mock.calls).toHaveLength(1);
+        expect(send().mock.calls[0][0]).toEqual({
+            buy: '1',
+            price: 1,
+            parameters: {
+                amount: 1,
+                basis: 'stake',
+                contract_type: 'DIGITUNDER',
+                currency: 'USD',
+                duration: 1,
+                duration_unit: 't',
+                underlying_symbol: 'JD50',
+                barrier: '8',
+            },
+        });
     });
 
-    it('reports a refused proposal as a rejection', async () => {
+    it('allows identical contracts to be purchased independently', async () => {
+        send()
+            .mockResolvedValueOnce({ buy: { buy_price: 1, contract_id: 7, transaction_id: 9 } })
+            .mockResolvedValueOnce({ buy: { buy_price: 1, contract_id: 8, transaction_id: 10 } });
+        const first = await buyContractForUi({ parameters: params, price: 1 });
+        const second = await buyContractForUi({ parameters: params, price: 1 });
+        expect([first.contract_id, second.contract_id]).toEqual([7, 8]);
+        expect(send().mock.calls.every(call => call[0].buy === '1')).toBe(true);
+    });
+
+    it('reports an explicitly refused buy without retrying it', async () => {
         send().mockRejectedValueOnce(apiError('InvalidContractProposal', 'Unknown contract proposal'));
         await expect(buyContractForUi({ parameters: params, price: 1 })).rejects.toMatchObject({
             kind: 'rejected',
-            stage: 'proposal',
+            stage: 'buy',
             code: 'InvalidContractProposal',
+            outcomeUnknown: false,
         });
-        expect(send().mock.calls.length).toBe(1);
-    });
-
-    it('retries ONCE with a fresh proposal when Deriv explicitly rejects the buy as unknown', async () => {
-        send()
-            .mockResolvedValueOnce({ proposal: { id: 'p1' } })
-            .mockRejectedValueOnce(apiError('InvalidContractProposal', 'Unknown contract proposal'))
-            .mockResolvedValueOnce({ proposal: { id: 'p2' } })
-            .mockResolvedValueOnce({ buy: { buy_price: 1, contract_id: 8, transaction_id: 10 } });
-        const result = await buyContractForUi({ parameters: params, price: 1 });
-        expect(result.contract_id).toBe(8);
-        expect(send().mock.calls[3][0].buy).toBe('p2');
+        expect(send().mock.calls).toHaveLength(1);
     });
 
     it('treats a buy that dies without a Deriv error code as outcome unknown and never retries it', async () => {
-        send()
-            .mockResolvedValueOnce({ proposal: { id: 'p1' } })
-            .mockRejectedValueOnce(new Error('WebSocket closed'));
+        send().mockRejectedValueOnce(new Error('WebSocket closed'));
         await expect(buyContractForUi({ parameters: params, price: 1 })).rejects.toMatchObject({
             stage: 'buy',
             outcomeUnknown: true,
         });
-        expect(send().mock.calls.length).toBe(2);
+        expect(send().mock.calls.length).toBe(1);
     });
 
-    it('does not mark a proposal-stage network failure as unknown (nothing was bought)', async () => {
-        send().mockRejectedValueOnce(new Error('socket closed'));
-        await expect(buyContractForUi({ parameters: params, price: 1 })).rejects.toMatchObject({
-            stage: 'proposal',
-            kind: 'transient',
-            outcomeUnknown: false,
-        });
+    it('does not mark a connection-not-ready failure as unknown (nothing was sent)', async () => {
+        const saved = (api_base as any).api;
+        (api_base as any).api = null;
+        try {
+            await expect(buyContractForUi({ parameters: params, price: 1 })).rejects.toMatchObject({
+                stage: 'request',
+                kind: 'transient',
+                outcomeUnknown: false,
+            });
+        } finally {
+            (api_base as any).api = saved;
+        }
     });
 
     it('never retries a buy that timed out: the contract may exist', async () => {
         jest.useFakeTimers();
-        send()
-            .mockResolvedValueOnce({ proposal: { id: 'p1' } })
-            .mockImplementationOnce(() => new Promise(() => undefined));
+        send().mockImplementationOnce(() => new Promise(() => undefined));
         const pending = buyContractForUi({ parameters: params, price: 1 });
         const assertion = expect(pending).rejects.toMatchObject({
             kind: 'timeout',
@@ -75,7 +87,7 @@ describe('buyContractForUi', () => {
         });
         await jest.advanceTimersByTimeAsync(16_000);
         await assertion;
-        expect(send().mock.calls.length).toBe(2);
+        expect(send().mock.calls.length).toBe(1);
         expect(await pending.catch(e => e)).toBeInstanceOf(TradeRequestError);
         jest.useRealTimers();
     });
