@@ -4,6 +4,7 @@ import {
     nextStakeState,
     requiredEntry,
     sessionStopReason,
+    tradeBarrier,
 } from '../sentinel-ai-money';
 import {
     DEFAULT_SETTINGS,
@@ -128,51 +129,47 @@ const under = (entryDigit: number | null) => ({ entryDigit, contractType: 'DIGIT
 describe('Sentinel AI entry digits', () => {
     it("uses the engine's own entry digit when it has one", () => {
         const s = settings();
-        expect(requiredEntry(under(4), 0, s)).toEqual({ digits: [4], source: 'engine' });
-        expect(requiredEntry(over(9), 0, s)).toEqual({ digits: [9], source: 'engine' });
+        expect(requiredEntry(under(4), s)).toEqual({ digits: [4], source: 'engine' });
+        expect(requiredEntry(over(9), s)).toEqual({ digits: [9], source: 'engine' });
     });
 
     it('falls back to the default digits of the signal side: Over 2/4, Under 5/7', () => {
         const s = settings();
-        expect(requiredEntry(over(null), 0, s)).toEqual({ digits: [2, 4], source: 'default' });
-        expect(requiredEntry(under(null), 0, s)).toEqual({ digits: [5, 7], source: 'default' });
+        expect(requiredEntry(over(null), s)).toEqual({ digits: [2, 4], source: 'default' });
+        expect(requiredEntry(under(null), s)).toEqual({ digits: [5, 7], source: 'default' });
     });
 
     it('honours custom default digits, and an empty list means nothing is traded', () => {
         const s = settings({ defaultOverDigits: [3], defaultUnderDigits: [] });
-        expect(requiredEntry(over(null), 0, s).digits).toEqual([3]);
-        expect(requiredEntry(under(null), 0, s).digits).toEqual([]);
+        expect(requiredEntry(over(null), s).digits).toEqual([3]);
+        expect(requiredEntry(under(null), s).digits).toEqual([]);
     });
 });
 
-describe('Sentinel AI recovery digits (separate for Over and Under)', () => {
-    const s = settings({ recoveryDigitEnabled: true, recoveryOverDigits: [3], recoveryUnderDigits: [8] });
-
-    it('does not use recovery before a loss', () => {
-        expect(requiredEntry(over(5), 0, s)).toEqual({ digits: [5], source: 'engine' });
-        expect(requiredEntry(under(5), 0, s)).toEqual({ digits: [5], source: 'engine' });
+describe('Sentinel AI recovery barrier (separate for Over and Under)', () => {
+    const s = settings({ recoveryBarrierEnabled: true, recoveryOverBarrier: 3, recoveryUnderBarrier: 6 });
+    const sig = (type: 'DIGITOVER' | 'DIGITUNDER', barrier: number) => ({
+        contractType: type,
+        barrier,
+        label: `${type === 'DIGITOVER' ? 'Over' : 'Under'} ${barrier}`,
     });
 
-    it('an Over signal recovers on the Over digit and an Under signal on the Under digit', () => {
-        expect(requiredEntry(over(5), 1, s)).toEqual({ digits: [3], source: 'recovery' });
-        expect(requiredEntry(under(5), 1, s)).toEqual({ digits: [8], source: 'recovery' });
-        expect(requiredEntry(over(null), 2, s)).toEqual({ digits: [3], source: 'recovery' });
+    it('keeps the signal barrier before any loss and after a win', () => {
+        expect(tradeBarrier(sig('DIGITUNDER', 8), 0, s)).toEqual({ barrier: 8, label: 'Under 8', recovery: false });
     });
 
-    it('accepts several recovery digits (the first to print triggers)', () => {
-        const multi = settings({ recoveryDigitEnabled: true, recoveryOverDigits: [3, 6] });
-        expect(requiredEntry(over(5), 1, multi).digits).toEqual([3, 6]);
+    it('Under 8 loses -> trade Under 6; Over signal -> Over 3', () => {
+        expect(tradeBarrier(sig('DIGITUNDER', 8), 1, s)).toEqual({ barrier: 6, label: 'Under 6', recovery: true });
+        expect(tradeBarrier(sig('DIGITOVER', 1), 2, s)).toEqual({ barrier: 3, label: 'Over 3', recovery: true });
     });
 
-    it('ignores recovery digits when recovery is off', () => {
-        const off = settings({ recoveryDigitEnabled: false, recoveryOverDigits: [3] });
-        expect(requiredEntry(over(5), 4, off)).toEqual({ digits: [5], source: 'engine' });
+    it('does nothing when recovery is off', () => {
+        const off = settings({ recoveryBarrierEnabled: false });
+        expect(tradeBarrier(sig('DIGITUNDER', 8), 3, off).barrier).toBe(8);
     });
 
-    it('an empty list for a side recovers on that side\'s normal entry', () => {
-        const empty = settings({ recoveryDigitEnabled: true, recoveryOverDigits: [] });
-        expect(requiredEntry(over(5), 1, empty)).toEqual({ digits: [5], source: 'engine' });
-        expect(requiredEntry(over(null), 1, empty)).toEqual({ digits: [2, 4], source: 'default' });
+    it('never changes the entry digit', () => {
+        expect(requiredEntry(under(5), s)).toEqual({ digits: [5], source: 'engine' });
     });
 });
 
@@ -221,26 +218,19 @@ describe('Sentinel AI settings validation', () => {
         const s = normalizeSettings({
             stake: -5,
             martingaleMultiplier: 0,
-            recoveryOverDigits: [3, 42, 'a'],
+            recoveryOverBarrier: 42,
+            recoveryUnderBarrier: 0,
             runsPerSignal: 99,
             martingaleMode: 'nonsense',
             alertVisual: 'yes',
         });
         expect(s.stake).toBe(MIN_STAKE);
         expect(s.martingaleMultiplier).toBeCloseTo(1.01, 2);
-        expect(s.recoveryOverDigits).toEqual([3]);
+        expect(s.recoveryOverBarrier).toBe(8); // Over barrier tops out at 8
+        expect(s.recoveryUnderBarrier).toBe(1); // Under barrier starts at 1
         expect(s.runsPerSignal).toBe(10);
         expect(s.martingaleMode).toBe(DEFAULT_SETTINGS.martingaleMode);
         expect(s.alertVisual).toBe(DEFAULT_SETTINGS.alertVisual);
-    });
-
-    it('carries a legacy single recovery digit over to both sides', () => {
-        const s = normalizeSettings({ recoveryDigit: 8 });
-        expect(s.recoveryOverDigits).toEqual([8]);
-        expect(s.recoveryUnderDigits).toEqual([8]);
-        const mixed = normalizeSettings({ recoveryDigit: 8, recoveryOverDigits: [3] });
-        expect(mixed.recoveryOverDigits).toEqual([3]);
-        expect(mixed.recoveryUnderDigits).toEqual([8]);
     });
 
     it('defaults: entry digits Over 2/4 and Under 5/7, target profit 100', () => {

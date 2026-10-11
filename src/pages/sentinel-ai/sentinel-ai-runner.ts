@@ -11,7 +11,7 @@ import { contract_stages } from '@/constants/contract-stage';
 import { describeTradeFailure } from '@/utils/trade-errors';
 import type { RankedOpportunity } from '@/sentinel-engine/lib/apex/types';
 import type { SentinelAiEngine } from './sentinel-ai-engine-types';
-import { initialStakeState, nextStakeState, requiredEntry, sessionStopReason } from './sentinel-ai-money';
+import { initialStakeState, nextStakeState, requiredEntry, sessionStopReason, tradeBarrier } from './sentinel-ai-money';
 import { toSentinelAiSignal } from './sentinel-ai-signal';
 import {
     DEFAULT_SETTINGS,
@@ -466,25 +466,8 @@ export class SentinelAiRunner {
     /** The digit(s) the next trade waits for. Empty when nothing is waited for (immediate mode, or already touched). */
     private requirement(): { digits: number[]; source: EntrySource | null } {
         const active = this.active;
-        if (!active || this.settings.executionMode === 'immediate') return { digits: [], source: null };
-        if (active.locked && !this.waitingRecoveryDigit()) return { digits: [], source: null };
-        return requiredEntry(active.signal, this.session.consecutiveLosses, this.settings);
-    }
-
-    /**
-     * Touch-once, entry already touched, but the last trade lost and recovery digits are on for this signal's side:
-     * the next trade waits for a recovery digit (once per recovering trade) before it fires. After a win it is nonstop again.
-     */
-    private waitingRecoveryDigit() {
-        const active = this.active;
-        if (!active || !active.locked || !this.settings.recoveryDigitEnabled || this.session.consecutiveLosses <= 0) {
-            return false;
-        }
-        const list =
-            active.signal.contractType === 'DIGITOVER'
-                ? this.settings.recoveryOverDigits
-                : this.settings.recoveryUnderDigits;
-        return list.length > 0;
+        if (!active || this.settings.executionMode === 'immediate' || active.locked) return { digits: [], source: null };
+        return requiredEntry(active.signal, this.settings);
     }
 
     private onTick(symbol: string) {
@@ -494,12 +477,12 @@ export class SentinelAiRunner {
         }
         this.scheduleEmit();
         const mode = this.settings.executionMode;
-        if (mode === 'immediate' || (active.locked && !this.waitingRecoveryDigit())) {
+        if (mode === 'immediate' || active.locked) {
             this.tryFire();
             return;
         }
         if (!this.running || this.tradeInFlight || active.done || active.expired) return;
-        if (!active.locked && this.io.now() >= active.expiresAt) {
+        if (this.io.now() >= active.expiresAt) {
             this.checkExpiry();
             return;
         }
@@ -523,7 +506,6 @@ export class SentinelAiRunner {
         const active = this.active;
         if (!active || active.done || active.expired || this.tradeInFlight) return;
         if (!(mode === 'immediate' || (mode === 'touch_once' && active.locked))) return;
-        if (this.waitingRecoveryDigit()) return; // Fires from onTick when a recovery digit prints.
         if (this.io.now() < this.cooldownUntil) return;
         if (!active.locked && this.io.now() >= active.expiresAt) {
             this.checkExpiry();
@@ -559,6 +541,7 @@ export class SentinelAiRunner {
         this.tradeInFlight = true;
         this.emit();
 
+        const contract = tradeBarrier(signal, this.session.consecutiveLosses, this.settings);
         const parameters: Loose = {
             amount: stake,
             basis: 'stake',
@@ -567,7 +550,7 @@ export class SentinelAiRunner {
             duration: 1,
             duration_unit: 't',
             symbol: signal.symbol,
-            barrier: String(signal.barrier),
+            barrier: String(contract.barrier),
         };
 
         const baseContract: Loose = {
@@ -598,7 +581,7 @@ export class SentinelAiRunner {
                 contractId,
                 signalId: signal.id,
                 symbol: signal.symbol,
-                label: signal.label,
+                label: contract.label,
                 entryDigit,
                 stake,
                 profit: null,
@@ -769,7 +752,7 @@ export class SentinelAiRunner {
             else if (active.expired) signalState = 'EXPIRED';
             else if (this.tradeInFlight) signalState = 'TRADING';
             else if (!this.running) signalState = 'WATCHING';
-            else if (active.locked && !this.waitingRecoveryDigit()) signalState = 'LOCKED';
+            else if (active.locked) signalState = 'LOCKED';
             else if (this.settings.executionMode === 'immediate') signalState = 'READY';
             else signalState = requiredDigits.length === 0 ? 'NO_ENTRY_DIGIT' : 'WAITING_ENTRY';
         }
@@ -786,7 +769,9 @@ export class SentinelAiRunner {
             requiredDigits,
             entrySource: active ? entrySource : null,
             locked: Boolean(active?.locked),
-            recovering: this.settings.recoveryDigitEnabled && this.session.consecutiveLosses > 0,
+            recovering: this.settings.recoveryBarrierEnabled && this.session.consecutiveLosses > 0,
+            nextBarrier: active ? tradeBarrier(active.signal, this.session.consecutiveLosses, this.settings).barrier : null,
+            nextLabel: active ? tradeBarrier(active.signal, this.session.consecutiveLosses, this.settings).label : null,
             lastDigit: active ? this.io.engine.getLastDigit(active.signal.symbol) : null,
             runsDone: active ? active.runsDone : 0,
             runsTotal: active ? active.runsTotal : this.settings.runsPerSignal,

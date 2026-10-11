@@ -26,13 +26,13 @@ export type SentinelAiSettings = {
     /** 0 = no cap. Hard ceiling for any single stake. */
     maxStake: number;
     /**
-     * While recovering from a loss, enter on the recovery digit(s) of the signal's own side instead of its entry digit:
-     * an Over signal uses `recoveryOverDigits`, an Under signal uses `recoveryUnderDigits`. The first listed digit to
-     * print triggers the trade. An empty list for a side means that side recovers on its normal entry digit.
+     * Recovery contract barrier. After a loss the next trade uses the recovery barrier of the signal's own side instead
+     * of the signal's barrier (Under 8 loses -> Under 6), and the signal's own barrier returns after a win. Over signals
+     * use `recoveryOverBarrier` (0-8), Under signals use `recoveryUnderBarrier` (1-9). Entry digits are unaffected.
      */
-    recoveryDigitEnabled: boolean;
-    recoveryOverDigits: number[];
-    recoveryUnderDigits: number[];
+    recoveryBarrierEnabled: boolean;
+    recoveryOverBarrier: number;
+    recoveryUnderBarrier: number;
     /** After a win, keep the recovery stake until the session P/L is back above zero. */
     recoverToBreakeven: boolean;
     /** How many consecutive trades are taken for each signal (each waits for the entry digit unless mode is immediate). */
@@ -69,9 +69,9 @@ export const DEFAULT_SETTINGS: SentinelAiSettings = {
     martingaleMultiplier: 2,
     martingaleMaxSteps: 0,
     maxStake: 0,
-    recoveryDigitEnabled: false,
-    recoveryOverDigits: [3],
-    recoveryUnderDigits: [6],
+    recoveryBarrierEnabled: false,
+    recoveryOverBarrier: 3,
+    recoveryUnderBarrier: 6,
     recoverToBreakeven: false,
     runsPerSignal: 1,
     takeProfit: 100,
@@ -117,12 +117,6 @@ export const parseDigitList = (text: string): number[] | null => {
     return normalizeDigitList(parts.map(Number), []);
 };
 
-/** Settings saved before recovery was split by side held one `recoveryDigit`: it carries over to both sides. */
-const legacyRecovery = (r: Record<string, unknown>): number[] | undefined => {
-    const digit = Number(r.recoveryDigit);
-    return r.recoveryDigit !== undefined && Number.isInteger(digit) && digit >= 0 && digit <= 9 ? [digit] : undefined;
-};
-
 /** Validates and clamps a (possibly partial / hand-edited / stale) settings object. */
 export const normalizeSettings = (raw: unknown, base: SentinelAiSettings = DEFAULT_SETTINGS): SentinelAiSettings => {
     const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
@@ -138,9 +132,9 @@ export const normalizeSettings = (raw: unknown, base: SentinelAiSettings = DEFAU
         martingaleMultiplier: num(r.martingaleMultiplier, base.martingaleMultiplier, 1.01, 100),
         martingaleMaxSteps: num(r.martingaleMaxSteps, base.martingaleMaxSteps, 0, 50, true),
         maxStake: num(r.maxStake, base.maxStake, 0, 1000000),
-        recoveryDigitEnabled: bool(r.recoveryDigitEnabled, base.recoveryDigitEnabled),
-        recoveryOverDigits: normalizeDigitList(r.recoveryOverDigits ?? legacyRecovery(r), base.recoveryOverDigits),
-        recoveryUnderDigits: normalizeDigitList(r.recoveryUnderDigits ?? legacyRecovery(r), base.recoveryUnderDigits),
+        recoveryBarrierEnabled: bool(r.recoveryBarrierEnabled, base.recoveryBarrierEnabled),
+        recoveryOverBarrier: num(r.recoveryOverBarrier, base.recoveryOverBarrier, 0, 8, true),
+        recoveryUnderBarrier: num(r.recoveryUnderBarrier, base.recoveryUnderBarrier, 1, 9, true),
         recoverToBreakeven: bool(r.recoverToBreakeven, base.recoverToBreakeven),
         runsPerSignal: num(r.runsPerSignal, base.runsPerSignal, 1, 10, true),
         takeProfit: num(r.takeProfit, base.takeProfit, 0, 1000000),
@@ -254,7 +248,7 @@ export type ActiveSignalState =
     | 'DONE';
 
 /** Where the digit(s) the next trade waits for come from. */
-export type EntrySource = 'engine' | 'default' | 'recovery';
+export type EntrySource = 'engine' | 'default';
 
 export type SentinelAiSnapshot = {
     status: RunnerStatus;
@@ -262,8 +256,8 @@ export type SentinelAiSnapshot = {
     signal: SentinelAiSignal | null;
     signalState: ActiveSignalState | null;
     /**
-     * Digit(s) the next trade waits for; the first one to print triggers it. The signal's own entry digit, the recovery
-     * digit(s) of its side while recovering, or the default digits when the engine gave none. Empty when nothing is
+     * Digit(s) the next trade waits for; the first one to print triggers it. The signal's own entry digit, or the default
+     * digits when the engine gave none. Empty when nothing is
      * waited for (Immediate mode, an entry already touched in Touch-once mode, or nothing configured).
      */
     requiredDigits: number[];
@@ -271,6 +265,9 @@ export type SentinelAiSnapshot = {
     /** Touch-once mode: the entry digit has been touched and trades now fire back to back. */
     locked: boolean;
     recovering: boolean;
+    /** Barrier the next trade will use (the recovery barrier while recovering, else the signal's own). */
+    nextBarrier: number | null;
+    nextLabel: string | null;
     lastDigit: number | null;
     runsDone: number;
     runsTotal: number;

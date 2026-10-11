@@ -34,14 +34,14 @@ Target repo: vmainamc-hub/new-sentinel-app (live: https://precisionapex.netlify.
 Done (85 Sentinel AI unit tests pass; rebased on 15213c0 "Repair Auto Trades purchase flow" - `buyContractForUi` signature unchanged, so no code change needed):
 - [x] Default entry digits for signals the engine gave no entry: Over = 2 or 4, Under = 5 or 7, first to print wins. Editable ("Default entry digits").
 - [x] Target profit (default 100, 0 = off): own panel under the run bar with progress bar, editable while running; stops the session when reached.
-- [x] Recovery split by side: Over signals recover on the Over recovery digit(s) (default 3), Under signals on the Under ones (default 6). Old saved single `recoveryDigit` migrates to both sides.
+- [x] Recovery BARRIER split by side: after a loss the next trade uses the recovery contract barrier of the signal's side (Under 8 loses -> Under 6; Over signal -> Over 3, defaults Over 3 / Under 6, editable), the signal's own barrier returns after a win. Entry digits are NOT changed by recovery. (An earlier build wrongly treated this as a recovery entry digit; replaced.)
 - [x] New mode "Touch once, then nonstop": waits for the entry digit once, then fires trades back to back like a bot (martingale still applies) until target profit / stop loss / max trades / max losses / Stop. Ignores runs-per-signal; after a loss (recovery digits on) the next trade waits for the recovery digit of its side, nonstop again after a win; a newer signal does not interrupt it (logged as "Not traded").
 - [x] "Contract offers no return" error: left alone as instructed (fixed separately on main).
 
 Not done / unverified:
 - [ ] `npm run build`, repo jest/eslint, SCSS compile (registry blocked here) - check the Netlify deploy.
 - [ ] Live run on a demo account in each mode.
-- [ ] Under recovery default digit 6 is a guess; change it if you want another.
+- [ ] Under recovery default barrier 6 is a guess; change it if you want another.
 
 Next: run demo, tune defaults, then real account.
 

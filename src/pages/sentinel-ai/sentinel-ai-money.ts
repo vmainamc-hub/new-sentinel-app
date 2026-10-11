@@ -76,24 +76,37 @@ export const nextStakeState = (
 export type EntryRequirement = { digits: number[]; source: EntrySource };
 
 /**
- * The digit(s) the next trade enters on; the first one to print triggers it.
- *  1. While recovering from a loss (and recovery is on): the recovery digit(s) of the SIGNAL'S side, so an Over signal
- *     recovers on the Over recovery digit and an Under signal on the Under one. An empty list falls through to 2.
- *  2. The signal's own entry digit from the engine.
- *  3. When the engine gave none: the default digits of the signal's side (Over 2/4, Under 5/7 unless changed).
+ * The digit(s) the next trade enters on; the first one to print triggers it: the signal's own entry digit from the
+ * engine, or, when the engine gave none, the default digits of the signal's side (Over 2/4, Under 5/7 unless changed).
+ * Recovery never changes the entry digit; it changes the contract barrier (see tradeBarrier).
  */
 export const requiredEntry = (
     signal: { entryDigit: number | null; contractType: 'DIGITOVER' | 'DIGITUNDER' },
-    consecutiveLosses: number,
     settings: SentinelAiSettings
 ): EntryRequirement => {
-    const isOver = signal.contractType === 'DIGITOVER';
-    if (settings.recoveryDigitEnabled && consecutiveLosses > 0) {
-        const recovery = isOver ? settings.recoveryOverDigits : settings.recoveryUnderDigits;
-        if (recovery.length > 0) return { digits: [...recovery], source: 'recovery' };
-    }
     if (signal.entryDigit !== null) return { digits: [signal.entryDigit], source: 'engine' };
+    const isOver = signal.contractType === 'DIGITOVER';
     return { digits: [...(isOver ? settings.defaultOverDigits : settings.defaultUnderDigits)], source: 'default' };
+};
+
+export type TradeBarrier = { barrier: number; label: string; recovery: boolean };
+
+/**
+ * The contract the next trade buys. Normally the signal's own barrier. While recovering from a loss (and recovery is
+ * on) it is the recovery barrier of the signal's side - an Over signal recovers on Over <recoveryOverBarrier>, an Under
+ * signal on Under <recoveryUnderBarrier> - and the signal's own barrier is back after a win.
+ */
+export const tradeBarrier = (
+    signal: { barrier: number; label: string; contractType: 'DIGITOVER' | 'DIGITUNDER' },
+    consecutiveLosses: number,
+    settings: SentinelAiSettings
+): TradeBarrier => {
+    if (!settings.recoveryBarrierEnabled || consecutiveLosses <= 0) {
+        return { barrier: signal.barrier, label: signal.label, recovery: false };
+    }
+    const isOver = signal.contractType === 'DIGITOVER';
+    const barrier = isOver ? settings.recoveryOverBarrier : settings.recoveryUnderBarrier;
+    return { barrier, label: `${isOver ? 'Over' : 'Under'} ${barrier}`, recovery: true };
 };
 
 /** Returns a human-readable reason when the session must stop, otherwise null. */

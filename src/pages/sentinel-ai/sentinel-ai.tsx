@@ -44,7 +44,7 @@ const OUTCOME_LABEL: Record<SignalOutcome, string> = {
 
 const digitsText = (digits: number[]) => digits.join(' or ');
 
-const SOURCE_LABEL = { engine: '', default: ' (default entry digit)', recovery: ' (recovery digit)' } as const;
+const SOURCE_LABEL = { engine: '', default: ' (default entry digit)' } as const;
 
 const stateText = (snapshot: SentinelAiSnapshot) => {
     const { signalState, requiredDigits, entrySource, secondsLeft, runsDone, runsTotal, settings } = snapshot;
@@ -319,9 +319,7 @@ const SentinelAi = observer(() => {
                                 <dt>Recovery</dt>
                                 <dd>
                                     {snapshot.recovering
-                                        ? snapshot.entrySource === 'recovery' && snapshot.requiredDigits.length > 0
-                                            ? `On digit ${digitsText(snapshot.requiredDigits)}`
-                                            : 'Recovering'
+                                        ? `Recovering${snapshot.nextLabel ? ` on ${snapshot.nextLabel}` : ''}`
                                         : martingaleOn && session.martingaleStep > 0
                                           ? `Step ${session.martingaleStep}`
                                           : 'Idle'}{' '}
@@ -639,32 +637,32 @@ const SentinelAi = observer(() => {
                             <fieldset className='sentinel-ai-card' disabled={running}>
                                 <legend>Recovery</legend>
                                 <Toggle
-                                    label='Enter on a recovery digit after a loss'
-                                    hint="Replaces the signal's entry digit until a win. Over signals use the Over digit, Under signals the Under digit"
-                                    checked={settings.recoveryDigitEnabled}
-                                    onChange={checked => set({ recoveryDigitEnabled: checked })}
+                                    label='Trade a recovery barrier after a loss'
+                                    hint="After a loss the next trade uses the recovery barrier of the signal's side; after a win the signal's own barrier returns. Entry digits do not change"
+                                    checked={settings.recoveryBarrierEnabled}
+                                    onChange={checked => set({ recoveryBarrierEnabled: checked })}
                                 />
-                                {settings.recoveryDigitEnabled ? (
+                                {settings.recoveryBarrierEnabled ? (
                                     <div className='sentinel-ai-row'>
-                                        <DigitListField
-                                            label='Over recovery digit(s)'
-                                            value={settings.recoveryOverDigits}
-                                            hint='Used when the signal is Over'
-                                            onCommit={value => set({ recoveryOverDigits: value })}
+                                        <NumberField
+                                            label='Over recovery barrier'
+                                            value={settings.recoveryOverBarrier}
+                                            min={0}
+                                            max={8}
+                                            step={1}
+                                            hint='Over signals recover on Over this digit (e.g. 3)'
+                                            onCommit={value => set({ recoveryOverBarrier: value })}
                                         />
-                                        <DigitListField
-                                            label='Under recovery digit(s)'
-                                            value={settings.recoveryUnderDigits}
-                                            hint='Used when the signal is Under'
-                                            onCommit={value => set({ recoveryUnderDigits: value })}
+                                        <NumberField
+                                            label='Under recovery barrier'
+                                            value={settings.recoveryUnderBarrier}
+                                            min={1}
+                                            max={9}
+                                            step={1}
+                                            hint='Under signals recover on Under this digit (e.g. 6)'
+                                            onCommit={value => set({ recoveryUnderBarrier: value })}
                                         />
                                     </div>
-                                ) : null}
-                                {settings.recoveryDigitEnabled && touchOnce ? (
-                                    <p className='sentinel-ai-muted'>
-                                        In Touch-once mode, trades run nonstop after the first touch, but after a loss the next
-                                        trade waits for the recovery digit of its side. After a win it is nonstop again.
-                                    </p>
                                 ) : null}
                                 <Toggle
                                     label='Keep the recovery stake until the session is in profit'
