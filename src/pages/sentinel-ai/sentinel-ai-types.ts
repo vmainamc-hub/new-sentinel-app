@@ -53,6 +53,16 @@ export type SentinelAiSettings = {
      */
     defaultOverDigits: number[];
     defaultUnderDigits: number[];
+    /**
+     * Signal quality gate, applied before a signal can be traded. A signal that fails is never taken and the next-best
+     * one surfaces instead. 0 = off for the numbers.
+     */
+    minScore: number;
+    maxDanger: number;
+    /** Skip candidates the engine itself marked blocked (these carry a score of 0). */
+    skipBlocked: boolean;
+    /** Market symbols never traded, e.g. ["JD100"]. */
+    excludedMarkets: string[];
     alertVisual: boolean;
     alertVibrate: boolean;
     alertNotify: boolean;
@@ -81,6 +91,10 @@ export const DEFAULT_SETTINGS: SentinelAiSettings = {
     signalWaitSeconds: 45,
     defaultOverDigits: [2, 4],
     defaultUnderDigits: [5, 7],
+    minScore: 70,
+    maxDanger: 45,
+    skipBlocked: true,
+    excludedMarkets: ['JD100'],
     alertVisual: true,
     alertVibrate: true,
     alertNotify: true,
@@ -108,6 +122,19 @@ export const normalizeDigitList = (value: unknown, fallback: number[]): number[]
         .map(item => (typeof item === 'string' && item.trim() === '' ? NaN : Number(item)))
         .filter(item => Number.isInteger(item) && item >= 0 && item <= 9);
     return Array.from(new Set(digits)).sort((a, b) => a - b);
+};
+
+/** Market symbols: upper-case letters, digits and underscores only, unique. Not a list -> fallback. */
+export const normalizeSymbolList = (value: unknown, fallback: string[]): string[] => {
+    if (!Array.isArray(value)) return [...fallback];
+    const symbols = value.map(item => String(item).trim().toUpperCase()).filter(item => /^[A-Z0-9_]{2,20}$/.test(item));
+    return Array.from(new Set(symbols));
+};
+
+export const parseSymbolList = (text: string): string[] | null => {
+    const parts = text.split(/[\s,;]+/).filter(Boolean);
+    if (parts.some(part => !/^[A-Za-z0-9_]{2,20}$/.test(part))) return null;
+    return normalizeSymbolList(parts, []);
 };
 
 /** "2, 4" -> [2, 4]. Returns null when the text holds anything that is not a single digit 0-9. */
@@ -144,6 +171,10 @@ export const normalizeSettings = (raw: unknown, base: SentinelAiSettings = DEFAU
         signalWaitSeconds: num(r.signalWaitSeconds, base.signalWaitSeconds, 10, 600, true),
         defaultOverDigits: normalizeDigitList(r.defaultOverDigits, base.defaultOverDigits),
         defaultUnderDigits: normalizeDigitList(r.defaultUnderDigits, base.defaultUnderDigits),
+        minScore: num(r.minScore, base.minScore, 0, 100, true),
+        maxDanger: num(r.maxDanger, base.maxDanger, 0, 100, true),
+        skipBlocked: bool(r.skipBlocked, base.skipBlocked),
+        excludedMarkets: normalizeSymbolList(r.excludedMarkets, base.excludedMarkets),
         alertVisual: bool(r.alertVisual, base.alertVisual),
         alertVibrate: bool(r.alertVibrate, base.alertVibrate),
         alertNotify: bool(r.alertNotify, base.alertNotify),
@@ -188,6 +219,8 @@ export type SentinelAiSignal = {
     /** Historical win rate (%) when this entry digit is showing, if the engine measured it. */
     entryWinRate: number | null;
     score: number;
+    /** Engine danger 0-100 for this candidate (null when the engine gave none). */
+    danger: number | null;
     confidence: number;
     /** Sentinel's own classification label, shown for information. */
     status: string;
@@ -245,6 +278,7 @@ export type ActiveSignalState =
     | 'WATCHING'
     | 'EXPIRED'
     | 'LOCKED'
+    | 'HELD'
     | 'DONE';
 
 /** Where the digit(s) the next trade waits for come from. */
@@ -265,6 +299,10 @@ export type SentinelAiSnapshot = {
     /** Touch-once mode: the entry digit has been touched and trades now fire back to back. */
     locked: boolean;
     recovering: boolean;
+    /** Candidates the quality gate is keeping out right now, and why the best-ranked one was rejected. */
+    filtered: { count: number; example: string | null };
+    /** Markets taken out of the feed this session after Deriv kept refusing them. */
+    quarantined: string[];
     /** Barrier the next trade will use (the recovery barrier while recovering, else the signal's own). */
     nextBarrier: number | null;
     nextLabel: string | null;

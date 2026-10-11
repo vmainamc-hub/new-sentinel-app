@@ -12,6 +12,7 @@ import { describeTradeFailure } from '@/utils/trade-errors';
 import type { RankedOpportunity } from '@/sentinel-engine/lib/apex/types';
 import type { SentinelAiEngine } from './sentinel-ai-engine-types';
 import { initialStakeState, nextStakeState, requiredEntry, sessionStopReason, tradeBarrier } from './sentinel-ai-money';
+import { qualityVerdict } from './sentinel-ai-quality';
 import { toSentinelAiSignal } from './sentinel-ai-signal';
 import {
     DEFAULT_SETTINGS,
@@ -39,6 +40,8 @@ const MAX_CONSECUTIVE_BUY_ERRORS = 3;
 const BLOCK_TTL_MS = 5 * 60_000;
 /** Stop (instead of looping silently) when Deriv refuses this many signals in a row without a single purchase. */
 const MAX_SKIPS_IN_A_ROW = 6;
+/** A market Deriv refuses this many times in one session is taken out of the feed until the next Run. */
+const MAX_MARKET_REFUSALS = 2;
 /** Pause after a transient failure so Immediate mode cannot hammer the API. */
 const RETRY_COOLDOWN_MS = 3_000;
 
@@ -107,6 +110,8 @@ type ActiveSignal = {
     done: boolean;
     /** Touch-once mode: the entry digit has been touched, so trades now fire back to back without waiting for it. */
     locked: boolean;
+    /** The quality gate rejects this market right now (a touch-once run is paused until it qualifies again). */
+    held: boolean;
 };
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
@@ -151,6 +156,11 @@ export class SentinelAiRunner {
     /** `${symbol}|${contractId}` -> time the block lapses. Cells Deriv refused this session. */
     private blocked = new Map<string, number>();
     private aborts = new Set<AbortController>();
+    /** Quality-gate rejections seen in the latest engine sample: `symbol|contractId` -> reason (rank order). */
+    private qualityRejected = new Map<string, string>();
+    /** Deriv refusals per market this session; a market refused repeatedly is quarantined. */
+    private marketRefusals = new Map<string, number>();
+    private quarantined = new Set<string>();
 
     private history: SignalRecord[] = [];
     private trades: TradeRecord[] = [];
@@ -244,6 +254,8 @@ export class SentinelAiRunner {
         this.skipStreak = 0;
         this.cooldownUntil = 0;
         this.blocked.clear();
+        this.marketRefusals.clear();
+        this.quarantined.clear();
         this.session = this.freshSession();
         this.runToken += 1;
         this.running = true;
@@ -355,9 +367,11 @@ export class SentinelAiRunner {
 
     private loop() {
         try {
-            const sample = this.io.engine.sample((symbol, contractId) => this.isBlocked(`${symbol}|${contractId}`));
+            this.qualityRejected = new Map();
+            const sample = this.io.engine.sample((symbol, contractId, opp) => this.excludeCell(symbol, contractId, opp));
             this.engineInfo = sample.info;
             this.ingest(sample.surfaced);
+            this.applyQualityToActive();
         } catch (error) {
             this.engineInfo = { ...this.engineInfo, degraded: true, failsafes: ['ENGINE ERROR'] };
             this.lastError = error instanceof Error ? error.message : 'Sentinel engine sample failed.';
@@ -365,6 +379,36 @@ export class SentinelAiRunner {
         this.checkExpiry();
         this.emit();
         this.tryFire();
+    }
+
+    /** True when a market x contract cell must not be traded: Deriv refused it, the market is out, or it fails the gate. */
+    private excludeCell(symbol: string, contractId: string, opp: RankedOpportunity) {
+        const key = `${symbol}|${contractId}`;
+        if (this.isBlocked(key)) return true;
+        if (this.settings.excludedMarkets.includes(symbol) || this.quarantined.has(symbol)) return true;
+        const verdict = qualityVerdict(opp, this.settings);
+        if (!verdict.ok) {
+            this.qualityRejected.set(key, `${opp.contract?.label ?? contractId} on ${opp.name || symbol}: ${verdict.reason}`);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * A signal that was fine when it surfaced can turn bad while it waits (score falls, danger rises, engine blocks it).
+     * Before its entry digit: drop it. In a touch-once run: pause the nonstop trades until it qualifies again.
+     */
+    private applyQualityToActive() {
+        const active = this.active;
+        if (!active || active.done) return;
+        const rejected = this.qualityRejected.get(active.signal.key);
+        active.held = Boolean(rejected) && active.locked;
+        if (!rejected || active.locked || this.tradeInFlight) return;
+        active.done = true;
+        const record = this.history.find(r => r.signal.id === active.signal.id);
+        if (record && record.outcome === 'ACTIVE') record.outcome = active.runsDone > 0 ? 'TRADED' : 'SKIPPED';
+        this.lastError = `Dropped ${rejected}.`;
+        if (this.pending) this.activate(this.pending);
     }
 
     private isBlocked(key: string) {
@@ -430,6 +474,7 @@ export class SentinelAiRunner {
             expired: false,
             done: false,
             locked: false,
+            held: false,
         };
         const existing = this.history.find(r => r.signal.id === signal.id);
         if (!existing) this.pushHistory({ signal, outcome: this.running ? 'ACTIVE' : 'WATCHED', runsDone: 0, pnl: 0 });
@@ -507,6 +552,7 @@ export class SentinelAiRunner {
         if (!active || active.done || active.expired || this.tradeInFlight) return;
         if (!(mode === 'immediate' || (mode === 'touch_once' && active.locked))) return;
         if (this.io.now() < this.cooldownUntil) return;
+        if (active.held) return; // Touch-once: the market fails the quality gate; trading resumes when it qualifies.
         if (!active.locked && this.io.now() >= active.expiresAt) {
             this.checkExpiry();
             return;
@@ -655,6 +701,9 @@ export class SentinelAiRunner {
     private skipSignal(active: ActiveSignal, message: string) {
         const { signal } = active;
         this.blocked.set(signal.key, this.io.now() + BLOCK_TTL_MS);
+        const refusals = (this.marketRefusals.get(signal.symbol) ?? 0) + 1;
+        this.marketRefusals.set(signal.symbol, refusals);
+        if (refusals >= MAX_MARKET_REFUSALS) this.quarantined.add(signal.symbol);
         this.skipStreak += 1;
         active.done = true;
         const record = this.history.find(r => r.signal.id === signal.id);
@@ -752,6 +801,7 @@ export class SentinelAiRunner {
             else if (active.expired) signalState = 'EXPIRED';
             else if (this.tradeInFlight) signalState = 'TRADING';
             else if (!this.running) signalState = 'WATCHING';
+            else if (active.held) signalState = 'HELD';
             else if (active.locked) signalState = 'LOCKED';
             else if (this.settings.executionMode === 'immediate') signalState = 'READY';
             else signalState = requiredDigits.length === 0 ? 'NO_ENTRY_DIGIT' : 'WAITING_ENTRY';
@@ -770,6 +820,11 @@ export class SentinelAiRunner {
             entrySource: active ? entrySource : null,
             locked: Boolean(active?.locked),
             recovering: this.settings.recoveryBarrierEnabled && this.session.consecutiveLosses > 0,
+            filtered: {
+                count: this.qualityRejected.size,
+                example: this.qualityRejected.size ? (this.qualityRejected.values().next().value ?? null) : null,
+            },
+            quarantined: Array.from(this.quarantined),
             nextBarrier: active ? tradeBarrier(active.signal, this.session.consecutiveLosses, this.settings).barrier : null,
             nextLabel: active ? tradeBarrier(active.signal, this.session.consecutiveLosses, this.settings).label : null,
             lastDigit: active ? this.io.engine.getLastDigit(active.signal.symbol) : null,

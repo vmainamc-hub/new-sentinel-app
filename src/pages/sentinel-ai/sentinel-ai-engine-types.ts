@@ -10,7 +10,7 @@ export type EngineSample = {
 };
 
 /** Lets the runner keep a cell out of the feed (e.g. Deriv refused that contract) so the next-best signal surfaces. */
-export type SignalExclusion = (symbol: string, contractId: string) => boolean;
+export type SignalExclusion = (symbol: string, contractId: string, opportunity: RankedOpportunity) => boolean;
 
 export interface SentinelAiEngine {
     /** Starts continuous analysis (reference-counted by the engine). Returns the release function. */

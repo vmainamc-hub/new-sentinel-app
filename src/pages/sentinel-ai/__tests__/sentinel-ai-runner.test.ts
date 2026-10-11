@@ -13,6 +13,8 @@ const opportunity = (contractId = 'UNDER7', digit: number | null = 4, symbol = S
         symbol,
         name: 'Volatility 100 Index',
         score: 72,
+        blocked: false,
+        dangerComposition: { total: 20, isHardBlocked: false },
         contract: {
             id: contractId,
             label: `${isOver ? 'Over' : 'Under'} ${barrier}`,
@@ -44,7 +46,7 @@ class FakeEngine implements SentinelAiEngine {
     }
 
     sample(exclude?: SignalExclusion): EngineSample {
-        const hidden = Boolean(this.surfaced && exclude?.(this.surfaced.symbol, String(this.surfaced.contract.id)));
+        const hidden = Boolean(this.surfaced && exclude?.(this.surfaced.symbol, String(this.surfaced.contract.id), this.surfaced));
         return {
             info: {
                 status: 'live',
@@ -613,7 +615,7 @@ describe('SentinelAiRunner: failed purchases', () => {
         });
         h.runner.start();
         for (let i = 0; i < 8 && h.runner.isRunning(); i += 1) {
-            h.surface(opportunity(`UNDER${i + 1}`, 4, 'JD50'));
+            h.surface(opportunity(`UNDER${i + 1}`, 4, `MKT${i}`));
             await flush();
         }
         expect(h.runner.isRunning()).toBe(false);
@@ -1060,5 +1062,138 @@ describe('SentinelAiRunner: target profit can change while running', () => {
         h.runner.updateSettings({ takeProfit: 50 });
         expect(h.runner.isRunning()).toBe(true);
         expect(h.runner.getSnapshot().settings.takeProfit).toBe(50);
+    });
+});
+
+describe('SentinelAiRunner: score, danger and market filters', () => {
+    let h: Harness | null = null;
+    afterEach(() => {
+        h?.cleanup();
+        h = null;
+    });
+
+    const rejected = () =>
+        new TradeRequestError('Unknown contract proposal (InvalidContractProposal)', {
+            stage: 'proposal',
+            kind: 'rejected',
+            code: 'InvalidContractProposal',
+        });
+    const weak = (patch: Record<string, unknown>, contractId = 'UNDER7', symbol = SYMBOL) =>
+        ({ ...opportunity(contractId, 4, symbol), ...patch }) as unknown as RankedOpportunity;
+
+    it('never trades a score-0 (engine-blocked) signal', async () => {
+        h = makeHarness({ executionMode: 'immediate' });
+        h.surface(weak({ score: 0, blocked: true }));
+        h.runner.start();
+        await flush();
+        expect(h.runner.getSnapshot().signal).toBeNull();
+        expect(h.buy.mock.calls.length).toBe(0);
+        expect(h.runner.getSnapshot().filtered.count).toBe(1);
+        expect(h.runner.getSnapshot().filtered.example).toMatch(/blocked by the engine/);
+    });
+
+    it('rejects a score below the minimum and accepts it once the minimum is lowered', async () => {
+        h = makeHarness({ executionMode: 'immediate', minScore: 70 });
+        h.surface(weak({ score: 55 }));
+        h.runner.start();
+        expect(h.runner.getSnapshot().signal).toBeNull();
+        expect(h.runner.getSnapshot().filtered.example).toMatch(/score 55 is below 70/);
+        h.runner.updateSettings({ minScore: 50 });
+        h.loop();
+        expect(h.runner.getSnapshot().signal?.score).toBe(55);
+    });
+
+    it('rejects a danger above the maximum', async () => {
+        h = makeHarness({ executionMode: 'immediate', maxDanger: 45 });
+        h.surface(weak({ dangerComposition: { total: 60, isHardBlocked: false } }));
+        h.runner.start();
+        expect(h.runner.getSnapshot().signal).toBeNull();
+        expect(h.runner.getSnapshot().filtered.example).toMatch(/danger 60 is above 45/);
+    });
+
+    it('0 switches the score and danger limits off', () => {
+        h = makeHarness({ executionMode: 'immediate', minScore: 0, maxDanger: 0, skipBlocked: false });
+        h.surface(weak({ score: 5, blocked: true, dangerComposition: { total: 99, isHardBlocked: true } }));
+        h.runner.start();
+        expect(h.runner.getSnapshot().signal).not.toBeNull();
+    });
+
+    it('a signal that turns bad while it waits for its entry digit is dropped, not traded', async () => {
+        h = makeHarness({});
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        expect(h.runner.getSnapshot().signal?.contractId).toBe('UNDER7');
+        h.surface(weak({ score: 10 })); // same cell, now failing the gate
+        h.advance(1000);
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(0);
+        expect(h.runner.getSnapshot().history[0].outcome).toBe('SKIPPED');
+        expect(h.runner.getSnapshot().lastError).toMatch(/Dropped/);
+    });
+
+    it('JD100 is excluded by default and other markets are not', async () => {
+        h = makeHarness({ executionMode: 'immediate' });
+        expect(h.runner.getSnapshot().settings.excludedMarkets).toEqual(['JD100']);
+        h.surface(opportunity('UNDER7', 4, 'JD100'));
+        h.runner.start();
+        expect(h.runner.getSnapshot().signal).toBeNull();
+        expect(h.buy.mock.calls.length).toBe(0);
+        h.surface(opportunity('UNDER7', 4, 'JD50'));
+        h.advance(1000);
+        expect(h.runner.getSnapshot().signal?.symbol).toBe('JD50');
+    });
+
+    it('the excluded list can be changed', () => {
+        h = makeHarness({ executionMode: 'immediate', excludedMarkets: [] });
+        h.surface(opportunity('UNDER7', 4, 'JD100'));
+        h.runner.start();
+        expect(h.runner.getSnapshot().signal?.symbol).toBe('JD100');
+    });
+
+    it('a market Deriv refuses twice is quarantined for the rest of the session', async () => {
+        h = makeHarness({ executionMode: 'immediate', excludedMarkets: [] });
+        h.buy.mockImplementation(async () => {
+            throw rejected();
+        });
+        h.runner.start();
+        h.surface(opportunity('UNDER7', 4, 'JD75'));
+        await flush();
+        h.surface(opportunity('UNDER6', 4, 'JD75'));
+        h.advance(1000);
+        await flush();
+        expect(h.runner.getSnapshot().quarantined).toEqual(['JD75']);
+        const sent = h.buy.mock.calls.length;
+        h.surface(opportunity('UNDER5', 4, 'JD75')); // a third cell on the same market never reaches Deriv
+        h.advance(1000);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(sent);
+        expect(h.runner.getSnapshot().history.some(r => r.signal.contractId === 'UNDER5')).toBe(false);
+    });
+
+    it('a touch-once run pauses while the market fails the gate and resumes when it qualifies', async () => {
+        h = makeHarness({ executionMode: 'touch_once', martingaleMode: 'off', maxTrades: 3 });
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        let calls = 0;
+        h.buy.mockImplementation(async ({ parameters }: { parameters: Record<string, any> }) => {
+            calls += 1;
+            if (calls === 1) h.surface(weak({ dangerComposition: { total: 90, isHardBlocked: false } }));
+            return { buy_price: Number(parameters.amount), contract_id: 900 + calls, transaction_id: 1900 + calls };
+        });
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        h.advance(1000); // the sample now rejects the market
+        await flush();
+        expect(h.runner.getSnapshot().signalState).toBe('HELD');
+        const heldAt = h.buy.mock.calls.length;
+        h.advance(1000);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(heldAt);
+
+        h.surface(opportunity('UNDER7', 4)); // qualifies again
+        h.advance(1000);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(3);
     });
 });

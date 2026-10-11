@@ -158,7 +158,7 @@ class RealSentinelAiEngine implements SentinelAiEngine {
         const ranked = rankOpportunities(intels, DEFAULT_SCAN_OPTIONS).ranked;
         // Cells Deriv refused are filtered BEFORE the engine's own surfacing rule runs, so the next-best signal
         // surfaces through the same gate instead of the feed getting stuck on a contract that cannot be bought.
-        const eligible = exclude ? ranked.filter(opp => !exclude(opp.symbol, String(opp.contract.id))) : ranked;
+        const eligible = exclude ? ranked.filter(opp => !exclude(opp.symbol, String(opp.contract.id), opp)) : ranked;
         const surfaced = selectSurfacedOpportunity(eligible);
         const gd = globalDanger(intels);
 

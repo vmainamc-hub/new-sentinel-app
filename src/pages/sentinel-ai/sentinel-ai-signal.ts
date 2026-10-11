@@ -3,6 +3,7 @@
 // Converts the engine's surfaced RankedOpportunity into the frontend's SentinelAiSignal. Read-only:
 // it never changes, re-ranks or filters what the engine produced, and it never invents an entry digit.
 import type { RankedOpportunity } from '@/sentinel-engine/lib/apex/types';
+import { dangerOf } from './sentinel-ai-quality';
 import type { SentinelAiSignal } from './sentinel-ai-types';
 
 export const signalKeyOf = (opp: Pick<RankedOpportunity, 'symbol' | 'contract'>) =>
@@ -39,6 +40,10 @@ export const toSentinelAiSignal = (opp: RankedOpportunity, receivedAt: number): 
         entryWindow: entry?.window?.label ?? '',
         entryWinRate: preferred && Number.isFinite(preferred.pWin) ? Math.round(preferred.pWin * 1000) / 10 : null,
         score: round(opp.score),
+        danger: (() => {
+            const danger = dangerOf(opp);
+            return danger === null ? null : Math.round(danger);
+        })(),
         confidence: round(contract.confidence),
         status: opp.signal?.label || opp.signal?.state || 'SIGNAL',
         reason: opp.signal?.reason ?? '',

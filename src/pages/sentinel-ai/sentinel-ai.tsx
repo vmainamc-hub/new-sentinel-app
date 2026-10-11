@@ -18,7 +18,7 @@ import type {
     SentinelAiSnapshot,
     SignalOutcome,
 } from './sentinel-ai-types';
-import { MIN_STAKE, parseDigitList } from './sentinel-ai-types';
+import { MIN_STAKE, parseDigitList, parseSymbolList } from './sentinel-ai-types';
 import { useSentinelAi } from './use-sentinel-ai';
 import './sentinel-ai.scss';
 
@@ -51,6 +51,8 @@ const stateText = (snapshot: SentinelAiSnapshot) => {
     switch (signalState) {
         case 'LOCKED':
             return 'Entry touched. Trading nonstop on this signal until you stop it or a limit is reached.';
+        case 'HELD':
+            return 'Paused: the engine now rates this market below your score / danger limits. Trading resumes when it qualifies again.';
         case 'READY':
             return 'Immediate mode: trading this signal now, without waiting for the entry digit.';
         case 'WAITING_ENTRY':
@@ -171,6 +173,58 @@ const DigitListField = ({
             />
             <span className={classNames('sentinel-ai-field__hint', { 'is-error': invalid })}>
                 {invalid ? 'Use digits 0-9 separated by commas, for example 2, 4' : hint}
+            </span>
+        </label>
+    );
+};
+
+/** Market symbols typed as "JD100, R_10". Invalid text is flagged and never saved. */
+const SymbolListField = ({
+    label,
+    value,
+    onCommit,
+    hint,
+}: {
+    label: string;
+    value: string[];
+    onCommit: (value: string[]) => void;
+    hint?: string;
+}) => {
+    const text = value.join(', ');
+    const [draft, setDraft] = useState(text);
+    const [invalid, setInvalid] = useState(false);
+    useEffect(() => {
+        setDraft(text);
+        setInvalid(false);
+    }, [text]);
+
+    const commit = () => {
+        const parsed = parseSymbolList(draft);
+        if (parsed === null) {
+            setInvalid(true);
+            return;
+        }
+        setInvalid(false);
+        setDraft(parsed.join(', '));
+        if (parsed.join(',') !== value.join(',')) onCommit(parsed);
+    };
+
+    return (
+        <label className='sentinel-ai-field'>
+            <span className='sentinel-ai-field__label'>{label}</span>
+            <input
+                type='text'
+                value={draft}
+                placeholder='none'
+                aria-invalid={invalid}
+                onChange={event => setDraft(event.target.value)}
+                onBlur={commit}
+                onKeyDown={event => {
+                    if (event.key === 'Enter') (event.target as HTMLInputElement).blur();
+                }}
+            />
+            <span className={classNames('sentinel-ai-field__hint', { 'is-error': invalid })}>
+                {invalid ? 'Use market symbols separated by commas, for example JD100, R_10' : hint}
             </span>
         </label>
     );
@@ -379,6 +433,11 @@ const SentinelAi = observer(() => {
                                                 <span>
                                                     Score <b>{signal.score}</b>
                                                 </span>
+                                                {signal.danger !== null ? (
+                                                    <span>
+                                                        Danger <b>{signal.danger}</b>
+                                                    </span>
+                                                ) : null}
                                                 <span>
                                                     Confidence <b>{signal.confidence}%</b>
                                                 </span>
@@ -550,6 +609,57 @@ const SentinelAi = observer(() => {
                                         onCommit={value => set({ defaultUnderDigits: value })}
                                     />
                                 </div>
+                            </fieldset>
+
+                            <fieldset className='sentinel-ai-card'>
+                                <legend>Signal quality</legend>
+                                <p className='sentinel-ai-muted'>
+                                    Signals that fail these checks are never traded; the next best one is used instead. A signal that
+                                    turns bad while it waits is dropped, and a Touch-once run pauses until it qualifies again.
+                                </p>
+                                <div className='sentinel-ai-row'>
+                                    <NumberField
+                                        label='Minimum score'
+                                        value={settings.minScore}
+                                        min={0}
+                                        max={100}
+                                        step={1}
+                                        hint="Default 70, the engine's own bar. 0 = off"
+                                        onCommit={value => set({ minScore: value })}
+                                    />
+                                    <NumberField
+                                        label='Maximum danger'
+                                        value={settings.maxDanger}
+                                        min={0}
+                                        max={100}
+                                        step={1}
+                                        hint="Default 45, the engine's safety boundary. 0 = off"
+                                        onCommit={value => set({ maxDanger: value })}
+                                    />
+                                </div>
+                                <Toggle
+                                    label='Skip signals the engine marks as blocked'
+                                    hint='Blocked candidates carry a score of 0'
+                                    checked={settings.skipBlocked}
+                                    onChange={checked => set({ skipBlocked: checked })}
+                                />
+                                <SymbolListField
+                                    label='Excluded markets'
+                                    value={settings.excludedMarkets}
+                                    hint='Never traded. Default JD100 (Jump 100). Clear it to trade every market again'
+                                    onCommit={value => set({ excludedMarkets: value })}
+                                />
+                                {snapshot.filtered.count > 0 ? (
+                                    <p className='sentinel-ai-muted'>
+                                        Filtered out right now: {snapshot.filtered.count}
+                                        {snapshot.filtered.example ? ` (e.g. ${snapshot.filtered.example})` : ''}
+                                    </p>
+                                ) : null}
+                                {snapshot.quarantined.length > 0 ? (
+                                    <p className='sentinel-ai-muted'>
+                                        Taken out this session after Deriv kept refusing it: {snapshot.quarantined.join(', ')}
+                                    </p>
+                                ) : null}
                             </fieldset>
 
                             <fieldset className='sentinel-ai-card' disabled={running}>

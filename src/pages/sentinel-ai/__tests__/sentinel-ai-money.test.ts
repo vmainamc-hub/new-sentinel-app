@@ -6,12 +6,14 @@ import {
     sessionStopReason,
     tradeBarrier,
 } from '../sentinel-ai-money';
+import { qualityVerdict } from '../sentinel-ai-quality';
 import {
     DEFAULT_SETTINGS,
     MIN_STAKE,
     normalizeDigitList,
     normalizeSettings,
     parseDigitList,
+    parseSymbolList,
     type SentinelAiSettings,
 } from '../sentinel-ai-types';
 
@@ -247,5 +249,45 @@ describe('Sentinel AI settings validation', () => {
     it('falls back to defaults for empty input', () => {
         expect(normalizeSettings(null)).toEqual(DEFAULT_SETTINGS);
         expect(normalizeSettings({ stake: '' }).stake).toBe(DEFAULT_SETTINGS.stake);
+    });
+});
+
+describe('Sentinel AI quality gate', () => {
+    const gate = { minScore: 70, maxDanger: 45, skipBlocked: true };
+    const opp = (patch: Record<string, unknown> = {}) =>
+        ({ score: 80, blocked: false, dangerComposition: { total: 20, isHardBlocked: false }, ...patch }) as any;
+
+    it('passes a healthy signal', () => {
+        expect(qualityVerdict(opp(), gate)).toEqual({ ok: true, reason: null });
+    });
+    it('rejects score 0 / blocked, low score and high danger with the reason', () => {
+        expect(qualityVerdict(opp({ score: 0, blocked: true }), gate).reason).toMatch(/blocked/);
+        expect(qualityVerdict(opp({ score: 0 }), gate).reason).toMatch(/score 0 is below 70/);
+        expect(qualityVerdict(opp({ dangerComposition: { total: 46 } }), gate).reason).toMatch(/danger 46/);
+        expect(qualityVerdict(opp({ dangerComposition: { total: 45 } }), gate).ok).toBe(true); // limit is inclusive
+    });
+    it('falls back to the raw market danger and ignores missing danger', () => {
+        expect(qualityVerdict(opp({ dangerComposition: undefined, intel: { danger: 70 } }), gate).ok).toBe(false);
+        expect(qualityVerdict(opp({ dangerComposition: undefined, intel: undefined }), gate).ok).toBe(true);
+    });
+    it('can be switched off', () => {
+        const off = { minScore: 0, maxDanger: 0, skipBlocked: false };
+        expect(qualityVerdict(opp({ score: 0, blocked: true, dangerComposition: { total: 100 } }), off).ok).toBe(true);
+    });
+});
+
+describe('Sentinel AI market lists', () => {
+    it('parses symbols and rejects junk', () => {
+        expect(parseSymbolList('jd100, 1hz100v')).toEqual(['JD100', '1HZ100V']);
+        expect(parseSymbolList('JD100 JD100')).toEqual(['JD100']);
+        expect(parseSymbolList('JD 100!')).toBeNull();
+        expect(parseSymbolList('')).toEqual([]);
+    });
+    it('defaults to excluding JD100 and clamps score/danger', () => {
+        expect(DEFAULT_SETTINGS.excludedMarkets).toEqual(['JD100']);
+        const s = normalizeSettings({ minScore: 500, maxDanger: -3, excludedMarkets: ['x y', 'jd75'] });
+        expect(s.minScore).toBe(100);
+        expect(s.maxDanger).toBe(0);
+        expect(s.excludedMarkets).toEqual(['JD75']);
     });
 });
