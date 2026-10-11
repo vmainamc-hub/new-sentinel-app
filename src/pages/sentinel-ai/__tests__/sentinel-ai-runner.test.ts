@@ -1227,3 +1227,71 @@ describe('SentinelAiRunner: score, danger and market filters', () => {
         expect(h.buy.mock.calls.length).toBe(3);
     });
 });
+
+describe('SentinelAiRunner: pressing Run on a signal that is already waiting', () => {
+    let h: Harness | null = null;
+    afterEach(() => {
+        h?.cleanup();
+        h = null;
+    });
+
+    it('trades the waiting signal when its entry digit prints after Run (no fresh signal needed)', async () => {
+        h = makeHarness({});
+        h.surface(opportunity('UNDER7', 4)); // arrives while not running
+        h.advance(10_000);
+        h.loop();
+        h.runner.start();
+        expect(h.runner.getSnapshot().signalState).toBe('WAITING_ENTRY');
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+    });
+
+    it('also works when the signal is surfaced again (same cell) after Run', async () => {
+        h = makeHarness({});
+        h.surface(opportunity('UNDER7', 4));
+        h.runner.start();
+        h.surface(opportunity('UNDER7', 4));
+        h.advance(1000);
+        h.loop();
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+    });
+
+    it('gives the signal its full wait window from the moment Run is pressed', async () => {
+        h = makeHarness({ signalWaitSeconds: 45 });
+        h.surface(opportunity('UNDER7', 4));
+        h.advance(40_000); // 40s of the 45s window pass before Run
+        h.loop();
+        expect(h.runner.getSnapshot().signalState).not.toBe('EXPIRED');
+        h.runner.start();
+        h.advance(30_000); // would be past 45s since arrival, but only 30s since Run
+        h.loop();
+        expect(h.runner.getSnapshot().signalState).toBe('WAITING_ENTRY');
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+    });
+
+    it('an entry digit that printed before Run does not count; it waits for the next print', async () => {
+        h = makeHarness({});
+        h.surface(opportunity('UNDER7', 4));
+        h.engine.tick(SYMBOL, 4); // printed while not running
+        h.runner.start();
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(0);
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+    });
+
+    it('a watched signal the engine stops surfacing still lapses after the wait window', () => {
+        h = makeHarness({ signalWaitSeconds: 45 });
+        h.surface(opportunity('UNDER7', 4));
+        h.surface(null);
+        h.advance(46_000);
+        h.loop();
+        expect(h.runner.getSnapshot().signalState).toBe('EXPIRED');
+    });
+});

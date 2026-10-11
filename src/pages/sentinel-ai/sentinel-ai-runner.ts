@@ -289,6 +289,7 @@ export class SentinelAiRunner {
             this.active.runsDone = 0;
             this.active.pnl = 0;
             this.active.locked = false;
+            this.active.expiresAt = this.io.now() + this.settings.signalWaitSeconds * 1000; // the wait window starts at Run
             const record = this.history.find(r => r.signal.id === this.active?.signal.id);
             if (record && record.outcome === 'WATCHED') record.outcome = 'ACTIVE';
         }
@@ -438,6 +439,9 @@ export class SentinelAiRunner {
         const active = this.active;
         if (active && active.signal.key === incoming.key && !active.done && !this.tradeInFlight) {
             active.signal = { ...incoming, id: active.signal.id, receivedAt: active.signal.receivedAt };
+            // Not running yet: the signal stays fresh for as long as the engine keeps surfacing it, so pressing Run
+            // trades it instead of waiting for a new one. It still lapses once the engine stops surfacing it.
+            if (!this.running && !active.locked) active.expiresAt = this.io.now() + this.settings.signalWaitSeconds * 1000;
             const record = this.history.find(r => r.signal.id === active.signal.id);
             if (record) record.signal = active.signal;
         }
