@@ -18,6 +18,7 @@ import {
 import { recordDiagnosticEvent, setDiagnosticGauge } from '@/utils/diagnostics';
 import { getLastDigitFromQuote, getMarketPipSize, isExpectedStreamInterruption } from '@/utils/market-data';
 import { buyContractForUi, streamContractUntilSettled, getErrorMessage } from '@/utils/trade-purchase';
+import { TradeRequestError } from '@/utils/trade-errors';
 import { ensureDerivConnection, safeSubscribe } from '@/utils/websocket-handler';
 import {
     AUTO_TRADE_STRATEGY_FAMILIES,
@@ -97,6 +98,7 @@ const PERCENTAGE_ANALYSIS_HISTORY_SIZE = 1000;
 const PERCENTAGE_BACKFILL_COUNT = PERCENTAGE_ANALYSIS_HISTORY_SIZE;
 const PERCENTAGE_MIN_SAMPLE_SIZE = 100;
 const MARKET_LOSS_COOLDOWN_TICKS = 60;
+const REFUSED_PURCHASE_COOLDOWN_TICKS = 10;
 
 type StrategyMode = 'STANDARD' | 'INVERSE' | 'PERCENTAGE';
 
@@ -1849,7 +1851,7 @@ const AutoTrades = observer(() => {
     }, []);
 
     const executeTrade = useCallback(
-        async (symbol: string, stakeAmount: number, lastResult: 'win' | 'loss' | null): Promise<number> => {
+        async (symbol: string, stakeAmount: number, lastResult: 'win' | 'loss' | null): Promise<number | null> => {
             const ct = tradeTypeRef.current;
             const bar = getActiveDigitBarrier(ct, lastResult, consecutiveLossRef.current);
             const tradeStartTime = Math.floor(Date.now() / 1000);
@@ -1910,12 +1912,19 @@ const AutoTrades = observer(() => {
             } catch (err) {
                 console.error('[AutoTrades] executeTrade exception:', err);
                 setError(getErrorMessage(err, 'Auto Trades could not purchase this contract.'));
-                return 0;
+                // Do not book a failed/unknown purchase as a zero-P/L trade.
+                // If the buy outcome is unknown, stop immediately to avoid a second purchase while the first may exist.
+                if (err instanceof TradeRequestError && (err.outcomeUnknown || err.kind === 'fatal')) {
+                    runningRef.current = false;
+                    if (!unmountedRef.current) setIsRunning(false);
+                    completeRunPanelStop();
+                }
+                return null;
             } finally {
                 contractStreamAbortControllersRef.current.delete(abortController);
             }
         },
-        [currency, getActiveDigitBarrier, pushContract, setError]
+        [completeRunPanelStop, currency, getActiveDigitBarrier, pushContract, setError]
     );
 
     const handleAfterTrade = useCallback(
@@ -2023,9 +2032,17 @@ const AutoTrades = observer(() => {
                     return;
                 }
 
-                executeTrade(symbol, stakeNow, previousContractResultRef.current).then(profit =>
-                    handleAfterTrade(symbol, profit)
-                );
+                executeTrade(symbol, stakeNow, previousContractResultRef.current).then(profit => {
+                    if (profit !== null) {
+                        handleAfterTrade(symbol, profit);
+                        return;
+                    }
+                    // A refused purchase must not alter P/L or martingale state; release locks and pause this market.
+                    state.trading = false;
+                    state.lossCooldownLeft = REFUSED_PURCHASE_COOLDOWN_TICKS;
+                    globalTradingRef.current = false;
+                    if (!unmountedRef.current) refreshDisplays();
+                });
             }
         },
         [executeTrade, handleAfterTrade, refreshDisplays]
