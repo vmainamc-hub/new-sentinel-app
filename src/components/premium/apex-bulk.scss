@@ -209,3 +209,16 @@
 .apex-bt__auto select { width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid var(--bt-line); background: #0b1830; color: var(--bt-text); font-size: 15px; font-weight: 700; }
 .apex-bt__auto input:disabled,
 .apex-bt__auto select:disabled { opacity: .6; }
+
+.apex-bt__auto h3 { margin: 16px 0 8px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--bt-muted, #8fa1c2); }
+.apex-bt__auto-state { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--bt-panel-2, #0e1a31); border: 1px solid var(--bt-line, #16233d); }
+.apex-bt__mode { padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 900; letter-spacing: .06em; background: rgba(25, 211, 138, .14); color: var(--bt-win, #19d38a); }
+.apex-bt__mode.is-recovery { background: rgba(232, 184, 74, .18); color: var(--bt-gold, #e8b84a); }
+.apex-bt__next { font-weight: 800; color: #fff; }
+.apex-bt__entry { display: inline-flex; align-items: center; gap: 8px; color: var(--bt-muted, #8fa1c2); }
+.apex-bt__entry small { font-size: 12px; }
+.apex-bt__ticks { display: inline-flex; gap: 4px; }
+.apex-bt__ticks i { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 6px; font-style: normal; font-size: 12px; font-weight: 900; color: #fff; background: #31405f; }
+.apex-bt__ticks i.is-over { background: var(--bt-teal, #0e9f8e); }
+.apex-bt__ticks i.is-under { background: var(--bt-red, #d6204a); }
+.apex-bt__ticks i.is-eq { background: #31405f; }

@@ -14,8 +14,15 @@ export type LogRow = {
 };
 
 export type BulkForm = { duration: string; stake: string; runs: string };
-export type AutoForm = { grade: string; cooldownSec: string; maxRuns: string; maxLoss: string };
-export type AutoView = { armed: boolean; form: AutoForm; runs: number; pnl: number; note: string; maxRuns: number; maxLoss: number; account: string };
+export type AutoForm = {
+    grade: string; cooldownSec: string; maxRuns: string; maxLoss: string; targetProfit: string; entryTicks: string; entryWaitSec: string;
+    recovery: string; recoveryOver: string; recoveryUnder: string; martingale: string; maxSteps: string; onCap: string;
+};
+export type AutoView = {
+    armed: boolean; form: AutoForm; runs: number; pnl: number; note: string; maxRuns: number; maxLoss: number; targetProfit: number; account: string;
+    mode: string; recovery: boolean; next: string;
+    entry: { need: number; want: string; symbols: string[]; waiting: boolean } | null;
+};
 
 export type BulkViewProps = {
     live: boolean;
@@ -96,37 +103,100 @@ const RecommendationBar = ({ rec, watch, onLoadRec, marketsReady, live, locked, 
     </section>
 );
 
-const AutoPanel = ({ auto, running, currency, onAutoToggle, onAutoForm }: Pick<BulkViewProps, 'auto' | 'currency' | 'onAutoToggle' | 'onAutoForm'> & { running: boolean }) => (
-    <section className={`apex-bt__auto${auto.armed ? ' is-armed' : ''}`} aria-label='Auto trader'>
-        <div className='apex-bt__auto-head'>
-            <div>
-                <small>AUTO TRADER</small>
-                <p className={`apex-bt__auto-note${auto.armed ? ' is-on' : ''}`}>{auto.note}</p>
+const AutoPanel = ({ auto, running, currency, onAutoToggle, onAutoForm }: Pick<BulkViewProps, 'auto' | 'currency' | 'onAutoToggle' | 'onAutoForm'> & { running: boolean }) => {
+    const f = auto.form;
+    const lock = auto.armed;
+    const field = (label: string, key: keyof AutoForm, mode: 'numeric' | 'decimal' = 'numeric') => (
+        <label>{label}<input value={f[key]} disabled={lock} inputMode={mode} onChange={event => onAutoForm(key, event.target.value)} /></label>
+    );
+    return (
+        <section className={`apex-bt__auto${auto.armed ? ' is-armed' : ''}`} aria-label='Auto trader'>
+            <div className='apex-bt__auto-head'>
+                <div>
+                    <small>AUTO TRADER</small>
+                    <p className={`apex-bt__auto-note${auto.armed ? ' is-on' : ''}`}>{auto.note}</p>
+                </div>
+                <button type='button' className={`apex-bt__arm${auto.armed ? ' is-on' : ''}`} onClick={onAutoToggle} aria-pressed={auto.armed}>
+                    {auto.armed ? 'Disarm auto trader' : 'Arm auto trader'}
+                </button>
             </div>
-            <button type='button' className={`apex-bt__arm${auto.armed ? ' is-on' : ''}`} onClick={onAutoToggle} aria-pressed={auto.armed}>
-                {auto.armed ? 'Disarm auto trader' : 'Arm auto trader'}
-            </button>
-        </div>
-        <div className='apex-bt__auto-form'>
-            <label>Trade on
-                <select value={auto.form.grade} disabled={auto.armed} onChange={event => onAutoForm('grade', event.target.value)}>
-                    <option value='EXECUTE'>EXECUTE signals only</option>
-                    <option value='ANY'>EXECUTE + PREPARE</option>
-                </select>
-            </label>
-            <label>Max auto runs<input value={auto.form.maxRuns} disabled={auto.armed} inputMode='numeric' onChange={event => onAutoForm('maxRuns', event.target.value)} /></label>
-            <label>Stop at loss ({currency})<input value={auto.form.maxLoss} disabled={auto.armed} inputMode='decimal' onChange={event => onAutoForm('maxLoss', event.target.value)} /></label>
-            <label>Cooldown (s)<input value={auto.form.cooldownSec} disabled={auto.armed} inputMode='numeric' onChange={event => onAutoForm('cooldownSec', event.target.value)} /></label>
-        </div>
-        <p className='apex-bt__auto-foot'>
-            Runs {auto.runs}/{auto.maxRuns} · Session P/L <b className={auto.pnl >= 0 ? 'is-win' : 'is-loss'}>{auto.pnl.toFixed(2)} {currency}</b>
-            {auto.account ? ` · ${auto.account} account` : ''}{running ? ' · run in progress' : ''}
-            <br />
-            Fires once for each new signal using the deck&apos;s stake, ticks and number of bulk trades. It trades the locked signal if you lock one.
-            It switches itself off at the run or loss limit, or if any purchase fails. Settings are fixed while armed, and it is always off when the page loads.
-        </p>
-    </section>
-);
+
+            {auto.armed && (
+                <div className='apex-bt__auto-state'>
+                    <span className={`apex-bt__mode${auto.mode === 'NORMAL' ? '' : ' is-recovery'}`}>{auto.mode}</span>
+                    {auto.next && <span className='apex-bt__next'>{auto.next}</span>}
+                    {auto.entry && (
+                        <span className='apex-bt__entry' title='Latest ticks against the barrier of the contract to be traded'>
+                            <small>Entry: last {auto.entry.need} ticks must be {auto.entry.want}</small>
+                            <span className='apex-bt__ticks'>
+                                {auto.entry.symbols.length === 0 && <i>…</i>}
+                                {auto.entry.symbols.map((symbol, index) => <i key={index} className={`is-${symbol === 'O' ? 'over' : symbol === 'U' ? 'under' : 'eq'}`}>{symbol}</i>)}
+                            </span>
+                        </span>
+                    )}
+                </div>
+            )}
+
+            <h3>Trigger and limits</h3>
+            <div className='apex-bt__auto-form'>
+                <label>Trade on
+                    <select value={f.grade} disabled={lock} onChange={event => onAutoForm('grade', event.target.value)}>
+                        <option value='EXECUTE'>EXECUTE signals only</option>
+                        <option value='ANY'>EXECUTE + PREPARE</option>
+                    </select>
+                </label>
+                {field('Max auto runs', 'maxRuns')}
+                {field(`Stop at loss (${currency})`, 'maxLoss', 'decimal')}
+                {field(`Target profit (${currency})`, 'targetProfit', 'decimal')}
+                {field('Cooldown (s)', 'cooldownSec')}
+            </div>
+
+            <h3>Entry</h3>
+            <div className='apex-bt__auto-form'>
+                {field('Entry ticks (0 = off)', 'entryTicks')}
+                {field('Wait for entry (s)', 'entryWaitSec')}
+            </div>
+
+            <h3>Recovery and martingale</h3>
+            <div className='apex-bt__auto-form'>
+                <label>Recovery
+                    <select value={f.recovery} disabled={lock} onChange={event => onAutoForm('recovery', event.target.value)}>
+                        <option value='off'>Off</option>
+                        <option value='on'>On</option>
+                    </select>
+                </label>
+                <label>Recovery Over digit
+                    <select value={f.recoveryOver} disabled={lock || f.recovery !== 'on'} onChange={event => onAutoForm('recoveryOver', event.target.value)}>
+                        {[1, 2, 3].map(d => <option key={d} value={d}>Over {d}</option>)}
+                    </select>
+                </label>
+                <label>Recovery Under digit
+                    <select value={f.recoveryUnder} disabled={lock || f.recovery !== 'on'} onChange={event => onAutoForm('recoveryUnder', event.target.value)}>
+                        {[8, 7, 6].map(d => <option key={d} value={d}>Under {d}</option>)}
+                    </select>
+                </label>
+                <label>Martingale ×<input value={f.martingale} disabled={lock || f.recovery !== 'on'} inputMode='decimal' onChange={event => onAutoForm('martingale', event.target.value)} /></label>
+                <label>Max recovery steps<input value={f.maxSteps} disabled={lock || f.recovery !== 'on'} inputMode='numeric' onChange={event => onAutoForm('maxSteps', event.target.value)} /></label>
+                <label>At the limit
+                    <select value={f.onCap} disabled={lock || f.recovery !== 'on'} onChange={event => onAutoForm('onCap', event.target.value)}>
+                        <option value='STOP'>Stop</option>
+                        <option value='RESET'>Reset to normal</option>
+                    </select>
+                </label>
+            </div>
+
+            <p className='apex-bt__auto-foot'>
+                Runs {auto.runs}/{auto.maxRuns} · Session P/L <b className={auto.pnl >= 0 ? 'is-win' : 'is-loss'}>{auto.pnl.toFixed(2)} {currency}</b>
+                {` · stops at +${auto.targetProfit.toFixed(2)} or −${auto.maxLoss.toFixed(2)}`}
+                {auto.account ? ` · ${auto.account} account` : ''}{running ? ' · run in progress' : ''}
+                <br />
+                A signal starts the watch; the buy happens when the latest ticks show the side (O for Over, U for Under against the contract&apos;s barrier). After a losing run
+                with recovery on, the next signal is traded at your recovery digit with the martingale stake, and a win returns to normal. The deck stake at arming is the base stake.
+                The deck is locked while armed, it stops itself at the limits or if any purchase fails, and it is always off when the page loads.
+            </p>
+        </section>
+    );
+};
 
 const BulkTraderView = (props: BulkViewProps) => {
     const { symbol, digitPct, form, currency, running, tally, log } = props;
@@ -156,7 +226,7 @@ const BulkTraderView = (props: BulkViewProps) => {
 
                 <div className='apex-bt__grid2'>
                     <label>Market
-                        <select value={symbol} disabled={running} onChange={event => props.onSymbol(event.target.value)}>
+                        <select value={symbol} disabled={running || props.auto.armed} onChange={event => props.onSymbol(event.target.value)}>
                             {BULK_MARKETS.map(item => <option key={item.symbol} value={item.symbol}>{item.name}</option>)}
                         </select>
                     </label>
@@ -189,16 +259,16 @@ const BulkTraderView = (props: BulkViewProps) => {
                 </div>
 
                 <div className='apex-bt__form'>
-                    <label>Ticks (duration)<input value={form.duration} disabled={running} inputMode='numeric' onChange={props.onForm('duration')} /></label>
-                    <label>Stake ({currency})<input value={form.stake} disabled={running} inputMode='decimal' onChange={props.onForm('stake')} /></label>
-                    <label>No. of bulk trades<input value={form.runs} disabled={running} inputMode='numeric' onChange={props.onForm('runs')} /></label>
+                    <label>Ticks (duration)<input value={form.duration} disabled={running || props.auto.armed} inputMode='numeric' onChange={props.onForm('duration')} /></label>
+                    <label>Stake ({currency})<input value={form.stake} disabled={running || props.auto.armed} inputMode='decimal' onChange={props.onForm('stake')} /></label>
+                    <label>No. of bulk trades<input value={form.runs} disabled={running || props.auto.armed} inputMode='numeric' onChange={props.onForm('runs')} /></label>
                     <label>Over barrier
-                        <select value={props.overBarrier} disabled={running} onChange={event => props.onOverBarrier(event.target.value)}>
+                        <select value={props.overBarrier} disabled={running || props.auto.armed} onChange={event => props.onOverBarrier(event.target.value)}>
                             {OVER_BARRIERS.map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
                     </label>
                     <label>Under barrier
-                        <select value={props.underBarrier} disabled={running} onChange={event => props.onUnderBarrier(event.target.value)}>
+                        <select value={props.underBarrier} disabled={running || props.auto.armed} onChange={event => props.onUnderBarrier(event.target.value)}>
                             {UNDER_BARRIERS.map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
                     </label>
@@ -208,7 +278,7 @@ const BulkTraderView = (props: BulkViewProps) => {
             <section className='apex-bt__panel apex-bt__lower' aria-label='Over and Under'>
                 <div className='apex-bt__sides'>
                     {sides.map(item => (
-                        <button key={item.side} type='button' disabled={running || !hasData}
+                        <button key={item.side} type='button' disabled={running || !hasData || props.auto.armed}
                             className={`apex-bt__side apex-bt__side--${item.cls}${props.pickSide === item.side ? ' is-pick' : ''}`}
                             onClick={() => props.onRun(item.side)}>
                             {props.pickSide === item.side && <em>AI PICK</em>}

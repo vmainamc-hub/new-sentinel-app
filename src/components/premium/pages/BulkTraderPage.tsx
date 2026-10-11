@@ -7,12 +7,13 @@ import {
     type CombinedVerdict, type OverUnderContract, type Recommendation,
 } from '../over-under-engine';
 import {
-    DEFAULT_BULK, RunGuard, emptyTally, limitError, recordFailed, recordPlaced, recordSettled, sanitizeBulk, syncReport, syncText,
+    DEFAULT_BULK, RunGuard, emptyTally, exposure, limitError, recordFailed, recordPlaced, recordSettled, sanitizeBulk, syncReport, syncText,
     type Fill, type Tally,
 } from '../bulk-run';
 import {
-    DEFAULT_AUTO, armSession, disarmSession, newSession, recordAutoRun, sanitizeAuto, stepAuto, waitingNote,
-    type AutoConfig, type AutoGrade, type AutoSession,
+    DEFAULT_AUTO, armSession, disarmSession, lossLimitError, modeText, newSession, planTrade, recordAutoRun, sanitizeAuto, stakeFor, stepAuto, tickSymbols,
+    waitingNote,
+    type AutoConfig, type AutoSession,
 } from '../auto-trader';
 import BulkTraderView, { type AutoForm, type BulkForm, type LogRow } from './BulkTraderView';
 
@@ -52,7 +53,12 @@ const BulkTraderPage = () => {
     const [loaded, setLoaded] = useState<Recommendation | null>(null);
     const [locked, setLocked] = useState<Recommendation | null>(readLock);
     // Auto trader is always OFF on page load; arming is never persisted between visits.
-    const [autoForm, setAutoForm] = useState<AutoForm>({ grade: DEFAULT_AUTO.grade, cooldownSec: String(DEFAULT_AUTO.cooldownSec), maxRuns: String(DEFAULT_AUTO.maxRuns), maxLoss: String(DEFAULT_AUTO.maxLoss) });
+    const [autoForm, setAutoForm] = useState<AutoForm>({
+        grade: DEFAULT_AUTO.grade, cooldownSec: String(DEFAULT_AUTO.cooldownSec), maxRuns: String(DEFAULT_AUTO.maxRuns), maxLoss: String(DEFAULT_AUTO.maxLoss),
+        targetProfit: String(DEFAULT_AUTO.targetProfit), entryTicks: String(DEFAULT_AUTO.entryTicks), entryWaitSec: String(DEFAULT_AUTO.entryWaitSec),
+        recovery: 'off', recoveryOver: String(DEFAULT_AUTO.recoveryOver), recoveryUnder: String(DEFAULT_AUTO.recoveryUnder),
+        martingale: String(DEFAULT_AUTO.martingale), maxSteps: String(DEFAULT_AUTO.maxSteps), onCap: DEFAULT_AUTO.onCap,
+    });
     const [autoSession, setAutoSession] = useState<AutoSession>(newSession());
     const [autoNote, setAutoNote] = useState('Off.');
     const [pendingAuto, setPendingAuto] = useState<{ rec: Recommendation; nonce: number } | null>(null);
@@ -76,7 +82,10 @@ const BulkTraderPage = () => {
     const autoRef = useRef<{ session: AutoSession; config: AutoConfig }>({ session: newSession(), config: DEFAULT_AUTO });
     const lockedRef = useRef<Recommendation | null>(null);
     const autoBusy = useRef(false);
-    const applyRef = useRef<(target: Recommendation, scroll?: boolean) => void>(() => undefined);
+    const applyRef = useRef<(target: Recommendation, scroll?: boolean, barrier?: number) => void>(() => undefined);
+    // The deck stake when the auto trader was armed. The stake in the deck is only ever a per-run override of this value.
+    const baseStakeRef = useRef(String(DEFAULT_BULK.stake));
+    const formRef = useRef(form);
     const symbolRef = useRef(symbol);
     const waiters = useRef<Record<string, Array<() => void>>>({});
     const mounted = useRef(true);
@@ -89,7 +98,13 @@ const BulkTraderPage = () => {
 
     symbolRef.current = symbol;
     lockedRef.current = locked;
-    const autoConfig = sanitizeAuto({ grade: autoForm.grade as AutoGrade, cooldownSec: Number(autoForm.cooldownSec), maxRuns: Number(autoForm.maxRuns), maxLoss: Number(autoForm.maxLoss) });
+    formRef.current = form;
+    const autoConfig = sanitizeAuto({
+        grade: autoForm.grade === 'ANY' ? 'ANY' : 'EXECUTE', cooldownSec: Number(autoForm.cooldownSec), maxRuns: Number(autoForm.maxRuns), maxLoss: Number(autoForm.maxLoss),
+        targetProfit: Number(autoForm.targetProfit), entryTicks: Number(autoForm.entryTicks), entryWaitSec: Number(autoForm.entryWaitSec),
+        recovery: autoForm.recovery === 'on', recoveryOver: Number(autoForm.recoveryOver), recoveryUnder: Number(autoForm.recoveryUnder),
+        martingale: Number(autoForm.martingale), maxSteps: Number(autoForm.maxSteps), onCap: autoForm.onCap === 'RESET' ? 'RESET' : 'STOP',
+    });
     autoRef.current.config = autoConfig;
     useEffect(() => () => { mounted.current = false; stopRef.current = true; }, []);
 
@@ -164,14 +179,24 @@ const BulkTraderPage = () => {
                 const held = lockedRef.current;
                 const target = held ? refreshLocked(held, verdicts.current, now) : next;
                 const valid = target ? validateRecommendation(target, verdicts.current, now, Boolean(held)).ok : false;
-                const result = stepAuto(auto.session, auto.config, { target, valid, busy: guard.current.busy || autoBusy.current, now });
+                // Base stake and trades per run let the loss-limit guard price the run BEFORE it is fired.
+                const sized = sanitizeBulk({ stake: Number(baseStakeRef.current), runs: Number(formRef.current.runs), duration: Number(formRef.current.duration) });
+                const result = stepAuto(auto.session, auto.config, {
+                    target, valid, busy: guard.current.busy || autoBusy.current, now,
+                    digits: target ? store.current[target.symbol]?.digits : undefined, baseStake: sized.stake, bulkRuns: sized.runs,
+                });
                 const shown = result.session.armed !== auto.session.armed || result.session.runs !== auto.session.runs
-                    || result.session.pnl !== auto.session.pnl || result.session.stopReason !== auto.session.stopReason;
+                    || result.session.pnl !== auto.session.pnl || result.session.stopReason !== auto.session.stopReason
+                    || result.session.lossStreak !== auto.session.lossStreak || Boolean(result.session.pending) !== Boolean(auto.session.pending);
                 auto.session = result.session;
                 if (shown) setAutoSession(result.session);
                 setAutoNote(previous => (previous === result.note ? previous : result.note));
-                if (result.fire && target) {
-                    applyRef.current(target, false);
+                if (result.fire && target && result.plan) {
+                    // Same hand-off as "Load to Trading Deck" (no scrolling), with the planned digit and stake: the signal's own digit at
+                    // the base stake normally, the recovery digit with a martingale stake after a loss. Both are undone after the run.
+                    applyRef.current(target, false, result.plan.barrier);
+                    const stake = stakeFor(sized.stake, result.plan);
+                    setForm(current => ({ ...current, stake: String(stake) }));
                     setPendingAuto({ rec: target, nonce: now });
                 }
             }
@@ -190,9 +215,9 @@ const BulkTraderPage = () => {
     void recVersion;
     const rec = locked ? refreshLocked(locked, verdicts.current, now) : offered;
     const watch = rec ? null : watching(verdicts.current);
-    const applyToDeck = (target: Recommendation, scroll = true) => {
+    const applyToDeck = (target: Recommendation, scroll = true, barrier = target.barrier) => {
         setLoaded(target); setSymbol(target.symbol);
-        if (target.contract === 'DIGITOVER') setOverBarrier(String(target.barrier)); else setUnderBarrier(String(target.barrier));
+        if (target.contract === 'DIGITOVER') setOverBarrier(String(barrier)); else setUnderBarrier(String(barrier));
         setError('');
         if (scroll) window.setTimeout(() => traderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     };
@@ -229,6 +254,14 @@ const BulkTraderPage = () => {
     const nextTick = (target: string) => new Promise<void>(resolve => { (waiters.current[target] ||= []).push(resolve); });
 
     // ------------------------------------------------------------------
+    // Switch the auto trader off from inside the page (fail-safe), keeping the reason on screen.
+    const haltAuto = (reason: string) => {
+        const off = disarmSession(autoRef.current.session, reason);
+        autoRef.current.session = off;
+        setAutoSession(off);
+        setAutoNote(reason);
+    };
+
     // One Run: all N contracts are requested and bought in the same instant, on one tick.
     // ------------------------------------------------------------------
     const execute = async (side: 0 | 1) => {
@@ -290,6 +323,11 @@ const BulkTraderPage = () => {
 
             // Independent final guard in the execution path, immediately before anything is sent.
             assertAllowedContract(contract, barrier);
+            if (autoBusy.current) {
+                // Auto runs are also checked against the session loss limit here, with the stake and trades that are about to be bought.
+                const breach = lossLimitError(autoRef.current.session, autoRef.current.config, exposure(params));
+                if (breach) { haltAuto(breach); setError(breach); setStatus('Run stopped: it could pass the session loss limit. Nothing was purchased.'); return; }
+            }
             setStatus(`Placing ${params.runs} trades together…`);
             // Every copy is bought directly from the same parameters (no shared proposal ID), all sent in one synchronous pass.
             const buyParams = {
@@ -366,15 +404,33 @@ const BulkTraderPage = () => {
         setPendingAuto(null);
         void (async () => {
             autoBusy.current = true;
-            tallyRef.current = emptyTally();
-            setAutoNote(`Running ${target.label} on ${target.market}…`);
-            try { await execute(target.side); } finally { autoBusy.current = false; }
-            const t = tallyRef.current;
-            const finished = recordAutoRun(autoRef.current.session, { placed: t.placed, failed: t.failed, pnl: t.pnl });
-            autoRef.current.session = finished;
-            if (!mounted.current) return;
-            setAutoSession(finished);
-            setAutoNote(finished.armed ? waitingNote(autoRef.current.config) : finished.stopReason);
+            try {
+                if (!autoRef.current.session.armed) return;          // disarmed after the decision was made: nothing is purchased
+                tallyRef.current = emptyTally();
+                setAutoNote(`Running ${target.label} on ${target.market}…`);
+                await execute(target.side);
+                const t = tallyRef.current;
+                const finished = recordAutoRun(
+                    autoRef.current.session,
+                    { placed: t.placed, failed: t.failed, pnl: t.pnl, unsettled: Math.max(0, t.placed - t.settled) },
+                    autoRef.current.config,
+                );
+                autoRef.current.session = finished;
+                if (!mounted.current) return;
+                setAutoSession(finished);
+                setAutoNote(finished.armed ? waitingNote(autoRef.current.config) : finished.stopReason);
+            } catch (err) {
+                if (mounted.current) haltAuto(`Stopped: ${errorText(err)}`);
+            } finally {
+                autoBusy.current = false;
+                // The martingale stake and the recovery digit apply to this one run only. Whatever happened (success, rejected purchase,
+                // thrown error, early return) the deck goes back to the base stake and the signal's own digit, so nothing leaks into the
+                // next trade. The streak that drives the NEXT recovery step lives in the session, so it is untouched.
+                if (mounted.current) {
+                    setForm(current => ({ ...current, stake: baseStakeRef.current }));
+                    if (target.contract === 'DIGITOVER') setOverBarrier(String(target.barrier)); else setUnderBarrier(String(target.barrier));
+                }
+            }
         })();
     }, [pendingAuto]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -383,6 +439,8 @@ const BulkTraderPage = () => {
         const onScreen = lockedRef.current
             ? refreshLocked(lockedRef.current, verdicts.current, Date.now())
             : (recRef.current && recRef.current.expiresAt >= Date.now() ? recRef.current : null);
+        if (!current.armed && (autoBusy.current || guard.current.busy)) { setAutoNote('A run is in progress. Arm the auto trader when it has finished.'); return; }
+        if (!current.armed) baseStakeRef.current = form.stake;          // the deck stake at arming is the base stake
         const next = current.armed ? disarmSession(current, 'Off.') : armSession(onScreen, autoRef.current.config.grade);
         autoRef.current.session = next;
         setAutoSession(next);
@@ -390,10 +448,26 @@ const BulkTraderPage = () => {
     };
     const onAutoForm = (key: keyof AutoForm, value: string) => setAutoForm(current => ({ ...current, [key]: value }));
 
+    // What the auto trader would do next, shown in the panel.
+    const watched = autoSession.armed ? (locked ? refreshLocked(locked, verdicts.current, now) : offered) : null;
+    const nextPlan = watched ? planTrade(watched, autoSession.lossStreak, autoConfig) : null;
+    const baseStake = sanitizeBulk({ stake: Number(autoSession.armed ? baseStakeRef.current : form.stake) }).stake;
+    const entryView = nextPlan && autoConfig.entryTicks > 0 && watched
+        ? {
+            need: autoConfig.entryTicks, want: nextPlan.contract === 'DIGITOVER' ? 'O' : 'U', waiting: Boolean(autoSession.pending),
+            symbols: tickSymbols(store.current[watched.symbol]?.digits ?? [], nextPlan.barrier, Math.max(autoConfig.entryTicks, 6)),
+        }
+        : null;
+
     return <BulkTraderView
         live={live} marketsReady={marketsReady} rec={rec} watch={watch ? { market: watch.market, label: watch.label } : null} onLoadRec={loadRecommendation}
         locked={Boolean(locked)} canLock={Boolean(offered)} onToggleLock={toggleLock}
-        auto={{ armed: autoSession.armed, form: autoForm, runs: autoSession.runs, pnl: autoSession.pnl, note: autoNote, maxRuns: autoConfig.maxRuns, maxLoss: autoConfig.maxLoss, account: authData?.is_virtual === 1 ? 'DEMO' : authData?.is_virtual === 0 ? 'REAL' : '' }}
+        auto={{
+            armed: autoSession.armed, form: autoForm, runs: autoSession.runs, pnl: autoSession.pnl, note: autoNote, maxRuns: autoConfig.maxRuns, maxLoss: autoConfig.maxLoss,
+            targetProfit: autoConfig.targetProfit, account: authData?.is_virtual === 1 ? 'DEMO' : authData?.is_virtual === 0 ? 'REAL' : '', mode: modeText(autoSession, autoConfig),
+            recovery: autoConfig.recovery, entry: entryView,
+            next: nextPlan ? `${nextPlan.label} at ${stakeFor(baseStake, nextPlan).toFixed(2)} ${currency}${nextPlan.recovery ? ` (recovery step ${nextPlan.step})` : ''}` : '',
+        }}
         onAutoToggle={toggleAuto} onAutoForm={onAutoForm}
         symbol={symbol} onSymbol={setSymbol} price={price} digit={digit} digitPct={digitPct} recent={recent}
         form={form} onForm={onForm} overBarrier={overBarrier} underBarrier={underBarrier} onOverBarrier={setOverBarrier} onUnderBarrier={setUnderBarrier}
