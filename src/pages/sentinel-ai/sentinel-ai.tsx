@@ -9,6 +9,7 @@ import ThemedScrollbars from '@/components/shared_ui/themed-scrollbars';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
 import { getNotificationPermission, requestNotificationPermission } from './sentinel-ai-alerts';
+import SentinelAiOutcomePanel from './sentinel-ai-outcome-panel';
 import { sentinelAiRunner } from './sentinel-ai-runner-instance';
 import type {
     ExecutionMode,
@@ -473,6 +474,23 @@ const SentinelAi = observer(() => {
                                         <p className='sentinel-ai-signal__state'>
                                             {stateText(snapshot)}
                                         </p>
+                                        {snapshot.momentum.enabled && snapshot.momentum.current ? (
+                                            <p
+                                                className={classNames('sentinel-ai-momentum', {
+                                                    'is-blocked': !snapshot.momentum.current.pass,
+                                                })}
+                                            >
+                                                {snapshot.momentum.current.pass
+                                                    ? `Momentum passed (score ${snapshot.momentum.current.score})`
+                                                    : `Momentum blocked: ${
+                                                          snapshot.momentum.current.blockers.join('; ') ||
+                                                          'recent digit movement does not favour this contract'
+                                                      }`}
+                                            </p>
+                                        ) : null}
+                                        {!snapshot.momentum.enabled ? (
+                                            <p className='sentinel-ai-momentum is-off'>Momentum check is off</p>
+                                        ) : null}
 
                                         <dl className='sentinel-ai-entry'>
                                             <div>
@@ -513,6 +531,8 @@ const SentinelAi = observer(() => {
                                     </div>
                                 )}
                             </section>
+
+                            <SentinelAiOutcomePanel />
 
                             <section className='sentinel-ai-card'>
                                 <h3>Signals this session</h3>
@@ -649,6 +669,21 @@ const SentinelAi = observer(() => {
                                     checked={settings.skipBlocked}
                                     onChange={checked => set({ skipBlocked: checked })}
                                 />
+                                <Toggle
+                                    label='Require momentum before trading'
+                                    hint='Only trade signals whose recent digit movement favours the contract. This reduces how many signals trade; it does not make them more likely to win'
+                                    checked={settings.requireMomentum}
+                                    onChange={checked => set({ requireMomentum: checked })}
+                                />
+                                {settings.requireMomentum ? (
+                                    <p className='sentinel-ai-muted'>
+                                        Momentum blocked {snapshot.momentum.recentBlocked} of the last{' '}
+                                        {snapshot.momentum.recentSurfaced} surfaced signals
+                                        {snapshot.momentum.topBlocked
+                                            ? `. Holding back now: ${snapshot.momentum.topBlocked.label} on ${snapshot.momentum.topBlocked.market} (${snapshot.momentum.topBlocked.reason})`
+                                            : ''}
+                                    </p>
+                                ) : null}
                                 <SymbolListField
                                     label='Excluded markets'
                                     value={settings.excludedMarkets}

@@ -797,3 +797,49 @@
         animation: none;
     }
 }
+
+// ── momentum status + signal outcome log ───────────────────────────────────────────────────────
+.sentinel-ai-momentum {
+    margin: 0;
+    font-size: 1.3rem;
+    color: var(--sai-muted);
+
+    &.is-blocked {
+        color: var(--sai-text);
+        font-weight: 600;
+    }
+}
+
+.sentinel-ai-log {
+    &__table-wrap {
+        overflow-x: auto;
+    }
+
+    &__table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 1.2rem;
+        color: var(--sai-text);
+
+        caption {
+            text-align: left;
+            padding: 4px 0;
+            color: var(--sai-muted);
+        }
+
+        th,
+        td {
+            padding: 4px 8px;
+            text-align: left;
+            white-space: nowrap;
+            border-bottom: 1px solid var(--sai-border);
+        }
+    }
+
+    &__actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+    }
+}

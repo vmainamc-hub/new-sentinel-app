@@ -70,3 +70,16 @@ Not done / unverified:
 - [x] A waiting signal is paused/dropped only when CLEARLY out of bounds (10 points past the score/danger limit, or engine-blocked) for 5s; dips around a limit are ignored. New signals are still admitted strictly at the limits.
 - [x] Touch-once: after the touch, quality never pauses or drops it; no "runs" wording; if Deriv refuses the touched market it carries on with the next signal without a new touch. Only target profit, stop loss, max losses in a row and Stop end it.
 - 113 tests pass. Still unverified: full build / live run (registry blocked here).
+
+## Momentum gate + signal outcome log (latest)
+Done:
+- [x] New standalone momentum engine in `src/sentinel-engine/lib/momentum/` (`momentum-separation.ts`, `momentum-gate.ts`, tests, README). No existing engine file was edited (not surface-vetting.ts, scan.ts, price-action-psychology.ts).
+- [x] `sentinel-ai-engine.ts` now calls `surfaceVetRank(eligible)` then `selectTradable(vetted, { requireMomentum })`. With the switch off this equals the old `selectSurfacedOpportunity(eligible)` (first vetted candidate, same order).
+- [x] Setting `requireMomentum` (DEFAULT ON, localStorage with try/catch). UI: switch with plain one-line explanation, momentum verdict + blockers on the current signal, "Momentum blocked N of the last 40 surfaced signals" line. Momentum holds a signal that is still waiting for its entry; it never pauses a trade in flight or a Touch-once run that already touched its entry.
+- [x] Signal outcome log (paper outcomes, no trades): one record per surfaced signal (key symbol+contract+barrier, re-logged only after it has been gone 3 s), outcome = last digit of the first tick strictly after the decision tick, unresolved after 30 s, 5000-record cap, localStorage key `sentinel_ai_signal_log_v1`, summary by signal type and momentum pass vs fail (Wilson 95%, break-even p0/0.955, "too few signals to judge" under 300), Download CSV, Clear log with confirmation. Read-only: failures never reach the engine or runner.
+- Momentum is a filter on signal COUNT; it is not described anywhere as improving win rate. Use the log to find out.
+
+Not done / unverified:
+- [ ] `npm run build`, repo jest/eslint (registry blocked here); tests ran under bun.
+- [ ] No live or demo run; nothing was traded.
+- Logged candidates are the ones left after Sentinel AI's own quality/exclusion filters (`surfaceVetRank(eligible)`), not the engine's unfiltered list.

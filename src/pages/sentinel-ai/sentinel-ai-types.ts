@@ -63,6 +63,11 @@ export type SentinelAiSettings = {
     skipBlocked: boolean;
     /** Market symbols never traded, e.g. ["JD100"]. */
     excludedMarkets: string[];
+    /**
+     * Only trade signals whose recent digit movement favours the contract (separate momentum engine). It reduces how
+     * many signals trade; it is not a claim about win rate. On by default.
+     */
+    requireMomentum: boolean;
     alertVisual: boolean;
     alertVibrate: boolean;
     alertNotify: boolean;
@@ -95,6 +100,7 @@ export const DEFAULT_SETTINGS: SentinelAiSettings = {
     maxDanger: 45,
     skipBlocked: true,
     excludedMarkets: ['JD100'],
+    requireMomentum: true,
     alertVisual: true,
     alertVibrate: true,
     alertNotify: true,
@@ -175,6 +181,7 @@ export const normalizeSettings = (raw: unknown, base: SentinelAiSettings = DEFAU
         maxDanger: num(r.maxDanger, base.maxDanger, 0, 100, true),
         skipBlocked: bool(r.skipBlocked, base.skipBlocked),
         excludedMarkets: normalizeSymbolList(r.excludedMarkets, base.excludedMarkets),
+        requireMomentum: bool(r.requireMomentum, base.requireMomentum),
         alertVisual: bool(r.alertVisual, base.alertVisual),
         alertVibrate: bool(r.alertVibrate, base.alertVibrate),
         alertNotify: bool(r.alertNotify, base.alertNotify),
@@ -284,6 +291,18 @@ export type ActiveSignalState =
 /** Where the digit(s) the next trade waits for come from. */
 export type EntrySource = 'engine' | 'default';
 
+/** Momentum status shown on the page. */
+export type MomentumView = {
+    enabled: boolean;
+    /** Momentum of the current signal (null when there is no signal or no momentum result for it). */
+    current: { pass: boolean; score: number; blockers: string[] } | null;
+    /** Of the last 40 surfaced signals (new signal events), how many momentum blocked. */
+    recentSurfaced: number;
+    recentBlocked: number;
+    /** Best-ranked candidate momentum is holding back right now, with the reason. */
+    topBlocked: { label: string; market: string; reason: string } | null;
+};
+
 export type SentinelAiSnapshot = {
     status: RunnerStatus;
     engine: EngineInfo;
@@ -322,4 +341,5 @@ export type SentinelAiSnapshot = {
     /** Increments for every new signal event so the UI can flash/animate. */
     alertSeq: number;
     settings: SentinelAiSettings;
+    momentum: MomentumView;
 };

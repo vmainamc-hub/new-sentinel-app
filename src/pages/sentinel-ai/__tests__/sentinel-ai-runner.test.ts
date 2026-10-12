@@ -1,6 +1,6 @@
 import type { RankedOpportunity } from '@/sentinel-engine/lib/apex/types';
 import { TradeRequestError } from '@/utils/trade-errors';
-import type { EngineSample, SentinelAiEngine, SignalExclusion } from '../sentinel-ai-engine-types';
+import type { EngineSample, SentinelAiEngine, SignalExclusion, VettedCandidate } from '../sentinel-ai-engine-types';
 import { MODULE_ID, SentinelAiRunner, type RunnerIO, type RunnerStores } from '../sentinel-ai-runner';
 import { DEFAULT_SETTINGS, type SentinelAiSettings } from '../sentinel-ai-types';
 
@@ -37,6 +37,8 @@ class FakeEngine implements SentinelAiEngine {
     listeners = new Set<(symbol: string) => void>();
     retained = 0;
     failsafes: string[] = [];
+    vetted: VettedCandidate[] | undefined = undefined;
+    lastOptions: unknown = undefined;
 
     retain() {
         this.retained += 1;
@@ -45,7 +47,8 @@ class FakeEngine implements SentinelAiEngine {
         };
     }
 
-    sample(exclude?: SignalExclusion): EngineSample {
+    sample(exclude?: SignalExclusion, options?: unknown): EngineSample {
+        this.lastOptions = options;
         const hidden = Boolean(this.surfaced && exclude?.(this.surfaced.symbol, String(this.surfaced.contract.id), this.surfaced));
         return {
             info: {
@@ -57,6 +60,7 @@ class FakeEngine implements SentinelAiEngine {
                 dangerLabel: 'CALM',
             },
             surfaced: hidden ? null : this.surfaced,
+            vetted: this.vetted,
         };
     }
 
@@ -1375,5 +1379,117 @@ describe('SentinelAiRunner: pressing Run on a signal that is already waiting', (
         h.advance(46_000);
         h.loop();
         expect(h.runner.getSnapshot().signalState).toBe('EXPIRED');
+    });
+});
+
+describe('SentinelAiRunner: momentum gate', () => {
+    let h: Harness | null = null;
+    afterEach(() => {
+        h?.cleanup();
+        h = null;
+    });
+
+    const candidate = (opp: RankedOpportunity, pass: boolean, required = true): VettedCandidate => ({
+        opportunity: opp,
+        blocked: required && !pass,
+        momentum: { pass, measurable: true, score: pass ? 70 : 20, blockers: pass ? [] : ['losing side is not weakening'] },
+    });
+
+    it('asks the engine for momentum by default and passes the switch through', () => {
+        h = makeHarness();
+        h.surface(opportunity('UNDER7', 4));
+        expect(h.engine.lastOptions).toEqual({ requireMomentum: true });
+        h.cleanup();
+        h = makeHarness({ requireMomentum: false });
+        h.surface(opportunity('UNDER7', 4));
+        expect(h.engine.lastOptions).toEqual({ requireMomentum: false });
+    });
+
+    it('shows the momentum verdict of the current signal and the blocked count over recent signals', () => {
+        h = makeHarness();
+        const a = opportunity('UNDER7', 4, 'R_100');
+        const b = opportunity('OVER2', 4, 'R_50');
+        h.engine.vetted = [candidate(b, false), candidate(a, true)];
+        h.surface(a);
+        const view = h.runner.getSnapshot().momentum;
+        expect(view.enabled).toBe(true);
+        expect(view.current).toEqual({ pass: true, score: 70, blockers: [] });
+        expect(view.recentSurfaced).toBe(2);
+        expect(view.recentBlocked).toBe(1);
+        expect(view.topBlocked?.reason).toMatch(/losing side/);
+        h.surface(a); // the same live signals are not counted again
+        expect(h.runner.getSnapshot().momentum.recentSurfaced).toBe(2);
+    });
+
+    it('keeps a waiting signal from trading while momentum blocks it, and trades once it passes again', async () => {
+        h = makeHarness();
+        const opp = opportunity('UNDER7', 4);
+        h.engine.vetted = [candidate(opp, true)];
+        h.surface(opp);
+        h.runner.start();
+        h.engine.vetted = [candidate(opp, false)];
+        h.surface(opp);
+        expect(h.runner.getSnapshot().signalState).toBe('HELD');
+        expect(h.runner.getSnapshot().holdReason).toMatch(/^momentum:/);
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(0);
+
+        h.engine.vetted = [candidate(opp, true)];
+        h.surface(opp);
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+    });
+
+    it('does nothing different when the switch is off (blocked flags are never set by the engine)', async () => {
+        h = makeHarness({ requireMomentum: false });
+        const opp = opportunity('UNDER7', 4);
+        h.engine.vetted = [candidate(opp, false, false)];
+        h.surface(opp);
+        h.runner.start();
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(h.buy.mock.calls.length).toBe(1);
+        expect(h.runner.getSnapshot().momentum.current).not.toBeNull();
+    });
+
+    it('never pauses a Touch-once run that has already touched its entry', async () => {
+        h = makeHarness({ executionMode: 'touch_once' });
+        const opp = opportunity('UNDER7', 4);
+        h.engine.vetted = [candidate(opp, true)];
+        h.gate.hold = new Promise<void>(() => undefined); // keep the first trade in flight
+        h.surface(opp);
+        h.runner.start();
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        h.engine.vetted = [candidate(opp, false)];
+        h.surface(opp);
+        expect(h.runner.getSnapshot().locked).toBe(true);
+        expect(h.runner.getSnapshot().signalState).not.toBe('HELD');
+        expect(h.runner.getSnapshot().holdReason).toBeNull();
+    });
+
+    it('a failing outcome log never breaks the runner and is told when a signal is bought', async () => {
+        h = makeHarness();
+        const opp = opportunity('UNDER7', 4);
+        h.engine.vetted = [candidate(opp, true)];
+        const outcomes = {
+            observe: jest.fn(() => {
+                throw new Error('log broke');
+            }),
+            markTraded: jest.fn(() => {
+                throw new Error('log broke');
+            }),
+        };
+        (h.runner as unknown as { io: { outcomes: unknown } }).io.outcomes = outcomes;
+        h.surface(opp);
+        h.runner.start();
+        h.engine.tick(SYMBOL, 4);
+        await flush();
+        expect(outcomes.observe).toHaveBeenCalled();
+        expect(h.buy.mock.calls.length).toBe(1);
+        expect(outcomes.markTraded).toHaveBeenCalledWith(SYMBOL, 'UNDER', 7);
+        expect(h.runner.getSnapshot().lastError).toBeNull();
     });
 });

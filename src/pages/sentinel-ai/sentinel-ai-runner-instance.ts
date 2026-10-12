@@ -2,9 +2,21 @@
 import { api_base } from '@/external/bot-skeleton';
 import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purchase';
 import { fireSignalAlerts } from './sentinel-ai-alerts';
+import { derivBus } from '@/sentinel-engine/lib/deriv/tick-bus';
 import { sentinelAiEngine } from './sentinel-ai-engine';
+import { loadStoredRecords, saveStoredRecords, SignalOutcomeLog } from './sentinel-ai-outcome-log';
 import { SentinelAiRunner } from './sentinel-ai-runner';
 import { loadSettings, saveSettings } from './sentinel-ai-types';
+
+/** Read-only paper-outcome log of every surfaced signal. It never trades and never feeds back into the engine. */
+export const sentinelAiOutcomeLog = new SignalOutcomeLog({
+    getTicks: symbol => derivBus.getTicks(symbol),
+    getPipSize: symbol => derivBus.getPipSize(symbol),
+    onTick: callback => derivBus.onTick(symbol => callback(symbol)),
+    now: () => Date.now(),
+    load: loadStoredRecords,
+    save: saveStoredRecords,
+});
 
 export const sentinelAiRunner = new SentinelAiRunner({
     engine: sentinelAiEngine,
@@ -22,4 +34,5 @@ export const sentinelAiRunner = new SentinelAiRunner({
     now: () => Date.now(),
     loadSettings,
     saveSettings,
+    outcomes: sentinelAiOutcomeLog,
 });

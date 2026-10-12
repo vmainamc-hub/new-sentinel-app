@@ -10,15 +10,18 @@
 import { contract_stages } from '@/constants/contract-stage';
 import { describeTradeFailure } from '@/utils/trade-errors';
 import type { RankedOpportunity } from '@/sentinel-engine/lib/apex/types';
-import type { SentinelAiEngine } from './sentinel-ai-engine-types';
+import type { SentinelAiEngine, VettedCandidate } from './sentinel-ai-engine-types';
+import type { OutcomeSink } from './sentinel-ai-outcome-log';
+import type { OutcomeContract, SurfacedSignalInput } from './sentinel-ai-outcomes';
 import { initialStakeState, nextStakeState, requiredEntry, sessionStopReason, tradeBarrier } from './sentinel-ai-money';
 import { qualityVerdict } from './sentinel-ai-quality';
-import { toSentinelAiSignal } from './sentinel-ai-signal';
+import { signalKeyOf, toSentinelAiSignal } from './sentinel-ai-signal';
 import {
     DEFAULT_SETTINGS,
     type ActiveSignalState,
     type EngineInfo,
     type EntrySource,
+    type MomentumView,
     type SentinelAiSettings,
     type SentinelAiSignal,
     type SentinelAiSnapshot,
@@ -46,6 +49,8 @@ const MAX_MARKET_REFUSALS = 2;
 const DROP_GRACE_MS = 5_000;
 /** A waiting signal is paused only when it is this many points beyond the score / danger limit (or engine-blocked). */
 const HOLD_TOLERANCE = 10;
+/** The "momentum blocked N of the last N surfaced signals" window. */
+const RECENT_SURFACED = 40;
 /** Pause after a transient failure so Immediate mode cannot hammer the API. */
 const RETRY_COOLDOWN_MS = 3_000;
 
@@ -102,6 +107,8 @@ export type RunnerIO = {
     now: () => number;
     loadSettings: () => SentinelAiSettings;
     saveSettings: (settings: SentinelAiSettings) => void;
+    /** Optional read-only signal outcome log. Failures here never reach the runner. */
+    outcomes?: OutcomeSink;
 };
 
 type ActiveSignal = {
@@ -119,6 +126,27 @@ type ActiveSignal = {
     /** Why the quality gate currently rejects this signal, and since when. */
     holdReason: string | null;
     rejectedSince: number | null;
+};
+
+const toLogInput = (candidate: VettedCandidate): SurfacedSignalInput => {
+    const opp = candidate.opportunity;
+    const contract = opp.contract;
+    const isOver = contract.side === 'OVER' || String(contract.id).startsWith('OVER');
+    const barrier = Number.isFinite(Number(contract.barrier))
+        ? Number(contract.barrier)
+        : Number(String(contract.id).match(/\d+/)?.[0] ?? NaN);
+    const type: OutcomeContract = isOver ? 'OVER' : 'UNDER';
+    const psychology = Number(opp.digitPsychology?.score);
+    return {
+        symbol: opp.symbol,
+        contract: type,
+        barrier: Number.isFinite(barrier) ? barrier : null,
+        label: contract.label || `${isOver ? 'Over' : 'Under'} ${barrier}`,
+        psychologyScore: Number.isFinite(psychology) ? psychology : null,
+        momentumPass: candidate.momentum.pass,
+        momentumScore: Number.isFinite(candidate.momentum.score) ? candidate.momentum.score : null,
+        momentumBlocked: candidate.blocked,
+    };
 };
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
@@ -172,6 +200,11 @@ export class SentinelAiRunner {
     /** Deriv refusals per market this session; a market refused repeatedly is quarantined. */
     private marketRefusals = new Map<string, number>();
     private quarantined = new Set<string>();
+    /** Momentum result per surfaced candidate in the latest sample: `symbol|contractId` -> candidate. */
+    private vettedByKey = new Map<string, VettedCandidate>();
+    /** The last surfaced signal events (newest last) and whether momentum blocks each, for the "blocked N of 40" line. */
+    private surfacedRing: { key: string; blocked: boolean }[] = [];
+    private liveKeys = new Set<string>();
 
     private history: SignalRecord[] = [];
     private trades: TradeRecord[] = [];
@@ -385,8 +418,11 @@ export class SentinelAiRunner {
         try {
             this.qualityRejected = new Map();
             this.activeOpp = null;
-            const sample = this.io.engine.sample((symbol, contractId, opp) => this.excludeCell(symbol, contractId, opp));
+            const sample = this.io.engine.sample((symbol, contractId, opp) => this.excludeCell(symbol, contractId, opp), {
+                requireMomentum: this.settings.requireMomentum,
+            });
             this.engineInfo = sample.info;
+            this.noteVetted(sample.vetted ?? []);
             this.ingest(sample.surfaced);
             this.applyQualityToActive();
         } catch (error) {
@@ -396,6 +432,34 @@ export class SentinelAiRunner {
         this.checkExpiry();
         this.emit();
         this.tryFire();
+    }
+
+    /** Records the momentum result of what surfaced (for the page) and hands it to the read-only outcome log. */
+    private noteVetted(vetted: VettedCandidate[]) {
+        this.vettedByKey = new Map();
+        for (const candidate of vetted) {
+            this.vettedByKey.set(signalKeyOf(candidate.opportunity), candidate);
+        }
+        for (const [key, candidate] of this.vettedByKey) {
+            if (this.liveKeys.has(key)) {
+                // Still surfaced: keep the newest event of this signal current (momentum can change while it is live).
+                for (let i = this.surfacedRing.length - 1; i >= 0; i -= 1) {
+                    if (this.surfacedRing[i].key === key) {
+                        this.surfacedRing[i].blocked = candidate.blocked;
+                        break;
+                    }
+                }
+            } else {
+                this.surfacedRing.push({ key, blocked: candidate.blocked });
+            }
+        }
+        if (this.surfacedRing.length > RECENT_SURFACED) this.surfacedRing.splice(0, this.surfacedRing.length - RECENT_SURFACED);
+        this.liveKeys = new Set(this.vettedByKey.keys());
+        try {
+            this.io.outcomes?.observe(vetted.map(candidate => toLogInput(candidate)));
+        } catch {
+            // The outcome log is observation only.
+        }
     }
 
     /** True when a market x contract cell must not be traded: Deriv refused it, the market is out, or it fails the gate. */
@@ -434,8 +498,11 @@ export class SentinelAiRunner {
         }
         const verdict = opp ? qualityVerdict(opp, this.settings, HOLD_TOLERANCE) : { ok: true, reason: null };
         if (verdict.ok || active.locked || this.tradeInFlight) {
-            active.held = false;
-            active.holdReason = null;
+            // Momentum (when required) keeps a signal that is still waiting for its entry from being traded while it
+            // fails. It never pauses a trade in flight or a Touch-once run that has already touched its entry.
+            const momentumHold = verdict.ok && !active.locked && !this.tradeInFlight ? this.momentumHold(active) : null;
+            active.held = momentumHold !== null;
+            active.holdReason = momentumHold;
             active.rejectedSince = null;
             return;
         }
@@ -449,6 +516,14 @@ export class SentinelAiRunner {
         if (record && record.outcome === 'ACTIVE') record.outcome = active.runsDone > 0 ? 'TRADED' : 'SKIPPED';
         this.dropNotice = `Dropped ${active.signal.label} on ${active.signal.marketName}: ${verdict.reason}`;
         if (this.pending) this.activate(this.pending);
+    }
+
+    /** Why momentum currently blocks the active signal, or null when it does not. */
+    private momentumHold(active: ActiveSignal): string | null {
+        if (!this.settings.requireMomentum) return null;
+        const candidate = this.vettedByKey.get(active.signal.key);
+        if (!candidate || !candidate.blocked) return null;
+        return `momentum: ${candidate.momentum.blockers[0] ?? 'recent digit movement does not favour this contract'}`;
     }
 
     private isBlocked(key: string) {
@@ -664,6 +739,15 @@ export class SentinelAiRunner {
             contractId = buy.contract_id;
             this.buyErrors = 0;
             this.skipStreak = 0;
+            try {
+                this.io.outcomes?.markTraded(
+                    signal.symbol,
+                    signal.contractType === 'DIGITOVER' ? 'OVER' : 'UNDER',
+                    signal.barrier
+                );
+            } catch {
+                // The outcome log is observation only.
+            }
             const opened: Loose = {
                 ...baseContract,
                 buy_price: buy.buy_price,
@@ -841,6 +925,30 @@ export class SentinelAiRunner {
         this.listeners.forEach(listener => listener());
     }
 
+    private momentumView(): MomentumView {
+        const active = this.active;
+        const candidate = active ? this.vettedByKey.get(active.signal.key) : undefined;
+        let topBlocked: MomentumView['topBlocked'] = null;
+        for (const entry of this.vettedByKey.values()) {
+            if (!entry.blocked) continue;
+            topBlocked = {
+                label: entry.opportunity.contract?.label ?? String(entry.opportunity.contract?.id ?? ''),
+                market: entry.opportunity.name || entry.opportunity.symbol,
+                reason: entry.momentum.blockers[0] ?? 'recent digit movement does not favour this contract',
+            };
+            break;
+        }
+        return {
+            enabled: this.settings.requireMomentum,
+            current: candidate
+                ? { pass: candidate.momentum.pass, score: candidate.momentum.score, blockers: candidate.momentum.blockers }
+                : null,
+            recentSurfaced: this.surfacedRing.length,
+            recentBlocked: this.surfacedRing.filter(entry => entry.blocked).length,
+            topBlocked,
+        };
+    }
+
     private buildSnapshot(): SentinelAiSnapshot {
         const active = this.active;
         const { digits: requiredDigits, source: entrySource } = this.requirement();
@@ -886,6 +994,7 @@ export class SentinelAiRunner {
             lastError: this.lastError,
             dropNotice: this.dropNotice,
             holdReason: active?.holdReason ?? null,
+            momentum: this.momentumView(),
             stopReason: this.stopReason,
             alertSeq: this.alertSeq,
             settings: this.settings,

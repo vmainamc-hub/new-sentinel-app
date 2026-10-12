@@ -1,13 +1,14 @@
 // SENTINEL AI — adapter to the real Sentinel Signal Engine (src/lib/**, copied unchanged).
 //
 // This file only READS the engine. Signal production is never altered: it uses the same
-// apexCore → rankOpportunities → selectSurfacedOpportunity chain the Forge used, minus the audible alert.
+// apexCore → rankOpportunities → surfaceVetRank (+ the separate momentum gate) chain the Forge used, minus the audible alert.
 import { api_base } from '@/external/bot-skeleton';
 import { apexCore, APEX_UNIVERSE } from '@/sentinel-engine/lib/apex/core';
 import { DEFAULT_SCAN_OPTIONS, globalDanger, rankOpportunities } from '@/sentinel-engine/lib/apex/scan';
-import { selectSurfacedOpportunity } from '@/sentinel-engine/lib/apex/surface-vetting';
+import { surfaceVetRank } from '@/sentinel-engine/lib/apex/surface-vetting';
 import { derivBus } from '@/sentinel-engine/lib/deriv/tick-bus';
-import type { SentinelAiEngine, EngineSample, SignalExclusion } from './sentinel-ai-engine-types';
+import { selectTradable } from '@/sentinel-engine/lib/momentum/momentum-gate';
+import type { SentinelAiEngine, EngineSample, SampleOptions, SignalExclusion, VettedCandidate } from './sentinel-ai-engine-types';
 import type { EngineInfo } from './sentinel-ai-types';
 
 // Same fail-safe thresholds the Forge used, so "no signal" can be told apart from "cannot see".
@@ -150,7 +151,7 @@ class RealSentinelAiEngine implements SentinelAiEngine {
         }
     }
 
-    sample(exclude?: SignalExclusion): EngineSample {
+    sample(exclude?: SignalExclusion, options?: SampleOptions): EngineSample {
         const t0 = Date.now();
         const intels = apexCore.getAll();
         this.lastSampleCostMs = Date.now() - t0;
@@ -159,7 +160,21 @@ class RealSentinelAiEngine implements SentinelAiEngine {
         // Cells Deriv refused are filtered BEFORE the engine's own surfacing rule runs, so the next-best signal
         // surfaces through the same gate instead of the feed getting stuck on a contract that cannot be bought.
         const eligible = exclude ? ranked.filter(opp => !exclude(opp.symbol, String(opp.contract.id), opp)) : ranked;
-        const surfaced = selectSurfacedOpportunity(eligible);
+        // The engine's own surface vetting (unchanged), then the separate momentum gate picks what may be traded. With
+        // momentum off this is exactly selectSurfacedOpportunity(eligible): the first vetted candidate.
+        const vettedRank = surfaceVetRank(eligible);
+        const gate = selectTradable(vettedRank, { requireMomentum: options?.requireMomentum === true });
+        const surfaced = gate.tradable;
+        const vetted: VettedCandidate[] = gate.reports.map(report => ({
+            opportunity: report.candidate,
+            blocked: report.blocked,
+            momentum: {
+                pass: report.momentum.pass,
+                measurable: report.momentum.measurable,
+                score: report.momentum.score,
+                blockers: report.momentum.blockers,
+            },
+        }));
         const gd = globalDanger(intels);
 
         const rawStatus = apexCore.getStatus();
@@ -192,6 +207,7 @@ class RealSentinelAiEngine implements SentinelAiEngine {
                 dangerLabel: dangerLabel(gd),
             },
             surfaced,
+            vetted,
         };
     }
 
