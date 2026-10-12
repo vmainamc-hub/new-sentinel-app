@@ -31,7 +31,9 @@ const make = (options = {}) => {
     });
     return engine;
 };
-const tick = (quote, epoch, symbol = 'R_100') => mockTicks.next({ data: { msg_type: 'tick', tick: { symbol, quote, epoch, pip_size: 2 } } });
+const tick = (quote, epoch, symbol = 'R_100', pipSize = 2) => mockTicks.next({
+    data: { msg_type: 'tick', tick: { symbol, quote, epoch, ...(pipSize == null ? {} : { pip_size: pipSize }) } },
+});
 const real = status => ({ status, profit: status === 'won' ? 0.9 : -1 });
 const virtual = status => ({ status, profit: status === 'won' ? 0.9 : -1, is_virtual_hook: 1 });
 
@@ -130,6 +132,48 @@ describe('virtualPurchase', () => {
         tick(10.03, 2);
         expect(e.settled[0].status).toBe('lost');
         expect(e.settled[0].profit).toBe(-1);
+    });
+
+    it('preserves a trailing zero when settling a digit contract', async () => {
+        const e = make({ prediction: 7 });
+        e.setVirtualHook({ enabled: true, startVirtual: true });
+        await e.virtualPurchase('DIGITUNDER');
+        tick('6022.690', 2, 'R_100', 3);
+        expect(e.settled[0].status).toBe('won'); // final printed digit is 0, which is below 7
+        expect(e.settled[0].exit_digit).toBe(0);
+        expect(e.settled[0].exit_spot).toBe('6022.690');
+        expect(e.settled[0].exit_display_value).toBe('6022.690');
+    });
+
+    it('accepts pip steps and falls back to quote precision when pip size is missing', async () => {
+        const stepSize = make({ prediction: 7 });
+        stepSize.setVirtualHook({ enabled: true, startVirtual: true });
+        await stepSize.virtualPurchase('DIGITUNDER');
+        tick('6022.690', 2, 'R_100', 0.001);
+        expect(stepSize.settled[0].exit_digit).toBe(0);
+
+        const noPip = make({ prediction: 7 });
+        noPip.getPipSize = undefined;
+        noPip.setVirtualHook({ enabled: true, startVirtual: true });
+        await noPip.virtualPurchase('DIGITUNDER');
+        tick('6022.690', 3, 'R_100', null);
+        expect(noPip.settled[0].exit_digit).toBe(0);
+    });
+
+    it('does not settle on any market while the target symbol is unknown, and recovers once known', async () => {
+        const e = make({ prediction: 2 });
+        e.symbol = undefined;
+        e.tradeOptions.symbol = undefined;
+        e.setVirtualHook({ enabled: true, startVirtual: true });
+        await e.virtualPurchase('DIGITOVER');
+        tick(100.17, 2, 'R_50');
+        expect(e.settled).toHaveLength(0);
+        e.symbol = 'R_100';
+        tick(100.17, 3, 'R_50');
+        expect(e.settled).toHaveLength(0);
+        tick(100.17, 4, 'R_100');
+        expect(e.settled).toHaveLength(1);
+        expect(e.settled[0].status).toBe('won');
     });
 
     it('waits the configured number of ticks and ignores duplicate epochs and other symbols', async () => {
