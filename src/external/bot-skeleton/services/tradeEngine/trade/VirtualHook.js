@@ -10,7 +10,20 @@ const SUPPORTED = new Set(['DIGITOVER', 'DIGITUNDER', 'DIGITEVEN', 'DIGITODD', '
 const VIRTUAL_ID_BASE = 9_000_000_000_000;
 let virtual_counter = 0;
 
-const lastDigit = (quote, pip) => Number(Number(quote).toFixed(Math.max(0, Number(pip) || 2)).slice(-1));
+// Deriv normally reports pip_size as a decimal count (for example, 3). Some feeds expose the pip step
+// instead (0.001). Normalize both forms so settlement and display use the same precision.
+const pipDecimals = (pip, quote) => {
+    const n = Number(pip);
+    if (pip !== undefined && pip !== null && pip !== '' && Number.isFinite(n) && n >= 0) {
+        const decimals = n > 0 && n < 1 ? Math.round(-Math.log10(n)) : Math.trunc(n);
+        return Math.min(20, Math.max(0, decimals));
+    }
+    return (String(quote).split('.')[1] || '').length;
+};
+
+// Keep the quote as text (for example, 6022.690). Converting it to Number first drops trailing zeros.
+const formatSpot = (quote, pip) => Number(quote).toFixed(pipDecimals(pip, quote));
+const lastDigit = (quote, pip) => Number(formatSpot(quote, pip).slice(-1));
 
 const winProbability = (type, barrier) => {
     const b = Number(barrier);
@@ -163,27 +176,36 @@ export default Engine =>
             this.store.dispatch(purchaseSuccessful());
 
             let entry = null;
+            let entry_text = '';
             let count = 0;
             let last_epoch = null;
-            const symbol = this.symbol;
 
             this.vh.subscription = api_base.api.onMessage().subscribe(({ data }) => {
                 if (data?.msg_type !== 'tick' || !data.tick) return;
                 const tick = data.tick;
-                if (symbol && (tick.symbol || tick.underlying_symbol) !== symbol) return;
+                // Resolve the intended market on every tick: some engine instances populate the symbol only after purchase starts.
+                // If it is still unknown, do not let an arbitrary market's tick settle this virtual trade.
+                const symbol = this.symbol || options.symbol || this.options?.symbol;
+                if (!symbol) return;
+                if ((tick.symbol || tick.underlying_symbol) !== symbol) return;
                 if (tick.epoch && tick.epoch === last_epoch) return;
                 last_epoch = tick.epoch;
                 const quote = Number(tick.quote);
                 if (!Number.isFinite(quote)) return;
+                const pip = tick.pip_size ?? this.getPipSize?.();
 
-                if (entry === null) entry = quote;
+                if (entry === null) {
+                    entry = quote;
+                    entry_text = formatSpot(tick.quote, pip);
+                }
                 // The first tick after purchase is tick 1, including for one-tick contracts.
                 count += 1;
                 if (count < duration) return;
 
                 this.vhStop();
-                const pip = tick.pip_size ?? this.getPipSize?.() ?? 2;
-                const won = hasWon(contract_type, barrier, entry, quote, lastDigit(quote, pip));
+                const exit_text = formatSpot(tick.quote, pip);
+                const exit_digit = lastDigit(tick.quote, pip);
+                const won = hasWon(contract_type, barrier, entry, quote, exit_digit);
                 const profit = won ? potential_profit : -stake;
                 this.handleOpenContract({
                     contract_id,
@@ -197,10 +219,15 @@ export default Engine =>
                     sell_price: won ? stake + potential_profit : 0,
                     profit,
                     barrier: String(barrier),
-                    entry_spot: entry,
+                    entry_spot: entry_text,
                     entry_tick: entry,
                     exit_tick: quote,
-                    exit_spot: quote,
+                    exit_spot: exit_text,
+                    entry_text,
+                    exit_text,
+                    entry_display_value: entry_text,
+                    exit_display_value: exit_text,
+                    exit_digit,
                     entry_tick_time: tick.epoch,
                     exit_tick_time: tick.epoch,
                     transaction_ids: { buy: contract_id, sell: contract_id },
