@@ -25,7 +25,7 @@ import BulkTraderPage from './pages/BulkTraderPage';
 import CalculatorPage from './pages/CalculatorPage';
 import DigitsAnalysisPage from './pages/DigitsAnalysisPage';
 import DashboardHome from './pages/DashboardHome';
-import FreeBotsPage from './pages/FreeBotsPage';
+import FreeBotsPage, { prefetchFreeBots } from './pages/FreeBotsPage';
 import {
     AdvancedManualTradingPage,
     AutoTraderPage,
@@ -108,6 +108,8 @@ const PremiumLayout = observer(() => {
     const isAuthenticated = Boolean(runtimeAuthenticated || hasStoredAuth || isLocalDevelopmentHost());
 
     useEffect(() => { document.title = getTemplateDomain(); }, []);
+    // Load the Free Bots list now so it is already in memory when the tab is opened later.
+    useEffect(() => { prefetchFreeBots(); }, []);
 
     useEffect(() => {
         setSection(sectionFromHash(location.hash));

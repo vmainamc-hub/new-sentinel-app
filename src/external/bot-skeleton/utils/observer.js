@@ -81,9 +81,13 @@ export default class Observer {
     }
 
     unregister(event, f) {
+        // The Run Panel clears whole events with unregisterAll() when a run starts or stops, so a component that
+        // registered a listener earlier can legitimately unregister it after the event is gone. Nothing to remove then.
+        const actionList = this.eam.get(event);
+        if (!actionList) return;
         this.eam = this.eam.set(
             event,
-            this.eam.get(event).filter(r => r.searchBy !== f)
+            actionList.filter(r => r.searchBy !== f)
         );
     }
 

@@ -46,20 +46,38 @@ const githubRawUrlForLocalPath = (url: string): string => {
     return joinUrl(GITHUB_RAW_BOT_LIBRARY, url.slice('/free-bots/'.length));
 };
 
+class FetchFailure extends Error {
+    status: number;
+    constructor(message: string, status = 0) {
+        super(message);
+        this.status = status;
+    }
+}
+
+const isRejectedByServer = (status: number) => status === 401 || status === 403;
+
 const fetchTextWithFallback = async (urls: string[], label: string): Promise<string> => {
     let lastError = '';
+    let lastStatus = 0;
 
     for (const url of Array.from(new Set(urls.filter(Boolean)))) {
-        try {
-            const response = await fetch(url, { cache: 'no-store' });
-            if (response.ok) return response.text();
-            lastError = `HTTP ${response.status}`;
-        } catch (error) {
-            lastError = error instanceof Error ? error.message : String(error);
+        // One quick retry: a request made right after the tab wakes up can fail once before the connection is back.
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+            try {
+                const response = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+                if (response.ok) return await response.text();
+                lastError = `HTTP ${response.status}`;
+                lastStatus = response.status;
+                if (isRejectedByServer(response.status)) break; // retrying the same URL cannot fix a refusal
+            } catch (error) {
+                lastError = error instanceof Error ? error.message : String(error);
+                lastStatus = 0;
+                await new Promise(resolve => window.setTimeout(resolve, 400));
+            }
         }
     }
 
-    throw new Error(`${label} could not be loaded${lastError ? ` (${lastError})` : ''}.`);
+    throw new FetchFailure(`${label} could not be loaded${lastError ? ` (${lastError})` : ''}.`, lastStatus);
 };
 
 const decodeGzipBase64 = (encoded: string): string => {
@@ -68,9 +86,8 @@ const decodeGzipBase64 = (encoded: string): string => {
     return ungzip(bytes, { to: 'string' });
 };
 
-const FreeBotsPage = ({ openBotBuilder }: { openBotBuilder?: () => void }) => {
+const manifestUrlsForSite = () => {
     const site = getCurrentSiteConfig();
-    const domain = getTemplateDomain();
     const configuredLibrary = site.bot_library;
     const domainManifestUrl = `/free-bots/domains/${encodeURIComponent(site.id)}.json`;
     const configuredManifestUrl = configuredLibrary?.manifest_url;
@@ -92,33 +109,70 @@ const FreeBotsPage = ({ openBotBuilder }: { openBotBuilder?: () => void }) => {
             githubRawUrlForLocalPath(SHARED_BOT_LIBRARY.manifest_url)
         );
     }
+    return { manifestUrl, baseUrl, manifestFallbacks };
+};
 
-    const [bots, setBots] = useState<DomainBot[]>([]);
-    const [loading, setLoading] = useState(true);
+const parseManifest = (payload: string): DomainBot[] => {
+    const manifest = JSON.parse(payload);
+    const items = Array.isArray(manifest) ? manifest : Array.isArray(manifest?.bots) ? manifest.bots : [];
+    return items
+        .filter((item: any) => item && typeof item.file === 'string')
+        .map((item: any) => ({ ...item, priority: Number(item.priority ?? 999) }))
+        .sort((a: DomainBot, b: DomainBot) => Number(a.priority ?? 999) - Number(b.priority ?? 999));
+};
+
+// The last good bot list, kept in memory. A tab left open for a long time can have its later requests refused
+// (for example HTTP 401 after the site's access session expires); the list loaded earlier still shows.
+const manifestCache = new Map<string, DomainBot[]>();
+
+const loadManifest = async (urls: string[]): Promise<DomainBot[]> => {
+    const bots = parseManifest(await fetchTextWithFallback(urls, 'Bot manifest'));
+    manifestCache.set(urls.join('|'), bots);
+    return bots;
+};
+
+// Called once when the app starts so the list is already in memory before the Free Bots tab is opened.
+export const prefetchFreeBots = () => {
+    try {
+        void loadManifest(manifestUrlsForSite().manifestFallbacks).catch(() => undefined);
+    } catch {
+        // Prefetch is only an optimisation.
+    }
+};
+
+const FreeBotsPage = ({ openBotBuilder }: { openBotBuilder?: () => void }) => {
+    const domain = getTemplateDomain();
+    const { manifestUrl, baseUrl, manifestFallbacks } = manifestUrlsForSite();
+    const cacheKey = manifestFallbacks.join('|');
+
+    const [bots, setBots] = useState<DomainBot[]>(() => manifestCache.get(cacheKey) ?? []);
+    const [loading, setLoading] = useState(() => !manifestCache.has(cacheKey));
     const [busyFile, setBusyFile] = useState('');
     const [error, setError] = useState('');
+    const [rejected, setRejected] = useState(false);
 
     useEffect(() => {
         let alive = true;
-        const loadManifest = async () => {
-            setLoading(true);
+        const refresh = async () => {
+            const cached = manifestCache.get(cacheKey);
+            if (cached) setBots(cached);
+            else setLoading(true);
             setError('');
+            setRejected(false);
             try {
-                const manifestPayload = await fetchTextWithFallback(manifestFallbacks, 'Bot manifest');
-                const manifest = JSON.parse(manifestPayload);
-                const items = Array.isArray(manifest) ? manifest : Array.isArray(manifest?.bots) ? manifest.bots : [];
-                const clean = items
-                    .filter((item: any) => item && typeof item.file === 'string')
-                    .map((item: any) => ({ ...item, priority: Number(item.priority ?? 999) }))
-                    .sort((a: DomainBot, b: DomainBot) => Number(a.priority ?? 999) - Number(b.priority ?? 999));
+                const clean = await loadManifest(manifestFallbacks);
                 if (alive) setBots(clean);
             } catch (err) {
-                if (alive) setError(err instanceof Error ? err.message : String(err));
+                // A list that is already on screen stays; only an empty page needs the error.
+                if (alive && !manifestCache.has(cacheKey)) {
+                    setError(err instanceof Error ? err.message : String(err));
+                    setRejected(err instanceof FetchFailure && isRejectedByServer(err.status));
+                }
             } finally {
                 if (alive) setLoading(false);
             }
         };
-        void loadManifest();
+        void refresh();
         return () => { alive = false; };
     }, [manifestUrl]);
 
@@ -126,6 +180,7 @@ const FreeBotsPage = ({ openBotBuilder }: { openBotBuilder?: () => void }) => {
         if (!openBotBuilder || !baseUrl) return;
         setBusyFile(bot.file);
         setError('');
+        setRejected(false);
         try {
             const assetFile = bot.asset || bot.file;
             const localAssetUrl = joinUrl(baseUrl, assetFile);
@@ -152,6 +207,7 @@ const FreeBotsPage = ({ openBotBuilder }: { openBotBuilder?: () => void }) => {
             });
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
+            setRejected(err instanceof FetchFailure && isRejectedByServer(err.status));
         } finally {
             setBusyFile('');
         }
@@ -159,7 +215,18 @@ const FreeBotsPage = ({ openBotBuilder }: { openBotBuilder?: () => void }) => {
 
     return <div className='prodb-free-bots'>
         {loading && <div className='prodb-live-empty'>Loading bots…</div>}
-        {error && <div className='prodb-live-error'>{error}</div>}
+        {error && (
+            <div className='prodb-live-error'>
+                {error}
+                {rejected && (
+                    <>
+                        {' '}The site refused the request, which usually means this page was left open too long and its
+                        session expired.{' '}
+                        <button type='button' onClick={() => window.location.reload()}>Reload the page</button>
+                    </>
+                )}
+            </div>
+        )}
         {!loading && !error && bots.length === 0 && <div className='prodb-live-empty'>No free bots are available yet.</div>}
 
         <div className='prodb-bot-grid prodb-bot-grid--imported'>
