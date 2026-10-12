@@ -1,5 +1,5 @@
 import type { CSSProperties, RefObject } from 'react';
-import { BULK_MARKETS, OVER_BARRIERS, UNDER_BARRIERS, hitRate, type Recommendation } from '../over-under-engine';
+import { BULK_MARKETS, FREE_BARRIERS, OVER_BARRIERS, UNDER_BARRIERS, hitRate, type Recommendation } from '../over-under-engine';
 import { MAX_BULK_RUNS, exposure, sanitizeBulk, type Tally } from '../bulk-run';
 
 export type LogRow = {
@@ -26,6 +26,15 @@ export type AutoView = {
     entry: { need: number; want: string; symbols: string[]; waiting: boolean } | null;
 };
 
+/** The signal lock: ON keeps Over/Under shut until the loaded signal reads EXECUTE; OFF leaves both free with any barrier. */
+export type SignalLockView = {
+    on: boolean;
+    /** The one button the signal has unlocked (it wears the EXECUTE tag); null while everything is shut or the lock is off. */
+    openSide: 0 | 1 | null;
+    note: string;
+    onToggle: () => void;
+};
+
 export type BulkViewProps = {
     live: boolean;
     marketsReady: number;
@@ -38,6 +47,7 @@ export type BulkViewProps = {
     auto: AutoView;
     onAutoToggle: () => void;
     onAutoForm: (key: keyof AutoForm, value: string) => void;
+    signalLock: SignalLockView;
     symbol: string;
     onSymbol: (symbol: string) => void;
     price: number | null;
@@ -208,6 +218,9 @@ const BulkTraderView = (props: BulkViewProps) => {
     const hasData = digitPct.some(value => value > 0);
     const over = Number(props.overBarrier);
     const under = Number(props.underBarrier);
+    const lock = props.signalLock;
+    const overList = lock.on ? OVER_BARRIERS : FREE_BARRIERS.DIGITOVER;
+    const underList = lock.on ? UNDER_BARRIERS : FREE_BARRIERS.DIGITUNDER;
     const sides = [
         { side: 0 as const, label: `Over ${over}`, hit: hitRate(digitPct, 'DIGITOVER', over), cls: 'a' },
         { side: 1 as const, label: `Under ${under}`, hit: hitRate(digitPct, 'DIGITUNDER', under), cls: 'b' },
@@ -266,32 +279,48 @@ const BulkTraderView = (props: BulkViewProps) => {
                     <label>No. of bulk trades<input value={form.runs} disabled={running || props.auto.armed} inputMode='numeric' onChange={props.onForm('runs')} /></label>
                     <label>Over barrier
                         <select value={props.overBarrier} disabled={running || props.auto.armed} onChange={event => props.onOverBarrier(event.target.value)}>
-                            {OVER_BARRIERS.map(b => <option key={b} value={b}>{b}</option>)}
+                            {overList.map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
                     </label>
                     <label>Under barrier
                         <select value={props.underBarrier} disabled={running || props.auto.armed} onChange={event => props.onUnderBarrier(event.target.value)}>
-                            {UNDER_BARRIERS.map(b => <option key={b} value={b}>{b}</option>)}
+                            {underList.map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
                     </label>
                 </div>
             </section>
 
             <section className='apex-bt__panel apex-bt__lower' aria-label='Over and Under'>
-                <div className='apex-bt__sides'>
-                    {sides.map(item => (
-                        <button key={item.side} type='button' disabled={running || !hasData || props.auto.armed}
-                            className={`apex-bt__side apex-bt__side--${item.cls}${props.pickSide === item.side ? ' is-pick' : ''}`}
-                            onClick={() => props.onRun(item.side)}>
-                            {props.pickSide === item.side && <em>AI PICK</em>}
-                            <span>{item.label}</span>
-                            <strong>{item.hit.toFixed(1)}%</strong>
-                            <small>past hit · run ×{params.runs} together</small>
-                        </button>
-                    ))}
+                <div className='apex-bt__siglock'>
+                    <button type='button' role='switch' aria-checked={lock.on} className={`apex-bt__switch${lock.on ? ' is-on' : ''}`} onClick={lock.onToggle}
+                        title={lock.on ? 'Signal lock on: Over/Under open only for a loaded EXECUTE signal' : 'Signal lock off: Over/Under are free with any barrier'}>
+                        <i aria-hidden='true' />
+                        <span>Signal lock {lock.on ? 'ON' : 'OFF'}</span>
+                    </button>
+                    <small>{lock.on
+                        ? 'Over / Under stay locked until a signal is loaded and the engine says EXECUTE. The auto trader always locks them while it is on.'
+                        : 'Over / Under are free: choose any barrier and trade either side at any time. The auto trader still locks them while it is on.'}</small>
                 </div>
 
-                <p className='apex-bt__pickinfo'>{props.loadedNote}</p>
+                <div className='apex-bt__sides'>
+                    {sides.map(item => {
+                        const open = !lock.on || lock.openSide === item.side;
+                        const executeTag = lock.on && lock.openSide === item.side;
+                        return (
+                            <button key={item.side} type='button' disabled={running || !hasData || props.auto.armed || !open}
+                                className={`apex-bt__side apex-bt__side--${item.cls}${!lock.on && props.pickSide === item.side ? ' is-pick' : ''}${executeTag ? ' is-execute' : ''}${lock.on && !open ? ' is-gated' : ''}`}
+                                onClick={() => props.onRun(item.side)}>
+                                {executeTag && <em>EXECUTE SIGNAL</em>}
+                                {!lock.on && props.pickSide === item.side && <em>AI PICK</em>}
+                                <span>{item.label}</span>
+                                <strong>{item.hit.toFixed(1)}%</strong>
+                                <small>{lock.on && !open ? '🔒 locked · waiting for an EXECUTE signal' : `past hit · run ×${params.runs} together`}</small>
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <p className='apex-bt__pickinfo'>{lock.on && lock.note ? lock.note : props.loadedNote}</p>
 
                 <div className='apex-bt__status'>
                     <span>{props.status}</span>

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApiBase } from '@/hooks/useApiBase';
 import { PremiumDerivApiService } from '@/services/premium-deriv-api.service';
 import {
-    BULK_MARKETS, ENGINE_TICKS, assertAllowedContract, contractLabel, digitPercents, refreshLocked, validateRecommendation, watching,
+    BULK_MARKETS, ENGINE_TICKS, OVER_BARRIERS, UNDER_BARRIERS, assertAllowedContract, assertFreeContract, contractLabel, digitPercents, executeGate,
+    refreshLocked, validateRecommendation, watching,
     type OverUnderContract, type Recommendation,
 } from '../over-under-engine';
 import {
@@ -33,6 +34,14 @@ const writeLock = (value: Recommendation | null) => {
         if (value) sessionStorage.setItem(LOCK_KEY, JSON.stringify(value)); else sessionStorage.removeItem(LOCK_KEY);
     } catch { /* storage unavailable: the lock simply lasts for this visit */ }
 };
+// The signal lock (ON = Over/Under only trade a loaded EXECUTE signal, OFF = any barrier, any time). ON unless the person switched it off.
+const GATE_KEY = 'apex_bulk_signal_lock';
+const readGate = (): boolean => {
+    try { return typeof localStorage === 'undefined' || localStorage.getItem(GATE_KEY) !== 'off'; } catch { return true; }
+};
+const writeGate = (on: boolean) => {
+    try { if (typeof localStorage !== 'undefined') localStorage.setItem(GATE_KEY, on ? 'on' : 'off'); } catch { /* storage unavailable: the choice lasts for this visit */ }
+};
 const SETTLE_WAIT_MS = 90_000;
 /** Deriv sometimes closes a contract before its exit tick is attached. These are the follow-up lookups (ms from settlement). */
 const EXIT_LOOKUP_DELAYS_MS = [400, 1200, 2500, 4500];
@@ -52,6 +61,7 @@ const BulkTraderPage = () => {
     const [form, setForm] = useState<BulkForm>({ duration: String(DEFAULT_BULK.duration), stake: String(DEFAULT_BULK.stake), runs: String(DEFAULT_BULK.runs) });
     const [loaded, setLoaded] = useState<Recommendation | null>(null);
     const [locked, setLocked] = useState<Recommendation | null>(readLock);
+    const [signalLock, setSignalLock] = useState<boolean>(readGate);
     // Auto trader is always OFF on page load; arming is never persisted between visits.
     const [autoForm, setAutoForm] = useState<AutoForm>({
         grade: DEFAULT_AUTO.grade, cooldownSec: String(DEFAULT_AUTO.cooldownSec), maxRuns: String(DEFAULT_AUTO.maxRuns), maxLoss: String(DEFAULT_AUTO.maxLoss),
@@ -197,6 +207,29 @@ const BulkTraderPage = () => {
 
     const onForm = (key: keyof BulkForm) => (event: { target: { value: string } }) => setForm(current => ({ ...current, [key]: event.target.value }));
 
+    // Signal lock. ON: the buttons stay shut until the loaded signal reads EXECUTE, then only that signal's button opens.
+    // OFF: both buttons are free, with any barrier.
+    const toggleSignalLock = () => {
+        const next = !signalLock;
+        setSignalLock(next);
+        writeGate(next);
+        setError('');
+        if (next) {
+            // Back to the barriers a signal can use, so the selectors never show a value they cannot offer.
+            if (!OVER_BARRIERS.includes(Number(overBarrier))) setOverBarrier(String(OVER_BARRIERS[1]));
+            if (!UNDER_BARRIERS.includes(Number(underBarrier))) setUnderBarrier(String(UNDER_BARRIERS[1]));
+        }
+    };
+    const gateCheck = executeGate(loaded, bulkFeed.verdicts, now);
+    const gateSide: 0 | 1 | null = signalLock && gateCheck.ok ? pickSide : null;
+    const gateNote = !signalLock ? ''
+        : !loaded ? (offered?.action === 'EXECUTE'
+            ? `EXECUTE signal ready: ${offered.label} on ${offered.market}. Press “Load to Trading Deck” to unlock its button.`
+            : 'Locked. Waiting for an EXECUTE signal to load to the Trading Deck.')
+            : !gateCheck.ok ? `Locked. ${gateCheck.reason}`
+                : pickSide === null ? `Locked. The deck no longer matches ${loaded.label} on ${loaded.market}. Reload the signal.`
+                    : `Unlocked for ${loaded.label} on ${loaded.market}: the engine says EXECUTE.`;
+
     // ------------------------------------------------------------------
     // Switch the auto trader off from inside the page (fail-safe), keeping the reason on screen.
     const haltAuto = (reason: string) => {
@@ -242,14 +275,23 @@ const BulkTraderPage = () => {
             const contract: OverUnderContract = side === 0 ? 'DIGITOVER' : 'DIGITUNDER';
             const barrier = Number(side === 0 ? overBarrier : underBarrier);
             const params = sanitizeBulk({ stake: Number(form.stake), runs: Number(form.runs), duration: Number(form.duration) });
-            try { assertAllowedContract(contract, barrier); } catch (err) { setError(errorText(err)); return; }
+            // Signal lock OFF: a hand-placed trade may use any barrier Deriv offers and is never held back by the engine. The auto trader and
+            // the signal lock keep the strict allowlist and the engine checks.
+            const free = !signalLock && !autoBusy.current;
+            try { if (free) assertFreeContract(contract, barrier); else assertAllowedContract(contract, barrier); } catch (err) { setError(errorText(err)); return; }
             const tooBig = limitError(params);
             if (tooBig) { setError(tooBig); return; }
 
-            const isPick = Boolean(loaded && loaded.symbol === symbol && loaded.contract === contract && loaded.barrier === barrier);
-            if (isPick) {
-                const check = validateRecommendation(loaded, bulkFeed.verdicts, Date.now(), Boolean(locked && loaded && loaded.id === locked.id));
-                if (!check.ok) { setError(check.reason); return; }
+            if (!free) {
+                const isPick = Boolean(loaded && loaded.symbol === symbol && loaded.contract === contract && loaded.barrier === barrier);
+                if (!autoBusy.current) {
+                    // Signal lock ON, hand-placed: only the loaded signal, only while the engine still says EXECUTE.
+                    const gate = isPick ? executeGate(loaded, bulkFeed.verdicts, Date.now()) : { ok: false as const, reason: 'Only the loaded EXECUTE signal can be traded while the signal lock is on.' };
+                    if (!gate.ok) { setError(gate.reason); return; }
+                } else if (isPick) {
+                    const check = validateRecommendation(loaded, bulkFeed.verdicts, Date.now(), Boolean(locked && loaded && loaded.id === locked.id));
+                    if (!check.ok) { setError(check.reason); return; }
+                }
             }
 
             const market = BULK_MARKETS.find(item => item.symbol === symbol) ?? BULK_MARKETS[0];
@@ -299,7 +341,7 @@ const BulkTraderPage = () => {
             if (stopRef.current) { setStatus('Stopped before any purchase was made.'); return; }
 
             // Independent final guard in the execution path, immediately before anything is sent.
-            assertAllowedContract(contract, barrier);
+            if (free) assertFreeContract(contract, barrier); else assertAllowedContract(contract, barrier);
             if (autoBusy.current) {
                 // Auto runs are also checked against the session loss limit here, with the stake and trades that are about to be bought.
                 const breach = lossLimitError(autoRef.current.session, autoRef.current.config, exposure(params));
@@ -462,6 +504,7 @@ const BulkTraderPage = () => {
             next: nextPlan ? `${nextPlan.label} at ${stakeFor(baseStake, nextPlan).toFixed(2)} ${currency}${nextPlan.recovery ? ` (recovery step ${nextPlan.step})` : ''}` : '',
         }}
         onAutoToggle={toggleAuto} onAutoForm={onAutoForm}
+        signalLock={{ on: signalLock, openSide: gateSide, note: gateNote, onToggle: toggleSignalLock }}
         symbol={symbol} onSymbol={setSymbol} price={price} digit={digit} digitPct={digitPct} recent={recent}
         form={form} onForm={onForm} overBarrier={overBarrier} underBarrier={underBarrier} onOverBarrier={setOverBarrier} onUnderBarrier={setUnderBarrier}
         pickSide={pickSide} loadedNote={loadedNote} currency={currency} running={running} status={status} error={error}

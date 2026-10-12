@@ -64,6 +64,27 @@ export const assertAllowedContract = (contract: unknown, barrier: unknown): void
     throw new Error(`${String(contract)} ${String(barrier)} is not permitted. Only Over 1, 2, 3 and Under 8, 7, 6 can be traded.`);
 };
 
+/**
+ * Barriers Deriv itself accepts for each contract. Used ONLY when the Bulk Trader's signal lock is switched off, so the
+ * person at the keyboard can pick any barrier. Recommendations, the auto trader and the signal lock never leave ALLOWED_BARRIERS.
+ */
+export const FREE_BARRIERS: Record<OverUnderContract, readonly number[]> = {
+    DIGITOVER: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+    DIGITUNDER: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+};
+
+export const isFreeContract = (contract: unknown, barrier: unknown): contract is OverUnderContract => {
+    if (contract !== 'DIGITOVER' && contract !== 'DIGITUNDER') return false;
+    const n = typeof barrier === 'string' && barrier.trim() !== '' ? Number(barrier) : barrier;
+    return typeof n === 'number' && Number.isInteger(n) && FREE_BARRIERS[contract].includes(n);
+};
+
+/** Defensive gate for manual trades while the signal lock is OFF: any barrier Deriv offers for Over (0-8) or Under (1-9). */
+export const assertFreeContract = (contract: unknown, barrier: unknown): void => {
+    if (isFreeContract(contract, barrier)) return;
+    throw new Error(`${String(contract)} ${String(barrier)} is not a valid contract. Over takes 0-8 and Under takes 1-9.`);
+};
+
 export const propositionFor = (contract: OverUnderContract, barrier: number): Proposition | null =>
     isAllowedContract(contract, barrier) ? (`${contract === 'DIGITOVER' ? 'OVER' : 'UNDER'}${barrier}` as Proposition) : null;
 
@@ -302,6 +323,19 @@ export const validateRecommendation = (
     }
     return { ok: true };
 };
+/**
+ * The signal lock's gate. A trade is allowed only while the LIVE engine says EXECUTE for the loaded signal (PREPARE, OBSERVE and
+ * STAND DOWN all keep it shut, whether or not the signal was held with "Lock signal"), and the signal is a permitted, fresh contract.
+ */
+export const executeGate = (rec: Recommendation | null, verdicts: Record<string, CombinedVerdict>, now: number): Validity => {
+    if (!rec) return { ok: false, reason: 'No signal is loaded. Load an EXECUTE signal to the Trading Deck to unlock the buttons.' };
+    const base = validateRecommendation(rec, verdicts, now, false);
+    const item = verdicts[rec.symbol]?.verdicts.find(v => v.proposition === rec.proposition);
+    if (!item) return base.ok ? { ok: false, reason: `${rec.label} is no longer produced by the engine.` } : base;
+    if (item.action === 'EXECUTE') return base;
+    return { ok: false, reason: `The engine reads ${item.action.replace('_', ' ')} for ${rec.label} on ${rec.market}, not EXECUTE. Waiting for an EXECUTE signal.` };
+};
+
 export const refreshLocked = (locked: Recommendation, verdicts: Record<string, CombinedVerdict>, now: number): Recommendation => {
     const verdict = verdicts[locked.symbol];
     const item = verdict?.verdicts.find(v => v.proposition === locked.proposition);
