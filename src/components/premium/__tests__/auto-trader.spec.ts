@@ -1,6 +1,6 @@
 import {
-    AUTO_BOUNDS, DEFAULT_AUTO, armSession, disarmSession, entrySupports, lossAllowance, modeText, newSession, planRisk, planTrade, recordAutoRun, sanitizeAuto, signalKey,
-    stakeFor, stepAuto, tickSymbol, tickSymbols,
+    AUTO_BOUNDS, DEFAULT_AUTO, armSession, disarmSession, entrySlip, entrySupports, lossAllowance, modeText, newSession, planRisk, planTrade, recordAutoRun, releaseRun,
+    sanitizeAuto, signalKey, slipText, stakeFor, stepAuto, tickMoved, tickSymbol, tickSymbols,
     type AutoConfig, type AutoSession,
 } from '../auto-trader';
 import { ALLOWED_BARRIERS, contractLabel, type Recommendation, type VerdictAction } from '../over-under-engine';
@@ -570,5 +570,104 @@ describe('finishing a run', () => {
         expect(afterRun.armed).toBe(false);
         expect(afterRun.stopReason).toBe('Stopped by you.');
         expect(afterRun.pnl).toBe(-0.5);
+    });
+});
+
+describe('entry timing: a one-tick trade decided on tick 0 must enter and settle on tick 1', () => {
+    // Ticks 1 s apart. The decision is made on the tick printed at t = 10 000 ms.
+    const times = [8000, 9000, 10000];
+    const decided = 10000;
+
+    it('the tick has not moved while the latest tick is still the decision tick', () => {
+        expect(tickMoved(times, decided)).toBe(false);
+    });
+    it('the tick has moved once a newer tick printed, so the buy would enter a tick late', () => {
+        expect(tickMoved([...times, 11000], decided)).toBe(true);
+    });
+    it('an unknown decision time or an empty tick list never blocks a trade', () => {
+        expect(tickMoved(times, 0)).toBe(false);
+        expect(tickMoved([], decided)).toBe(false);
+    });
+
+    it('entry on the very next tick has no slip', () => {
+        expect(entrySlip([...times, 11000, 12000], decided, 11)).toBe(0);
+    });
+    it('entry one tick later is reported as a slip of 1, two later as 2', () => {
+        expect(entrySlip([...times, 11000, 12000], decided, 12)).toBe(1);
+        expect(entrySlip([...times, 11000, 12000, 13000], decided, 13)).toBe(2);
+    });
+    it('an entry time that is missing, invalid or not after the decision is unknown, never "on time"', () => {
+        expect(entrySlip(times, decided, null)).toBeNull();
+        expect(entrySlip(times, decided, 0)).toBeNull();
+        expect(entrySlip(times, decided, Number.NaN)).toBeNull();
+        expect(entrySlip(times, decided, 10)).toBeNull();
+        expect(entrySlip(times, decided, 9)).toBeNull();
+    });
+
+    it('slipText says when every trade was on time, when some were late, and nothing when nothing is known', () => {
+        expect(slipText([])).toBe('');
+        expect(slipText([null, null])).toBe('');
+        expect(slipText([0, 0])).toMatch(/all trades entered on the very next tick/);
+        expect(slipText([0, 1, 2])).toMatch(/2 of 3 trades entered late \(up to 2 ticks\)/);
+        expect(slipText([1])).toMatch(/1 of 1 trade entered late \(up to 1 tick\)/);
+        expect(slipText([0, 1, null])).toMatch(/1 of 2 trades entered late/);
+    });
+
+    describe('releasing a run whose entry tick moved on', () => {
+        const fired = () => {
+            const step = stepAuto(armSession(), cfg(), { ...base, target: rec(), now: 1000, digits: [5, 5, 5] });
+            expect(step.fire).toBe(true);
+            return step.session;
+        };
+
+        it('gives the run back, keeps the trader armed, and does not count it or stop it', () => {
+            const session = fired();
+            expect(session.runs).toBe(1);
+            const back = releaseRun(session, signalKey(rec()), 1200, 'moved on');
+            expect(back.runs).toBe(0);
+            expect(back.armed).toBe(true);
+            expect(back.pnl).toBe(0);
+            expect(back.lossStreak).toBe(0);
+            expect(back.notice).toBe('moved on');
+        });
+        it('never takes a run count below zero', () => {
+            expect(releaseRun(armSession(), 'k', 0, 'x').runs).toBe(0);
+        });
+        it('puts the signal back to waiting for entry, and it fires again on the newest ticks at once (no cooldown, no lost signal)', () => {
+            const back = releaseRun(fired(), signalKey(rec()), 1200, 'moved on');
+            expect(back.pending).toEqual({ key: signalKey(rec()), since: 1200 });
+            const again = stepAuto(back, cfg({ cooldownSec: 600 }), {
+                ...base,
+                target: rec(),
+                now: 1300,
+                digits: [5, 5, 5, 6],
+            });
+            expect(again.fire).toBe(true);
+            expect(again.session.runs).toBe(1);
+            expect(again.session.pending).toBeNull();
+        });
+        it('waits for the entry digits again if the new tick breaks the entry condition', () => {
+            const config = cfg({ entryTicks: 2 });
+            const back = releaseRun(fired(), signalKey(rec()), 1200, 'moved on');
+            const held = stepAuto(back, config, { ...base, target: rec(), now: 1300, digits: [5, 5, 1] });
+            expect(held.fire).toBe(false);
+            expect(held.session.armed).toBe(true);
+            expect(held.session.pending).not.toBeNull();
+            const later = stepAuto(held.session, config, {
+                ...base,
+                target: rec(),
+                now: 1400,
+                digits: [5, 5, 1, 4, 5],
+            });
+            expect(later.fire).toBe(true);
+        });
+        it('still drops the signal if the entry never comes within the wait window', () => {
+            const config = cfg({ entryTicks: 2, entryWaitSec: 5 });
+            const back = releaseRun(fired(), signalKey(rec()), 1000, 'moved on');
+            const late = stepAuto(back, config, { ...base, target: rec(), now: 1000 + 6000, digits: [1, 1, 1] });
+            expect(late.fire).toBe(false);
+            expect(late.session.pending).toBeNull();
+            expect(late.note).toMatch(/No entry within/);
+        });
     });
 });

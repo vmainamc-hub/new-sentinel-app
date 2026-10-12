@@ -334,3 +334,49 @@ export const recordAutoRun = (
 /** Plain-English state for the panel. */
 export const modeText = (session: AutoSession, config: AutoConfig): string =>
     config.recovery && session.lossStreak >= 1 ? `RECOVERY step ${session.lossStreak} of ${config.maxSteps}` : 'NORMAL';
+
+/**
+ * Timing of a trade against the tick it was decided on. A one-tick contract enters on the first tick Deriv prints AFTER it receives
+ * the buy and settles on that same tick, so a trade decided on tick 0 must settle on tick 1. If the buy arrives after tick 1 has
+ * already printed, the trade silently enters (and settles) on tick 2 instead, on a digit nobody looked at.
+ */
+
+/**
+ * True when a newer tick than the decision tick has already printed, so a buy sent now would no longer enter on the tick right after
+ * the decision. An unknown decision time (0 or less) or an empty tick list is never "moved": there is nothing to compare against.
+ */
+export const tickMoved = (times: number[], decidedAtMs: number): boolean =>
+    decidedAtMs > 0 && times.length > 0 && times[times.length - 1] > decidedAtMs;
+
+/**
+ * How many ticks Deriv printed between the decision tick and the tick the contract really entered on.
+ * 0 = it entered on the very next tick (correct). null = unknown (the entry time was not reported or is not after the decision).
+ */
+export const entrySlip = (times: number[], decidedAtMs: number, entryTimeSec: number | null): number | null => {
+    if (entryTimeSec === null || !Number.isFinite(entryTimeSec) || entryTimeSec <= 0) return null;
+    const entryMs = entryTimeSec * 1000;
+    if (entryMs <= decidedAtMs) return null;
+    return times.filter(t => t > decidedAtMs && t < entryMs).length;
+};
+
+/** Plain-English verdict for the panel. */
+export const slipText = (slips: Array<number | null>): string => {
+    const known = slips.filter((s): s is number => s !== null);
+    if (known.length === 0) return '';
+    const late = known.filter(s => s > 0);
+    if (late.length === 0) return 'Entry timing: all trades entered on the very next tick after the decision.';
+    const worst = Math.max(...late);
+    return `Entry timing: ${late.length} of ${known.length} trade${known.length === 1 ? '' : 's'} entered late (up to ${worst} tick${worst === 1 ? '' : 's'}), because the buy reached Deriv after the next tick had already printed.`;
+};
+
+/**
+ * A run cancelled BEFORE any purchase because the entry tick moved on. The run is given back, nothing is counted as placed, and the
+ * signal goes back to waiting for its entry ticks, so the entry is re-checked on the newest ticks and fired again at once if it still
+ * holds. The cooldown clock is left alone. The auto trader stays armed.
+ */
+export const releaseRun = (session: AutoSession, key: string, now: number, notice: string): AutoSession => ({
+    ...session,
+    runs: Math.max(0, session.runs - 1),
+    pending: { key, since: now },
+    notice,
+});

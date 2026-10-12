@@ -11,7 +11,8 @@ import {
 } from '../bulk-run';
 import { bulkFeed } from '../bulk-feed';
 import {
-    DEFAULT_AUTO, armSession, disarmSession, lossLimitError, modeText, newSession, planTrade, recordAutoRun, sanitizeAuto, stakeFor, stepAuto, tickSymbols,
+    DEFAULT_AUTO, armSession, disarmSession, entrySlip, lossLimitError, modeText, newSession, planTrade, recordAutoRun, releaseRun, sanitizeAuto, signalKey, slipText,
+    stakeFor, stepAuto, tickMoved, tickSymbols,
     waitingNote,
     type AutoConfig, type AutoSession,
 } from '../auto-trader';
@@ -60,7 +61,7 @@ const BulkTraderPage = () => {
     });
     const [autoSession, setAutoSession] = useState<AutoSession>(newSession());
     const [autoNote, setAutoNote] = useState('Off.');
-    const [pendingAuto, setPendingAuto] = useState<{ rec: Recommendation; nonce: number } | null>(null);
+    const [pendingAuto, setPendingAuto] = useState<{ rec: Recommendation; nonce: number; decidedAt: number } | null>(null);
     const [tickVersion, setTickVersion] = useState(0);
     const [, setClock] = useState(0);
     const [recVersion, setRecVersion] = useState('');
@@ -75,6 +76,7 @@ const BulkTraderPage = () => {
     const autoRef = useRef<{ session: AutoSession; config: AutoConfig }>({ session: newSession(), config: DEFAULT_AUTO });
     const lockedRef = useRef<Recommendation | null>(null);
     const autoBusy = useRef(false);
+    const releasedRef = useRef(false);
     const applyRef = useRef<(target: Recommendation, scroll?: boolean, barrier?: number) => void>(() => undefined);
     // The deck stake when the auto trader was armed. The stake in the deck is only ever a per-run override of this value.
     const baseStakeRef = useRef(String(DEFAULT_BULK.stake));
@@ -138,7 +140,9 @@ const BulkTraderPage = () => {
                     applyRef.current(target, false, result.plan.barrier);
                     const stake = stakeFor(sized.stake, result.plan);
                     setForm(current => ({ ...current, stake: String(stake) }));
-                    setPendingAuto({ rec: target, nonce: now });
+                    // The tick the entry was confirmed on. The buy must go out before the NEXT tick prints, or the trade enters a tick late.
+                    const decidedAt = bulkFeed.store[target.symbol]?.times.at(-1) ?? 0;
+                    setPendingAuto({ rec: target, nonce: now, decidedAt });
                 }
             }
             setMarketsReady(previous => (previous === ready ? previous : ready));
@@ -192,7 +196,6 @@ const BulkTraderPage = () => {
             : `Loaded ${loaded.label} on ${loaded.market} (${loaded.action}). Press ${loaded.label} to run it. Nothing is purchased until you do.`;
 
     const onForm = (key: keyof BulkForm) => (event: { target: { value: string } }) => setForm(current => ({ ...current, [key]: event.target.value }));
-    const nextTick = (target: string) => bulkFeed.nextTick(target);
 
     // ------------------------------------------------------------------
     // Switch the auto trader off from inside the page (fail-safe), keeping the reason on screen.
@@ -228,7 +231,7 @@ const BulkTraderPage = () => {
 
     // One Run: all N contracts are requested and bought in the same instant, on one tick.
     // ------------------------------------------------------------------
-    const execute = async (side: 0 | 1) => {
+    const execute = async (side: 0 | 1, decidedAtTick = 0) => {
         const token = guard.current.begin();          // repeated clicks / duplicate events cannot start a second run
         if (!token) return;
         const state = { owned: new Map<number, number>(), settled: new Set<number>(), fills: new Map<number, Fill>(), stake: 0 };
@@ -253,6 +256,15 @@ const BulkTraderPage = () => {
             const label = contractLabel(contract, barrier);
 
             stopRef.current = false;
+            releasedRef.current = false;
+            // The tick this trade was decided on (auto: the entry-confirming tick; manual: the latest tick at the click). A one-tick
+            // contract enters on the first tick after Deriv gets the buy and settles on it, so the buy must go out before the NEXT tick.
+            const decidedAt = decidedAtTick > 0 ? decidedAtTick : (bulkFeed.store[market.symbol]?.times.at(-1) ?? 0);
+            const timingNote = () => {
+                const fills = [...state.fills.values()];
+                const times = bulkFeed.store[market.symbol]?.times ?? [];
+                return [settlementText(fills), slipText(fills.map(fill => entrySlip(times, decidedAt, fill.entryTime)))].filter(Boolean).join(' ');
+            };
             run.current = state;
             state.stake = params.stake;
             tallyRef.current = emptyTally(params.runs);
@@ -276,15 +288,14 @@ const BulkTraderPage = () => {
                 tallyRef.current = recordSettled(tallyRef.current, profit);
                 if (!mounted.current) return;
                 setTally(tallyRef.current);
-                setSyncNote(settlementText([...state.fills.values()]));
+                setSyncNote(timingNote());
                 const rowId = state.owned.get(id);
                 setLog(rows => rows.map(row => (row.id === rowId ? { ...row, profit, state: profit > 0 ? 'won' : 'lost', exitDigit, exitFinal: exitDigit !== null } : row)));
                 // The closing update did not carry the exit tick yet: ask Deriv again (and re-read the tick history) until it shows.
                 if (exitDigit === null) lookups.push(resolveExitDigit(id, rowId, market.symbol, state));
             });
 
-            setStatus('Waiting for the next tick…');
-            await Promise.race([nextTick(market.symbol), sleep(5000)]);
+            // No waiting for a tick here: the buy goes out NOW, so the contract enters on the very next tick and settles on it.
             if (stopRef.current) { setStatus('Stopped before any purchase was made.'); return; }
 
             // Independent final guard in the execution path, immediately before anything is sent.
@@ -293,6 +304,12 @@ const BulkTraderPage = () => {
                 // Auto runs are also checked against the session loss limit here, with the stake and trades that are about to be bought.
                 const breach = lossLimitError(autoRef.current.session, autoRef.current.config, exposure(params));
                 if (breach) { haltAuto(breach); setError(breach); setStatus('Run stopped: it could pass the session loss limit. Nothing was purchased.'); return; }
+            }
+            if (autoBusy.current && tickMoved(bulkFeed.store[market.symbol]?.times ?? [], decidedAt)) {
+                // A newer tick printed since the entry was confirmed: this buy would enter a tick late, on a digit nobody checked.
+                releasedRef.current = true;
+                setStatus('A new tick printed before the buy was sent. Nothing was purchased. Re-checking the entry.');
+                return;
             }
             setStatus(`Placing ${params.runs} trades together…`);
             // Every copy is bought directly from the same parameters (no shared proposal ID), all sent in one synchronous pass.
@@ -326,7 +343,7 @@ const BulkTraderPage = () => {
             await Promise.allSettled(lookups);   // every settlement digit is in before the run is reported as done
             const open = state.owned.size - state.settled.size;
             if (mounted.current) {
-                setSyncNote(settlementText([...state.fills.values()]));
+                setSyncNote(timingNote());
                 setStatus(open > 0
                     ? `${open} contract(s) still open. They keep being monitored by your Deriv account; check the statement.`
                     : `Done. ${state.owned.size}/${params.runs} placed${failures.length ? `, ${failures.length} failed` : ''} · P/L ${money(tallyRef.current.pnl, currency)}.`);
@@ -367,7 +384,7 @@ const BulkTraderPage = () => {
     // A qualifying signal follows the exact same execution path as a manual Run.
     useEffect(() => {
         if (!pendingAuto) return;
-        const { rec: target } = pendingAuto;
+        const { rec: target, decidedAt } = pendingAuto;
         setPendingAuto(null);
         void (async () => {
             autoBusy.current = true;
@@ -375,7 +392,15 @@ const BulkTraderPage = () => {
                 if (!autoRef.current.session.armed) return;          // disarmed after the decision was made: nothing is purchased
                 tallyRef.current = emptyTally();
                 setAutoNote(`Running ${target.label} on ${target.market}…`);
-                await execute(target.side);
+                await execute(target.side, decidedAt);
+                if (releasedRef.current) {
+                    // Cancelled before any purchase because the entry tick moved on: give the run back and re-check the entry.
+                    const notice = 'The entry tick moved on before the buy was sent. Re-checking the entry on the newest ticks.';
+                    const back = releaseRun(autoRef.current.session, signalKey(target), Date.now(), notice);
+                    autoRef.current.session = back;
+                    if (mounted.current) { setAutoSession(back); setAutoNote(notice); }
+                    return;
+                }
                 const t = tallyRef.current;
                 const finished = recordAutoRun(
                     autoRef.current.session,
