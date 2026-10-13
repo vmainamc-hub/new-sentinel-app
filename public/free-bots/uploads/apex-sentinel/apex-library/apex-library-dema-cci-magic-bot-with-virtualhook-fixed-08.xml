@@ -1,0 +1,1784 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="$7_XU_^577!m,;qyaLO3">text</variable>
+    <variable id="v_can_trade">Can Trade</variable>
+    <variable id="v_tick_count">Tick Count</variable>
+    <variable id="v_initial_stake">Initial Stake</variable>
+    <variable id="v_stake">Stake</variable>
+    <variable id="v_prediction">Prediction</variable>
+    <variable id="v_run_count">Run Count</variable>
+    <variable id="v_price">Price</variable>
+    <variable id="v_take_profit">Take Profit</variable>
+    <variable id="v_session_losses">Session Losses</variable>
+    <variable id="v_d1">D1</variable>
+    <variable id="v_ema1">EMA1</variable>
+    <variable id="v_stop_loss">Stop Loss</variable>
+    <variable id="v_session_wins">Session Wins</variable>
+    <variable id="v_consec_losses">Consec Losses</variable>
+    <variable id="v_d2">D2</variable>
+    <variable id="v_ema2">EMA2</variable>
+    <variable id="v_last_dema_int">Last DEMA Int</variable>
+    <variable id="v_recovery_factor">Recovery Factor</variable>
+    <variable id="v_analysis_mod">Analysis Mod</variable>
+    <variable id="v_dema">DEMA</variable>
+    <variable id="v_warmup">Warmup Ticks</variable>
+    <variable id="v_new_digit">New Digit</variable>
+    <variable id="v_dema_period">DEMA Period</variable>
+    <variable id="v_cci_price_ema">CCI Price EMA</variable>
+    <variable id="v_alpha_dema">Alpha DEMA</variable>
+    <variable id="v_cci_period">CCI Period</variable>
+    <variable id="v_analysis_interval">Analysis Interval</variable>
+    <variable id="v_dev">Deviation</variable>
+    <variable id="v_tick_int">Tick Int</variable>
+    <variable id="v_cci_dev_ema">CCI Dev EMA</variable>
+    <variable id="v_tick_digit">Tick Digit</variable>
+    <variable id="v_alpha_cci">Alpha CCI</variable>
+    <variable id="v_halted">Halted</variable>
+    <variable id="v_cci_prev">CCI Prev</variable>
+    <variable id="v_max_consec">Max Consec Losses</variable>
+    <variable id="v_cci">CCI</variable>
+    <variable id="v_direction">Direction</variable>
+  </variables>
+  <block type="trade_definition" id="td_root" deletable="false" x="0" y="50">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="td_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ10V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="td_tt" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="td_ct" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="td_ci" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">300</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="td_rbs" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="td_roe" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="text_print" id="ini_banner">
+        <value name="TEXT">
+          <shadow type="text" id="ini_banner_sh">
+            <field name="TEXT">DEMA+CCI Adaptive Over/Under Bot | 5-min candles | TP=Stake | Warming up...</field>
+          </shadow>
+        </value>
+        <next>
+          <block type="variables_set" id="ini_initial_stake">
+            <field name="VAR" id="v_initial_stake">Initial Stake</field>
+            <value name="VALUE">
+              <block type="math_number" id="ini_initial_stake_num">
+                <field name="NUM">2</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="ini_stake">
+                <field name="VAR" id="v_stake">Stake</field>
+                <value name="VALUE">
+                  <block type="variables_get" id="ini_stake_get">
+                    <field name="VAR" id="v_initial_stake">Initial Stake</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="ini_tp">
+                    <field name="VAR" id="v_take_profit">Take Profit</field>
+                    <value name="VALUE">
+                      <block type="variables_get" id="ini_tp_get">
+                        <field name="VAR" id="v_initial_stake">Initial Stake</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="ini_sl">
+                        <field name="VAR" id="v_stop_loss">Stop Loss</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id="ini_sl_mul">
+                            <field name="OP">MULTIPLY</field>
+                            <value name="A">
+                              <block type="math_number" id="ini_sl_six">
+                                <field name="NUM">6</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="ini_sl_stake">
+                                <field name="VAR" id="v_initial_stake">Initial Stake</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="ini_recovery">
+                            <field name="VAR" id="v_recovery_factor">Recovery Factor</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="ini_recovery_num">
+                                <field name="NUM">1.5</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="ini_dema_period">
+                                <field name="VAR" id="v_dema_period">DEMA Period</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="ini_dema_period_num">
+                                    <field name="NUM">14</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="ini_cci_period">
+                                    <field name="VAR" id="v_cci_period">CCI Period</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="ini_cci_period_num">
+                                        <field name="NUM">20</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="ini_alpha_dema">
+                                        <field name="VAR" id="v_alpha_dema">Alpha DEMA</field>
+                                        <value name="VALUE">
+                                          <block type="math_arithmetic" id="ini_alpha_dema_div">
+                                            <field name="OP">DIVIDE</field>
+                                            <value name="A">
+                                              <block type="math_number" id="ini_alpha_dema_two">
+                                                <field name="NUM">2</field>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="math_arithmetic" id="ini_alpha_dema_add">
+                                                <field name="OP">ADD</field>
+                                                <value name="A">
+                                                  <block type="variables_get" id="ini_alpha_dema_p">
+                                                    <field name="VAR" id="v_dema_period">DEMA Period</field>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="math_number" id="ini_alpha_dema_one">
+                                                    <field name="NUM">1</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="ini_alpha_cci">
+                                            <field name="VAR" id="v_alpha_cci">Alpha CCI</field>
+                                            <value name="VALUE">
+                                              <block type="math_arithmetic" id="ini_alpha_cci_div">
+                                                <field name="OP">DIVIDE</field>
+                                                <value name="A">
+                                                  <block type="math_number" id="ini_alpha_cci_two">
+                                                    <field name="NUM">2</field>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="math_arithmetic" id="ini_alpha_cci_add">
+                                                    <field name="OP">ADD</field>
+                                                    <value name="A">
+                                                      <block type="variables_get" id="ini_alpha_cci_p">
+                                                        <field name="VAR" id="v_cci_period">CCI Period</field>
+                                                      </block>
+                                                    </value>
+                                                    <value name="B">
+                                                      <block type="math_number" id="ini_alpha_cci_one">
+                                                        <field name="NUM">1</field>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="ini_ema1">
+                                                <field name="VAR" id="v_ema1">EMA1</field>
+                                                <value name="VALUE">
+                                                  <block type="math_number" id="ini_ema1_z">
+                                                    <field name="NUM">0</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="variables_set" id="ini_ema2">
+                                                    <field name="VAR" id="v_ema2">EMA2</field>
+                                                    <value name="VALUE">
+                                                      <block type="math_number" id="ini_ema2_z">
+                                                        <field name="NUM">0</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="variables_set" id="ini_dema">
+                                                        <field name="VAR" id="v_dema">DEMA</field>
+                                                        <value name="VALUE">
+                                                          <block type="math_number" id="ini_dema_z">
+                                                            <field name="NUM">0</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="variables_set" id="ini_cci_price_ema">
+                                                            <field name="VAR" id="v_cci_price_ema">CCI Price EMA</field>
+                                                            <value name="VALUE">
+                                                              <block type="math_number" id="ini_cci_price_ema_z">
+                                                                <field name="NUM">0</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="variables_set" id="ini_cci_dev_ema">
+                                                                <field name="VAR" id="v_cci_dev_ema">CCI Dev EMA</field>
+                                                                <value name="VALUE">
+                                                                  <block type="math_number" id="ini_cci_dev_ema_z">
+                                                                    <field name="NUM">0.0001</field>
+                                                                  </block>
+                                                                </value>
+                                                                <next>
+                                                                  <block type="variables_set" id="ini_cci">
+                                                                    <field name="VAR" id="v_cci">CCI</field>
+                                                                    <value name="VALUE">
+                                                                      <block type="math_number" id="ini_cci_z">
+                                                                        <field name="NUM">0</field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <next>
+                                                                      <block type="variables_set" id="ini_cci_prev">
+                                                                        <field name="VAR" id="v_cci_prev">CCI Prev</field>
+                                                                        <value name="VALUE">
+                                                                          <block type="math_number" id="ini_cci_prev_z">
+                                                                            <field name="NUM">0</field>
+                                                                          </block>
+                                                                        </value>
+                                                                        <next>
+                                                                          <block type="variables_set" id="ini_price">
+                                                                            <field name="VAR" id="v_price">Price</field>
+                                                                            <value name="VALUE">
+                                                                              <block type="math_number" id="ini_price_z">
+                                                                                <field name="NUM">0</field>
+                                                                              </block>
+                                                                            </value>
+                                                                            <next>
+                                                                              <block type="variables_set" id="ini_dev">
+                                                                                <field name="VAR" id="v_dev">Deviation</field>
+                                                                                <value name="VALUE">
+                                                                                  <block type="math_number" id="ini_dev_z">
+                                                                                    <field name="NUM">0</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                                <next>
+                                                                                  <block type="variables_set" id="ini_ldi">
+                                                                                    <field name="VAR" id="v_last_dema_int">Last DEMA Int</field>
+                                                                                    <value name="VALUE">
+                                                                                      <block type="math_number" id="ini_ldi_z">
+                                                                                        <field name="NUM">0</field>
+                                                                                      </block>
+                                                                                    </value>
+                                                                                    <next>
+                                                                                      <block type="variables_set" id="ini_new_digit">
+                                                                                        <field name="VAR" id="v_new_digit">New Digit</field>
+                                                                                        <value name="VALUE">
+                                                                                          <block type="math_number" id="ini_new_digit_m1">
+                                                                                            <field name="NUM">-1</field>
+                                                                                          </block>
+                                                                                        </value>
+                                                                                        <next>
+                                                                                          <block type="variables_set" id="ini_d1">
+                                                                                            <field name="VAR" id="v_d1">D1</field>
+                                                                                            <value name="VALUE">
+                                                                                              <block type="math_number" id="ini_d1_m1">
+                                                                                                <field name="NUM">-1</field>
+                                                                                              </block>
+                                                                                            </value>
+                                                                                            <next>
+                                                                                              <block type="variables_set" id="ini_d2">
+                                                                                                <field name="VAR" id="v_d2">D2</field>
+                                                                                                <value name="VALUE">
+                                                                                                  <block type="math_number" id="ini_d2_m1">
+                                                                                                    <field name="NUM">-1</field>
+                                                                                                  </block>
+                                                                                                </value>
+                                                                                                <next>
+                                                                                                  <block type="variables_set" id="ini_tick_int">
+                                                                                                    <field name="VAR" id="v_tick_int">Tick Int</field>
+                                                                                                    <value name="VALUE">
+                                                                                                      <block type="math_number" id="ini_tick_int_z">
+                                                                                                        <field name="NUM">0</field>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                    <next>
+                                                                                                      <block type="variables_set" id="ini_tick_digit">
+                                                                                                        <field name="VAR" id="v_tick_digit">Tick Digit</field>
+                                                                                                        <value name="VALUE">
+                                                                                                          <block type="math_number" id="ini_tick_digit_z">
+                                                                                                            <field name="NUM">0</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <next>
+                                                                                                          <block type="variables_set" id="ini_tick_count">
+                                                                                                            <field name="VAR" id="v_tick_count">Tick Count</field>
+                                                                                                            <value name="VALUE">
+                                                                                                              <block type="math_number" id="ini_tick_count_z">
+                                                                                                                <field name="NUM">0</field>
+                                                                                                              </block>
+                                                                                                            </value>
+                                                                                                            <next>
+                                                                                                              <block type="variables_set" id="ini_warmup">
+                                                                                                                <field name="VAR" id="v_warmup">Warmup Ticks</field>
+                                                                                                                <value name="VALUE">
+                                                                                                                  <block type="math_number" id="ini_warmup_num">
+                                                                                                                    <field name="NUM">25</field>
+                                                                                                                  </block>
+                                                                                                                </value>
+                                                                                                                <next>
+                                                                                                                  <block type="variables_set" id="ini_can_trade">
+                                                                                                                    <field name="VAR" id="v_can_trade">Can Trade</field>
+                                                                                                                    <value name="VALUE">
+                                                                                                                      <block type="logic_boolean" id="ini_can_trade_f">
+                                                                                                                        <field name="BOOL">FALSE</field>
+                                                                                                                      </block>
+                                                                                                                    </value>
+                                                                                                                    <next>
+                                                                                                                      <block type="variables_set" id="ini_direction">
+                                                                                                                        <field name="VAR" id="v_direction">Direction</field>
+                                                                                                                        <value name="VALUE">
+                                                                                                                          <block type="math_number" id="ini_direction_z">
+                                                                                                                            <field name="NUM">0</field>
+                                                                                                                          </block>
+                                                                                                                        </value>
+                                                                                                                        <next>
+                                                                                                                          <block type="variables_set" id="ini_prediction">
+                                                                                                                            <field name="VAR" id="v_prediction">Prediction</field>
+                                                                                                                            <value name="VALUE">
+                                                                                                                              <block type="math_number" id="ini_prediction_num">
+                                                                                                                                <field name="NUM">3</field>
+                                                                                                                              </block>
+                                                                                                                            </value>
+                                                                                                                            <next>
+                                                                                                                              <block type="variables_set" id="ini_run_count">
+                                                                                                                                <field name="VAR" id="v_run_count">Run Count</field>
+                                                                                                                                <value name="VALUE">
+                                                                                                                                  <block type="math_number" id="ini_run_count_z">
+                                                                                                                                    <field name="NUM">0</field>
+                                                                                                                                  </block>
+                                                                                                                                </value>
+                                                                                                                                <next>
+                                                                                                                                  <block type="variables_set" id="ini_session_wins">
+                                                                                                                                    <field name="VAR" id="v_session_wins">Session Wins</field>
+                                                                                                                                    <value name="VALUE">
+                                                                                                                                      <block type="math_number" id="ini_session_wins_z">
+                                                                                                                                        <field name="NUM">0</field>
+                                                                                                                                      </block>
+                                                                                                                                    </value>
+                                                                                                                                    <next>
+                                                                                                                                      <block type="variables_set" id="ini_session_losses">
+                                                                                                                                        <field name="VAR" id="v_session_losses">Session Losses</field>
+                                                                                                                                        <value name="VALUE">
+                                                                                                                                          <block type="math_number" id="ini_session_losses_z">
+                                                                                                                                            <field name="NUM">0</field>
+                                                                                                                                          </block>
+                                                                                                                                        </value>
+                                                                                                                                        <next>
+                                                                                                                                          <block type="variables_set" id="ini_consec_losses">
+                                                                                                                                            <field name="VAR" id="v_consec_losses">Consec Losses</field>
+                                                                                                                                            <value name="VALUE">
+                                                                                                                                              <block type="math_number" id="ini_consec_losses_z">
+                                                                                                                                                <field name="NUM">0</field>
+                                                                                                                                              </block>
+                                                                                                                                            </value>
+                                                                                                                                            <next>
+                                                                                                                                              <block type="variables_set" id="ini_max_consec">
+                                                                                                                                                <field name="VAR" id="v_max_consec">Max Consec Losses</field>
+                                                                                                                                                <value name="VALUE">
+                                                                                                                                                  <block type="math_number" id="ini_max_consec_num">
+                                                                                                                                                    <field name="NUM">4</field>
+                                                                                                                                                  </block>
+                                                                                                                                                </value>
+                                                                                                                                                <next>
+                                                                                                                                                  <block type="variables_set" id="ini_analysis_interval">
+                                                                                                                                                    <field name="VAR" id="v_analysis_interval">Analysis Interval</field>
+                                                                                                                                                    <value name="VALUE">
+                                                                                                                                                      <block type="math_number" id="ini_analysis_interval_num">
+                                                                                                                                                        <field name="NUM">5</field>
+                                                                                                                                                      </block>
+                                                                                                                                                    </value>
+                                                                                                                                                    <next>
+                                                                                                                                                      <block type="variables_set" id="ini_analysis_mod">
+                                                                                                                                                        <field name="VAR" id="v_analysis_mod">Analysis Mod</field>
+                                                                                                                                                        <value name="VALUE">
+                                                                                                                                                          <block type="math_number" id="ini_analysis_mod_z">
+                                                                                                                                                            <field name="NUM">1</field>
+                                                                                                                                                          </block>
+                                                                                                                                                        </value>
+                                                                                                                                                        <next>
+                                                                                                                                                          <block type="variables_set" id="ini_halted">
+                                                                                                                                                            <field name="VAR" id="v_halted">Halted</field>
+                                                                                                                                                            <value name="VALUE">
+                                                                                                                                                              <block type="logic_boolean" id="ini_halted_f">
+                                                                                                                                                                <field name="BOOL">FALSE</field>
+                                                                                                                                                              </block>
+                                                                                                                                                            </value>
+                                                                                                                                                            <next>
+                                                                                                                                                              <block type="virtual_hook" id="u,ZyL5j?(_KhT}tG6T_;">
+                                                                                                                                                                <field name="ENABLED">TRUE</field>
+                                                                                                                                                                <field name="START">VIRTUAL</field>
+                                                                                                                                                                <field name="LOSSES">1</field>
+                                                                                                                                                                <field name="WINS">2</field>
+                                                                                                                                                              </block>
+                                                                                                                                                            </next>
+                                                                                                                                                          </block>
+                                                                                                                                                        </next>
+                                                                                                                                                      </block>
+                                                                                                                                                    </next>
+                                                                                                                                                  </block>
+                                                                                                                                                </next>
+                                                                                                                                              </block>
+                                                                                                                                            </next>
+                                                                                                                                          </block>
+                                                                                                                                        </next>
+                                                                                                                                      </block>
+                                                                                                                                    </next>
+                                                                                                                                  </block>
+                                                                                                                                </next>
+                                                                                                                              </block>
+                                                                                                                            </next>
+                                                                                                                          </block>
+                                                                                                                        </next>
+                                                                                                                      </block>
+                                                                                                                    </next>
+                                                                                                                  </block>
+                                                                                                                </next>
+                                                                                                              </block>
+                                                                                                            </next>
+                                                                                                          </block>
+                                                                                                        </next>
+                                                                                                      </block>
+                                                                                                    </next>
+                                                                                                  </block>
+                                                                                                </next>
+                                                                                              </block>
+                                                                                            </next>
+                                                                                          </block>
+                                                                                        </next>
+                                                                                      </block>
+                                                                                    </next>
+                                                                                  </block>
+                                                                                </next>
+                                                                              </block>
+                                                                            </next>
+                                                                          </block>
+                                                                        </next>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="td_opts">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number_positive" id="td_dur_sh">
+            <field name="NUM">1</field>
+          </shadow>
+          <block type="math_number" id="td_dur">
+            <field name="NUM">1</field>
+          </block>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number_positive" id="td_amt_sh">
+            <field name="NUM">1</field>
+          </shadow>
+          <block type="variables_get" id="td_amt_get">
+            <field name="VAR" id="v_stake">Stake</field>
+          </block>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive" id="td_pred_sh">
+            <field name="NUM">3</field>
+          </shadow>
+          <block type="variables_get" id="td_pred_get">
+            <field name="VAR" id="v_prediction">Prediction</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="during_purchase" id="dp_root" deletable="false" x="1710" y="50">
+    <statement name="DURING_PURCHASE_STACK">
+      <block type="controls_if" id="dp_sell_check">
+        <value name="IF0">
+          <block type="check_sell" id="dp_check_sell"></block>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="after_purchase" id="ap_root" deletable="false" x="1710" y="332">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="variables_set" id="ap_reset_gate">
+        <field name="VAR" id="v_can_trade">Can Trade</field>
+        <value name="VALUE">
+          <block type="logic_boolean" id="ap_reset_gate_f">
+            <field name="BOOL">FALSE</field>
+          </block>
+        </value>
+        <next>
+          <block type="math_change" id="ap_inc_run">
+            <field name="VAR" id="v_run_count">Run Count</field>
+            <value name="DELTA">
+              <shadow type="math_number" id="ap_inc_run_sh">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+            <next>
+              <block type="controls_if" id="ap_win_loss">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="contract_check_result" id="ap_check_win">
+                    <field name="CHECK_RESULT">win</field>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="ap_win_stake">
+                    <field name="VAR" id="v_stake">Stake</field>
+                    <value name="VALUE">
+                      <block type="variables_get" id="ap_win_stake_src">
+                        <field name="VAR" id="v_initial_stake">Initial Stake</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="math_change" id="ap_win_inc_wins">
+                        <field name="VAR" id="v_session_wins">Session Wins</field>
+                        <value name="DELTA">
+                          <shadow type="math_number" id="ap_win_wins_sh">
+                            <field name="NUM">1</field>
+                          </shadow>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="ap_win_clear_consec">
+                            <field name="VAR" id="v_consec_losses">Consec Losses</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="ap_win_consec_z">
+                                <field name="NUM">0</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="notify" id="ap_win_notify">
+                                <field name="NOTIFICATION_TYPE">success</field>
+                                <field name="NOTIFICATION_SOUND">silent</field>
+                                <value name="MESSAGE">
+                                  <shadow type="text" id="ap_win_notify_sh">
+                                    <field name="TEXT">WIN</field>
+                                  </shadow>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="math_change" id="ap_loss_inc_losses">
+                    <field name="VAR" id="v_session_losses">Session Losses</field>
+                    <value name="DELTA">
+                      <shadow type="math_number" id="ap_loss_losses_sh">
+                        <field name="NUM">1</field>
+                      </shadow>
+                    </value>
+                    <next>
+                      <block type="math_change" id="ap_loss_inc_consec">
+                        <field name="VAR" id="v_consec_losses">Consec Losses</field>
+                        <value name="DELTA">
+                          <shadow type="math_number" id="ap_loss_consec_sh">
+                            <field name="NUM">1</field>
+                          </shadow>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="ap_loss_recovery">
+                            <field name="VAR" id="v_stake">Stake</field>
+                            <value name="VALUE">
+                              <block type="math_arithmetic" id="ap_loss_stake_mul">
+                                <field name="OP">MULTIPLY</field>
+                                <value name="A">
+                                  <block type="variables_get" id="ap_loss_stake_v">
+                                    <field name="VAR" id="v_stake">Stake</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="variables_get" id="ap_loss_rf_v">
+                                    <field name="VAR" id="v_recovery_factor">Recovery Factor</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="notify" id="ap_loss_notify">
+                                <field name="NOTIFICATION_TYPE">warn</field>
+                                <field name="NOTIFICATION_SOUND">silent</field>
+                                <value name="MESSAGE">
+                                  <shadow type="text" id="ap_loss_notify_sh">
+                                    <field name="TEXT">LOSS</field>
+                                  </shadow>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <next>
+                  <block type="variables_set" id="ap_reset_d1">
+                    <field name="VAR" id="v_d1">D1</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="ap_reset_d1_m1">
+                        <field name="NUM">-1</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="ap_reset_d2">
+                        <field name="VAR" id="v_d2">D2</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="ap_reset_d2_m1">
+                            <field name="NUM">-1</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="ap_calc_mod">
+                            <field name="VAR" id="v_analysis_mod">Analysis Mod</field>
+                            <value name="VALUE">
+                              <block type="math_modulo" id="ap_mod_calc">
+                                <value name="DIVIDEND">
+                                  <shadow type="math_number" id="ap_mod_div_sh">
+                                    <field name="NUM">0</field>
+                                  </shadow>
+                                  <block type="variables_get" id="ap_mod_run">
+                                    <field name="VAR" id="v_run_count">Run Count</field>
+                                  </block>
+                                </value>
+                                <value name="DIVISOR">
+                                  <shadow type="math_number" id="ap_mod_divisor_sh">
+                                    <field name="NUM">5</field>
+                                  </shadow>
+                                  <block type="variables_get" id="ap_mod_interval">
+                                    <field name="VAR" id="v_analysis_interval">Analysis Interval</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="controls_if" id="ap_analysis_gate">
+                                <value name="IF0">
+                                  <block type="logic_compare" id="ap_analysis_cmp">
+                                    <field name="OP">EQ</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="ap_analysis_mod_v">
+                                        <field name="VAR" id="v_analysis_mod">Analysis Mod</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="math_number" id="ap_analysis_zero">
+                                        <field name="NUM">0</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <statement name="DO0">
+                                  <block type="notify" id="ap_analysis_notify">
+                                    <field name="NOTIFICATION_TYPE">info</field>
+                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                    <value name="MESSAGE">
+                                      <shadow type="text" id="ap_analysis_notify_sh">
+                                        <field name="TEXT">Self-analysis</field>
+                                      </shadow>
+                                    </value>
+                                    <next>
+                                      <block type="controls_if" id="ap_halt_check">
+                                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                        <value name="IF0">
+                                          <block type="logic_compare" id="ap_halt_cmp">
+                                            <field name="OP">GTE</field>
+                                            <value name="A">
+                                              <block type="variables_get" id="ap_halt_cl">
+                                                <field name="VAR" id="v_consec_losses">Consec Losses</field>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="variables_get" id="ap_halt_max">
+                                                <field name="VAR" id="v_max_consec">Max Consec Losses</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <statement name="DO0">
+                                          <block type="variables_set" id="ap_halt_set">
+                                            <field name="VAR" id="v_halted">Halted</field>
+                                            <value name="VALUE">
+                                              <block type="logic_boolean" id="ap_halt_true">
+                                                <field name="BOOL">TRUE</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="notify" id="ap_halt_notify">
+                                                <field name="NOTIFICATION_TYPE">error</field>
+                                                <field name="NOTIFICATION_SOUND">announcement</field>
+                                                <value name="MESSAGE">
+                                                  <shadow type="text" id="ap_halt_notify_sh">
+                                                    <field name="TEXT">Bot halted: max consecutive losses reached. Review market before restarting.</field>
+                                                  </shadow>
+                                                </value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </statement>
+                                        <statement name="ELSE">
+                                          <block type="variables_set" id="ap_continue_cl">
+                                            <field name="VAR" id="v_consec_losses">Consec Losses</field>
+                                            <value name="VALUE">
+                                              <block type="math_number" id="ap_continue_cl_z">
+                                                <field name="NUM">0</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="notify" id="ap_continue_notify">
+                                                <field name="NOTIFICATION_TYPE">success</field>
+                                                <field name="NOTIFICATION_SOUND">silent</field>
+                                                <value name="MESSAGE">
+                                                  <shadow type="text" id="ap_continue_sh">
+                                                    <field name="TEXT">Analysis passed — CCI+DEMA signal active. Continuing.</field>
+                                                  </shadow>
+                                                </value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </statement>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="controls_if" id="ap_tp_sl">
+                                    <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+                                    <value name="IF0">
+                                      <block type="logic_compare" id="ap_tp_cmp">
+                                        <field name="OP">GTE</field>
+                                        <value name="A">
+                                          <block type="total_profit" id="ap_tp_profit"></block>
+                                        </value>
+                                        <value name="B">
+                                          <block type="variables_get" id="ap_tp_v">
+                                            <field name="VAR" id="v_take_profit">Take Profit</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                    <statement name="DO0">
+                                      <block type="notify" id="ap_tp_notify">
+                                        <field name="NOTIFICATION_TYPE">success</field>
+                                        <field name="NOTIFICATION_SOUND">earned-money</field>
+                                        <value name="MESSAGE">
+                                          <shadow type="text" id="ap_tp_notify_sh">
+                                            <field name="TEXT">Take Profit reached. Session complete.</field>
+                                          </shadow>
+                                        </value>
+                                      </block>
+                                    </statement>
+                                    <value name="IF1">
+                                      <block type="logic_compare" id="ap_sl_cmp">
+                                        <field name="OP">LTE</field>
+                                        <value name="A">
+                                          <block type="total_profit" id="ap_sl_profit"></block>
+                                        </value>
+                                        <value name="B">
+                                          <block type="math_single" id="ap_sl_neg">
+                                            <field name="OP">NEG</field>
+                                            <value name="NUM">
+                                              <shadow type="math_number" id="ap_sl_sh">
+                                                <field name="NUM">9</field>
+                                              </shadow>
+                                              <block type="variables_get" id="ap_sl_v">
+                                                <field name="VAR" id="v_stop_loss">Stop Loss</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                    <statement name="DO1">
+                                      <block type="notify" id="ap_sl_notify">
+                                        <field name="NOTIFICATION_TYPE">error</field>
+                                        <field name="NOTIFICATION_SOUND">announcement</field>
+                                        <value name="MESSAGE">
+                                          <shadow type="text" id="ap_sl_notify_sh">
+                                            <field name="TEXT">Stop Loss reached. Session ended.</field>
+                                          </shadow>
+                                        </value>
+                                      </block>
+                                    </statement>
+                                    <statement name="ELSE">
+                                      <block type="controls_if" id="ap_halted_gate">
+                                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                        <value name="IF0">
+                                          <block type="variables_get" id="ap_halted_v">
+                                            <field name="VAR" id="v_halted">Halted</field>
+                                          </block>
+                                        </value>
+                                        <statement name="DO0">
+                                          <block type="text_print" id="ap_halted_msg">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="ap_halted_msg_sh">
+                                                <field name="TEXT">Bot halted — session stopped. Restart on a new market after reviewing CCI+DEMA on TradingView.</field>
+                                              </shadow>
+                                            </value>
+                                          </block>
+                                        </statement>
+                                        <statement name="ELSE">
+                                          <block type="trade_again" id="ap_trade_again"></block>
+                                        </statement>
+                                      </block>
+                                    </statement>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="bp_root" deletable="false" x="0" y="2724">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="math_change" id="bp_inc_tick">
+        <field name="VAR" id="v_tick_count">Tick Count</field>
+        <value name="DELTA">
+          <shadow type="math_number" id="bp_inc_tick_sh">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <next>
+          <block type="variables_set" id="bp_set_price">
+            <field name="VAR" id="v_price">Price</field>
+            <value name="VALUE">
+              <block type="tick" id="bp_tick_val"></block>
+            </value>
+            <next>
+              <block type="controls_if" id="bp_seed_check">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="logic_compare" id="bp_seed_cmp">
+                    <field name="OP">EQ</field>
+                    <value name="A">
+                      <block type="variables_get" id="bp_seed_tickc">
+                        <field name="VAR" id="v_tick_count">Tick Count</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="math_number" id="bp_seed_one">
+                        <field name="NUM">1</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="bp_seed_ema1">
+                    <field name="VAR" id="v_ema1">EMA1</field>
+                    <value name="VALUE">
+                      <block type="variables_get" id="bp_seed_ema1_p">
+                        <field name="VAR" id="v_price">Price</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="bp_seed_ema2">
+                        <field name="VAR" id="v_ema2">EMA2</field>
+                        <value name="VALUE">
+                          <block type="variables_get" id="bp_seed_ema2_p">
+                            <field name="VAR" id="v_price">Price</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="bp_seed_dema">
+                            <field name="VAR" id="v_dema">DEMA</field>
+                            <value name="VALUE">
+                              <block type="variables_get" id="bp_seed_dema_p">
+                                <field name="VAR" id="v_price">Price</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="bp_seed_cpe">
+                                <field name="VAR" id="v_cci_price_ema">CCI Price EMA</field>
+                                <value name="VALUE">
+                                  <block type="variables_get" id="bp_seed_cpe_p">
+                                    <field name="VAR" id="v_price">Price</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="variables_set" id="bp_update_ema1">
+                    <field name="VAR" id="v_ema1">EMA1</field>
+                    <value name="VALUE">
+                      <block type="math_arithmetic" id="bp_ema1_add">
+                        <field name="OP">ADD</field>
+                        <value name="A">
+                          <block type="math_arithmetic" id="bp_ema1_alpha_price">
+                            <field name="OP">MULTIPLY</field>
+                            <value name="A">
+                              <block type="variables_get" id="bp_ema1_alpha">
+                                <field name="VAR" id="v_alpha_dema">Alpha DEMA</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="bp_ema1_price">
+                                <field name="VAR" id="v_price">Price</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="math_arithmetic" id="bp_ema1_1m_ema1">
+                            <field name="OP">MULTIPLY</field>
+                            <value name="A">
+                              <block type="math_arithmetic" id="bp_ema1_1m">
+                                <field name="OP">MINUS</field>
+                                <value name="A">
+                                  <block type="math_number" id="bp_ema1_one">
+                                    <field name="NUM">1</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="variables_get" id="bp_ema1_alpha2">
+                                    <field name="VAR" id="v_alpha_dema">Alpha DEMA</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="bp_ema1_prev">
+                                <field name="VAR" id="v_ema1">EMA1</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="bp_update_ema2">
+                        <field name="VAR" id="v_ema2">EMA2</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id="bp_ema2_add">
+                            <field name="OP">ADD</field>
+                            <value name="A">
+                              <block type="math_arithmetic" id="bp_ema2_alpha_ema1">
+                                <field name="OP">MULTIPLY</field>
+                                <value name="A">
+                                  <block type="variables_get" id="bp_ema2_alpha">
+                                    <field name="VAR" id="v_alpha_dema">Alpha DEMA</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="variables_get" id="bp_ema2_ema1">
+                                    <field name="VAR" id="v_ema1">EMA1</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_arithmetic" id="bp_ema2_1m_ema2">
+                                <field name="OP">MULTIPLY</field>
+                                <value name="A">
+                                  <block type="math_arithmetic" id="bp_ema2_1m">
+                                    <field name="OP">MINUS</field>
+                                    <value name="A">
+                                      <block type="math_number" id="bp_ema2_one">
+                                        <field name="NUM">1</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="variables_get" id="bp_ema2_alpha2">
+                                        <field name="VAR" id="v_alpha_dema">Alpha DEMA</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="variables_get" id="bp_ema2_prev">
+                                    <field name="VAR" id="v_ema2">EMA2</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="bp_update_dema">
+                            <field name="VAR" id="v_dema">DEMA</field>
+                            <value name="VALUE">
+                              <block type="math_arithmetic" id="bp_dema_sub">
+                                <field name="OP">MINUS</field>
+                                <value name="A">
+                                  <block type="math_arithmetic" id="bp_dema_2xema1">
+                                    <field name="OP">MULTIPLY</field>
+                                    <value name="A">
+                                      <block type="math_number" id="bp_dema_two">
+                                        <field name="NUM">2</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="variables_get" id="bp_dema_ema1">
+                                        <field name="VAR" id="v_ema1">EMA1</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="variables_get" id="bp_dema_ema2">
+                                    <field name="VAR" id="v_ema2">EMA2</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="controls_if" id="bp_dev_sign">
+                                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                <value name="IF0">
+                                  <block type="logic_compare" id="bp_dev_sign_cmp">
+                                    <field name="OP">GT</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="bp_dev_price">
+                                        <field name="VAR" id="v_price">Price</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="variables_get" id="bp_dev_cpe">
+                                        <field name="VAR" id="v_cci_price_ema">CCI Price EMA</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <statement name="DO0">
+                                  <block type="variables_set" id="bp_dev_pos">
+                                    <field name="VAR" id="v_dev">Deviation</field>
+                                    <value name="VALUE">
+                                      <block type="math_arithmetic" id="bp_dev_pos_sub">
+                                        <field name="OP">MINUS</field>
+                                        <value name="A">
+                                          <block type="variables_get" id="bp_dev_pos_p">
+                                            <field name="VAR" id="v_price">Price</field>
+                                          </block>
+                                        </value>
+                                        <value name="B">
+                                          <block type="variables_get" id="bp_dev_pos_cpe">
+                                            <field name="VAR" id="v_cci_price_ema">CCI Price EMA</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </statement>
+                                <statement name="ELSE">
+                                  <block type="variables_set" id="bp_dev_neg">
+                                    <field name="VAR" id="v_dev">Deviation</field>
+                                    <value name="VALUE">
+                                      <block type="math_arithmetic" id="bp_dev_neg_sub">
+                                        <field name="OP">MINUS</field>
+                                        <value name="A">
+                                          <block type="variables_get" id="bp_dev_neg_cpe">
+                                            <field name="VAR" id="v_cci_price_ema">CCI Price EMA</field>
+                                          </block>
+                                        </value>
+                                        <value name="B">
+                                          <block type="variables_get" id="bp_dev_neg_p">
+                                            <field name="VAR" id="v_price">Price</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="variables_set" id="bp_update_cpe">
+                                    <field name="VAR" id="v_cci_price_ema">CCI Price EMA</field>
+                                    <value name="VALUE">
+                                      <block type="math_arithmetic" id="bp_cpe_add">
+                                        <field name="OP">ADD</field>
+                                        <value name="A">
+                                          <block type="math_arithmetic" id="bp_cpe_alpha_price">
+                                            <field name="OP">MULTIPLY</field>
+                                            <value name="A">
+                                              <block type="variables_get" id="bp_cpe_alpha">
+                                                <field name="VAR" id="v_alpha_cci">Alpha CCI</field>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="variables_get" id="bp_cpe_price">
+                                                <field name="VAR" id="v_price">Price</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <value name="B">
+                                          <block type="math_arithmetic" id="bp_cpe_1m_cpe">
+                                            <field name="OP">MULTIPLY</field>
+                                            <value name="A">
+                                              <block type="math_arithmetic" id="bp_cpe_1m">
+                                                <field name="OP">MINUS</field>
+                                                <value name="A">
+                                                  <block type="math_number" id="bp_cpe_one">
+                                                    <field name="NUM">1</field>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="variables_get" id="bp_cpe_alpha2">
+                                                    <field name="VAR" id="v_alpha_cci">Alpha CCI</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="variables_get" id="bp_cpe_prev">
+                                                <field name="VAR" id="v_cci_price_ema">CCI Price EMA</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="bp_update_cde">
+                                        <field name="VAR" id="v_cci_dev_ema">CCI Dev EMA</field>
+                                        <value name="VALUE">
+                                          <block type="math_arithmetic" id="bp_cde_add">
+                                            <field name="OP">ADD</field>
+                                            <value name="A">
+                                              <block type="math_arithmetic" id="bp_cde_alpha_dev">
+                                                <field name="OP">MULTIPLY</field>
+                                                <value name="A">
+                                                  <block type="variables_get" id="bp_cde_alpha">
+                                                    <field name="VAR" id="v_alpha_cci">Alpha CCI</field>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="variables_get" id="bp_cde_dev">
+                                                    <field name="VAR" id="v_dev">Deviation</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="math_arithmetic" id="bp_cde_1m_cde">
+                                                <field name="OP">MULTIPLY</field>
+                                                <value name="A">
+                                                  <block type="math_arithmetic" id="bp_cde_1m">
+                                                    <field name="OP">MINUS</field>
+                                                    <value name="A">
+                                                      <block type="math_number" id="bp_cde_one">
+                                                        <field name="NUM">1</field>
+                                                      </block>
+                                                    </value>
+                                                    <value name="B">
+                                                      <block type="variables_get" id="bp_cde_alpha2">
+                                                        <field name="VAR" id="v_alpha_cci">Alpha CCI</field>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="variables_get" id="bp_cde_prev">
+                                                    <field name="VAR" id="v_cci_dev_ema">CCI Dev EMA</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="bp_save_cci_prev">
+                                            <field name="VAR" id="v_cci_prev">CCI Prev</field>
+                                            <value name="VALUE">
+                                              <block type="variables_get" id="bp_save_cci_val">
+                                                <field name="VAR" id="v_cci">CCI</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="bp_update_cci">
+                                                <field name="VAR" id="v_cci">CCI</field>
+                                                <value name="VALUE">
+                                                  <block type="math_arithmetic" id="bp_cci_div">
+                                                    <field name="OP">DIVIDE</field>
+                                                    <value name="A">
+                                                      <block type="math_arithmetic" id="bp_cci_num">
+                                                        <field name="OP">MINUS</field>
+                                                        <value name="A">
+                                                          <block type="variables_get" id="bp_cci_num_price">
+                                                            <field name="VAR" id="v_price">Price</field>
+                                                          </block>
+                                                        </value>
+                                                        <value name="B">
+                                                          <block type="variables_get" id="bp_cci_num_cpe">
+                                                            <field name="VAR" id="v_cci_price_ema">CCI Price EMA</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                    <value name="B">
+                                                      <block type="math_arithmetic" id="bp_cci_denom">
+                                                        <field name="OP">MULTIPLY</field>
+                                                        <value name="A">
+                                                          <block type="math_number" id="bp_cci_const">
+                                                            <field name="NUM">0.015</field>
+                                                          </block>
+                                                        </value>
+                                                        <value name="B">
+                                                          <block type="variables_get" id="bp_cci_denom_cde">
+                                                            <field name="VAR" id="v_cci_dev_ema">CCI Dev EMA</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <next>
+                  <block type="controls_if" id="bp_warmup_gate">
+                    <value name="IF0">
+                      <block type="logic_compare" id="bp_warmup_cmp">
+                        <field name="OP">GTE</field>
+                        <value name="A">
+                          <block type="variables_get" id="bp_warmup_tc">
+                            <field name="VAR" id="v_tick_count">Tick Count</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="variables_get" id="bp_warmup_wt">
+                            <field name="VAR" id="v_warmup">Warmup Ticks</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="bp_set_ldi">
+                        <field name="VAR" id="v_last_dema_int">Last DEMA Int</field>
+                        <value name="VALUE">
+                          <block type="math_round" id="bp_ldi_round">
+                            <field name="OP">ROUND</field>
+                            <value name="NUM">
+                              <shadow type="math_number" id="bp_ldi_sh">
+                                <field name="NUM">0</field>
+                              </shadow>
+                              <block type="math_arithmetic" id="bp_ldi_scale">
+                                <field name="OP">MULTIPLY</field>
+                                <value name="A">
+                                  <block type="variables_get" id="bp_ldi_dema">
+                                    <field name="VAR" id="v_dema">DEMA</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="math_number" id="bp_ldi_10000">
+                                    <field name="NUM">10000</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="bp_set_new_digit">
+                            <field name="VAR" id="v_new_digit">New Digit</field>
+                            <value name="VALUE">
+                              <block type="math_modulo" id="bp_new_digit_mod">
+                                <value name="DIVIDEND">
+                                  <shadow type="math_number" id="bp_nd_div_sh">
+                                    <field name="NUM">0</field>
+                                  </shadow>
+                                  <block type="variables_get" id="bp_nd_ldi">
+                                    <field name="VAR" id="v_last_dema_int">Last DEMA Int</field>
+                                  </block>
+                                </value>
+                                <value name="DIVISOR">
+                                  <shadow type="math_number" id="bp_nd_divisor_sh">
+                                    <field name="NUM">10</field>
+                                  </shadow>
+                                  <block type="math_number" id="bp_nd_ten">
+                                    <field name="NUM">10</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="controls_if" id="bp_digit_changed">
+                                <value name="IF0">
+                                  <block type="logic_compare" id="bp_dc_cmp">
+                                    <field name="OP">NEQ</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="bp_dc_nd">
+                                        <field name="VAR" id="v_new_digit">New Digit</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="variables_get" id="bp_dc_d2">
+                                        <field name="VAR" id="v_d2">D2</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <statement name="DO0">
+                                  <block type="variables_set" id="bp_shift_d1">
+                                    <field name="VAR" id="v_d1">D1</field>
+                                    <value name="VALUE">
+                                      <block type="variables_get" id="bp_shift_d1_src">
+                                        <field name="VAR" id="v_d2">D2</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="bp_shift_d2">
+                                        <field name="VAR" id="v_d2">D2</field>
+                                        <value name="VALUE">
+                                          <block type="variables_get" id="bp_shift_d2_src">
+                                            <field name="VAR" id="v_new_digit">New Digit</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="variables_set" id="bp_set_tick_int">
+                                    <field name="VAR" id="v_tick_int">Tick Int</field>
+                                    <value name="VALUE">
+                                      <block type="math_round" id="bp_ti_round">
+                                        <field name="OP">ROUND</field>
+                                        <value name="NUM">
+                                          <shadow type="math_number" id="bp_ti_sh">
+                                            <field name="NUM">0</field>
+                                          </shadow>
+                                          <block type="math_arithmetic" id="bp_ti_scale">
+                                            <field name="OP">MULTIPLY</field>
+                                            <value name="A">
+                                              <block type="variables_get" id="bp_ti_price">
+                                                <field name="VAR" id="v_price">Price</field>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="math_number" id="bp_ti_10000">
+                                                <field name="NUM">10000</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="bp_set_tick_digit">
+                                        <field name="VAR" id="v_tick_digit">Tick Digit</field>
+                                        <value name="VALUE">
+                                          <block type="math_modulo" id="bp_td_mod">
+                                            <value name="DIVIDEND">
+                                              <shadow type="math_number" id="bp_td_div_sh">
+                                                <field name="NUM">0</field>
+                                              </shadow>
+                                              <block type="variables_get" id="bp_td_ti">
+                                                <field name="VAR" id="v_tick_int">Tick Int</field>
+                                              </block>
+                                            </value>
+                                            <value name="DIVISOR">
+                                              <shadow type="math_number" id="bp_td_divisor_sh">
+                                                <field name="NUM">10</field>
+                                              </shadow>
+                                              <block type="math_number" id="bp_td_ten">
+                                                <field name="NUM">10</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="controls_if" id="bp_cci_dir">
+                                            <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1"></mutation>
+                                            <value name="IF0">
+                                              <block type="logic_compare" id="bp_cci_rising">
+                                                <field name="OP">GT</field>
+                                                <value name="A">
+                                                  <block type="variables_get" id="bp_cci_r_cci">
+                                                    <field name="VAR" id="v_cci">CCI</field>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="variables_get" id="bp_cci_r_prev">
+                                                    <field name="VAR" id="v_cci_prev">CCI Prev</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <statement name="DO0">
+                                              <block type="variables_set" id="bp_dir_over">
+                                                <field name="VAR" id="v_direction">Direction</field>
+                                                <value name="VALUE">
+                                                  <block type="math_number" id="bp_dir_one">
+                                                    <field name="NUM">1</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </statement>
+                                            <value name="IF1">
+                                              <block type="logic_compare" id="bp_cci_falling">
+                                                <field name="OP">LT</field>
+                                                <value name="A">
+                                                  <block type="variables_get" id="bp_cci_f_cci">
+                                                    <field name="VAR" id="v_cci">CCI</field>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="variables_get" id="bp_cci_f_prev">
+                                                    <field name="VAR" id="v_cci_prev">CCI Prev</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <statement name="DO1">
+                                              <block type="variables_set" id="bp_dir_under">
+                                                <field name="VAR" id="v_direction">Direction</field>
+                                                <value name="VALUE">
+                                                  <block type="math_number" id="bp_dir_two">
+                                                    <field name="NUM">2</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </statement>
+                                            <next>
+                                              <block type="controls_if" id="bp_entry_check">
+                                                <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1"></mutation>
+                                                <value name="IF0">
+                                                  <block type="logic_operation" id="bp_over_cond_all">
+                                                    <field name="OP">AND</field>
+                                                    <value name="A">
+                                                      <block type="logic_operation" id="bp_over_cond_4">
+                                                        <field name="OP">AND</field>
+                                                        <value name="A">
+                                                          <block type="logic_operation" id="bp_over_cond_3">
+                                                            <field name="OP">AND</field>
+                                                            <value name="A">
+                                                              <block type="logic_operation" id="bp_over_cond_2">
+                                                                <field name="OP">AND</field>
+                                                                <value name="A">
+                                                                  <block type="logic_negate" id="bp_over_not_ct">
+                                                                    <value name="BOOL">
+                                                                      <block type="variables_get" id="bp_over_ct">
+                                                                        <field name="VAR" id="v_can_trade">Can Trade</field>
+                                                                      </block>
+                                                                    </value>
+                                                                  </block>
+                                                                </value>
+                                                                <value name="B">
+                                                                  <block type="logic_compare" id="bp_over_dir">
+                                                                    <field name="OP">EQ</field>
+                                                                    <value name="A">
+                                                                      <block type="variables_get" id="bp_over_dir_v">
+                                                                        <field name="VAR" id="v_direction">Direction</field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <value name="B">
+                                                                      <block type="math_number" id="bp_over_dir_1">
+                                                                        <field name="NUM">1</field>
+                                                                      </block>
+                                                                    </value>
+                                                                  </block>
+                                                                </value>
+                                                              </block>
+                                                            </value>
+                                                            <value name="B">
+                                                              <block type="logic_compare" id="bp_over_d1">
+                                                                <field name="OP">GT</field>
+                                                                <value name="A">
+                                                                  <block type="variables_get" id="bp_over_d1_v">
+                                                                    <field name="VAR" id="v_d1">D1</field>
+                                                                  </block>
+                                                                </value>
+                                                                <value name="B">
+                                                                  <block type="math_number" id="bp_over_d1_3">
+                                                                    <field name="NUM">3</field>
+                                                                  </block>
+                                                                </value>
+                                                              </block>
+                                                            </value>
+                                                          </block>
+                                                        </value>
+                                                        <value name="B">
+                                                          <block type="logic_compare" id="bp_over_d2">
+                                                            <field name="OP">GT</field>
+                                                            <value name="A">
+                                                              <block type="variables_get" id="bp_over_d2_v">
+                                                                <field name="VAR" id="v_d2">D2</field>
+                                                              </block>
+                                                            </value>
+                                                            <value name="B">
+                                                              <block type="math_number" id="bp_over_d2_3">
+                                                                <field name="NUM">3</field>
+                                                              </block>
+                                                            </value>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                    <value name="B">
+                                                      <block type="logic_compare" id="bp_over_td">
+                                                        <field name="OP">LTE</field>
+                                                        <value name="A">
+                                                          <block type="variables_get" id="bp_over_td_v">
+                                                            <field name="VAR" id="v_tick_digit">Tick Digit</field>
+                                                          </block>
+                                                        </value>
+                                                        <value name="B">
+                                                          <block type="math_number" id="bp_over_td_3">
+                                                            <field name="NUM">3</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                                <statement name="DO0">
+                                                  <block type="variables_set" id="bp_over_set_pred">
+                                                    <field name="VAR" id="v_prediction">Prediction</field>
+                                                    <value name="VALUE">
+                                                      <block type="math_number" id="bp_over_pred_3">
+                                                        <field name="NUM">3</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="variables_set" id="bp_over_set_ct">
+                                                        <field name="VAR" id="v_can_trade">Can Trade</field>
+                                                        <value name="VALUE">
+                                                          <block type="logic_boolean" id="bp_over_ct_true">
+                                                            <field name="BOOL">FALSE</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="purchase" id="bp_over_purchase">
+                                                            <field name="PURCHASE_LIST">DIGITOVER</field>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </statement>
+                                                <value name="IF1">
+                                                  <block type="logic_operation" id="bp_under_cond_all">
+                                                    <field name="OP">AND</field>
+                                                    <value name="A">
+                                                      <block type="logic_operation" id="bp_under_cond_4">
+                                                        <field name="OP">AND</field>
+                                                        <value name="A">
+                                                          <block type="logic_operation" id="bp_under_cond_3">
+                                                            <field name="OP">AND</field>
+                                                            <value name="A">
+                                                              <block type="logic_operation" id="bp_under_cond_2">
+                                                                <field name="OP">AND</field>
+                                                                <value name="A">
+                                                                  <block type="logic_negate" id="bp_under_not_ct">
+                                                                    <value name="BOOL">
+                                                                      <block type="variables_get" id="bp_under_ct">
+                                                                        <field name="VAR" id="v_can_trade">Can Trade</field>
+                                                                      </block>
+                                                                    </value>
+                                                                  </block>
+                                                                </value>
+                                                                <value name="B">
+                                                                  <block type="logic_compare" id="bp_under_dir">
+                                                                    <field name="OP">EQ</field>
+                                                                    <value name="A">
+                                                                      <block type="variables_get" id="bp_under_dir_v">
+                                                                        <field name="VAR" id="v_direction">Direction</field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <value name="B">
+                                                                      <block type="math_number" id="bp_under_dir_2">
+                                                                        <field name="NUM">2</field>
+                                                                      </block>
+                                                                    </value>
+                                                                  </block>
+                                                                </value>
+                                                              </block>
+                                                            </value>
+                                                            <value name="B">
+                                                              <block type="logic_compare" id="bp_under_d1">
+                                                                <field name="OP">LT</field>
+                                                                <value name="A">
+                                                                  <block type="variables_get" id="bp_under_d1_v">
+                                                                    <field name="VAR" id="v_d1">D1</field>
+                                                                  </block>
+                                                                </value>
+                                                                <value name="B">
+                                                                  <block type="math_number" id="bp_under_d1_7">
+                                                                    <field name="NUM">7</field>
+                                                                  </block>
+                                                                </value>
+                                                              </block>
+                                                            </value>
+                                                          </block>
+                                                        </value>
+                                                        <value name="B">
+                                                          <block type="logic_compare" id="bp_under_d2">
+                                                            <field name="OP">LT</field>
+                                                            <value name="A">
+                                                              <block type="variables_get" id="bp_under_d2_v">
+                                                                <field name="VAR" id="v_d2">D2</field>
+                                                              </block>
+                                                            </value>
+                                                            <value name="B">
+                                                              <block type="math_number" id="bp_under_d2_7">
+                                                                <field name="NUM">7</field>
+                                                              </block>
+                                                            </value>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                    <value name="B">
+                                                      <block type="logic_compare" id="bp_under_td">
+                                                        <field name="OP">GTE</field>
+                                                        <value name="A">
+                                                          <block type="variables_get" id="bp_under_td_v">
+                                                            <field name="VAR" id="v_tick_digit">Tick Digit</field>
+                                                          </block>
+                                                        </value>
+                                                        <value name="B">
+                                                          <block type="math_number" id="bp_under_td_6">
+                                                            <field name="NUM">6</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                                <statement name="DO1">
+                                                  <block type="variables_set" id="bp_under_set_pred">
+                                                    <field name="VAR" id="v_prediction">Prediction</field>
+                                                    <value name="VALUE">
+                                                      <block type="math_number" id="bp_under_pred_6">
+                                                        <field name="NUM">6</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="variables_set" id="bp_under_set_ct">
+                                                        <field name="VAR" id="v_can_trade">Can Trade</field>
+                                                        <value name="VALUE">
+                                                          <block type="logic_boolean" id="bp_under_ct_true">
+                                                            <field name="BOOL">FALSE</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="purchase" id="bp_under_purchase">
+                                                            <field name="PURCHASE_LIST">DIGITUNDER</field>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </statement>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="text_join" id="ap_win_msg" disabled="true" x="0" y="5246">
+    <field name="VARIABLE" id="$7_XU_^577!m,;qyaLO3">text</field>
+  </block>
+  <block type="text_join" id="ap_loss_msg" disabled="true" x="0" y="5408">
+    <field name="VARIABLE" id="$7_XU_^577!m,;qyaLO3">text</field>
+  </block>
+  <block type="text_join" id="ap_analysis_msg" disabled="true" x="0" y="5570">
+    <field name="VARIABLE" id="$7_XU_^577!m,;qyaLO3">text</field>
+  </block>
+  <block type="text_join" id="ap_tp_msg" disabled="true" x="0" y="5732">
+    <field name="VARIABLE" id="$7_XU_^577!m,;qyaLO3">text</field>
+  </block>
+  <block type="text_join" id="ap_sl_msg" disabled="true" x="0" y="5894">
+    <field name="VARIABLE" id="$7_XU_^577!m,;qyaLO3">text</field>
+  </block>
+</xml>

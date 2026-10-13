@@ -1,0 +1,767 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="var_stake">Stake</variable>
+    <variable id="var_stake_initial">Stake Initial</variable>
+    <variable id="var_martingale">Martingale</variable>
+    <variable id="var_pred_before">Prediction Before Loss</variable>
+    <variable id="var_pred_after">Prediction After Loss</variable>
+    <variable id="var_prediction">Prediction</variable>
+    <variable id="var_start">Start</variable>
+    <variable id="var_ticks">Ticks to Analyse</variable>
+    <variable id="var_lastn">Last N Ticks</variable>
+    <variable id="var_over_count_1">Over Count 1</variable>
+    <variable id="var_over_count_3">Over Count 3</variable>
+    <variable id="var_total">Total</variable>
+    <variable id="var_i">i</variable>
+    <variable id="var_over_pct_1">Over Pct 1</variable>
+    <variable id="var_over_pct_3">Over Pct 3</variable>
+    <variable id="var_threshold_1">Threshold 1</variable>
+    <variable id="var_threshold_3">Threshold 3</variable>
+    <variable id="var_last_digit">Last Digit</variable>
+    <variable id="var_target_profit">Target Profit</variable>
+    <variable id="var_stop_loss">Stop Loss</variable>
+  </variables>
+
+  <!-- ═══════════════════════════════════════════════════════
+       TRADE DEFINITION
+       ═══════════════════════════════════════════════════════ -->
+  <block type="trade_definition" id="td_main" deletable="false" x="0" y="0">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="td_market" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">R_75</field>
+        <next>
+          <block type="trade_definition_tradetype" id="td_tt" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="td_ct" deletable="false" movable="false">
+                <field name="TYPE_LIST">DIGITOVER</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="td_ci" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="td_rbs" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="td_roe" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- INITIALIZATION -->
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="init_pred_before">
+        <field name="VAR" id="var_pred_before">Prediction Before Loss</field>
+        <value name="VALUE">
+          <block type="math_number" id="ipb_num"><field name="NUM">1</field></block>
+        </value>
+        <next>
+          <block type="variables_set" id="init_pred_after">
+            <field name="VAR" id="var_pred_after">Prediction After Loss</field>
+            <value name="VALUE">
+              <block type="math_number" id="ipa_num"><field name="NUM">3</field></block>
+            </value>
+            <next>
+              <block type="variables_set" id="init_prediction">
+                <field name="VAR" id="var_prediction">Prediction</field>
+                <value name="VALUE">
+                  <block type="variables_get" id="ip_from_before">
+                    <field name="VAR" id="var_pred_before">Prediction Before Loss</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="init_stake">
+                    <field name="VAR" id="var_stake">Stake</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="is_num"><field name="NUM">10</field></block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="init_stake_initial">
+                        <field name="VAR" id="var_stake_initial">Stake Initial</field>
+                        <value name="VALUE">
+                          <block type="variables_get" id="isi_from_stake">
+                            <field name="VAR" id="var_stake">Stake</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="init_martingale">
+                            <field name="VAR" id="var_martingale">Martingale</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="im_num"><field name="NUM">2.1</field></block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="init_start">
+                                <field name="VAR" id="var_start">Start</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="istart_num"><field name="NUM">0</field></block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="init_ticks">
+                                    <field name="VAR" id="var_ticks">Ticks to Analyse</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="it_num"><field name="NUM">1000</field></block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="init_th1">
+                                        <field name="VAR" id="var_threshold_1">Threshold 1</field>
+                                        <value name="VALUE">
+                                          <block type="math_number" id="ith1_num"><field name="NUM">80</field></block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="init_th3">
+                                            <field name="VAR" id="var_threshold_3">Threshold 3</field>
+                                            <value name="VALUE">
+                                              <block type="math_number" id="ith3_num"><field name="NUM">60</field></block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="init_pct1">
+                                                <field name="VAR" id="var_over_pct_1">Over Pct 1</field>
+                                                <value name="VALUE">
+                                                  <block type="math_number" id="ipct1_num"><field name="NUM">0</field></block>
+                                                </value>
+                                                <next>
+                                                  <block type="variables_set" id="init_pct3">
+                                                    <field name="VAR" id="var_over_pct_3">Over Pct 3</field>
+                                                    <value name="VALUE">
+                                                      <block type="math_number" id="ipct3_num"><field name="NUM">0</field></block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="variables_set" id="init_lastdig">
+                                                        <field name="VAR" id="var_last_digit">Last Digit</field>
+                                                        <value name="VALUE">
+                                                          <block type="math_number" id="ild_num"><field name="NUM">0</field></block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="variables_set" id="init_target">
+                                                            <field name="VAR" id="var_target_profit">Target Profit</field>
+                                                            <value name="VALUE">
+                                                              <block type="math_number" id="itp_num"><field name="NUM">50</field></block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="variables_set" id="init_stoploss">
+                                                                <field name="VAR" id="var_stop_loss">Stop Loss</field>
+                                                                <value name="VALUE">
+                                                                  <block type="math_number" id="isl_num"><field name="NUM">20</field></block>
+                                                                </value>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+
+    <!-- TRADE OPTIONS -->
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="td_opts">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number" id="td_dur_sh"><field name="NUM">1</field></shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number" id="td_amt_sh"><field name="NUM">1</field></shadow>
+          <block type="variables_get" id="td_amt_var">
+            <field name="VAR" id="var_stake">Stake</field>
+          </block>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive" id="td_pred_sh"><field name="NUM">1</field></shadow>
+          <block type="variables_get" id="td_pred_var">
+            <field name="VAR" id="var_prediction">Prediction</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══════════════════════════════════════════════════════
+       AFTER PURCHASE
+       1. Handle win / loss (stake, prediction, start)
+       2. Check limits: only call trade_again when within limits.
+          If target profit OR stop loss is hit the bot stops
+          naturally (no trade_again → dbot halts the run).
+          Stop-loss check: (total_profit + Stop Loss) <= 0
+          avoids negation arithmetic entirely.
+       ═══════════════════════════════════════════════════════ -->
+  <block type="after_purchase" id="ap_main" deletable="false" x="714" y="0">
+    <statement name="AFTERPURCHASE_STACK">
+      <!-- Step 1: win / loss logic -->
+      <block type="controls_if" id="ap_win_or_loss">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0">
+          <block type="contract_check_result" id="ap_check_win">
+            <field name="CHECK_RESULT">win</field>
+          </block>
+        </value>
+        <!-- WIN -->
+        <statement name="DO0">
+          <block type="controls_if" id="ap_profit_check">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
+              <block type="logic_compare" id="ap_profit_gt0">
+                <field name="OP">GT</field>
+                <value name="A">
+                  <block type="total_profit" id="ap_tp_win"></block>
+                </value>
+                <value name="B">
+                  <block type="math_number" id="ap_zero"><field name="NUM">0</field></block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="variables_set" id="ap_reset_stake">
+                <field name="VAR" id="var_stake">Stake</field>
+                <value name="VALUE">
+                  <block type="variables_get" id="ap_rs_val">
+                    <field name="VAR" id="var_stake_initial">Stake Initial</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="ap_reset_start">
+                    <field name="VAR" id="var_start">Start</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="ap_rst_zero"><field name="NUM">0</field></block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="ap_reset_pred">
+                        <field name="VAR" id="var_prediction">Prediction</field>
+                        <value name="VALUE">
+                          <block type="variables_get" id="ap_rp_val">
+                            <field name="VAR" id="var_pred_before">Prediction Before Loss</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="variables_set" id="ap_keep_pred">
+                <field name="VAR" id="var_prediction">Prediction</field>
+                <value name="VALUE">
+                  <block type="variables_get" id="ap_kp_val">
+                    <field name="VAR" id="var_pred_after">Prediction After Loss</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="ap_keep_start">
+                    <field name="VAR" id="var_start">Start</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="ap_ks_one"><field name="NUM">1</field></block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </statement>
+        <!-- LOSS -->
+        <statement name="ELSE">
+          <block type="variables_set" id="ap_mart_stake">
+            <field name="VAR" id="var_stake">Stake</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="ap_stake_x_mart">
+                <field name="OP">MULTIPLY</field>
+                <value name="A">
+                  <shadow type="math_number" id="ap_sa_sh"><field name="NUM">1</field></shadow>
+                  <block type="variables_get" id="ap_sa_var">
+                    <field name="VAR" id="var_stake">Stake</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <shadow type="math_number" id="ap_mb_sh"><field name="NUM">2.1</field></shadow>
+                  <block type="variables_get" id="ap_mb_var">
+                    <field name="VAR" id="var_martingale">Martingale</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="ap_set_pred_after">
+                <field name="VAR" id="var_prediction">Prediction</field>
+                <value name="VALUE">
+                  <block type="variables_get" id="ap_spa_val">
+                    <field name="VAR" id="var_pred_after">Prediction After Loss</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="ap_set_recovery">
+                    <field name="VAR" id="var_start">Start</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="ap_sr_one"><field name="NUM">1</field></block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <next>
+          <!--
+            Step 2: Trade again ONLY if both limits are safe.
+              • Target: total_profit < Target Profit
+              • Stop Loss: (total_profit + Stop Loss) > 0
+                  i.e. total_profit > -Stop Loss, without any negation arithmetic.
+            If either limit is breached: no trade_again → dbot stops naturally.
+          -->
+          <block type="controls_if" id="ap_limit_gate">
+            <value name="IF0">
+              <block type="logic_operation" id="ap_within_limits">
+                <field name="OP">AND</field>
+                <value name="A">
+                  <!-- total_profit &lt; Target Profit (target not yet hit) -->
+                  <block type="logic_compare" id="ap_below_target">
+                    <field name="OP">LT</field>
+                    <value name="A">
+                      <block type="total_profit" id="ap_tp_target"></block>
+                    </value>
+                    <value name="B">
+                      <block type="variables_get" id="ap_target_var">
+                        <field name="VAR" id="var_target_profit">Target Profit</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <value name="B">
+                  <!-- (total_profit + Stop Loss) > 0  →  stop loss not yet hit -->
+                  <block type="logic_compare" id="ap_above_stoploss">
+                    <field name="OP">GT</field>
+                    <value name="A">
+                      <block type="math_arithmetic" id="ap_tp_plus_sl">
+                        <field name="OP">ADD</field>
+                        <value name="A">
+                          <shadow type="math_number" id="ap_tpa_sh"><field name="NUM">0</field></shadow>
+                          <block type="total_profit" id="ap_tp_sl"></block>
+                        </value>
+                        <value name="B">
+                          <shadow type="math_number" id="ap_slb_sh"><field name="NUM">1</field></shadow>
+                          <block type="variables_get" id="ap_sl_var">
+                            <field name="VAR" id="var_stop_loss">Stop Loss</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="math_number" id="ap_sl_zero"><field name="NUM">0</field></block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="trade_again" id="ap_trade_again"></block>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══════════════════════════════════════════════════════
+       BEFORE PURCHASE
+       Silently waits when conditions are not met.
+       When both Over Pct 1 >= 80 AND Over Pct 3 >= 60:
+         Normal mode (Start=0)  → buy DIGITOVER on digit 1
+         Recovery mode (Start=1, Last Digit < 3) → buy DIGITOVER
+       ═══════════════════════════════════════════════════════ -->
+  <block type="before_purchase" id="bp_main" deletable="false" x="0" y="1261">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="bp_pct_gate">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1"></mutation>
+        <!-- Branch 1: conditions met + normal mode -->
+        <value name="IF0">
+          <block type="logic_operation" id="bp_normal_all">
+            <field name="OP">AND</field>
+            <value name="A">
+              <block type="logic_operation" id="bp_pcts_ok">
+                <field name="OP">AND</field>
+                <value name="A">
+                  <block type="logic_compare" id="bp_pct1_ok">
+                    <field name="OP">GTE</field>
+                    <value name="A">
+                      <block type="variables_get" id="bp_pct1_a">
+                        <field name="VAR" id="var_over_pct_1">Over Pct 1</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="variables_get" id="bp_th1_b">
+                        <field name="VAR" id="var_threshold_1">Threshold 1</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="logic_compare" id="bp_pct3_ok">
+                    <field name="OP">GTE</field>
+                    <value name="A">
+                      <block type="variables_get" id="bp_pct3_a">
+                        <field name="VAR" id="var_over_pct_3">Over Pct 3</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="variables_get" id="bp_th3_b">
+                        <field name="VAR" id="var_threshold_3">Threshold 3</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <value name="B">
+              <block type="logic_compare" id="bp_start_is_zero">
+                <field name="OP">EQ</field>
+                <value name="A">
+                  <block type="variables_get" id="bp_start_a">
+                    <field name="VAR" id="var_start">Start</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="math_number" id="bp_start_zero"><field name="NUM">0</field></block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="purchase" id="bp_buy_normal">
+            <field name="PURCHASE_LIST">DIGITOVER</field>
+          </block>
+        </statement>
+        <!-- Branch 2: conditions met + recovery mode + last digit < pred_after -->
+        <value name="IF1">
+          <block type="logic_operation" id="bp_recovery_all">
+            <field name="OP">AND</field>
+            <value name="A">
+              <block type="logic_operation" id="bp_pcts_ok2">
+                <field name="OP">AND</field>
+                <value name="A">
+                  <block type="logic_compare" id="bp_pct1_ok2">
+                    <field name="OP">GTE</field>
+                    <value name="A">
+                      <block type="variables_get" id="bp_pct1_a2">
+                        <field name="VAR" id="var_over_pct_1">Over Pct 1</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="variables_get" id="bp_th1_b2">
+                        <field name="VAR" id="var_threshold_1">Threshold 1</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="logic_compare" id="bp_pct3_ok2">
+                    <field name="OP">GTE</field>
+                    <value name="A">
+                      <block type="variables_get" id="bp_pct3_a2">
+                        <field name="VAR" id="var_over_pct_3">Over Pct 3</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="variables_get" id="bp_th3_b2">
+                        <field name="VAR" id="var_threshold_3">Threshold 3</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <value name="B">
+              <block type="logic_operation" id="bp_recovery_and_filter">
+                <field name="OP">AND</field>
+                <value name="A">
+                  <block type="logic_compare" id="bp_start_is_one">
+                    <field name="OP">EQ</field>
+                    <value name="A">
+                      <block type="variables_get" id="bp_start_a2">
+                        <field name="VAR" id="var_start">Start</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="math_number" id="bp_start_one"><field name="NUM">1</field></block>
+                    </value>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="logic_compare" id="bp_lastdig_lt_pred">
+                    <field name="OP">LT</field>
+                    <value name="A">
+                      <block type="variables_get" id="bp_ld_a">
+                        <field name="VAR" id="var_last_digit">Last Digit</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="variables_get" id="bp_pa_b">
+                        <field name="VAR" id="var_pred_after">Prediction After Loss</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="purchase" id="bp_buy_recovery">
+            <field name="PURCHASE_LIST">DIGITOVER</field>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+
+  <!-- ═══════════════════════════════════════════════════════
+       TICK ANALYSIS
+       Runs on every tick. Counts digits >1 and >3 from the
+       last 1000 ticks independently to compute percentages.
+       Also tracks the most recent digit in Last Digit by
+       overwriting it on each loop iteration.
+       ═══════════════════════════════════════════════════════ -->
+  <block type="tick_analysis" id="ta_main" x="0" y="1966">
+    <statement name="TICKANALYSIS_STACK">
+      <block type="variables_set" id="ta_set_lastn">
+        <field name="VAR" id="var_lastn">Last N Ticks</field>
+        <value name="VALUE">
+          <block type="lists_getSublist" id="ta_sublist">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" at1="true" at2="false"></mutation>
+            <field name="WHERE1">FROM_END</field>
+            <field name="WHERE2">LAST</field>
+            <value name="LIST">
+              <block type="lastDigitList" id="ta_digit_list"></block>
+            </value>
+            <value name="AT1">
+              <block type="variables_get" id="ta_ticks_var">
+                <field name="VAR" id="var_ticks">Ticks to Analyse</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="ta_reset_oc1">
+            <field name="VAR" id="var_over_count_1">Over Count 1</field>
+            <value name="VALUE">
+              <block type="math_number" id="ta_oc1_z"><field name="NUM">0</field></block>
+            </value>
+            <next>
+              <block type="variables_set" id="ta_reset_oc3">
+                <field name="VAR" id="var_over_count_3">Over Count 3</field>
+                <value name="VALUE">
+                  <block type="math_number" id="ta_oc3_z"><field name="NUM">0</field></block>
+                </value>
+                <next>
+                  <block type="variables_set" id="ta_set_total">
+                    <field name="VAR" id="var_total">Total</field>
+                    <value name="VALUE">
+                      <block type="lists_length" id="ta_len">
+                        <value name="VALUE">
+                          <block type="variables_get" id="ta_len_list">
+                            <field name="VAR" id="var_lastn">Last N Ticks</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="controls_forEach" id="ta_loop">
+                        <field name="VAR" id="var_i">i</field>
+                        <value name="LIST">
+                          <block type="variables_get" id="ta_loop_list">
+                            <field name="VAR" id="var_lastn">Last N Ticks</field>
+                          </block>
+                        </value>
+                        <statement name="DO">
+                          <block type="controls_if" id="ta_if_gt1">
+                            <value name="IF0">
+                              <block type="logic_compare" id="ta_cmp1">
+                                <field name="OP">GT</field>
+                                <value name="A">
+                                  <block type="variables_get" id="ta_i1">
+                                    <field name="VAR" id="var_i">i</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="variables_get" id="ta_pb1">
+                                    <field name="VAR" id="var_pred_before">Prediction Before Loss</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <statement name="DO0">
+                              <block type="variables_set" id="ta_inc_oc1">
+                                <field name="VAR" id="var_over_count_1">Over Count 1</field>
+                                <value name="VALUE">
+                                  <block type="math_arithmetic" id="ta_oc1_add">
+                                    <field name="OP">ADD</field>
+                                    <value name="A">
+                                      <shadow type="math_number" id="ta_oc1_as"><field name="NUM">1</field></shadow>
+                                      <block type="variables_get" id="ta_oc1_av">
+                                        <field name="VAR" id="var_over_count_1">Over Count 1</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <shadow type="math_number" id="ta_oc1_bs"><field name="NUM">1</field></shadow>
+                                    </value>
+                                  </block>
+                                </value>
+                              </block>
+                            </statement>
+                            <next>
+                              <block type="controls_if" id="ta_if_gt3">
+                                <value name="IF0">
+                                  <block type="logic_compare" id="ta_cmp3">
+                                    <field name="OP">GT</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="ta_i3">
+                                        <field name="VAR" id="var_i">i</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="variables_get" id="ta_pa3">
+                                        <field name="VAR" id="var_pred_after">Prediction After Loss</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <statement name="DO0">
+                                  <block type="variables_set" id="ta_inc_oc3">
+                                    <field name="VAR" id="var_over_count_3">Over Count 3</field>
+                                    <value name="VALUE">
+                                      <block type="math_arithmetic" id="ta_oc3_add">
+                                        <field name="OP">ADD</field>
+                                        <value name="A">
+                                          <shadow type="math_number" id="ta_oc3_as"><field name="NUM">1</field></shadow>
+                                          <block type="variables_get" id="ta_oc3_av">
+                                            <field name="VAR" id="var_over_count_3">Over Count 3</field>
+                                          </block>
+                                        </value>
+                                        <value name="B">
+                                          <shadow type="math_number" id="ta_oc3_bs"><field name="NUM">1</field></shadow>
+                                        </value>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="variables_set" id="ta_track_last">
+                                    <field name="VAR" id="var_last_digit">Last Digit</field>
+                                    <value name="VALUE">
+                                      <block type="variables_get" id="ta_i_last">
+                                        <field name="VAR" id="var_i">i</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </statement>
+                        <next>
+                          <block type="variables_set" id="ta_set_pct1">
+                            <field name="VAR" id="var_over_pct_1">Over Pct 1</field>
+                            <value name="VALUE">
+                              <block type="math_arithmetic" id="ta_pct1_x100">
+                                <field name="OP">MULTIPLY</field>
+                                <value name="A">
+                                  <shadow type="math_number" id="ta_p1a_sh"><field name="NUM">1</field></shadow>
+                                  <block type="math_arithmetic" id="ta_pct1_div">
+                                    <field name="OP">DIVIDE</field>
+                                    <value name="A">
+                                      <shadow type="math_number" id="ta_p1da_sh"><field name="NUM">1</field></shadow>
+                                      <block type="variables_get" id="ta_p1_oc">
+                                        <field name="VAR" id="var_over_count_1">Over Count 1</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <shadow type="math_number" id="ta_p1db_sh"><field name="NUM">1</field></shadow>
+                                      <block type="variables_get" id="ta_p1_tot">
+                                        <field name="VAR" id="var_total">Total</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <shadow type="math_number" id="ta_p1_100"><field name="NUM">100</field></shadow>
+                                </value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="ta_set_pct3">
+                                <field name="VAR" id="var_over_pct_3">Over Pct 3</field>
+                                <value name="VALUE">
+                                  <block type="math_arithmetic" id="ta_pct3_x100">
+                                    <field name="OP">MULTIPLY</field>
+                                    <value name="A">
+                                      <shadow type="math_number" id="ta_p3a_sh"><field name="NUM">1</field></shadow>
+                                      <block type="math_arithmetic" id="ta_pct3_div">
+                                        <field name="OP">DIVIDE</field>
+                                        <value name="A">
+                                          <shadow type="math_number" id="ta_p3da_sh"><field name="NUM">1</field></shadow>
+                                          <block type="variables_get" id="ta_p3_oc">
+                                            <field name="VAR" id="var_over_count_3">Over Count 3</field>
+                                          </block>
+                                        </value>
+                                        <value name="B">
+                                          <shadow type="math_number" id="ta_p3db_sh"><field name="NUM">1</field></shadow>
+                                          <block type="variables_get" id="ta_p3_tot">
+                                            <field name="VAR" id="var_total">Total</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <shadow type="math_number" id="ta_p3_100"><field name="NUM">100</field></shadow>
+                                    </value>
+                                  </block>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+</xml>

@@ -1,0 +1,2441 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="v_0_log_text">Log Text</variable>
+    <variable id="v_24_trades_total">Trades Total</variable>
+    <variable id="v_18_current_digit">Current Digit</variable>
+    <variable id="v_1_initial_stake">Initial Stake</variable>
+    <variable id="v_4_stake">Stake Amount (USD)</variable>
+    <variable id="v_5_barrier">Barrier</variable>
+    <variable id="v_2_max_stake">Max Stake</variable>
+    <variable id="v_25_wins_total">Wins Total</variable>
+    <variable id="v_26_losses_total">Losses Total</variable>
+    <variable id="v_23_session_stopped">Session Stopped</variable>
+    <variable id="v_16_trading_active">Trading Active</variable>
+    <variable id="v_3_martingale_factor">Martingale Factor</variable>
+    <variable id="v_11_recovery_mode">Recovery Mode</variable>
+    <variable id="v_19_v_open">Virtual Trade Open</variable>
+    <variable id="v_20_v_entry_digit">Virtual Entry Digit</variable>
+    <variable id="v_21_target_profit">Target Profit Amount</variable>
+    <variable id="v_27_v_trades_total">Virtual Trades Total</variable>
+    <variable id="v_6_base_barrier">Base Barrier</variable>
+    <variable id="v_22_stop_loss">Stop Loss Amount</variable>
+    <variable id="v_15_entry_armed">Entry Armed</variable>
+    <variable id="v_7_rb1">Recovery Barrier 1</variable>
+    <variable id="v_8_rb2">Recovery Barrier 2</variable>
+    <variable id="v_9_rb3">Recovery Barrier 3</variable>
+    <variable id="v_10_min_barrier">Min Barrier</variable>
+    <variable id="v_28_v_wins_total">Virtual Wins Total</variable>
+    <variable id="v_29_v_losses_total">Virtual Losses Total</variable>
+    <variable id="v_12_entry_digit">Entry Digit</variable>
+    <variable id="v_17_danger">Danger Detected</variable>
+    <variable id="v_14_cons_v_losses">Consecutive Virtual Losses</variable>
+    <variable id="v_13_losses_required">Virtual Losses Required</variable>
+  </variables>
+  <block type="trade_definition" id="b103" deletable="false" x="0" y="50">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="b1" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ25V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="b2" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="b3" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="b4" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="b5" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="b6" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="is0">
+        <field name="VAR" id="v_0_log_text">Log Text</field>
+        <value name="VALUE">
+          <block type="text" id="iv0">
+            <field name="TEXT"></field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="is1">
+            <field name="VAR" id="v_1_initial_stake">Initial Stake</field>
+            <value name="VALUE">
+              <block type="math_number" id="iv1">
+                <field name="NUM">0.35</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="is2">
+                <field name="VAR" id="v_2_max_stake">Max Stake</field>
+                <value name="VALUE">
+                  <block type="math_number" id="iv2">
+                    <field name="NUM">0.5</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="is3">
+                    <field name="VAR" id="v_3_martingale_factor">Martingale Factor</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="iv3">
+                        <field name="NUM">1.6</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="is4">
+                        <field name="VAR" id="v_4_stake">Stake Amount (USD)</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="iv4">
+                            <field name="NUM">1</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="is5">
+                            <field name="VAR" id="v_6_base_barrier">Base Barrier</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="iv5">
+                                <field name="NUM">7</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="is6">
+                                <field name="VAR" id="v_5_barrier">Barrier</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="iv6">
+                                    <field name="NUM">7</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="is7">
+                                    <field name="VAR" id="v_7_rb1">Recovery Barrier 1</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="iv7">
+                                        <field name="NUM">6</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="is8">
+                                        <field name="VAR" id="v_8_rb2">Recovery Barrier 2</field>
+                                        <value name="VALUE">
+                                          <block type="math_number" id="iv8">
+                                            <field name="NUM">5</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="is9">
+                                            <field name="VAR" id="v_9_rb3">Recovery Barrier 3</field>
+                                            <value name="VALUE">
+                                              <block type="math_number" id="iv9">
+                                                <field name="NUM">6</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="is10">
+                                                <field name="VAR" id="v_10_min_barrier">Min Barrier</field>
+                                                <value name="VALUE">
+                                                  <block type="math_number" id="iv10">
+                                                    <field name="NUM">6</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="variables_set" id="is11">
+                                                    <field name="VAR" id="v_11_recovery_mode">Recovery Mode</field>
+                                                    <value name="VALUE">
+                                                      <block type="math_number" id="iv11">
+                                                        <field name="NUM">0</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="variables_set" id="is12">
+                                                        <field name="VAR" id="v_12_entry_digit">Entry Digit</field>
+                                                        <value name="VALUE">
+                                                          <block type="math_number" id="iv12">
+                                                            <field name="NUM">5</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="variables_set" id="is13">
+                                                            <field name="VAR" id="v_13_losses_required">Virtual Losses Required</field>
+                                                            <value name="VALUE">
+                                                              <block type="math_number" id="iv13">
+                                                                <field name="NUM">1</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="variables_set" id="is14">
+                                                                <field name="VAR" id="v_14_cons_v_losses">Consecutive Virtual Losses</field>
+                                                                <value name="VALUE">
+                                                                  <block type="math_number" id="iv14">
+                                                                    <field name="NUM">0</field>
+                                                                  </block>
+                                                                </value>
+                                                                <next>
+                                                                  <block type="variables_set" id="is15">
+                                                                    <field name="VAR" id="v_15_entry_armed">Entry Armed</field>
+                                                                    <value name="VALUE">
+                                                                      <block type="logic_boolean" id="iv15">
+                                                                        <field name="BOOL">FALSE</field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <next>
+                                                                      <block type="variables_set" id="is16">
+                                                                        <field name="VAR" id="v_16_trading_active">Trading Active</field>
+                                                                        <value name="VALUE">
+                                                                          <block type="logic_boolean" id="iv16">
+                                                                            <field name="BOOL">FALSE</field>
+                                                                          </block>
+                                                                        </value>
+                                                                        <next>
+                                                                          <block type="variables_set" id="is17">
+                                                                            <field name="VAR" id="v_17_danger">Danger Detected</field>
+                                                                            <value name="VALUE">
+                                                                              <block type="logic_boolean" id="iv17">
+                                                                                <field name="BOOL">FALSE</field>
+                                                                              </block>
+                                                                            </value>
+                                                                            <next>
+                                                                              <block type="variables_set" id="is18">
+                                                                                <field name="VAR" id="v_18_current_digit">Current Digit</field>
+                                                                                <value name="VALUE">
+                                                                                  <block type="math_number" id="iv18">
+                                                                                    <field name="NUM">0</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                                <next>
+                                                                                  <block type="variables_set" id="is19">
+                                                                                    <field name="VAR" id="v_19_v_open">Virtual Trade Open</field>
+                                                                                    <value name="VALUE">
+                                                                                      <block type="logic_boolean" id="iv19">
+                                                                                        <field name="BOOL">FALSE</field>
+                                                                                      </block>
+                                                                                    </value>
+                                                                                    <next>
+                                                                                      <block type="variables_set" id="is20">
+                                                                                        <field name="VAR" id="v_20_v_entry_digit">Virtual Entry Digit</field>
+                                                                                        <value name="VALUE">
+                                                                                          <block type="math_number" id="iv20">
+                                                                                            <field name="NUM">0</field>
+                                                                                          </block>
+                                                                                        </value>
+                                                                                        <next>
+                                                                                          <block type="variables_set" id="is21">
+                                                                                            <field name="VAR" id="v_21_target_profit">Target Profit Amount</field>
+                                                                                            <value name="VALUE">
+                                                                                              <block type="math_number" id="iv21">
+                                                                                                <field name="NUM">1</field>
+                                                                                              </block>
+                                                                                            </value>
+                                                                                            <next>
+                                                                                              <block type="variables_set" id="is22">
+                                                                                                <field name="VAR" id="v_22_stop_loss">Stop Loss Amount</field>
+                                                                                                <value name="VALUE">
+                                                                                                  <block type="math_number" id="iv22">
+                                                                                                    <field name="NUM">20</field>
+                                                                                                  </block>
+                                                                                                </value>
+                                                                                                <next>
+                                                                                                  <block type="variables_set" id="is23">
+                                                                                                    <field name="VAR" id="v_23_session_stopped">Session Stopped</field>
+                                                                                                    <value name="VALUE">
+                                                                                                      <block type="logic_boolean" id="iv23">
+                                                                                                        <field name="BOOL">FALSE</field>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                    <next>
+                                                                                                      <block type="variables_set" id="is24">
+                                                                                                        <field name="VAR" id="v_24_trades_total">Trades Total</field>
+                                                                                                        <value name="VALUE">
+                                                                                                          <block type="math_number" id="iv24">
+                                                                                                            <field name="NUM">0</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <next>
+                                                                                                          <block type="variables_set" id="is25">
+                                                                                                            <field name="VAR" id="v_25_wins_total">Wins Total</field>
+                                                                                                            <value name="VALUE">
+                                                                                                              <block type="math_number" id="iv25">
+                                                                                                                <field name="NUM">0</field>
+                                                                                                              </block>
+                                                                                                            </value>
+                                                                                                            <next>
+                                                                                                              <block type="variables_set" id="is26">
+                                                                                                                <field name="VAR" id="v_26_losses_total">Losses Total</field>
+                                                                                                                <value name="VALUE">
+                                                                                                                  <block type="math_number" id="iv26">
+                                                                                                                    <field name="NUM">0</field>
+                                                                                                                  </block>
+                                                                                                                </value>
+                                                                                                                <next>
+                                                                                                                  <block type="variables_set" id="is27">
+                                                                                                                    <field name="VAR" id="v_27_v_trades_total">Virtual Trades Total</field>
+                                                                                                                    <value name="VALUE">
+                                                                                                                      <block type="math_number" id="iv27">
+                                                                                                                        <field name="NUM">0</field>
+                                                                                                                      </block>
+                                                                                                                    </value>
+                                                                                                                    <next>
+                                                                                                                      <block type="variables_set" id="is28">
+                                                                                                                        <field name="VAR" id="v_28_v_wins_total">Virtual Wins Total</field>
+                                                                                                                        <value name="VALUE">
+                                                                                                                          <block type="math_number" id="iv28">
+                                                                                                                            <field name="NUM">0</field>
+                                                                                                                          </block>
+                                                                                                                        </value>
+                                                                                                                        <next>
+                                                                                                                          <block type="variables_set" id="is29">
+                                                                                                                            <field name="VAR" id="v_29_v_losses_total">Virtual Losses Total</field>
+                                                                                                                            <value name="VALUE">
+                                                                                                                              <block type="math_number" id="iv29">
+                                                                                                                                <field name="NUM">0</field>
+                                                                                                                              </block>
+                                                                                                                            </value>
+                                                                                                                          </block>
+                                                                                                                        </next>
+                                                                                                                      </block>
+                                                                                                                    </next>
+                                                                                                                  </block>
+                                                                                                                </next>
+                                                                                                              </block>
+                                                                                                            </next>
+                                                                                                          </block>
+                                                                                                        </next>
+                                                                                                      </block>
+                                                                                                    </next>
+                                                                                                  </block>
+                                                                                                </next>
+                                                                                              </block>
+                                                                                            </next>
+                                                                                          </block>
+                                                                                        </next>
+                                                                                      </block>
+                                                                                    </next>
+                                                                                  </block>
+                                                                                </next>
+                                                                              </block>
+                                                                            </next>
+                                                                          </block>
+                                                                        </next>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="b10">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number" id="(d@;M+$X9:I.]w0,k+V(">
+            <field name="NUM">1</field>
+          </shadow>
+          <block type="math_number" id="b7">
+            <field name="NUM">1</field>
+          </block>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number" id="Mq@.w[WlHbi-#]`D2!lE">
+            <field name="NUM">1</field>
+          </shadow>
+          <block type="variables_get" id="b8">
+            <field name="VAR" id="v_4_stake">Stake Amount (USD)</field>
+          </block>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number" id="3VDFoExUc?_Dx|{TbBke">
+            <field name="NUM">7</field>
+          </shadow>
+          <block type="variables_get" id="b9">
+            <field name="VAR" id="v_5_barrier">Barrier</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="after_purchase" id="b459" deletable="false" x="1344" y="50">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="variables_set" id="b446">
+        <field name="VAR" id="v_24_trades_total">Trades Total</field>
+        <value name="VALUE">
+          <block type="math_arithmetic" id="b445">
+            <field name="OP">ADD</field>
+            <value name="A">
+              <shadow type="math_number" id="3py6G=yBB%jt#qA4AEV6">
+                <field name="NUM">0</field>
+              </shadow>
+              <block type="variables_get" id="b443">
+                <field name="VAR" id="v_24_trades_total">Trades Total</field>
+              </block>
+            </value>
+            <value name="B">
+              <shadow type="math_number" id=")^*YIpnnZuTZ3~Ov7#X8">
+                <field name="NUM">0</field>
+              </shadow>
+              <block type="math_number" id="b444">
+                <field name="NUM">1</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <next>
+          <block type="controls_if" id="b448">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
+              <block type="contract_check_result" id="b447">
+                <field name="CHECK_RESULT">win</field>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="variables_set" id="b316">
+                <field name="VAR" id="v_25_wins_total">Wins Total</field>
+                <value name="VALUE">
+                  <block type="math_arithmetic" id="b315">
+                    <field name="OP">ADD</field>
+                    <value name="A">
+                      <shadow type="math_number" id="upPNF=xFG|@ara2ot%jf">
+                        <field name="NUM">0</field>
+                      </shadow>
+                      <block type="variables_get" id="b313">
+                        <field name="VAR" id="v_25_wins_total">Wins Total</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <shadow type="math_number" id="Pk!#,c0p`q`|7zT+V{k(">
+                        <field name="NUM">0</field>
+                      </shadow>
+                      <block type="math_number" id="b314">
+                        <field name="NUM">1</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="b318">
+                    <field name="VAR" id="v_4_stake">Stake Amount (USD)</field>
+                    <value name="VALUE">
+                      <block type="variables_get" id="b317">
+                        <field name="VAR" id="v_1_initial_stake">Initial Stake</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="b320">
+                        <field name="VAR" id="v_11_recovery_mode">Recovery Mode</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="b319">
+                            <field name="NUM">0</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="b322">
+                            <field name="VAR" id="v_5_barrier">Barrier</field>
+                            <value name="VALUE">
+                              <block type="variables_get" id="b321">
+                                <field name="VAR" id="v_6_base_barrier">Base Barrier</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="text_join" id="b335">
+                                <field name="VARIABLE" id="v_0_log_text">Log Text</field>
+                                <statement name="STACK">
+                                  <block type="text_statement" id="b327">
+                                    <value name="TEXT">
+                                      <shadow type="text" id="AS*g]OGkkqfQhy9xN~p)">
+                                        <field name="TEXT"></field>
+                                      </shadow>
+                                      <block type="text" id="b326">
+                                        <field name="TEXT">Trade WON | back to base digit Under </field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="text_statement" id="b328">
+                                        <value name="TEXT">
+                                          <shadow type="text" id="ca+iOZ_:B;@^0MuJwi5b">
+                                            <field name="TEXT"></field>
+                                          </shadow>
+                                          <block type="variables_get" id="b323">
+                                            <field name="VAR" id="v_6_base_barrier">Base Barrier</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="text_statement" id="b330">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="z#K%u9%`TiLy]rf|tMp`">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="text" id="b329">
+                                                <field name="TEXT"> | stake reset to </field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="text_statement" id="b331">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="lZwsd84ji%x!0Emrv[x{">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="variables_get" id="b324">
+                                                    <field name="VAR" id="v_4_stake">Stake Amount (USD)</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="text_statement" id="b333">
+                                                    <value name="TEXT">
+                                                      <shadow type="text" id="!@7GiYn1Wv:;bUz@@6mm">
+                                                        <field name="TEXT"></field>
+                                                      </shadow>
+                                                      <block type="text" id="b332">
+                                                        <field name="TEXT"> | total profit </field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="text_statement" id="b334">
+                                                        <value name="TEXT">
+                                                          <shadow type="text" id="$PCR}H^%v=k@lPhS5}Dm">
+                                                            <field name="TEXT"></field>
+                                                          </shadow>
+                                                          <block type="total_profit" id="b325"></block>
+                                                        </value>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="notify" id="b337">
+                                    <field name="NOTIFICATION_TYPE">info</field>
+                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                    <value name="MESSAGE">
+                                      <shadow type="text" id="P*7yi6]:4xd}@cjSX_ZG">
+                                        <field name="TEXT"></field>
+                                      </shadow>
+                                      <block type="variables_get" id="b336">
+                                        <field name="VAR" id="v_0_log_text">Log Text</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="variables_set" id="b341">
+                <field name="VAR" id="v_26_losses_total">Losses Total</field>
+                <value name="VALUE">
+                  <block type="math_arithmetic" id="b340">
+                    <field name="OP">ADD</field>
+                    <value name="A">
+                      <shadow type="math_number" id="8;J67i!g(MVIaQ=Qj]aj">
+                        <field name="NUM">0</field>
+                      </shadow>
+                      <block type="variables_get" id="b338">
+                        <field name="VAR" id="v_26_losses_total">Losses Total</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <shadow type="math_number" id="hlGtpLt$*cW~HB)rK}{N">
+                        <field name="NUM">0</field>
+                      </shadow>
+                      <block type="math_number" id="b339">
+                        <field name="NUM">1</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="b345">
+                    <field name="VAR" id="v_11_recovery_mode">Recovery Mode</field>
+                    <value name="VALUE">
+                      <block type="math_arithmetic" id="b344">
+                        <field name="OP">ADD</field>
+                        <value name="A">
+                          <shadow type="math_number" id="|4[o)rA]*,1%wnxN`5yP">
+                            <field name="NUM">0</field>
+                          </shadow>
+                          <block type="variables_get" id="b342">
+                            <field name="VAR" id="v_11_recovery_mode">Recovery Mode</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <shadow type="math_number" id="ac,(eSGXF=dgJY844[:z">
+                            <field name="NUM">0</field>
+                          </shadow>
+                          <block type="math_number" id="b343">
+                            <field name="NUM">1</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="controls_if" id="b363">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="2" else="1"></mutation>
+                        <value name="IF0">
+                          <block type="logic_compare" id="b348">
+                            <field name="OP">EQ</field>
+                            <value name="A">
+                              <block type="variables_get" id="b346">
+                                <field name="VAR" id="v_11_recovery_mode">Recovery Mode</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="b347">
+                                <field name="NUM">1</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="variables_set" id="b350">
+                            <field name="VAR" id="v_5_barrier">Barrier</field>
+                            <value name="VALUE">
+                              <block type="variables_get" id="b349">
+                                <field name="VAR" id="v_7_rb1">Recovery Barrier 1</field>
+                              </block>
+                            </value>
+                          </block>
+                        </statement>
+                        <value name="IF1">
+                          <block type="logic_compare" id="b353">
+                            <field name="OP">EQ</field>
+                            <value name="A">
+                              <block type="variables_get" id="b351">
+                                <field name="VAR" id="v_11_recovery_mode">Recovery Mode</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="b352">
+                                <field name="NUM">2</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO1">
+                          <block type="variables_set" id="b355">
+                            <field name="VAR" id="v_5_barrier">Barrier</field>
+                            <value name="VALUE">
+                              <block type="variables_get" id="b354">
+                                <field name="VAR" id="v_8_rb2">Recovery Barrier 2</field>
+                              </block>
+                            </value>
+                          </block>
+                        </statement>
+                        <value name="IF2">
+                          <block type="logic_compare" id="b358">
+                            <field name="OP">EQ</field>
+                            <value name="A">
+                              <block type="variables_get" id="b356">
+                                <field name="VAR" id="v_11_recovery_mode">Recovery Mode</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="b357">
+                                <field name="NUM">3</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO2">
+                          <block type="variables_set" id="b360">
+                            <field name="VAR" id="v_5_barrier">Barrier</field>
+                            <value name="VALUE">
+                              <block type="variables_get" id="b359">
+                                <field name="VAR" id="v_9_rb3">Recovery Barrier 3</field>
+                              </block>
+                            </value>
+                          </block>
+                        </statement>
+                        <statement name="ELSE">
+                          <block type="variables_set" id="b362">
+                            <field name="VAR" id="v_5_barrier">Barrier</field>
+                            <value name="VALUE">
+                              <block type="variables_get" id="b361">
+                                <field name="VAR" id="v_10_min_barrier">Min Barrier</field>
+                              </block>
+                            </value>
+                          </block>
+                        </statement>
+                        <next>
+                          <block type="variables_set" id="b367">
+                            <field name="VAR" id="v_4_stake">Stake Amount (USD)</field>
+                            <value name="VALUE">
+                              <block type="math_arithmetic" id="b366">
+                                <field name="OP">MULTIPLY</field>
+                                <value name="A">
+                                  <shadow type="math_number" id="^0MK.mKdXX$itF_~KD=r">
+                                    <field name="NUM">0</field>
+                                  </shadow>
+                                  <block type="variables_get" id="b364">
+                                    <field name="VAR" id="v_4_stake">Stake Amount (USD)</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <shadow type="math_number" id="LHB_@@a%}|;]I[DDXWoL">
+                                    <field name="NUM">0</field>
+                                  </shadow>
+                                  <block type="variables_get" id="b365">
+                                    <field name="VAR" id="v_3_martingale_factor">Martingale Factor</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="controls_if" id="b373">
+                                <value name="IF0">
+                                  <block type="logic_compare" id="b370">
+                                    <field name="OP">GT</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="b368">
+                                        <field name="VAR" id="v_4_stake">Stake Amount (USD)</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="variables_get" id="b369">
+                                        <field name="VAR" id="v_2_max_stake">Max Stake</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <statement name="DO0">
+                                  <block type="variables_set" id="b372">
+                                    <field name="VAR" id="v_4_stake">Stake Amount (USD)</field>
+                                    <value name="VALUE">
+                                      <block type="variables_get" id="b371">
+                                        <field name="VAR" id="v_2_max_stake">Max Stake</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="text_join" id="b390">
+                                    <field name="VARIABLE" id="v_0_log_text">Log Text</field>
+                                    <statement name="STACK">
+                                      <block type="text_statement" id="b379">
+                                        <value name="TEXT">
+                                          <shadow type="text" id="(7(^%E@DHL570ev0?wD0">
+                                            <field name="TEXT"></field>
+                                          </shadow>
+                                          <block type="text" id="b378">
+                                            <field name="TEXT">Trade LOST | recovery level </field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="text_statement" id="b380">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="9(JkB#p^R3#?mU#uPq5m">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="variables_get" id="b374">
+                                                <field name="VAR" id="v_11_recovery_mode">Recovery Mode</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="text_statement" id="b382">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="AQ%L}#{oG`ydv7nRMj|]">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="text" id="b381">
+                                                    <field name="TEXT"> -&gt; recovery digit Under </field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="text_statement" id="b383">
+                                                    <value name="TEXT">
+                                                      <shadow type="text" id="pV@mJ|Z9`pz,]}?H[7Dh">
+                                                        <field name="TEXT"></field>
+                                                      </shadow>
+                                                      <block type="variables_get" id="b375">
+                                                        <field name="VAR" id="v_5_barrier">Barrier</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="text_statement" id="b385">
+                                                        <value name="TEXT">
+                                                          <shadow type="text" id="bIsIwSCyWgsYKxFSdbN[">
+                                                            <field name="TEXT"></field>
+                                                          </shadow>
+                                                          <block type="text" id="b384">
+                                                            <field name="TEXT"> | next stake </field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="text_statement" id="b386">
+                                                            <value name="TEXT">
+                                                              <shadow type="text" id="XvP~]UlR$BaNklu1(;Gm">
+                                                                <field name="TEXT"></field>
+                                                              </shadow>
+                                                              <block type="variables_get" id="b376">
+                                                                <field name="VAR" id="v_4_stake">Stake Amount (USD)</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="text_statement" id="b388">
+                                                                <value name="TEXT">
+                                                                  <shadow type="text" id="rsl}IbN1566)K:6hgq@_">
+                                                                    <field name="TEXT"></field>
+                                                                  </shadow>
+                                                                  <block type="text" id="b387">
+                                                                    <field name="TEXT"> | total profit </field>
+                                                                  </block>
+                                                                </value>
+                                                                <next>
+                                                                  <block type="text_statement" id="b389">
+                                                                    <value name="TEXT">
+                                                                      <shadow type="text" id="+DuEp3/TwG7{^oObS4(H">
+                                                                        <field name="TEXT"></field>
+                                                                      </shadow>
+                                                                      <block type="total_profit" id="b377"></block>
+                                                                    </value>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </statement>
+                                    <next>
+                                      <block type="notify" id="b392">
+                                        <field name="NOTIFICATION_TYPE">info</field>
+                                        <field name="NOTIFICATION_SOUND">silent</field>
+                                        <value name="MESSAGE">
+                                          <shadow type="text" id="_dmV4-fFZdP_*RR/bAc,">
+                                            <field name="TEXT"></field>
+                                          </shadow>
+                                          <block type="variables_get" id="b391">
+                                            <field name="VAR" id="v_0_log_text">Log Text</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <next>
+              <block type="controls_if" id="b458">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+                <value name="IF0">
+                  <block type="logic_compare" id="b451">
+                    <field name="OP">GTE</field>
+                    <value name="A">
+                      <block type="total_profit" id="b449"></block>
+                    </value>
+                    <value name="B">
+                      <block type="variables_get" id="b450">
+                        <field name="VAR" id="v_21_target_profit">Target Profit Amount</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="b394">
+                    <field name="VAR" id="v_23_session_stopped">Session Stopped</field>
+                    <value name="VALUE">
+                      <block type="logic_boolean" id="b393">
+                        <field name="BOOL">TRUE</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="b396">
+                        <field name="VAR" id="v_16_trading_active">Trading Active</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="b395">
+                            <field name="BOOL">FALSE</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="text_join" id="b415">
+                            <field name="VARIABLE" id="v_0_log_text">Log Text</field>
+                            <statement name="STACK">
+                              <block type="text_statement" id="b402">
+                                <value name="TEXT">
+                                  <shadow type="text" id="y|N`o|SqCZPnoCSr*j_U">
+                                    <field name="TEXT"></field>
+                                  </shadow>
+                                  <block type="text" id="b401">
+                                    <field name="TEXT">TARGET PROFIT reached (</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="text_statement" id="b403">
+                                    <value name="TEXT">
+                                      <shadow type="text" id="J]t8hf%ws~3@1QX!Kq+h">
+                                        <field name="TEXT"></field>
+                                      </shadow>
+                                      <block type="total_profit" id="b397"></block>
+                                    </value>
+                                    <next>
+                                      <block type="text_statement" id="b405">
+                                        <value name="TEXT">
+                                          <shadow type="text" id="I*t+_52-8tR;8-C_UsYA">
+                                            <field name="TEXT"></field>
+                                          </shadow>
+                                          <block type="text" id="b404">
+                                            <field name="TEXT">) | trades </field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="text_statement" id="b406">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="b3:?7%cg?4NN?wG;c$G?">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="variables_get" id="b398">
+                                                <field name="VAR" id="v_24_trades_total">Trades Total</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="text_statement" id="b408">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="_v?Qe|w9tcXp|cfVK|x1">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="text" id="b407">
+                                                    <field name="TEXT"> | wins </field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="text_statement" id="b409">
+                                                    <value name="TEXT">
+                                                      <shadow type="text" id="WL:kb_)_7WFgCybRI;Bc">
+                                                        <field name="TEXT"></field>
+                                                      </shadow>
+                                                      <block type="variables_get" id="b399">
+                                                        <field name="VAR" id="v_25_wins_total">Wins Total</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="text_statement" id="b411">
+                                                        <value name="TEXT">
+                                                          <shadow type="text" id="mxiw.$2#ysTS*Wpe5!s(">
+                                                            <field name="TEXT"></field>
+                                                          </shadow>
+                                                          <block type="text" id="b410">
+                                                            <field name="TEXT"> | losses </field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="text_statement" id="b412">
+                                                            <value name="TEXT">
+                                                              <shadow type="text" id="y5=VAUL0#45j]BCJ,{Zp">
+                                                                <field name="TEXT"></field>
+                                                              </shadow>
+                                                              <block type="variables_get" id="b400">
+                                                                <field name="VAR" id="v_26_losses_total">Losses Total</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="text_statement" id="b414">
+                                                                <value name="TEXT">
+                                                                  <shadow type="text" id="HJrcB1z`@nG{MB07)uRI">
+                                                                    <field name="TEXT"></field>
+                                                                  </shadow>
+                                                                  <block type="text" id="b413">
+                                                                    <field name="TEXT"> | bot stopped</field>
+                                                                  </block>
+                                                                </value>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </statement>
+                            <next>
+                              <block type="notify" id="b417">
+                                <field name="NOTIFICATION_TYPE">info</field>
+                                <field name="NOTIFICATION_SOUND">silent</field>
+                                <value name="MESSAGE">
+                                  <shadow type="text" id="H%Yw=KQ($wa7*0HOVwY8">
+                                    <field name="TEXT"></field>
+                                  </shadow>
+                                  <block type="variables_get" id="b416">
+                                    <field name="VAR" id="v_0_log_text">Log Text</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <value name="IF1">
+                  <block type="logic_compare" id="b456">
+                    <field name="OP">LTE</field>
+                    <value name="A">
+                      <block type="total_profit" id="b452"></block>
+                    </value>
+                    <value name="B">
+                      <block type="math_arithmetic" id="b455">
+                        <field name="OP">MINUS</field>
+                        <value name="A">
+                          <shadow type="math_number" id="`Dza,#O^^uSOzJgfM@IF">
+                            <field name="NUM">0</field>
+                          </shadow>
+                          <block type="math_number" id="b453">
+                            <field name="NUM">0</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <shadow type="math_number" id="TpNBIZeqD7z_.wzEM,Jy">
+                            <field name="NUM">0</field>
+                          </shadow>
+                          <block type="variables_get" id="b454">
+                            <field name="VAR" id="v_22_stop_loss">Stop Loss Amount</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO1">
+                  <block type="variables_set" id="b419">
+                    <field name="VAR" id="v_23_session_stopped">Session Stopped</field>
+                    <value name="VALUE">
+                      <block type="logic_boolean" id="b418">
+                        <field name="BOOL">TRUE</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="b421">
+                        <field name="VAR" id="v_16_trading_active">Trading Active</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="b420">
+                            <field name="BOOL">FALSE</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="text_join" id="b440">
+                            <field name="VARIABLE" id="v_0_log_text">Log Text</field>
+                            <statement name="STACK">
+                              <block type="text_statement" id="b427">
+                                <value name="TEXT">
+                                  <shadow type="text" id="=N(c#01%fdOH/7,u3i9d">
+                                    <field name="TEXT"></field>
+                                  </shadow>
+                                  <block type="text" id="b426">
+                                    <field name="TEXT">STOP LOSS reached (</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="text_statement" id="b428">
+                                    <value name="TEXT">
+                                      <shadow type="text" id="`4YkJR(4db~V4foJLJnl">
+                                        <field name="TEXT"></field>
+                                      </shadow>
+                                      <block type="total_profit" id="b422"></block>
+                                    </value>
+                                    <next>
+                                      <block type="text_statement" id="b430">
+                                        <value name="TEXT">
+                                          <shadow type="text" id="B{B+h`F:Lcs/*;_y;kn|">
+                                            <field name="TEXT"></field>
+                                          </shadow>
+                                          <block type="text" id="b429">
+                                            <field name="TEXT">) | trades </field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="text_statement" id="b431">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="Wwc7NfIVhFe**ZrZEW?J">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="variables_get" id="b423">
+                                                <field name="VAR" id="v_24_trades_total">Trades Total</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="text_statement" id="b433">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="V5fMy/{fS#,yz79Aqk#H">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="text" id="b432">
+                                                    <field name="TEXT"> | wins </field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="text_statement" id="b434">
+                                                    <value name="TEXT">
+                                                      <shadow type="text" id="xUb}iy@{UTp,yPlM_R}S">
+                                                        <field name="TEXT"></field>
+                                                      </shadow>
+                                                      <block type="variables_get" id="b424">
+                                                        <field name="VAR" id="v_25_wins_total">Wins Total</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="text_statement" id="b436">
+                                                        <value name="TEXT">
+                                                          <shadow type="text" id="v;}+(tj]CU@`_ZRjPz;z">
+                                                            <field name="TEXT"></field>
+                                                          </shadow>
+                                                          <block type="text" id="b435">
+                                                            <field name="TEXT"> | losses </field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="text_statement" id="b437">
+                                                            <value name="TEXT">
+                                                              <shadow type="text" id="P]K1}I2u){%$M~GL?o1Z">
+                                                                <field name="TEXT"></field>
+                                                              </shadow>
+                                                              <block type="variables_get" id="b425">
+                                                                <field name="VAR" id="v_26_losses_total">Losses Total</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="text_statement" id="b439">
+                                                                <value name="TEXT">
+                                                                  <shadow type="text" id="g6X}~0CRb:W!n?fidOCS">
+                                                                    <field name="TEXT"></field>
+                                                                  </shadow>
+                                                                  <block type="text" id="b438">
+                                                                    <field name="TEXT"> | bot stopped</field>
+                                                                  </block>
+                                                                </value>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </statement>
+                            <next>
+                              <block type="notify" id="b442">
+                                <field name="NOTIFICATION_TYPE">info</field>
+                                <field name="NOTIFICATION_SOUND">silent</field>
+                                <value name="MESSAGE">
+                                  <shadow type="text" id="(g$Zu:9E$dg~|o[UU:~y">
+                                    <field name="TEXT"></field>
+                                  </shadow>
+                                  <block type="variables_get" id="b441">
+                                    <field name="VAR" id="v_0_log_text">Log Text</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="trade_again" id="b457"></block>
+                </statement>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="b312" deletable="false" x="0" y="2130">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="variables_set" id="b303">
+        <field name="VAR" id="v_18_current_digit">Current Digit</field>
+        <value name="VALUE">
+          <block type="lists_getIndex" id="b302">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="false"></mutation>
+            <field name="MODE">GET</field>
+            <field name="WHERE">LAST</field>
+            <value name="VALUE">
+              <block type="lastDigitList" id="b301"></block>
+            </value>
+          </block>
+        </value>
+        <next>
+          <block type="controls_if" id="b311">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1" else="1"></mutation>
+            <value name="IF0">
+              <block type="variables_get" id="b304">
+                <field name="VAR" id="v_23_session_stopped">Session Stopped</field>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="text_join" id="b307">
+                <field name="VARIABLE" id="v_0_log_text">Log Text</field>
+                <statement name="STACK">
+                  <block type="text_statement" id="b306">
+                    <value name="TEXT">
+                      <shadow type="text" id="g5co)kG-uvl,qaF/7h9$">
+                        <field name="TEXT"></field>
+                      </shadow>
+                      <block type="text" id="b305">
+                        <field name="TEXT">Session stopped - no further trades</field>
+                      </block>
+                    </value>
+                  </block>
+                </statement>
+                <next>
+                  <block type="notify" id="b309">
+                    <field name="NOTIFICATION_TYPE">info</field>
+                    <field name="NOTIFICATION_SOUND">silent</field>
+                    <value name="MESSAGE">
+                      <shadow type="text" id="c)qN(ZNAw6ttBWq6-nJ?">
+                        <field name="TEXT"></field>
+                      </shadow>
+                      <block type="variables_get" id="b308">
+                        <field name="VAR" id="v_0_log_text">Log Text</field>
+                      </block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <value name="IF1">
+              <block type="variables_get" id="b310">
+                <field name="VAR" id="v_16_trading_active">Trading Active</field>
+              </block>
+            </value>
+            <statement name="DO1">
+              <block type="text_join" id="b297">
+                <field name="VARIABLE" id="v_0_log_text">Log Text</field>
+                <statement name="STACK">
+                  <block type="text_statement" id="b286">
+                    <value name="TEXT">
+                      <shadow type="text" id="+aelQ(_@L]-|Y4;]h4Eg">
+                        <field name="TEXT"></field>
+                      </shadow>
+                      <block type="text" id="b285">
+                        <field name="TEXT">REAL ENTRY | tick digit </field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="text_statement" id="b287">
+                        <value name="TEXT">
+                          <shadow type="text" id="@r!*~=q.sm)v_9i`STT|">
+                            <field name="TEXT"></field>
+                          </shadow>
+                          <block type="variables_get" id="b281">
+                            <field name="VAR" id="v_18_current_digit">Current Digit</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="text_statement" id="b289">
+                            <value name="TEXT">
+                              <shadow type="text" id="t_m[Z-Mf7zKZN_QSP[w%">
+                                <field name="TEXT"></field>
+                              </shadow>
+                              <block type="text" id="b288">
+                                <field name="TEXT"> | Under </field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="text_statement" id="b290">
+                                <value name="TEXT">
+                                  <shadow type="text" id="vd/@(q=QL]r0(oHMQSU#">
+                                    <field name="TEXT"></field>
+                                  </shadow>
+                                  <block type="variables_get" id="b282">
+                                    <field name="VAR" id="v_5_barrier">Barrier</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="text_statement" id="b292">
+                                    <value name="TEXT">
+                                      <shadow type="text" id="7,URU~%-Tg92_M+A)EL|">
+                                        <field name="TEXT"></field>
+                                      </shadow>
+                                      <block type="text" id="b291">
+                                        <field name="TEXT"> | stake </field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="text_statement" id="b293">
+                                        <value name="TEXT">
+                                          <shadow type="text" id="2tXAr*!NOVlibY+gaBb$">
+                                            <field name="TEXT"></field>
+                                          </shadow>
+                                          <block type="variables_get" id="b283">
+                                            <field name="VAR" id="v_4_stake">Stake Amount (USD)</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="text_statement" id="b295">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="wB54.yzsV6q9uDPS7,(P">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="text" id="b294">
+                                                <field name="TEXT"> | recovery level </field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="text_statement" id="b296">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="0FNgWz*PK0^yzhJOXl!r">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="variables_get" id="b284">
+                                                    <field name="VAR" id="v_11_recovery_mode">Recovery Mode</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <next>
+                  <block type="notify" id="b299">
+                    <field name="NOTIFICATION_TYPE">info</field>
+                    <field name="NOTIFICATION_SOUND">silent</field>
+                    <value name="MESSAGE">
+                      <shadow type="text" id="`)f`kQxlaV;-M9Gn7o8]">
+                        <field name="TEXT"></field>
+                      </shadow>
+                      <block type="variables_get" id="b298">
+                        <field name="VAR" id="v_0_log_text">Log Text</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="purchase" id="b300">
+                        <field name="PURCHASE_LIST">DIGITUNDER</field>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="controls_if" id="b280">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="variables_get" id="b279">
+                    <field name="VAR" id="v_19_v_open">Virtual Trade Open</field>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="b222">
+                    <field name="VAR" id="v_19_v_open">Virtual Trade Open</field>
+                    <value name="VALUE">
+                      <block type="logic_boolean" id="b221">
+                        <field name="BOOL">FALSE</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="b226">
+                        <field name="VAR" id="v_27_v_trades_total">Virtual Trades Total</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id="b225">
+                            <field name="OP">ADD</field>
+                            <value name="A">
+                              <shadow type="math_number" id="]~R(SDdeUS4#{uZ~Pf12">
+                                <field name="NUM">0</field>
+                              </shadow>
+                              <block type="variables_get" id="b223">
+                                <field name="VAR" id="v_27_v_trades_total">Virtual Trades Total</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <shadow type="math_number" id="jfFF2XZEPhoptrkoPD]1">
+                                <field name="NUM">0</field>
+                              </shadow>
+                              <block type="math_number" id="b224">
+                                <field name="NUM">1</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="controls_if" id="b230">
+                            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                            <value name="IF0">
+                              <block type="logic_compare" id="b229">
+                                <field name="OP">LT</field>
+                                <value name="A">
+                                  <block type="variables_get" id="b227">
+                                    <field name="VAR" id="v_18_current_digit">Current Digit</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="variables_get" id="b228">
+                                    <field name="VAR" id="v_5_barrier">Barrier</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <statement name="DO0">
+                              <block type="variables_set" id="b107">
+                                <field name="VAR" id="v_28_v_wins_total">Virtual Wins Total</field>
+                                <value name="VALUE">
+                                  <block type="math_arithmetic" id="b106">
+                                    <field name="OP">ADD</field>
+                                    <value name="A">
+                                      <shadow type="math_number" id="pWs=bJ=u(mbB0Qr]TUOP">
+                                        <field name="NUM">0</field>
+                                      </shadow>
+                                      <block type="variables_get" id="b104">
+                                        <field name="VAR" id="v_28_v_wins_total">Virtual Wins Total</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <shadow type="math_number" id="Dd|[O@7lRMpMx^B;7$FE">
+                                        <field name="NUM">0</field>
+                                      </shadow>
+                                      <block type="math_number" id="b105">
+                                        <field name="NUM">1</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="controls_if" id="b149">
+                                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                    <value name="IF0">
+                                      <block type="variables_get" id="b108">
+                                        <field name="VAR" id="v_15_entry_armed">Entry Armed</field>
+                                      </block>
+                                    </value>
+                                    <statement name="DO0">
+                                      <block type="text_join" id="b127">
+                                        <field name="VARIABLE" id="v_0_log_text">Log Text</field>
+                                        <statement name="STACK">
+                                          <block type="text_statement" id="b114">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="3qGlql8PIqKLEu:evH(*">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="text" id="b113">
+                                                <field name="TEXT">Virtual WIN (entry </field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="text_statement" id="b115">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="RB#LrV8]})|YRLCVX@Tk">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="variables_get" id="b109">
+                                                    <field name="VAR" id="v_20_v_entry_digit">Virtual Entry Digit</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="text_statement" id="b117">
+                                                    <value name="TEXT">
+                                                      <shadow type="text" id="#|@L(AxL%{DRO.[ePo[O">
+                                                        <field name="TEXT"></field>
+                                                      </shadow>
+                                                      <block type="text" id="b116">
+                                                        <field name="TEXT"> -&gt; settle </field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="text_statement" id="b118">
+                                                        <value name="TEXT">
+                                                          <shadow type="text" id="aCa3m.E$r7rGE}u|D3Zw">
+                                                            <field name="TEXT"></field>
+                                                          </shadow>
+                                                          <block type="variables_get" id="b110">
+                                                            <field name="VAR" id="v_18_current_digit">Current Digit</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="text_statement" id="b120">
+                                                            <value name="TEXT">
+                                                              <shadow type="text" id="lv%w?+=%STPgde%H?m@4">
+                                                                <field name="TEXT"></field>
+                                                              </shadow>
+                                                              <block type="text" id="b119">
+                                                                <field name="TEXT"> Under </field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="text_statement" id="b121">
+                                                                <value name="TEXT">
+                                                                  <shadow type="text" id="Z)0dDkR@DBLO1PDaC-Y8">
+                                                                    <field name="TEXT"></field>
+                                                                  </shadow>
+                                                                  <block type="variables_get" id="b111">
+                                                                    <field name="VAR" id="v_5_barrier">Barrier</field>
+                                                                  </block>
+                                                                </value>
+                                                                <next>
+                                                                  <block type="text_statement" id="b123">
+                                                                    <value name="TEXT">
+                                                                      <shadow type="text" id="4(TsD1Nwcr6JGU[HAkHQ">
+                                                                        <field name="TEXT"></field>
+                                                                      </shadow>
+                                                                      <block type="text" id="b122">
+                                                                        <field name="TEXT">) | still waiting for entry digit </field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <next>
+                                                                      <block type="text_statement" id="b124">
+                                                                        <value name="TEXT">
+                                                                          <shadow type="text" id="dw||1w3cQl;|/MoQKx`j">
+                                                                            <field name="TEXT"></field>
+                                                                          </shadow>
+                                                                          <block type="variables_get" id="b112">
+                                                                            <field name="VAR" id="v_12_entry_digit">Entry Digit</field>
+                                                                          </block>
+                                                                        </value>
+                                                                        <next>
+                                                                          <block type="text_statement" id="b126">
+                                                                            <value name="TEXT">
+                                                                              <shadow type="text" id="ENO;#H#BcgU}8ND[#o;o">
+                                                                                <field name="TEXT"></field>
+                                                                              </shadow>
+                                                                              <block type="text" id="b125">
+                                                                                <field name="TEXT"> | danger clear</field>
+                                                                              </block>
+                                                                            </value>
+                                                                          </block>
+                                                                        </next>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </statement>
+                                        <next>
+                                          <block type="notify" id="b129">
+                                            <field name="NOTIFICATION_TYPE">info</field>
+                                            <field name="NOTIFICATION_SOUND">silent</field>
+                                            <value name="MESSAGE">
+                                              <shadow type="text" id="?JEMz+h(ARy9;;v-.8ra">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="variables_get" id="b128">
+                                                <field name="VAR" id="v_0_log_text">Log Text</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </statement>
+                                    <statement name="ELSE">
+                                      <block type="variables_set" id="b131">
+                                        <field name="VAR" id="v_14_cons_v_losses">Consecutive Virtual Losses</field>
+                                        <value name="VALUE">
+                                          <block type="math_number" id="b130">
+                                            <field name="NUM">0</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="text_join" id="b146">
+                                            <field name="VARIABLE" id="v_0_log_text">Log Text</field>
+                                            <statement name="STACK">
+                                              <block type="text_statement" id="b136">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="6-=5zPbkk5k^R)^a?tRC">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="text" id="b135">
+                                                    <field name="TEXT">Virtual WIN (entry </field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="text_statement" id="b137">
+                                                    <value name="TEXT">
+                                                      <shadow type="text" id="R{h{}bmPwsO_oBtZ;Tv~">
+                                                        <field name="TEXT"></field>
+                                                      </shadow>
+                                                      <block type="variables_get" id="b132">
+                                                        <field name="VAR" id="v_20_v_entry_digit">Virtual Entry Digit</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="text_statement" id="b139">
+                                                        <value name="TEXT">
+                                                          <shadow type="text" id="Q8Lc:ZNd2BjMC^{?VkyN">
+                                                            <field name="TEXT"></field>
+                                                          </shadow>
+                                                          <block type="text" id="b138">
+                                                            <field name="TEXT"> -&gt; settle </field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="text_statement" id="b140">
+                                                            <value name="TEXT">
+                                                              <shadow type="text" id="K{]IlUnXcQ:LcIR]S]#J">
+                                                                <field name="TEXT"></field>
+                                                              </shadow>
+                                                              <block type="variables_get" id="b133">
+                                                                <field name="VAR" id="v_18_current_digit">Current Digit</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="text_statement" id="b142">
+                                                                <value name="TEXT">
+                                                                  <shadow type="text" id="B,%tB1jW.zcmh_@0a*@5">
+                                                                    <field name="TEXT"></field>
+                                                                  </shadow>
+                                                                  <block type="text" id="b141">
+                                                                    <field name="TEXT"> Under </field>
+                                                                  </block>
+                                                                </value>
+                                                                <next>
+                                                                  <block type="text_statement" id="b143">
+                                                                    <value name="TEXT">
+                                                                      <shadow type="text" id="mt_Y|m3B/S_e|{K6]M5%">
+                                                                        <field name="TEXT"></field>
+                                                                      </shadow>
+                                                                      <block type="variables_get" id="b134">
+                                                                        <field name="VAR" id="v_5_barrier">Barrier</field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <next>
+                                                                      <block type="text_statement" id="b145">
+                                                                        <value name="TEXT">
+                                                                          <shadow type="text" id="din+0,)?.xRprm;%]=]S">
+                                                                            <field name="TEXT"></field>
+                                                                          </shadow>
+                                                                          <block type="text" id="b144">
+                                                                            <field name="TEXT">) | consecutive virtual losses reset to 0</field>
+                                                                          </block>
+                                                                        </value>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </statement>
+                                            <next>
+                                              <block type="notify" id="b148">
+                                                <field name="NOTIFICATION_TYPE">info</field>
+                                                <field name="NOTIFICATION_SOUND">silent</field>
+                                                <value name="MESSAGE">
+                                                  <shadow type="text" id="DAy4oyWRQgT[aZ`Qoa}i">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="variables_get" id="b147">
+                                                    <field name="VAR" id="v_0_log_text">Log Text</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </statement>
+                                  </block>
+                                </next>
+                              </block>
+                            </statement>
+                            <statement name="ELSE">
+                              <block type="variables_set" id="b153">
+                                <field name="VAR" id="v_29_v_losses_total">Virtual Losses Total</field>
+                                <value name="VALUE">
+                                  <block type="math_arithmetic" id="b152">
+                                    <field name="OP">ADD</field>
+                                    <value name="A">
+                                      <shadow type="math_number" id="6}vam5cva#Vx^++)[@5e">
+                                        <field name="NUM">0</field>
+                                      </shadow>
+                                      <block type="variables_get" id="b150">
+                                        <field name="VAR" id="v_29_v_losses_total">Virtual Losses Total</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <shadow type="math_number" id="C*!iLAs:l[%TK!Y@3CT6">
+                                        <field name="NUM">0</field>
+                                      </shadow>
+                                      <block type="math_number" id="b151">
+                                        <field name="NUM">1</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="controls_if" id="b220">
+                                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                    <value name="IF0">
+                                      <block type="variables_get" id="b154">
+                                        <field name="VAR" id="v_15_entry_armed">Entry Armed</field>
+                                      </block>
+                                    </value>
+                                    <statement name="DO0">
+                                      <block type="variables_set" id="b156">
+                                        <field name="VAR" id="v_15_entry_armed">Entry Armed</field>
+                                        <value name="VALUE">
+                                          <block type="logic_boolean" id="b155">
+                                            <field name="BOOL">FALSE</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="b158">
+                                            <field name="VAR" id="v_17_danger">Danger Detected</field>
+                                            <value name="VALUE">
+                                              <block type="logic_boolean" id="b157">
+                                                <field name="BOOL">TRUE</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="b160">
+                                                <field name="VAR" id="v_14_cons_v_losses">Consecutive Virtual Losses</field>
+                                                <value name="VALUE">
+                                                  <block type="math_number" id="b159">
+                                                    <field name="NUM">0</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="text_join" id="b171">
+                                                    <field name="VARIABLE" id="v_0_log_text">Log Text</field>
+                                                    <statement name="STACK">
+                                                      <block type="text_statement" id="b164">
+                                                        <value name="TEXT">
+                                                          <shadow type="text" id="c#GlMzn=S9=hXh6dS[wB">
+                                                            <field name="TEXT"></field>
+                                                          </shadow>
+                                                          <block type="text" id="b163">
+                                                            <field name="TEXT">DANGER TOOL: virtual LOSS while waiting for entry digit </field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="text_statement" id="b165">
+                                                            <value name="TEXT">
+                                                              <shadow type="text" id="/#%5Ed#e_6b,tf$IeUk.">
+                                                                <field name="TEXT"></field>
+                                                              </shadow>
+                                                              <block type="variables_get" id="b161">
+                                                                <field name="VAR" id="v_12_entry_digit">Entry Digit</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="text_statement" id="b167">
+                                                                <value name="TEXT">
+                                                                  <shadow type="text" id=",1g_T9rgmS2Ri$(oD$1Z">
+                                                                    <field name="TEXT"></field>
+                                                                  </shadow>
+                                                                  <block type="text" id="b166">
+                                                                    <field name="TEXT"> -&gt; entry ABORTED, danger flag set, restarting a fresh cycle of </field>
+                                                                  </block>
+                                                                </value>
+                                                                <next>
+                                                                  <block type="text_statement" id="b168">
+                                                                    <value name="TEXT">
+                                                                      <shadow type="text" id="nuc$)GOd*-vBauOVq=+0">
+                                                                        <field name="TEXT"></field>
+                                                                      </shadow>
+                                                                      <block type="variables_get" id="b162">
+                                                                        <field name="VAR" id="v_13_losses_required">Virtual Losses Required</field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <next>
+                                                                      <block type="text_statement" id="b170">
+                                                                        <value name="TEXT">
+                                                                          <shadow type="text" id="}UhE^=dZ]qU?dmvu{swS">
+                                                                            <field name="TEXT"></field>
+                                                                          </shadow>
+                                                                          <block type="text" id="b169">
+                                                                            <field name="TEXT"> virtual losses</field>
+                                                                          </block>
+                                                                        </value>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </statement>
+                                                    <next>
+                                                      <block type="notify" id="b173">
+                                                        <field name="NOTIFICATION_TYPE">info</field>
+                                                        <field name="NOTIFICATION_SOUND">silent</field>
+                                                        <value name="MESSAGE">
+                                                          <shadow type="text" id="U`7:2WF.kGwc`Y:[S`V`">
+                                                            <field name="TEXT"></field>
+                                                          </shadow>
+                                                          <block type="variables_get" id="b172">
+                                                            <field name="VAR" id="v_0_log_text">Log Text</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </statement>
+                                    <statement name="ELSE">
+                                      <block type="variables_set" id="b177">
+                                        <field name="VAR" id="v_14_cons_v_losses">Consecutive Virtual Losses</field>
+                                        <value name="VALUE">
+                                          <block type="math_arithmetic" id="b176">
+                                            <field name="OP">ADD</field>
+                                            <value name="A">
+                                              <shadow type="math_number" id="ZeA1T9U}e@*8EtEEK5Gn">
+                                                <field name="NUM">0</field>
+                                              </shadow>
+                                              <block type="variables_get" id="b174">
+                                                <field name="VAR" id="v_14_cons_v_losses">Consecutive Virtual Losses</field>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <shadow type="math_number" id="|iv^Z;PLY$f|s4o5#5x$">
+                                                <field name="NUM">0</field>
+                                              </shadow>
+                                              <block type="math_number" id="b175">
+                                                <field name="NUM">1</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="text_join" id="b198">
+                                            <field name="VARIABLE" id="v_0_log_text">Log Text</field>
+                                            <statement name="STACK">
+                                              <block type="text_statement" id="b184">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="D~35.FUE01Tl#2e(=}aX">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="text" id="b183">
+                                                    <field name="TEXT">Virtual LOSS (entry </field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="text_statement" id="b185">
+                                                    <value name="TEXT">
+                                                      <shadow type="text" id="WM}G?{s*X=;*YN9TB2w$">
+                                                        <field name="TEXT"></field>
+                                                      </shadow>
+                                                      <block type="variables_get" id="b178">
+                                                        <field name="VAR" id="v_20_v_entry_digit">Virtual Entry Digit</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="text_statement" id="b187">
+                                                        <value name="TEXT">
+                                                          <shadow type="text" id="o.Kv9`Gp#^B#%~)Ark|^">
+                                                            <field name="TEXT"></field>
+                                                          </shadow>
+                                                          <block type="text" id="b186">
+                                                            <field name="TEXT"> -&gt; settle </field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="text_statement" id="b188">
+                                                            <value name="TEXT">
+                                                              <shadow type="text" id="AM**kw.W]-5T[tWYWmyR">
+                                                                <field name="TEXT"></field>
+                                                              </shadow>
+                                                              <block type="variables_get" id="b179">
+                                                                <field name="VAR" id="v_18_current_digit">Current Digit</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="text_statement" id="b190">
+                                                                <value name="TEXT">
+                                                                  <shadow type="text" id="CQ,|-r0@*~#`xL{Q)UQX">
+                                                                    <field name="TEXT"></field>
+                                                                  </shadow>
+                                                                  <block type="text" id="b189">
+                                                                    <field name="TEXT"> Under </field>
+                                                                  </block>
+                                                                </value>
+                                                                <next>
+                                                                  <block type="text_statement" id="b191">
+                                                                    <value name="TEXT">
+                                                                      <shadow type="text" id="5ILHPOLJQMHUZq8|~Kq6">
+                                                                        <field name="TEXT"></field>
+                                                                      </shadow>
+                                                                      <block type="variables_get" id="b180">
+                                                                        <field name="VAR" id="v_5_barrier">Barrier</field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <next>
+                                                                      <block type="text_statement" id="b193">
+                                                                        <value name="TEXT">
+                                                                          <shadow type="text" id="ktJzerkKZ^5?s_gpT{2w">
+                                                                            <field name="TEXT"></field>
+                                                                          </shadow>
+                                                                          <block type="text" id="b192">
+                                                                            <field name="TEXT">) | </field>
+                                                                          </block>
+                                                                        </value>
+                                                                        <next>
+                                                                          <block type="text_statement" id="b194">
+                                                                            <value name="TEXT">
+                                                                              <shadow type="text" id="%qFe[|w+6DtW$8|4#rH3">
+                                                                                <field name="TEXT"></field>
+                                                                              </shadow>
+                                                                              <block type="variables_get" id="b181">
+                                                                                <field name="VAR" id="v_14_cons_v_losses">Consecutive Virtual Losses</field>
+                                                                              </block>
+                                                                            </value>
+                                                                            <next>
+                                                                              <block type="text_statement" id="b196">
+                                                                                <value name="TEXT">
+                                                                                  <shadow type="text" id="GL]ZoEW7W-d_TwLjDyvU">
+                                                                                    <field name="TEXT"></field>
+                                                                                  </shadow>
+                                                                                  <block type="text" id="b195">
+                                                                                    <field name="TEXT"> of at least </field>
+                                                                                  </block>
+                                                                                </value>
+                                                                                <next>
+                                                                                  <block type="text_statement" id="b197">
+                                                                                    <value name="TEXT">
+                                                                                      <shadow type="text" id="IC;IU(GJ3,s-/tad%FSO">
+                                                                                        <field name="TEXT"></field>
+                                                                                      </shadow>
+                                                                                      <block type="variables_get" id="b182">
+                                                                                        <field name="VAR" id="v_13_losses_required">Virtual Losses Required</field>
+                                                                                      </block>
+                                                                                    </value>
+                                                                                  </block>
+                                                                                </next>
+                                                                              </block>
+                                                                            </next>
+                                                                          </block>
+                                                                        </next>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </statement>
+                                            <next>
+                                              <block type="notify" id="b200">
+                                                <field name="NOTIFICATION_TYPE">info</field>
+                                                <field name="NOTIFICATION_SOUND">silent</field>
+                                                <value name="MESSAGE">
+                                                  <shadow type="text" id="8qm,rWA^33g5qo(Ls$MK">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="variables_get" id="b199">
+                                                    <field name="VAR" id="v_0_log_text">Log Text</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="controls_if" id="b219">
+                                                    <value name="IF0">
+                                                      <block type="logic_compare" id="b203">
+                                                        <field name="OP">GTE</field>
+                                                        <value name="A">
+                                                          <block type="variables_get" id="b201">
+                                                            <field name="VAR" id="v_14_cons_v_losses">Consecutive Virtual Losses</field>
+                                                          </block>
+                                                        </value>
+                                                        <value name="B">
+                                                          <block type="variables_get" id="b202">
+                                                            <field name="VAR" id="v_13_losses_required">Virtual Losses Required</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                    <statement name="DO0">
+                                                      <block type="variables_set" id="b205">
+                                                        <field name="VAR" id="v_15_entry_armed">Entry Armed</field>
+                                                        <value name="VALUE">
+                                                          <block type="logic_boolean" id="b204">
+                                                            <field name="BOOL">TRUE</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="variables_set" id="b207">
+                                                            <field name="VAR" id="v_17_danger">Danger Detected</field>
+                                                            <value name="VALUE">
+                                                              <block type="logic_boolean" id="b206">
+                                                                <field name="BOOL">FALSE</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="text_join" id="b216">
+                                                                <field name="VARIABLE" id="v_0_log_text">Log Text</field>
+                                                                <statement name="STACK">
+                                                                  <block type="text_statement" id="b211">
+                                                                    <value name="TEXT">
+                                                                      <shadow type="text" id="XZjBM)By*UeE%]4d~Hq^">
+                                                                        <field name="TEXT"></field>
+                                                                      </shadow>
+                                                                      <block type="text" id="b210">
+                                                                        <field name="TEXT">ARMED after </field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <next>
+                                                                      <block type="text_statement" id="b212">
+                                                                        <value name="TEXT">
+                                                                          <shadow type="text" id="6zQ@ofZ:kLwECXBE,r#3">
+                                                                            <field name="TEXT"></field>
+                                                                          </shadow>
+                                                                          <block type="variables_get" id="b208">
+                                                                            <field name="VAR" id="v_14_cons_v_losses">Consecutive Virtual Losses</field>
+                                                                          </block>
+                                                                        </value>
+                                                                        <next>
+                                                                          <block type="text_statement" id="b214">
+                                                                            <value name="TEXT">
+                                                                              <shadow type="text" id="+BOIKq!sBQJ@x|t%Z9/?">
+                                                                                <field name="TEXT"></field>
+                                                                              </shadow>
+                                                                              <block type="text" id="b213">
+                                                                                <field name="TEXT"> virtual losses | danger CLEAR | waiting for entry digit </field>
+                                                                              </block>
+                                                                            </value>
+                                                                            <next>
+                                                                              <block type="text_statement" id="b215">
+                                                                                <value name="TEXT">
+                                                                                  <shadow type="text" id="%6*J03KzRA`m(P6uVf,u">
+                                                                                    <field name="TEXT"></field>
+                                                                                  </shadow>
+                                                                                  <block type="variables_get" id="b209">
+                                                                                    <field name="VAR" id="v_12_entry_digit">Entry Digit</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                              </block>
+                                                                            </next>
+                                                                          </block>
+                                                                        </next>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </statement>
+                                                                <next>
+                                                                  <block type="notify" id="b218">
+                                                                    <field name="NOTIFICATION_TYPE">info</field>
+                                                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                                                    <value name="MESSAGE">
+                                                                      <shadow type="text" id="bbdc]U$UWK)O5X~b4^uz">
+                                                                        <field name="TEXT"></field>
+                                                                      </shadow>
+                                                                      <block type="variables_get" id="b217">
+                                                                        <field name="VAR" id="v_0_log_text">Log Text</field>
+                                                                      </block>
+                                                                    </value>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </statement>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </statement>
+                                  </block>
+                                </next>
+                              </block>
+                            </statement>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="variables_set" id="b232">
+                    <field name="VAR" id="v_20_v_entry_digit">Virtual Entry Digit</field>
+                    <value name="VALUE">
+                      <block type="variables_get" id="b231">
+                        <field name="VAR" id="v_18_current_digit">Current Digit</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="b234">
+                        <field name="VAR" id="v_19_v_open">Virtual Trade Open</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="b233">
+                            <field name="BOOL">TRUE</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="text_join" id="b245">
+                            <field name="VARIABLE" id="v_0_log_text">Log Text</field>
+                            <statement name="STACK">
+                              <block type="text_statement" id="b238">
+                                <value name="TEXT">
+                                  <shadow type="text" id="Cs`-lEfGOO{OoD0q(01b">
+                                    <field name="TEXT"></field>
+                                  </shadow>
+                                  <block type="text" id="b237">
+                                    <field name="TEXT">Virtual trade OPENED at digit </field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="text_statement" id="b239">
+                                    <value name="TEXT">
+                                      <shadow type="text" id="qWZlb8rsy)(%)Z/`rO/q">
+                                        <field name="TEXT"></field>
+                                      </shadow>
+                                      <block type="variables_get" id="b235">
+                                        <field name="VAR" id="v_18_current_digit">Current Digit</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="text_statement" id="b241">
+                                        <value name="TEXT">
+                                          <shadow type="text" id="`qZutytZ/I;hq||}Hd4-">
+                                            <field name="TEXT"></field>
+                                          </shadow>
+                                          <block type="text" id="b240">
+                                            <field name="TEXT"> | barrier Under </field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="text_statement" id="b242">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="/%[I(sCqll^P[0DbdQvH">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="variables_get" id="b236">
+                                                <field name="VAR" id="v_5_barrier">Barrier</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="text_statement" id="b244">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="Gt`*tav0/Hhj,BHw!%z0">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="text" id="b243">
+                                                    <field name="TEXT"> | awaiting settlement tick</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </statement>
+                            <next>
+                              <block type="notify" id="b247">
+                                <field name="NOTIFICATION_TYPE">info</field>
+                                <field name="NOTIFICATION_SOUND">silent</field>
+                                <value name="MESSAGE">
+                                  <shadow type="text" id="~l%QVj!as@Qir`Yg*n{U">
+                                    <field name="TEXT"></field>
+                                  </shadow>
+                                  <block type="variables_get" id="b246">
+                                    <field name="VAR" id="v_0_log_text">Log Text</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <next>
+                  <block type="controls_if" id="b278">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                    <value name="IF0">
+                      <block type="logic_operation" id="b256">
+                        <field name="OP">AND</field>
+                        <value name="A">
+                          <block type="logic_operation" id="b252">
+                            <field name="OP">AND</field>
+                            <value name="A">
+                              <block type="variables_get" id="b248">
+                                <field name="VAR" id="v_15_entry_armed">Entry Armed</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_compare" id="b251">
+                                <field name="OP">EQ</field>
+                                <value name="A">
+                                  <block type="variables_get" id="b249">
+                                    <field name="VAR" id="v_17_danger">Danger Detected</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="logic_boolean" id="b250">
+                                    <field name="BOOL">FALSE</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_compare" id="b255">
+                            <field name="OP">EQ</field>
+                            <value name="A">
+                              <block type="variables_get" id="b253">
+                                <field name="VAR" id="v_18_current_digit">Current Digit</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="b254">
+                                <field name="VAR" id="v_12_entry_digit">Entry Digit</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="b258">
+                        <field name="VAR" id="v_16_trading_active">Trading Active</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="b257">
+                            <field name="BOOL">TRUE</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="b260">
+                            <field name="VAR" id="v_15_entry_armed">Entry Armed</field>
+                            <value name="VALUE">
+                              <block type="logic_boolean" id="b259">
+                                <field name="BOOL">FALSE</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="text_join" id="b273">
+                                <field name="VARIABLE" id="v_0_log_text">Log Text</field>
+                                <statement name="STACK">
+                                  <block type="text_statement" id="b265">
+                                    <value name="TEXT">
+                                      <shadow type="text" id="D=0oNq0EP%0bRI)`2Z^T">
+                                        <field name="TEXT"></field>
+                                      </shadow>
+                                      <block type="text" id="b264">
+                                        <field name="TEXT">ENTRY DIGIT </field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="text_statement" id="b266">
+                                        <value name="TEXT">
+                                          <shadow type="text" id="rw*=^({ttdz@NNtApb#7">
+                                            <field name="TEXT"></field>
+                                          </shadow>
+                                          <block type="variables_get" id="b261">
+                                            <field name="VAR" id="v_12_entry_digit">Entry Digit</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="text_statement" id="b268">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="8w4z!W#3!uKvL,B?E]cJ">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="text" id="b267">
+                                                <field name="TEXT"> matched with danger clear -&gt; CONTINUOUS real trading STARTED | stake </field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="text_statement" id="b269">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="Z]@e?kC-ZM$DagX@!jIr">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="variables_get" id="b262">
+                                                    <field name="VAR" id="v_4_stake">Stake Amount (USD)</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="text_statement" id="b271">
+                                                    <value name="TEXT">
+                                                      <shadow type="text" id="6qwz($pvlf]2[%vTmX6g">
+                                                        <field name="TEXT"></field>
+                                                      </shadow>
+                                                      <block type="text" id="b270">
+                                                        <field name="TEXT"> | Under </field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="text_statement" id="b272">
+                                                        <value name="TEXT">
+                                                          <shadow type="text" id="ehI-~}-rD:Woc:8h0gCQ">
+                                                            <field name="TEXT"></field>
+                                                          </shadow>
+                                                          <block type="variables_get" id="b263">
+                                                            <field name="VAR" id="v_5_barrier">Barrier</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="notify" id="b275">
+                                    <field name="NOTIFICATION_TYPE">info</field>
+                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                    <value name="MESSAGE">
+                                      <shadow type="text" id=",qI(Hb`d-?F5?I/H[}#%">
+                                        <field name="TEXT"></field>
+                                      </shadow>
+                                      <block type="variables_get" id="b274">
+                                        <field name="VAR" id="v_0_log_text">Log Text</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="purchase" id="b276">
+                                        <field name="PURCHASE_LIST">DIGITUNDER</field>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <statement name="ELSE">
+                      <block type="trade_again" id="b277"></block>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+</xml>

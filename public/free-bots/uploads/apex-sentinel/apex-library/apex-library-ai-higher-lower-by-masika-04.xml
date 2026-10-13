@@ -1,0 +1,1189 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="k,w$Vmk`gU-i.n2J:2c4">text</variable>
+    <variable id="v_init">INITIAL_STAKE</variable>
+    <variable id="v_open">C_OPEN</variable>
+    <variable id="v_stake">STAKE</variable>
+    <variable id="v_loss">LOSS_COUNT</variable>
+    <variable id="v_close">C_CLOSE</variable>
+    <variable id="v_tp">TAKE_PROFIT</variable>
+    <variable id="v_ticks">TICKS</variable>
+    <variable id="v_sl">STOP_LOSS</variable>
+    <variable id="v_mg">MARTINGALE</variable>
+    <variable id="v_t3">T3</variable>
+    <variable id="v_t2">T2</variable>
+    <variable id="v_t1">T1</variable>
+    <variable id="v_dir">DIRECTION</variable>
+    <variable id="v_jn_rsi">JOURNAL_RSI</variable>
+    <variable id="v_jn_t4">JOURNAL_T4</variable>
+    <variable id="v_jn_candle">JOURNAL_CANDLE</variable>
+    <variable id="v_jn_e1">JOURNAL_ENTRY_1</variable>
+    <variable id="v_jn_e2">JOURNAL_ENTRY_2</variable>
+    <variable id="v_jn_e3">JOURNAL_ENTRY_3</variable>
+    <variable id="v_jn_msg">JOURNAL_MESSAGE</variable>
+    <variable id="v_ema_f">EMA_FAST</variable>
+    <variable id="v_ema_s">EMA_SLOW</variable>
+  </variables>
+  <block type="trade_definition" id="td_root" deletable="false" x="0" y="110">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="td_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ25V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="td_tt" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">highlowticks</field>
+            <field name="TRADETYPE_LIST">highlowticks</field>
+            <next>
+              <block type="trade_definition_contracttype" id="td_ct" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="td_ci" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">120</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="td_rbs" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="td_roe" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="i_init">
+        <field name="VAR" id="v_init">INITIAL_STAKE</field>
+        <value name="VALUE">
+          <block type="math_number" id="n_init">
+            <field name="NUM">0.5</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="i_stake">
+            <field name="VAR" id="v_stake">STAKE</field>
+            <value name="VALUE">
+              <block type="variables_get" id="g_init">
+                <field name="VAR" id="v_init">INITIAL_STAKE</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="i_tp">
+                <field name="VAR" id="v_tp">TAKE_PROFIT</field>
+                <value name="VALUE">
+                  <block type="math_number" id="n_tp">
+                    <field name="NUM">5</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="i_sl">
+                    <field name="VAR" id="v_sl">STOP_LOSS</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="n_sl">
+                        <field name="NUM">1500</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="i_mg">
+                        <field name="VAR" id="v_mg">MARTINGALE</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="n_mg">
+                            <field name="NUM">1.5</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="i_loss">
+                            <field name="VAR" id="v_loss">LOSS_COUNT</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="n_loss">
+                                <field name="NUM">0</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="i_dir">
+                                <field name="VAR" id="v_dir">DIRECTION</field>
+                                <value name="VALUE">
+                                  <block type="text" id="t_dir">
+                                    <field name="TEXT">NONE</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="td_to" deletable="false" movable="false">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number" id="d_dur">
+            <field name="NUM">5</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number" id="d_amt">
+            <field name="NUM">1</field>
+          </shadow>
+          <block type="variables_get" id="g_stake">
+            <field name="VAR" id="v_stake">STAKE</field>
+          </block>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive" id="H+K#ASD=2e_y`^!FLkvV" inline="true">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="after_purchase" id="ap_root" deletable="false" x="2704" y="110">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="ap_if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="2" else="1"></mutation>
+        <value name="IF0">
+          <block type="logic_compare" id="ap_tp">
+            <field name="OP">GTE</field>
+            <value name="A">
+              <block type="total_profit" id="tp1"></block>
+            </value>
+            <value name="B">
+              <block type="variables_get" id="g_tp">
+                <field name="VAR" id="v_tp">TAKE_PROFIT</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="notify" id="nt_tp">
+            <field name="NOTIFICATION_TYPE">success</field>
+            <field name="NOTIFICATION_SOUND">silent</field>
+            <value name="MESSAGE">
+              <shadow type="text" id="sh_ntp">
+                <field name="TEXT">abc</field>
+              </shadow>
+            </value>
+            <next>
+              <block type="text_print" id="pr_tp">
+                <value name="TEXT">
+                  <shadow type="text" id="sh_tp">
+                    <field name="TEXT">Congratulations, Msika strategy worked</field>
+                  </shadow>
+                </value>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <value name="IF1">
+          <block type="logic_compare" id="ap_sl">
+            <field name="OP">LTE</field>
+            <value name="A">
+              <block type="total_profit" id="tp2"></block>
+            </value>
+            <value name="B">
+              <block type="math_single" id="neg_sl">
+                <field name="OP">NEG</field>
+                <value name="NUM">
+                  <shadow type="math_number" id="sh_sl">
+                    <field name="NUM">15</field>
+                  </shadow>
+                  <block type="variables_get" id="g_sl">
+                    <field name="VAR" id="v_sl">STOP_LOSS</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="notify" id="nt_sl">
+            <field name="NOTIFICATION_TYPE">error</field>
+            <field name="NOTIFICATION_SOUND">silent</field>
+            <value name="MESSAGE">
+              <shadow type="text" id="sh_nsl">
+                <field name="TEXT">abc</field>
+              </shadow>
+            </value>
+            <next>
+              <block type="text_print" id="pr_sl">
+                <value name="TEXT">
+                  <shadow type="text" id="sh_sl2">
+                    <field name="TEXT">Stop loss reached.</field>
+                  </shadow>
+                </value>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <value name="IF2">
+          <block type="contract_check_result" id="ap_win">
+            <field name="CHECK_RESULT">win</field>
+          </block>
+        </value>
+        <statement name="DO2">
+          <block type="variables_set" id="reset_loss">
+            <field name="VAR" id="v_loss">LOSS_COUNT</field>
+            <value name="VALUE">
+              <block type="math_number" id="n_z">
+                <field name="NUM">0</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="reset_stake">
+                <field name="VAR" id="v_stake">STAKE</field>
+                <value name="VALUE">
+                  <block type="variables_get" id="g_init2">
+                    <field name="VAR" id="v_init">INITIAL_STAKE</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="trade_again" id="ta_win"></block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <block type="variables_set" id="mg_stake">
+            <field name="VAR" id="v_stake">STAKE</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="mg_mul">
+                <field name="OP">MULTIPLY</field>
+                <value name="A">
+                  <shadow type="math_number" id="sh_a">
+                    <field name="NUM">1</field>
+                  </shadow>
+                  <block type="variables_get" id="g_stake2">
+                    <field name="VAR" id="v_stake">STAKE</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <shadow type="math_number" id="sh_b">
+                    <field name="NUM">1</field>
+                  </shadow>
+                  <block type="variables_get" id="g_mg">
+                    <field name="VAR" id="v_mg">MARTINGALE</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <block type="math_change" id="inc_loss">
+                <field name="VAR" id="v_loss">LOSS_COUNT</field>
+                <value name="DELTA">
+                  <shadow type="math_number" id="sh_d">
+                    <field name="NUM">1</field>
+                  </shadow>
+                </value>
+                <next>
+                  <block type="trade_again" id="ta_loss"></block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="bp_root" deletable="false" x="0" y="1076">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="variables_set" id="bp_open">
+        <field name="VAR" id="v_open">C_OPEN</field>
+        <value name="VALUE">
+          <block type="read_ohlc" id="ohlc_open">
+            <field name="OHLCFIELD_LIST">open</field>
+            <field name="CANDLEINTERVAL_LIST">default</field>
+            <value name="CANDLEINDEX">
+              <shadow type="math_number_positive" id="s_o">
+                <field name="NUM">1</field>
+              </shadow>
+            </value>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="bp_close">
+            <field name="VAR" id="v_close">C_CLOSE</field>
+            <value name="VALUE">
+              <block type="read_ohlc" id="ohlc_close">
+                <field name="OHLCFIELD_LIST">close</field>
+                <field name="CANDLEINTERVAL_LIST">default</field>
+                <value name="CANDLEINDEX">
+                  <shadow type="math_number_positive" id="s_c">
+                    <field name="NUM">1</field>
+                  </shadow>
+                </value>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="bp_ticks">
+                <field name="VAR" id="v_ticks">TICKS</field>
+                <value name="VALUE">
+                  <block type="ticks" id="tk_list"></block>
+                </value>
+                <next>
+                  <block type="variables_set" id="bp_t3">
+                    <field name="VAR" id="v_t3">T3</field>
+                    <value name="VALUE">
+                      <block type="lists_getIndex" id="li_t3">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"></mutation>
+                        <field name="MODE">GET</field>
+                        <field name="WHERE">FROM_END</field>
+                        <value name="VALUE">
+                          <block type="variables_get" id="g_tk3">
+                            <field name="VAR" id="v_ticks">TICKS</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="bp_t2">
+                        <field name="VAR" id="v_t2">T2</field>
+                        <value name="VALUE">
+                          <block type="lists_getIndex" id="li_t2">
+                            <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"></mutation>
+                            <field name="MODE">GET</field>
+                            <field name="WHERE">FROM_END</field>
+                            <value name="VALUE">
+                              <block type="variables_get" id="g_tk2">
+                                <field name="VAR" id="v_ticks">TICKS</field>
+                              </block>
+                            </value>
+                            <value name="AT">
+                              <block type="math_number" id="n_at2">
+                                <field name="NUM">2</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="bp_t1">
+                            <field name="VAR" id="v_t1">T1</field>
+                            <value name="VALUE">
+                              <block type="lists_getIndex" id="li_t1">
+                                <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"></mutation>
+                                <field name="MODE">GET</field>
+                                <field name="WHERE">FROM_END</field>
+                                <value name="VALUE">
+                                  <block type="variables_get" id="g_tk1">
+                                    <field name="VAR" id="v_ticks">TICKS</field>
+                                  </block>
+                                </value>
+                                <value name="AT">
+                                  <block type="math_number" id="n_at3">
+                                    <field name="NUM">3</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="rsi_statement" id="jn_rsi_stmt">
+                                <field name="VARIABLE" id="v_jn_rsi">JOURNAL_RSI</field>
+                                <statement name="STATEMENT">
+                                  <block type="input_list" id="jn_rsi_input" deletable="false" movable="false">
+                                    <value name="INPUT_LIST">
+                                      <block type="ohlc_values" id="jn_rsi_ohlc">
+                                        <field name="OHLCFIELD_LIST">close</field>
+                                        <field name="CANDLEINTERVAL_LIST">default</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="period" id="jn_rsi_period" deletable="false" movable="false">
+                                        <value name="PERIOD">
+                                          <shadow type="math_number" id="jn_rsi_14">
+                                            <field name="NUM">14</field>
+                                          </shadow>
+                                        </value>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </statement>
+                                <next>
+                                  <block type="variables_set" id="jn_set_t4">
+                                    <field name="VAR" id="v_jn_t4">JOURNAL_T4</field>
+                                    <value name="VALUE">
+                                      <block type="lists_getIndex" id="jn_get_t4">
+                                        <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"></mutation>
+                                        <field name="MODE">GET</field>
+                                        <field name="WHERE">FROM_END</field>
+                                        <value name="VALUE">
+                                          <block type="variables_get" id="jn_ticks_for_t4">
+                                            <field name="VAR" id="v_ticks">TICKS</field>
+                                          </block>
+                                        </value>
+                                        <value name="AT">
+                                          <block type="math_number" id="jn_at4">
+                                            <field name="NUM">4</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="jn_candle_default">
+                                        <field name="VAR" id="v_jn_candle">JOURNAL_CANDLE</field>
+                                        <value name="VALUE">
+                                          <block type="text" id="jn_doji">
+                                            <field name="TEXT">🟡DOJI</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="controls_if" id="jn_candle_if">
+                                            <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1"></mutation>
+                                            <value name="IF0">
+                                              <block type="logic_compare" id="jn_cmp_green">
+                                                <field name="OP">GT</field>
+                                                <value name="A">
+                                                  <block type="variables_get" id="jn_close_g">
+                                                    <field name="VAR" id="v_close">C_CLOSE</field>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="variables_get" id="jn_open_g">
+                                                    <field name="VAR" id="v_open">C_OPEN</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <statement name="DO0">
+                                              <block type="variables_set" id="jn_set_green">
+                                                <field name="VAR" id="v_jn_candle">JOURNAL_CANDLE</field>
+                                                <value name="VALUE">
+                                                  <block type="text" id="jn_green">
+                                                    <field name="TEXT">🟢GREEN</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </statement>
+                                            <value name="IF1">
+                                              <block type="logic_compare" id="jn_cmp_red">
+                                                <field name="OP">LT</field>
+                                                <value name="A">
+                                                  <block type="variables_get" id="jn_close_r">
+                                                    <field name="VAR" id="v_close">C_CLOSE</field>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="variables_get" id="jn_open_r">
+                                                    <field name="VAR" id="v_open">C_OPEN</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <statement name="DO1">
+                                              <block type="variables_set" id="jn_set_red">
+                                                <field name="VAR" id="v_jn_candle">JOURNAL_CANDLE</field>
+                                                <value name="VALUE">
+                                                  <block type="text" id="jn_red">
+                                                    <field name="TEXT">🔴RED</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </statement>
+                                            <next>
+                                              <block type="variables_set" id="jn_e1_default">
+                                                <field name="VAR" id="v_jn_e1">JOURNAL_ENTRY_1</field>
+                                                <value name="VALUE">
+                                                  <block type="text" id="jn_e1_e">
+                                                    <field name="TEXT">🟡E,</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="controls_if" id="jn_e1_if">
+                                                    <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1"></mutation>
+                                                    <value name="IF0">
+                                                      <block type="logic_compare" id="jn_e1_cmp_r">
+                                                        <field name="OP">GT</field>
+                                                        <value name="A">
+                                                          <block type="variables_get" id="jn_e1_new_r">
+                                                            <field name="VAR" id="v_t1">T1</field>
+                                                          </block>
+                                                        </value>
+                                                        <value name="B">
+                                                          <block type="variables_get" id="jn_e1_old_r">
+                                                            <field name="VAR" id="v_jn_t4">JOURNAL_T4</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                    <statement name="DO0">
+                                                      <block type="variables_set" id="jn_e1_rise_set">
+                                                        <field name="VAR" id="v_jn_e1">JOURNAL_ENTRY_1</field>
+                                                        <value name="VALUE">
+                                                          <block type="text" id="jn_e1_r">
+                                                            <field name="TEXT">🟢R,</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </statement>
+                                                    <value name="IF1">
+                                                      <block type="logic_compare" id="jn_e1_cmp_f">
+                                                        <field name="OP">LT</field>
+                                                        <value name="A">
+                                                          <block type="variables_get" id="jn_e1_new_f">
+                                                            <field name="VAR" id="v_t1">T1</field>
+                                                          </block>
+                                                        </value>
+                                                        <value name="B">
+                                                          <block type="variables_get" id="jn_e1_old_f">
+                                                            <field name="VAR" id="v_jn_t4">JOURNAL_T4</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                    <statement name="DO1">
+                                                      <block type="variables_set" id="jn_e1_fall_set">
+                                                        <field name="VAR" id="v_jn_e1">JOURNAL_ENTRY_1</field>
+                                                        <value name="VALUE">
+                                                          <block type="text" id="jn_e1_f">
+                                                            <field name="TEXT">🔴F,</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </statement>
+                                                    <next>
+                                                      <block type="variables_set" id="jn_e2_default">
+                                                        <field name="VAR" id="v_jn_e2">JOURNAL_ENTRY_2</field>
+                                                        <value name="VALUE">
+                                                          <block type="text" id="jn_e2_e">
+                                                            <field name="TEXT">🟡E,</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="controls_if" id="jn_e2_if">
+                                                            <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1"></mutation>
+                                                            <value name="IF0">
+                                                              <block type="logic_compare" id="jn_e2_cmp_r">
+                                                                <field name="OP">GT</field>
+                                                                <value name="A">
+                                                                  <block type="variables_get" id="jn_e2_new_r">
+                                                                    <field name="VAR" id="v_t2">T2</field>
+                                                                  </block>
+                                                                </value>
+                                                                <value name="B">
+                                                                  <block type="variables_get" id="jn_e2_old_r">
+                                                                    <field name="VAR" id="v_t1">T1</field>
+                                                                  </block>
+                                                                </value>
+                                                              </block>
+                                                            </value>
+                                                            <statement name="DO0">
+                                                              <block type="variables_set" id="jn_e2_rise_set">
+                                                                <field name="VAR" id="v_jn_e2">JOURNAL_ENTRY_2</field>
+                                                                <value name="VALUE">
+                                                                  <block type="text" id="jn_e2_r">
+                                                                    <field name="TEXT">🟢R,</field>
+                                                                  </block>
+                                                                </value>
+                                                              </block>
+                                                            </statement>
+                                                            <value name="IF1">
+                                                              <block type="logic_compare" id="jn_e2_cmp_f">
+                                                                <field name="OP">LT</field>
+                                                                <value name="A">
+                                                                  <block type="variables_get" id="jn_e2_new_f">
+                                                                    <field name="VAR" id="v_t2">T2</field>
+                                                                  </block>
+                                                                </value>
+                                                                <value name="B">
+                                                                  <block type="variables_get" id="jn_e2_old_f">
+                                                                    <field name="VAR" id="v_t1">T1</field>
+                                                                  </block>
+                                                                </value>
+                                                              </block>
+                                                            </value>
+                                                            <statement name="DO1">
+                                                              <block type="variables_set" id="jn_e2_fall_set">
+                                                                <field name="VAR" id="v_jn_e2">JOURNAL_ENTRY_2</field>
+                                                                <value name="VALUE">
+                                                                  <block type="text" id="jn_e2_f">
+                                                                    <field name="TEXT">🔴F,</field>
+                                                                  </block>
+                                                                </value>
+                                                              </block>
+                                                            </statement>
+                                                            <next>
+                                                              <block type="variables_set" id="jn_e3_default">
+                                                                <field name="VAR" id="v_jn_e3">JOURNAL_ENTRY_3</field>
+                                                                <value name="VALUE">
+                                                                  <block type="text" id="jn_e3_e">
+                                                                    <field name="TEXT">🟡E</field>
+                                                                  </block>
+                                                                </value>
+                                                                <next>
+                                                                  <block type="controls_if" id="jn_e3_if">
+                                                                    <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1"></mutation>
+                                                                    <value name="IF0">
+                                                                      <block type="logic_compare" id="jn_e3_cmp_r">
+                                                                        <field name="OP">GT</field>
+                                                                        <value name="A">
+                                                                          <block type="variables_get" id="jn_e3_new_r">
+                                                                            <field name="VAR" id="v_t3">T3</field>
+                                                                          </block>
+                                                                        </value>
+                                                                        <value name="B">
+                                                                          <block type="variables_get" id="jn_e3_old_r">
+                                                                            <field name="VAR" id="v_t2">T2</field>
+                                                                          </block>
+                                                                        </value>
+                                                                      </block>
+                                                                    </value>
+                                                                    <statement name="DO0">
+                                                                      <block type="variables_set" id="jn_e3_rise_set">
+                                                                        <field name="VAR" id="v_jn_e3">JOURNAL_ENTRY_3</field>
+                                                                        <value name="VALUE">
+                                                                          <block type="text" id="jn_e3_r">
+                                                                            <field name="TEXT">🟢R</field>
+                                                                          </block>
+                                                                        </value>
+                                                                      </block>
+                                                                    </statement>
+                                                                    <value name="IF1">
+                                                                      <block type="logic_compare" id="jn_e3_cmp_f">
+                                                                        <field name="OP">LT</field>
+                                                                        <value name="A">
+                                                                          <block type="variables_get" id="jn_e3_new_f">
+                                                                            <field name="VAR" id="v_t3">T3</field>
+                                                                          </block>
+                                                                        </value>
+                                                                        <value name="B">
+                                                                          <block type="variables_get" id="jn_e3_old_f">
+                                                                            <field name="VAR" id="v_t2">T2</field>
+                                                                          </block>
+                                                                        </value>
+                                                                      </block>
+                                                                    </value>
+                                                                    <statement name="DO1">
+                                                                      <block type="variables_set" id="jn_e3_fall_set">
+                                                                        <field name="VAR" id="v_jn_e3">JOURNAL_ENTRY_3</field>
+                                                                        <value name="VALUE">
+                                                                          <block type="text" id="jn_e3_f">
+                                                                            <field name="TEXT">🔴F</field>
+                                                                          </block>
+                                                                        </value>
+                                                                      </block>
+                                                                    </statement>
+                                                                    <next>
+                                                                      <block type="text_join" id="jn_msg_join">
+                                                                        <field name="VARIABLE" id="v_jn_msg">JOURNAL_MESSAGE</field>
+                                                                        <statement name="STACK">
+                                                                          <block type="text_statement" id="jn_txt_rsi_label">
+                                                                            <value name="TEXT">
+                                                                              <block type="text" id="jn_rsi_label">
+                                                                                <field name="TEXT">RSI:</field>
+                                                                              </block>
+                                                                            </value>
+                                                                            <next>
+                                                                              <block type="text_statement" id="jn_txt_rsi_value">
+                                                                                <value name="TEXT">
+                                                                                  <shadow type="text" id="jn_txt_rsi_value_shadow">
+                                                                                    <field name="TEXT"></field>
+                                                                                  </shadow>
+                                                                                  <block type="math_round" id="jn_round_rsi">
+                                                                                    <field name="OP">ROUND</field>
+                                                                                    <value name="NUM">
+                                                                                      <block type="variables_get" id="jn_rsi_value">
+                                                                                        <field name="VAR" id="v_jn_rsi">JOURNAL_RSI</field>
+                                                                                      </block>
+                                                                                    </value>
+                                                                                  </block>
+                                                                                </value>
+                                                                                <next>
+                                                                                  <block type="text_statement" id="jn_txt_candle_label">
+                                                                                    <value name="TEXT">
+                                                                                      <block type="text" id="jn_candle_label">
+                                                                                        <field name="TEXT">CANDLE:</field>
+                                                                                      </block>
+                                                                                    </value>
+                                                                                    <next>
+                                                                                      <block type="text_statement" id="jn_txt_candle_value">
+                                                                                        <value name="TEXT">
+                                                                                          <shadow type="text" id="jn_txt_candle_value_shadow">
+                                                                                            <field name="TEXT"></field>
+                                                                                          </shadow>
+                                                                                          <block type="variables_get" id="jn_candle_value">
+                                                                                            <field name="VAR" id="v_jn_candle">JOURNAL_CANDLE</field>
+                                                                                          </block>
+                                                                                        </value>
+                                                                                        <next>
+                                                                                          <block type="text_statement" id="jn_txt_entry_label">
+                                                                                            <value name="TEXT">
+                                                                                              <block type="text" id="jn_entry_label">
+                                                                                                <field name="TEXT">ENTRY:</field>
+                                                                                              </block>
+                                                                                            </value>
+                                                                                            <next>
+                                                                                              <block type="text_statement" id="jn_txt_e1">
+                                                                                                <value name="TEXT">
+                                                                                                  <shadow type="text" id="jn_txt_e1_shadow">
+                                                                                                    <field name="TEXT"></field>
+                                                                                                  </shadow>
+                                                                                                  <block type="variables_get" id="jn_e1_value">
+                                                                                                    <field name="VAR" id="v_jn_e1">JOURNAL_ENTRY_1</field>
+                                                                                                  </block>
+                                                                                                </value>
+                                                                                                <next>
+                                                                                                  <block type="text_statement" id="jn_txt_e2">
+                                                                                                    <value name="TEXT">
+                                                                                                      <shadow type="text" id="jn_txt_e2_shadow">
+                                                                                                        <field name="TEXT"></field>
+                                                                                                      </shadow>
+                                                                                                      <block type="variables_get" id="jn_e2_value">
+                                                                                                        <field name="VAR" id="v_jn_e2">JOURNAL_ENTRY_2</field>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                    <next>
+                                                                                                      <block type="text_statement" id="jn_txt_e3">
+                                                                                                        <value name="TEXT">
+                                                                                                          <shadow type="text" id="jn_txt_e3_shadow">
+                                                                                                            <field name="TEXT"></field>
+                                                                                                          </shadow>
+                                                                                                          <block type="variables_get" id="jn_e3_value">
+                                                                                                            <field name="VAR" id="v_jn_e3">JOURNAL_ENTRY_3</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                      </block>
+                                                                                                    </next>
+                                                                                                  </block>
+                                                                                                </next>
+                                                                                              </block>
+                                                                                            </next>
+                                                                                          </block>
+                                                                                        </next>
+                                                                                      </block>
+                                                                                    </next>
+                                                                                  </block>
+                                                                                </next>
+                                                                              </block>
+                                                                            </next>
+                                                                          </block>
+                                                                        </statement>
+                                                                        <next>
+                                                                          <block type="notify" id="jn_notify">
+                                                                            <field name="NOTIFICATION_TYPE">info</field>
+                                                                            <field name="NOTIFICATION_SOUND">silent</field>
+                                                                            <value name="MESSAGE">
+                                                                              <shadow type="text" id="jn_notify_shadow">
+                                                                                <field name="TEXT"></field>
+                                                                              </shadow>
+                                                                              <block type="variables_get" id="jn_msg_value">
+                                                                                <field name="VAR" id="v_jn_msg">JOURNAL_MESSAGE</field>
+                                                                              </block>
+                                                                            </value>
+                                                                            <next>
+                                                                              <block type="ema_statement" id="ema_fast">
+                                                                                <field name="VARIABLE" id="v_ema_f">EMA_FAST</field>
+                                                                                <statement name="STATEMENT">
+                                                                                  <block type="input_list" id="ema_fast_in" deletable="false" movable="false">
+                                                                                    <value name="INPUT_LIST">
+                                                                                      <block type="ohlc_values" id="ema_fast_oh">
+                                                                                        <field name="OHLCFIELD_LIST">close</field>
+                                                                                        <field name="CANDLEINTERVAL_LIST">default</field>
+                                                                                      </block>
+                                                                                    </value>
+                                                                                    <next>
+                                                                                      <block type="period" id="ema_fast_pd" deletable="false" movable="false">
+                                                                                        <value name="PERIOD">
+                                                                                          <shadow type="math_number" id="ema_fast_n">
+                                                                                            <field name="NUM">9</field>
+                                                                                          </shadow>
+                                                                                        </value>
+                                                                                      </block>
+                                                                                    </next>
+                                                                                  </block>
+                                                                                </statement>
+                                                                                <next>
+                                                                                  <block type="ema_statement" id="ema_slow">
+                                                                                    <field name="VARIABLE" id="v_ema_s">EMA_SLOW</field>
+                                                                                    <statement name="STATEMENT">
+                                                                                      <block type="input_list" id="ema_slow_in" deletable="false" movable="false">
+                                                                                        <value name="INPUT_LIST">
+                                                                                          <block type="ohlc_values" id="ema_slow_oh">
+                                                                                            <field name="OHLCFIELD_LIST">close</field>
+                                                                                            <field name="CANDLEINTERVAL_LIST">default</field>
+                                                                                          </block>
+                                                                                        </value>
+                                                                                        <next>
+                                                                                          <block type="period" id="ema_slow_pd" deletable="false" movable="false">
+                                                                                            <value name="PERIOD">
+                                                                                              <shadow type="math_number" id="ema_slow_n">
+                                                                                                <field name="NUM">21</field>
+                                                                                              </shadow>
+                                                                                            </value>
+                                                                                          </block>
+                                                                                        </next>
+                                                                                      </block>
+                                                                                    </statement>
+                                                                                    <next>
+                                                                                      <block type="controls_if" id="bp_if">
+                                                                                        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="1"></mutation>
+                                                                                        <value name="IF0">
+                                                                                          <block type="logic_operation" id="wrapu">
+                                                                                            <field name="OP">AND</field>
+                                                                                            <value name="A">
+                                                                                              <block type="logic_operation" id="fua3">
+                                                                                                <field name="OP">AND</field>
+                                                                                                <value name="A">
+                                                                                                  <block type="logic_operation" id="fua1">
+                                                                                                    <field name="OP">AND</field>
+                                                                                                    <value name="A">
+                                                                                                      <block type="logic_compare" id="fuc1">
+                                                                                                        <field name="OP">GT</field>
+                                                                                                        <value name="A">
+                                                                                                          <block type="variables_get" id="fuf1">
+                                                                                                            <field name="VAR" id="v_ema_f">EMA_FAST</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <value name="B">
+                                                                                                          <block type="variables_get" id="fus1">
+                                                                                                            <field name="VAR" id="v_ema_s">EMA_SLOW</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                    <value name="B">
+                                                                                                      <block type="logic_compare" id="fuc2">
+                                                                                                        <field name="OP">GT</field>
+                                                                                                        <value name="A">
+                                                                                                          <block type="variables_get" id="fucl">
+                                                                                                            <field name="VAR" id="v_close">C_CLOSE</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <value name="B">
+                                                                                                          <block type="variables_get" id="fuf2">
+                                                                                                            <field name="VAR" id="v_ema_f">EMA_FAST</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                  </block>
+                                                                                                </value>
+                                                                                                <value name="B">
+                                                                                                  <block type="logic_operation" id="fua2">
+                                                                                                    <field name="OP">AND</field>
+                                                                                                    <value name="A">
+                                                                                                      <block type="logic_compare" id="fuc3">
+                                                                                                        <field name="OP">GT</field>
+                                                                                                        <value name="A">
+                                                                                                          <block type="variables_get" id="fur1">
+                                                                                                            <field name="VAR" id="v_jn_rsi">JOURNAL_RSI</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <value name="B">
+                                                                                                          <block type="math_number" id="fun1">
+                                                                                                            <field name="NUM">50</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                    <value name="B">
+                                                                                                      <block type="logic_compare" id="fuc4">
+                                                                                                        <field name="OP">LT</field>
+                                                                                                        <value name="A">
+                                                                                                          <block type="variables_get" id="fur2">
+                                                                                                            <field name="VAR" id="v_jn_rsi">JOURNAL_RSI</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <value name="B">
+                                                                                                          <block type="math_number" id="fun2">
+                                                                                                            <field name="NUM">70</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                  </block>
+                                                                                                </value>
+                                                                                              </block>
+                                                                                            </value>
+                                                                                            <value name="B">
+                                                                                              <block type="logic_operation" id="cond_ups">
+                                                                                                <field name="OP">AND</field>
+                                                                                                <value name="A">
+                                                                                                  <block type="logic_compare" id="cmp_bull">
+                                                                                                    <field name="OP">GT</field>
+                                                                                                    <value name="A">
+                                                                                                      <block type="variables_get" id="g_close1">
+                                                                                                        <field name="VAR" id="v_close">C_CLOSE</field>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                    <value name="B">
+                                                                                                      <block type="variables_get" id="g_open1">
+                                                                                                        <field name="VAR" id="v_open">C_OPEN</field>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                  </block>
+                                                                                                </value>
+                                                                                                <value name="B">
+                                                                                                  <block type="logic_operation" id="cond_pull_dn">
+                                                                                                    <field name="OP">AND</field>
+                                                                                                    <value name="A">
+                                                                                                      <block type="logic_compare" id="cmp_pd1">
+                                                                                                        <field name="OP">GT</field>
+                                                                                                        <value name="A">
+                                                                                                          <block type="variables_get" id="g_t1a">
+                                                                                                            <field name="VAR" id="v_t1">T1</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <value name="B">
+                                                                                                          <block type="variables_get" id="g_t2a">
+                                                                                                            <field name="VAR" id="v_t2">T2</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                    <value name="B">
+                                                                                                      <block type="logic_compare" id="cmp_pd2">
+                                                                                                        <field name="OP">GT</field>
+                                                                                                        <value name="A">
+                                                                                                          <block type="variables_get" id="g_t2b">
+                                                                                                            <field name="VAR" id="v_t2">T2</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <value name="B">
+                                                                                                          <block type="variables_get" id="g_t3a">
+                                                                                                            <field name="VAR" id="v_t3">T3</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                  </block>
+                                                                                                </value>
+                                                                                              </block>
+                                                                                            </value>
+                                                                                          </block>
+                                                                                        </value>
+                                                                                        <statement name="DO0">
+                                                                                          <block type="variables_set" id="set_dir_up">
+                                                                                            <field name="VAR" id="v_dir">DIRECTION</field>
+                                                                                            <value name="VALUE">
+                                                                                              <block type="text" id="t_up">
+                                                                                                <field name="TEXT">UP</field>
+                                                                                              </block>
+                                                                                            </value>
+                                                                                            <next>
+                                                                                              <block type="purchase" id="buy_up">
+                                                                                                <field name="PURCHASE_LIST">TICKHIGH</field>
+                                                                                              </block>
+                                                                                            </next>
+                                                                                          </block>
+                                                                                        </statement>
+                                                                                        <value name="IF1">
+                                                                                          <block type="logic_operation" id="wrapd">
+                                                                                            <field name="OP">AND</field>
+                                                                                            <value name="A">
+                                                                                              <block type="logic_operation" id="fda3">
+                                                                                                <field name="OP">AND</field>
+                                                                                                <value name="A">
+                                                                                                  <block type="logic_operation" id="fda1">
+                                                                                                    <field name="OP">AND</field>
+                                                                                                    <value name="A">
+                                                                                                      <block type="logic_compare" id="fdc1">
+                                                                                                        <field name="OP">LT</field>
+                                                                                                        <value name="A">
+                                                                                                          <block type="variables_get" id="fdf1">
+                                                                                                            <field name="VAR" id="v_ema_f">EMA_FAST</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <value name="B">
+                                                                                                          <block type="variables_get" id="fds1">
+                                                                                                            <field name="VAR" id="v_ema_s">EMA_SLOW</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                    <value name="B">
+                                                                                                      <block type="logic_compare" id="fdc2">
+                                                                                                        <field name="OP">LT</field>
+                                                                                                        <value name="A">
+                                                                                                          <block type="variables_get" id="fdcl">
+                                                                                                            <field name="VAR" id="v_close">C_CLOSE</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <value name="B">
+                                                                                                          <block type="variables_get" id="fdf2">
+                                                                                                            <field name="VAR" id="v_ema_f">EMA_FAST</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                  </block>
+                                                                                                </value>
+                                                                                                <value name="B">
+                                                                                                  <block type="logic_operation" id="fda2">
+                                                                                                    <field name="OP">AND</field>
+                                                                                                    <value name="A">
+                                                                                                      <block type="logic_compare" id="fdc3">
+                                                                                                        <field name="OP">GT</field>
+                                                                                                        <value name="A">
+                                                                                                          <block type="variables_get" id="fdr1">
+                                                                                                            <field name="VAR" id="v_jn_rsi">JOURNAL_RSI</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <value name="B">
+                                                                                                          <block type="math_number" id="fdn1">
+                                                                                                            <field name="NUM">30</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                    <value name="B">
+                                                                                                      <block type="logic_compare" id="fdc4">
+                                                                                                        <field name="OP">LT</field>
+                                                                                                        <value name="A">
+                                                                                                          <block type="variables_get" id="fdr2">
+                                                                                                            <field name="VAR" id="v_jn_rsi">JOURNAL_RSI</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <value name="B">
+                                                                                                          <block type="math_number" id="fdn2">
+                                                                                                            <field name="NUM">50</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                  </block>
+                                                                                                </value>
+                                                                                              </block>
+                                                                                            </value>
+                                                                                            <value name="B">
+                                                                                              <block type="logic_operation" id="cond_dns">
+                                                                                                <field name="OP">AND</field>
+                                                                                                <value name="A">
+                                                                                                  <block type="logic_compare" id="cmp_bear">
+                                                                                                    <field name="OP">LT</field>
+                                                                                                    <value name="A">
+                                                                                                      <block type="variables_get" id="g_close2">
+                                                                                                        <field name="VAR" id="v_close">C_CLOSE</field>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                    <value name="B">
+                                                                                                      <block type="variables_get" id="g_open2">
+                                                                                                        <field name="VAR" id="v_open">C_OPEN</field>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                  </block>
+                                                                                                </value>
+                                                                                                <value name="B">
+                                                                                                  <block type="logic_operation" id="cond_pull_up">
+                                                                                                    <field name="OP">AND</field>
+                                                                                                    <value name="A">
+                                                                                                      <block type="logic_compare" id="cmp_pu1">
+                                                                                                        <field name="OP">LT</field>
+                                                                                                        <value name="A">
+                                                                                                          <block type="variables_get" id="g_t1b">
+                                                                                                            <field name="VAR" id="v_t1">T1</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <value name="B">
+                                                                                                          <block type="variables_get" id="g_t2c">
+                                                                                                            <field name="VAR" id="v_t2">T2</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                    <value name="B">
+                                                                                                      <block type="logic_compare" id="cmp_pu2">
+                                                                                                        <field name="OP">LT</field>
+                                                                                                        <value name="A">
+                                                                                                          <block type="variables_get" id="g_t2d">
+                                                                                                            <field name="VAR" id="v_t2">T2</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <value name="B">
+                                                                                                          <block type="variables_get" id="g_t3b">
+                                                                                                            <field name="VAR" id="v_t3">T3</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                  </block>
+                                                                                                </value>
+                                                                                              </block>
+                                                                                            </value>
+                                                                                          </block>
+                                                                                        </value>
+                                                                                        <statement name="DO1">
+                                                                                          <block type="variables_set" id="set_dir_dn">
+                                                                                            <field name="VAR" id="v_dir">DIRECTION</field>
+                                                                                            <value name="VALUE">
+                                                                                              <block type="text" id="t_dn">
+                                                                                                <field name="TEXT">DOWN</field>
+                                                                                              </block>
+                                                                                            </value>
+                                                                                            <next>
+                                                                                              <block type="purchase" id="buy_dn">
+                                                                                                <field name="PURCHASE_LIST">TICKLOW</field>
+                                                                                              </block>
+                                                                                            </next>
+                                                                                          </block>
+                                                                                        </statement>
+                                                                                      </block>
+                                                                                    </next>
+                                                                                  </block>
+                                                                                </next>
+                                                                              </block>
+                                                                            </next>
+                                                                          </block>
+                                                                        </next>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="text_join" id="tj_tp" disabled="true" x="0" y="4178">
+    <field name="VARIABLE" id="k,w$Vmk`gU-i.n2J:2c4">text</field>
+  </block>
+  <block type="text_join" id="tj_tp2" disabled="true" x="0" y="4340">
+    <field name="VARIABLE" id="k,w$Vmk`gU-i.n2J:2c4">text</field>
+  </block>
+  <block type="text_join" id="tj_sl" disabled="true" x="0" y="4502">
+    <field name="VARIABLE" id="k,w$Vmk`gU-i.n2J:2c4">text</field>
+  </block>
+  <block type="text_join" id="tj_sl2" disabled="true" x="0" y="4664">
+    <field name="VARIABLE" id="k,w$Vmk`gU-i.n2J:2c4">text</field>
+  </block>
+</xml>

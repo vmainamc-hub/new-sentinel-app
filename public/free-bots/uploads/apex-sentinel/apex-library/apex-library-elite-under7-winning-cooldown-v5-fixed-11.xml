@@ -1,0 +1,1895 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="var_cd_needed">Cooldown Winning Ticks Needed</variable>
+    <variable id="jnl_u7_dmv">Journal Digit Msg</variable>
+    <variable id="var_cd_done">Cooldown Winning Ticks Done</variable>
+    <variable id="var_stake">Stake</variable>
+    <variable id="var_pred">Current Prediction</variable>
+    <variable id="var_recovery">Recovery Mode</variable>
+    <variable id="var_trig_streak_n">Trigger Streak (Normal)</variable>
+    <variable id="var_tp">Take Profit</variable>
+    <variable id="var_initial_stake">Initial Stake</variable>
+    <variable id="var_mart_step">Martingale Step</variable>
+    <variable id="var_trig_streak_r">Trigger Streak (Recovery)</variable>
+    <variable id="var_sl">Stop Loss</variable>
+    <variable id="var_started">Started</variable>
+    <variable id="var_armed">Armed</variable>
+    <variable id="var_all_high">Pattern Match Flag</variable>
+    <variable id="var_trig_lmax_n">Trigger Max (Normal)</variable>
+    <variable id="var_mart_cap">Martingale Cap</variable>
+    <variable id="var_mart">Martingale</variable>
+    <variable id="var_virt_losses">Virtual Losses Done</variable>
+    <variable id="var_virt_in_trade">Virtual Trade In Progress</variable>
+    <variable id="var_i">i</variable>
+    <variable id="var_trig_hmin_n">Trigger Min (Normal)</variable>
+    <variable id="var_virt_needed_recovery">Virtual Losses Needed (Recovery)</variable>
+    <variable id="var_virt_needed">Virtual Losses Needed (Normal)</variable>
+    <variable id="var_under_pred">Under Prediction</variable>
+    <variable id="var_trig_lmax_r">Trigger Max (Recovery)</variable>
+    <variable id="var_recovery_pred">Recovery Prediction</variable>
+    <variable id="var_streak_len">Streak Length</variable>
+    <variable id="var_trig_hmin_r">Trigger Min (Recovery)</variable>
+    <variable id="jnl_u7_vlv">Journal VL Msg</variable>
+    <variable id="jnl_u7_wmv">Journal Win Msg</variable>
+    <variable id="var_high_min">High Min (&gt;=)</variable>
+    <variable id="var_low_max">Low Max (&lt;=)</variable>
+    <variable id="var_trading_now_u7">Trading Now</variable>
+  </variables>
+  <block type="trade_definition" id="Y`?ihp3%l%4Y1rPK9^nR" deletable="false" x="0" y="110">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="7|~|59juBct2v:1jpwvI" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ10V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="03Iy%n=ExybJPWoTcYN$" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="Eb1#]djAh.XE!-IqbbLr" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="m|~WppHZHFEO#kb=N!;-" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="jU4qoT;6U^]Z1R7{id@!" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="-`}F+GjN!vhQ`q=*AEv?" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="init_cd_needed">
+        <field name="VAR" id="var_cd_needed">Cooldown Winning Ticks Needed</field>
+        <value name="VALUE">
+          <block type="math_number" id="init_cd_needed_num">
+            <field name="NUM">2</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="init_cd_done">
+            <field name="VAR" id="var_cd_done">Cooldown Winning Ticks Done</field>
+            <value name="VALUE">
+              <block type="math_number" id="init_cd_done_num">
+                <field name="NUM">0</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="init_var_trig_streak_n">
+                <field name="VAR" id="var_trig_streak_n">Trigger Streak (Normal)</field>
+                <value name="VALUE">
+                  <block type="math_number" id="init_var_trig_streak_n_num">
+                    <field name="NUM">4</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="init_var_trig_streak_r">
+                    <field name="VAR" id="var_trig_streak_r">Trigger Streak (Recovery)</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="init_var_trig_streak_r_num">
+                        <field name="NUM">5</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="init_var_trig_lmax_n">
+                        <field name="VAR" id="var_trig_lmax_n">Trigger Max (Normal)</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="init_var_trig_lmax_n_num">
+                            <field name="NUM">6</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="init_var_trig_hmin_n">
+                            <field name="VAR" id="var_trig_hmin_n">Trigger Min (Normal)</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="init_var_trig_hmin_n_num">
+                                <field name="NUM">0</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="init_var_trig_lmax_r">
+                                <field name="VAR" id="var_trig_lmax_r">Trigger Max (Recovery)</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="init_var_trig_lmax_r_num">
+                                    <field name="NUM">3</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="init_var_trig_hmin_r">
+                                    <field name="VAR" id="var_trig_hmin_r">Trigger Min (Recovery)</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="init_var_trig_hmin_r_num">
+                                        <field name="NUM">0</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="w,!G{r*xI|W*}p:W!Yvz">
+                                        <field name="VAR" id="var_initial_stake">Initial Stake</field>
+                                        <value name="VALUE">
+                                          <block type="math_number" id="YK;FHuF@XcQ!g%:}I#4L">
+                                            <field name="NUM">9</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="HsL0vIFocV%rCkgA$qY#">
+                                            <field name="VAR" id="var_stake">Stake</field>
+                                            <value name="VALUE">
+                                              <block type="variables_get" id="mPB?`4wE^DGTZk.!@xAb">
+                                                <field name="VAR" id="var_initial_stake">Initial Stake</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="UB5{_vP[rC-%o|zspNdp">
+                                                <field name="VAR" id="var_tp">Take Profit</field>
+                                                <value name="VALUE">
+                                                  <block type="math_number" id="DGn{2]eseq_ae,2TXsR3">
+                                                    <field name="NUM">40</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="variables_set" id="V#88RnQG:.w[i@Sokbpl">
+                                                    <field name="VAR" id="var_sl">Stop Loss</field>
+                                                    <value name="VALUE">
+                                                      <block type="math_number" id="~M}loR`Y]ppv^hy9G[^k">
+                                                        <field name="NUM">9000</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="variables_set" id="ot!LYXD5lC{UM2{y8[86">
+                                                        <field name="VAR" id="var_mart">Martingale</field>
+                                                        <value name="VALUE">
+                                                          <block type="math_number" id="3p:I-J)8uM==r;N4v/}4">
+                                                            <field name="NUM">1.4</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="variables_set" id="Uka~[TQ)x]tjyB[%+EB{">
+                                                            <field name="VAR" id="var_mart_cap">Martingale Cap</field>
+                                                            <value name="VALUE">
+                                                              <block type="math_number" id="mBn1eVqrtYC{hLPDdJEu">
+                                                                <field name="NUM">3</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="variables_set" id="`lv{gx$t=7%XV]ESr8Jg">
+                                                                <field name="VAR" id="var_mart_step">Martingale Step</field>
+                                                                <value name="VALUE">
+                                                                  <block type="math_number" id="m%Ne(h/[z.lK*=blxlVH">
+                                                                    <field name="NUM">0</field>
+                                                                  </block>
+                                                                </value>
+                                                                <next>
+                                                                  <block type="variables_set" id="%$wAd[M:C4uhV11Y^3L1">
+                                                                    <field name="VAR" id="var_streak_len">Streak Length</field>
+                                                                    <value name="VALUE">
+                                                                      <block type="math_number" id="$A=evIta%MF}4UDq61sg">
+                                                                        <field name="NUM">3</field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <next>
+                                                                      <block type="variables_set" id="n`~YewWT@52~D#PPED^d">
+                                                                        <field name="VAR" id="var_high_min">High Min (&gt;=)</field>
+                                                                        <value name="VALUE">
+                                                                          <block type="math_number" id="}vjZ./uk^1QP$0VTkOA9">
+                                                                            <field name="NUM">5</field>
+                                                                          </block>
+                                                                        </value>
+                                                                        <next>
+                                                                          <block type="variables_set" id="wc%OK(bMgwP1)/gGI=n)">
+                                                                            <field name="VAR" id="var_low_max">Low Max (&lt;=)</field>
+                                                                            <value name="VALUE">
+                                                                              <block type="math_number" id="$J}@nm1,_?ALM2/c1oIt">
+                                                                                <field name="NUM">4</field>
+                                                                              </block>
+                                                                            </value>
+                                                                            <next>
+                                                                              <block type="variables_set" id="mN4I56M!/1exN?l_f:HR">
+                                                                                <field name="VAR" id="var_under_pred">Under Prediction</field>
+                                                                                <value name="VALUE">
+                                                                                  <block type="math_number" id="U|mI}-c)yV=M@/0m+|o#">
+                                                                                    <field name="NUM">7</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                                <next>
+                                                                                  <block type="variables_set" id="3xMLAS.=M=G-:v{vq~jJ">
+                                                                                    <field name="VAR" id="var_recovery_pred">Recovery Prediction</field>
+                                                                                    <value name="VALUE">
+                                                                                      <block type="math_number" id="bpr8o6Y9KwbrmM*vSQd.">
+                                                                                        <field name="NUM">5</field>
+                                                                                      </block>
+                                                                                    </value>
+                                                                                    <next>
+                                                                                      <block type="variables_set" id="HmewC4|YY/O[wa!Li-]+">
+                                                                                        <field name="VAR" id="var_pred">Current Prediction</field>
+                                                                                        <value name="VALUE">
+                                                                                          <block type="variables_get" id="-;jx;RaFg^!yyjRJOH@9">
+                                                                                            <field name="VAR" id="var_under_pred">Under Prediction</field>
+                                                                                          </block>
+                                                                                        </value>
+                                                                                        <next>
+                                                                                          <block type="variables_set" id="Yg%LAo5Q`iHfeO~]9[Ne">
+                                                                                            <field name="VAR" id="var_recovery">Recovery Mode</field>
+                                                                                            <value name="VALUE">
+                                                                                              <block type="logic_boolean" id="Q7m:F}=(@{jMe~0JE=g}">
+                                                                                                <field name="BOOL">FALSE</field>
+                                                                                              </block>
+                                                                                            </value>
+                                                                                            <next>
+                                                                                              <block type="variables_set" id=")Dw~^Sn!`p1pl3lA6!!V">
+                                                                                                <field name="VAR" id="var_started">Started</field>
+                                                                                                <value name="VALUE">
+                                                                                                  <block type="logic_boolean" id="@n6r~Q/m3)HMeD|96$#k">
+                                                                                                    <field name="BOOL">FALSE</field>
+                                                                                                  </block>
+                                                                                                </value>
+                                                                                                <next>
+                                                                                                  <block type="variables_set" id="ZspiAQ9+$WhO](B*D].,">
+                                                                                                    <field name="VAR" id="var_armed">Armed</field>
+                                                                                                    <value name="VALUE">
+                                                                                                      <block type="logic_boolean" id="enO~)}-Cc^y`C2D6+2#B">
+                                                                                                        <field name="BOOL">FALSE</field>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                    <next>
+                                                                                                      <block type="variables_set" id="#2ThYUblTYDD8F`sQK|{">
+                                                                                                        <field name="VAR" id="var_virt_needed">Virtual Losses Needed (Normal)</field>
+                                                                                                        <value name="VALUE">
+                                                                                                          <block type="math_number" id="FTU6/A#NO-B][yE~#{0+">
+                                                                                                            <field name="NUM">2</field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                        <next>
+                                                                                                          <block type="variables_set" id="init_virt_needed_recovery_u7">
+                                                                                                            <field name="VAR" id="var_virt_needed_recovery">Virtual Losses Needed (Recovery)</field>
+                                                                                                            <value name="VALUE">
+                                                                                                              <block type="math_number" id="|x/YnB4`e_:b-R/TyYHq">
+                                                                                                                <field name="NUM">2</field>
+                                                                                                              </block>
+                                                                                                            </value>
+                                                                                                            <next>
+                                                                                                              <block type="variables_set" id="0.$23PhUqLXv,R0h?qL)">
+                                                                                                                <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                                                                                                                <value name="VALUE">
+                                                                                                                  <block type="math_number" id="UG[8DtCQL+WSZyem7Hbe">
+                                                                                                                    <field name="NUM">0</field>
+                                                                                                                  </block>
+                                                                                                                </value>
+                                                                                                                <next>
+                                                                                                                  <block type="variables_set" id="Z8lVX{4$ozb}HfKCxCbb">
+                                                                                                                    <field name="VAR" id="var_all_high">Pattern Match Flag</field>
+                                                                                                                    <value name="VALUE">
+                                                                                                                      <block type="logic_boolean" id="hWguwxaz(p_N_3!0lv#:">
+                                                                                                                        <field name="BOOL">TRUE</field>
+                                                                                                                      </block>
+                                                                                                                    </value>
+                                                                                                                    <next>
+                                                                                                                      <block type="variables_set" id="init_virt_in_trade">
+                                                                                                                        <field name="VAR" id="var_virt_in_trade">Virtual Trade In Progress</field>
+                                                                                                                        <value name="VALUE">
+                                                                                                                          <block type="logic_boolean" id="init_virt_in_trade_bool">
+                                                                                                                            <field name="BOOL">FALSE</field>
+                                                                                                                          </block>
+                                                                                                                        </value>
+                                                                                                                      
+                                                                                                                               <next>
+                                                                                                                                 <block type="variables_set" id="init_tn_u7">
+                                                                                                                                   <field name="VAR" id="var_trading_now_u7">Trading Now</field>
+                                                                                                                                   <value name="VALUE">
+                                                                                                                                     <block type="logic_boolean" id="init_tnb_u7">
+                                                                                                                                       <field name="BOOL">FALSE</field>
+                                                                                                                                     </block>
+                                                                                                                                   </value>
+                                                                                                                                 </block>
+                                                                                                                               </next>
+</block>
+                                                                                                                    </next>
+                                                                                                                  </block>
+                                                                                                                </next>
+                                                                                                              </block>
+                                                                                                            </next>
+                                                                                                          </block>
+                                                                                                        </next>
+                                                                                                      </block>
+                                                                                                    </next>
+                                                                                                  </block>
+                                                                                                </next>
+                                                                                              </block>
+                                                                                            </next>
+                                                                                          </block>
+                                                                                        </next>
+                                                                                      </block>
+                                                                                    </next>
+                                                                                  </block>
+                                                                                </next>
+                                                                              </block>
+                                                                            </next>
+                                                                          </block>
+                                                                        </next>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="Mqc^zzV`DY#9#s*O[aH|">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number" id="GhzlaVV.H(i-^5knPiiW">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number" id="pM~[$z[M6%,X|MKUUW3z">
+            <field name="NUM">1</field>
+          </shadow>
+          <block type="variables_get" id="(juMdfL%k6Bni#zzxW*(">
+            <field name="VAR" id="var_stake">Stake</field>
+          </block>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number" id="6`OoqSQbvx?^y?tXa[Wm">
+            <field name="NUM">5</field>
+          </shadow>
+          <block type="variables_get" id="-DE;lIA3bSf`;0ZBls{!">
+            <field name="VAR" id="var_pred">Current Prediction</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="after_purchase" id="@YeMhEofe~2^:}nW,Cip" deletable="false" x="2936" y="110">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="tc)~p!70eZ|poTL$Z|#C">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" elseif="2" else="1"></mutation>
+        <value name="IF0">
+          <block type="logic_compare" id="*yE:nXp]Byt30:OmXRbk">
+            <field name="OP">GTE</field>
+            <value name="A">
+              <block type="total_profit" id="eZ|,lW01TDk)o[ppX%fM"></block>
+            </value>
+            <value name="B">
+              <block type="variables_get" id="TyfxdC)dB!N!R,[2x3{o">
+                <field name="VAR" id="var_tp">Take Profit</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="notify" id="jnl_u7_tp_n">
+            <field name="NOTIFICATION_TYPE">success</field>
+            <field name="NOTIFICATION_SOUND">silent</field>
+            <value name="MESSAGE">
+              <shadow type="text" id="jnl_u7_tp_ns">
+                <field name="TEXT">Take Profit reached</field>
+              </shadow>
+              <block type="text" id="jnl_u7_tp_nt">
+                <field name="TEXT">🎯 Take Profit reached. Stopping.</field>
+              </block>
+            </value>
+          </block>
+        </statement>
+        <value name="IF1">
+          <block type="logic_compare" id="_z(*K_ls;9nGQ:ciCp},">
+            <field name="OP">LTE</field>
+            <value name="A">
+              <block type="total_profit" id="[dE%`Q5a#S+SxI9TDQ{;"></block>
+            </value>
+            <value name="B">
+              <block type="math_single" id="%RXu4G,L^m^nW#TtJe@,">
+                <field name="OP">NEG</field>
+                <value name="NUM">
+                  <shadow type="math_number" id="s5D6%ETiq4]*tT-oWi~4">
+                    <field name="NUM">1</field>
+                  </shadow>
+                  <block type="variables_get" id="(fibdtplPh~emLe8fj}w">
+                    <field name="VAR" id="var_sl">Stop Loss</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO1">
+          <block type="notify" id="jnl_u7_sl_n">
+            <field name="NOTIFICATION_TYPE">error</field>
+            <field name="NOTIFICATION_SOUND">silent</field>
+            <value name="MESSAGE">
+              <shadow type="text" id="jnl_u7_sl_ns">
+                <field name="TEXT">Stop Loss hit</field>
+              </shadow>
+              <block type="text" id="jnl_u7_sl_nt">
+                <field name="TEXT">🛑 Stop Loss hit. Stopping.</field>
+              </block>
+            </value>
+          </block>
+        </statement>
+        <value name="IF2">
+          <block type="contract_check_result" id="JeGo*Ahn9prb`Bs0IgS!">
+            <field name="CHECK_RESULT">win</field>
+          </block>
+        </value>
+        <statement name="DO2">
+          <block type="variables_set" id="8xG/3Ehyyef_Jr{#-:OP">
+            <field name="VAR" id="var_stake">Stake</field>
+            <value name="VALUE">
+              <block type="variables_get" id="f.?xwPksqdpJC[zW1S}c">
+                <field name="VAR" id="var_initial_stake">Initial Stake</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="~X`rE~HVzZQ}J}Lqe[-y">
+                <field name="VAR" id="var_mart_step">Martingale Step</field>
+                <value name="VALUE">
+                  <block type="math_number" id="1;9uhno1wUC~v*`~T;F}">
+                    <field name="NUM">0</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="TfDRzj`aI!G]8)T!Cq-S">
+                    <field name="VAR" id="var_recovery">Recovery Mode</field>
+                    <value name="VALUE">
+                      <block type="logic_boolean" id="+T]#d4,uYX,b5u[lIM,n">
+                        <field name="BOOL">FALSE</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="z~{c(_LJ+QqfK3q--QJY">
+                        <field name="VAR" id="var_started">Started</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="80nuewxhI!S%D:0!c6iD">
+                            <field name="BOOL">TRUE</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="]{eo=.hxQ(4j{ErtHC3B">
+                            <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                            <value name="VALUE">
+                              <block type="variables_get" id="rac^;*,IQpkiw^;HgTLo">
+                                <field name="VAR" id="var_virt_needed">Virtual Losses Needed (Normal)</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="loc1_virt_in_trade_rst">
+                                <field name="VAR" id="var_virt_in_trade">Virtual Trade In Progress</field>
+                                <value name="VALUE">
+                                  <block type="logic_boolean" id="loc1_virt_in_trade_rst_bool">
+                                    <field name="BOOL">FALSE</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="a+Q]DWwg317$3Nkv}lwp">
+                                    <field name="VAR" id="var_pred">Current Prediction</field>
+                                    <value name="VALUE">
+                                      <block type="variables_get" id="D|i2*vhffWY5pQ:?!}{4">
+                                        <field name="VAR" id="var_under_pred">Under Prediction</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="text_join" id="jnl_u7_wj">
+                                        <field name="VARIABLE" id="jnl_u7_wmv">Journal Win Msg</field>
+                                        <statement name="STACK">
+                                          <block type="text_statement" id="jnl_u7_wts1">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="jnl_u7_ws1">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="text" id="jnl_u7_wt1">
+                                                <field name="TEXT">✅ You WON , Total profit is: $</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="text_statement" id="jnl_u7_wts2">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="jnl_u7_ws2">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="total_profit" id="jnl_u7_wtp"></block>
+                                                </value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </statement>
+                                        <next>
+                                          <block type="notify" id="jnl_u7_wn">
+                                            <field name="NOTIFICATION_TYPE">success</field>
+                                            <field name="NOTIFICATION_SOUND">silent</field>
+                                            <value name="MESSAGE">
+                                              <shadow type="text" id="jnl_u7_wns">
+                                                <field name="TEXT">YOU WON!</field>
+                                              </shadow>
+                                              <block type="variables_get" id="jnl_u7_wvg">
+                                                <field name="VAR" id="jnl_u7_wmv">Journal Win Msg</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="u7_cd_bypass_win">
+                                                <field name="VAR" id="var_trading_now_u7">Trading Now</field>
+                                                                                                                                 <value name="VALUE">
+                                                                                                                                   <block type="logic_boolean" id="u7_cd_bypass_win_tnb">
+                                                                                                                                     <field name="BOOL">TRUE</field>
+                                                                                                                                   </block>
+                                                                                                                                 </value>
+                                                <next>
+                                                  <block type="trade_again" id="LTx[6?c5_s#H#l^77^)O"></block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <block type="controls_if" id="}7s~EM7u2#C5[t+@^!PM">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
+              <block type="variables_get" id="rE-[`79=.^]j(WkwRPYp">
+                <field name="VAR" id="var_recovery">Recovery Mode</field>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="controls_if" id="rec_loss_cap_check">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="logic_compare" id="rec_loss_cap_cmp">
+                    <field name="OP">GTE</field>
+                    <value name="A">
+                      <block type="variables_get" id="rec_loss_cap_step">
+                        <field name="VAR" id="var_mart_step">Martingale Step</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="variables_get" id="rec_loss_cap_cap">
+                        <field name="VAR" id="var_mart_cap">Martingale Cap</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="cap_stake">
+                    <field name="VAR" id="var_stake">Stake</field>
+                    <value name="VALUE">
+                      <block type="variables_get" id="cap_stake_init">
+                        <field name="VAR" id="var_initial_stake">Initial Stake</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="cap_step">
+                        <field name="VAR" id="var_mart_step">Martingale Step</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="cap_step_zero">
+                            <field name="NUM">0</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="cap_recovery">
+                            <field name="VAR" id="var_recovery">Recovery Mode</field>
+                            <value name="VALUE">
+                              <block type="logic_boolean" id="cap_recovery_false">
+                                <field name="BOOL">FALSE</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="cap_pred">
+                                <field name="VAR" id="var_pred">Current Prediction</field>
+                                <value name="VALUE">
+                                  <block type="variables_get" id="cap_pred_get">
+                                    <field name="VAR" id="var_under_pred">Under Prediction</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="cap_armed">
+                                    <field name="VAR" id="var_armed">Armed</field>
+                                    <value name="VALUE">
+                                      <block type="logic_boolean" id="cap_armed_false">
+                                        <field name="BOOL">TRUE</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="cap_virt">
+                                        <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                                        <value name="VALUE">
+                                          <block type="variables_get" id="cap_virt_zero">
+                                            <field name="VAR" id="var_virt_needed_recovery">Virtual Losses Needed (Recovery)</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="loc2_virt_in_trade_rst">
+                                            <field name="VAR" id="var_virt_in_trade">Virtual Trade In Progress</field>
+                                            <value name="VALUE">
+                                              <block type="logic_boolean" id="loc2_virt_in_trade_rst_bool">
+                                                <field name="BOOL">FALSE</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="cap_started">
+                                                <field name="VAR" id="var_started">Started</field>
+                                                <value name="VALUE">
+                                                  <block type="logic_boolean" id="cap_started_false">
+                                                    <field name="BOOL">TRUE</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="notify" id="jnl_u7_cap">
+                                                    <field name="NOTIFICATION_TYPE">error</field>
+                                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                                    <value name="MESSAGE">
+                                                      <shadow type="text" id="jnl_u7_caps">
+                                                        <field name="TEXT">⚠️ Martingale cap hit. Resetting to normal mode.</field>
+                                                      </shadow>
+                                                    </value>
+                                                    <next>
+                                                      <block type="variables_set" id="u7_cd_bypass_cap">
+                                                        <field name="VAR" id="var_trading_now_u7">Trading Now</field>
+                                                                                                                                 <value name="VALUE">
+                                                                                                                                   <block type="logic_boolean" id="u7_cd_bypass_cap_tnb">
+                                                                                                                                     <field name="BOOL">TRUE</field>
+                                                                                                                                   </block>
+                                                                                                                                 </value>
+                                                        <next>
+                                                          <block type="trade_again" id="cap_trade_again"></block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="variables_set" id="rec_cont_stake">
+                    <field name="VAR" id="var_stake">Stake</field>
+                    <value name="VALUE">
+                      <block type="math_arithmetic" id="rec_cont_stake_calc">
+                        <field name="OP">MULTIPLY</field>
+                        <value name="A">
+                          <shadow type="math_number" id="rec_cont_sa">
+                            <field name="NUM">0</field>
+                          </shadow>
+                          <block type="variables_get" id="rec_cont_stake_get">
+                            <field name="VAR" id="var_stake">Stake</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <shadow type="math_number" id="rec_cont_sb">
+                            <field name="NUM">1</field>
+                          </shadow>
+                          <block type="variables_get" id="rec_cont_mart_get">
+                            <field name="VAR" id="var_mart">Martingale</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="rec_cont_step">
+                        <field name="VAR" id="var_mart_step">Martingale Step</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id="rec_cont_step_calc">
+                            <field name="OP">ADD</field>
+                            <value name="A">
+                              <shadow type="math_number" id="rec_cont_stepa">
+                                <field name="NUM">0</field>
+                              </shadow>
+                              <block type="variables_get" id="rec_cont_step_get">
+                                <field name="VAR" id="var_mart_step">Martingale Step</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <shadow type="math_number" id="rec_cont_stepb">
+                                <field name="NUM">1</field>
+                              </shadow>
+                            </value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="rec_cont_recovery">
+                            <field name="VAR" id="var_recovery">Recovery Mode</field>
+                            <value name="VALUE">
+                              <block type="logic_boolean" id="rec_cont_recovery_true">
+                                <field name="BOOL">TRUE</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="rec_cont_pred">
+                                <field name="VAR" id="var_pred">Current Prediction</field>
+                                <value name="VALUE">
+                                  <block type="variables_get" id="rec_cont_pred_get">
+                                    <field name="VAR" id="var_recovery_pred">Recovery Prediction</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="rec_cont_armed">
+                                    <field name="VAR" id="var_armed">Armed</field>
+                                    <value name="VALUE">
+                                      <block type="logic_boolean" id="rec_cont_armed_false">
+                                        <field name="BOOL">TRUE</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="rec_cont_virt">
+                                        <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                                        <value name="VALUE">
+                                          <block type="variables_get" id="rec_cont_virt_zero">
+                                            <field name="VAR" id="var_virt_needed_recovery">Virtual Losses Needed (Recovery)</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="loc3_virt_in_trade_rst">
+                                            <field name="VAR" id="var_virt_in_trade">Virtual Trade In Progress</field>
+                                            <value name="VALUE">
+                                              <block type="logic_boolean" id="loc3_virt_in_trade_rst_bool">
+                                                <field name="BOOL">FALSE</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="rec_cont_started">
+                                                <field name="VAR" id="var_started">Started</field>
+                                                <value name="VALUE">
+                                                  <block type="logic_boolean" id="rec_cont_started_false">
+                                                    <field name="BOOL">TRUE</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="notify" id="jnl_u7_rc">
+                                                    <field name="NOTIFICATION_TYPE">error</field>
+                                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                                    <value name="MESSAGE">
+                                                      <shadow type="text" id="jnl_u7_rcs">
+                                                        <field name="TEXT">❌ LOSS – Recovery continues. Stake increased.</field>
+                                                      </shadow>
+                                                    </value>
+                                                    <next>
+                                                      <block type="variables_set" id="u7_cd_bypass_rec">
+                                                        <field name="VAR" id="var_trading_now_u7">Trading Now</field>
+                                                                                                                                 <value name="VALUE">
+                                                                                                                                   <block type="logic_boolean" id="u7_cd_bypass_rec_tnb">
+                                                                                                                                     <field name="BOOL">TRUE</field>
+                                                                                                                                   </block>
+                                                                                                                                 </value>
+                                                        <next>
+                                                          <block type="trade_again" id="rec_cont_trade_again"></block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="variables_set" id="_=u=[={iYm0p^Ov^+@%[">
+                <field name="VAR" id="var_stake">Stake</field>
+                <value name="VALUE">
+                  <block type="math_arithmetic" id="mxSlCnv;/O*$lBLTvWSD">
+                    <field name="OP">MULTIPLY</field>
+                    <value name="A">
+                      <shadow type="math_number" id="+#f;Q;s~?E@#+GV]-uc.">
+                        <field name="NUM">0</field>
+                      </shadow>
+                      <block type="variables_get" id="9@la0cf9j{k^n9~4^ld`">
+                        <field name="VAR" id="var_stake">Stake</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <shadow type="math_number" id="sUFcC%l:$E|`?=FEE!;0">
+                        <field name="NUM">1</field>
+                      </shadow>
+                      <block type="variables_get" id="VO2YUn3|G6}iuWlm7fIX">
+                        <field name="VAR" id="var_mart">Martingale</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="v5qq~sb.-0/wu,H#JTI5">
+                    <field name="VAR" id="var_mart_step">Martingale Step</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="?vJE4o{q87b[CR^%4(*+">
+                        <field name="NUM">1</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="zUJYc=8~A5:VNkoh53*G">
+                        <field name="VAR" id="var_recovery">Recovery Mode</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="~PUxX/kZfh}t*!ND`~W+">
+                            <field name="BOOL">TRUE</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="|v*[AB5E:T]A^7Eo)*qP">
+                            <field name="VAR" id="var_pred">Current Prediction</field>
+                            <value name="VALUE">
+                              <block type="variables_get" id="DV*e+6Xb:r%LZp40PfyA">
+                                <field name="VAR" id="var_recovery_pred">Recovery Prediction</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="2ygxx7_|[s{Zj9(@OE,+">
+                                <field name="VAR" id="var_started">Started</field>
+                                <value name="VALUE">
+                                  <block type="logic_boolean" id="5}QrB#X;RD~t8qEgyt~~">
+                                    <field name="BOOL">TRUE</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="fix_els_armed">
+                                    <field name="VAR" id="var_armed">Armed</field>
+                                    <value name="VALUE">
+                                      <block type="logic_boolean" id="fix_els_armed_t">
+                                        <field name="BOOL">TRUE</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="fix_els_virt">
+                                        <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                                        <value name="VALUE">
+                                          <block type="variables_get" id="fix_els_virt_get">
+                                            <field name="VAR" id="var_virt_needed_recovery">Virtual Losses Needed (Recovery)</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="fix_els_vit">
+                                            <field name="VAR" id="var_virt_in_trade">Virtual Trade In Progress</field>
+                                            <value name="VALUE">
+                                              <block type="logic_boolean" id="fix_els_vit_f">
+                                                <field name="BOOL">FALSE</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="fix_els_cd_u7">
+                                                <field name="VAR" id="var_cd_done">Cooldown Winning Ticks Done</field>
+                                                <value name="VALUE">
+                                                  <block type="math_number" id="fix_els_cd_z_u7">
+                                                    <field name="NUM">0</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="notify" id="jnl_u7_ler">
+                                                    <field name="NOTIFICATION_TYPE">error</field>
+                                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                                    <value name="MESSAGE">
+                                                      <shadow type="text" id="jnl_u7_lers">
+                                                        <field name="TEXT">❌ LOSS – Entering recovery mode.</field>
+                                                      </shadow>
+                                                    </value>
+                                                    <next>
+                                                      <block type="variables_set" id="u7_cd_bypass_loss">
+                                                        <field name="VAR" id="var_trading_now_u7">Trading Now</field>
+                                                                                                                                 <value name="VALUE">
+                                                                                                                                   <block type="logic_boolean" id="u7_cd_bypass_loss_tnb">
+                                                                                                                                     <field name="BOOL">TRUE</field>
+                                                                                                                                   </block>
+                                                                                                                                 </value>
+                                                        <next>
+                                                          <block type="trade_again" id="AI5.B-U36.kw*3g~iNn]"></block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="3r=9XZm8toHaz07~5kK^" deletable="false" x="0" y="2120">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="controls_if" id="cd_root">
+        <value name="IF0">
+          <block type="variables_get" id="cd_root_rec">
+            <field name="VAR" id="var_recovery">Recovery Mode</field>
+          </block>
+        </value>
+        <next>
+          <block type="controls_if" id="R8H4%^f+JgVjulfhBdzJ" deletable="false">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
+              <block type="logic_operation" id="under_real_entry_requires_started_and_armed">
+                <field name="OP">AND</field>
+                <value name="A">
+                  <block type="variables_get" id="under_gate_started">
+                    <field name="VAR" id="var_started">Started</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="variables_get" id="under_gate_armed">
+                    <field name="VAR" id="var_armed">Armed</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+                  <block type="controls_if" id="cont_check_u7">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                    <value name="IF0">
+                      <block type="variables_get" id="cont_get_u7">
+                        <field name="VAR" id="var_trading_now_u7">Trading Now</field>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="controls_if" id="cont_pred_u7">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                        <value name="IF0">
+                          <block type="variables_get" id="cont_rec_u7">
+                            <field name="VAR" id="var_recovery">Recovery Mode</field>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="variables_set" id="cont_pred_r_u7">
+                            <field name="VAR" id="var_pred">Current Prediction</field>
+                            <value name="VALUE">
+                              <block type="variables_get" id="cont_pred_rg_u7">
+                                <field name="VAR" id="var_recovery_pred">Recovery Prediction</field>
+                              </block>
+                            </value>
+                          </block>
+                        </statement>
+                        <statement name="ELSE">
+                          <block type="variables_set" id="cont_pred_n_u7">
+                            <field name="VAR" id="var_pred">Current Prediction</field>
+                            <value name="VALUE">
+                              <block type="variables_get" id="cont_pred_ng_u7">
+                                <field name="VAR" id="var_under_pred">Under Prediction</field>
+                              </block>
+                            </value>
+                          </block>
+                        </statement>
+                        <next>
+                          <block type="purchase" id="cont_buy_u7">
+                            <field name="PURCHASE_LIST">DIGITUNDER</field>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <statement name="ELSE">
+                  <block type="controls_if" id="cd_in_virt_else">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                    <value name="IF0">
+                      <block type="logic_compare" id="cd_in_cmp">
+                        <field name="OP">LT</field>
+                        <value name="A">
+                          <block type="lists_getIndex" id="cd_in_digit">
+                            <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"></mutation>
+                            <field name="MODE">GET</field>
+                            <field name="WHERE">FROM_END</field>
+                            <value name="VALUE">
+                              <block type="lastDigitList" id="cd_in_ld"></block>
+                            </value>
+                            <value name="AT">
+                              <block type="math_number" id="cd_in_at">
+                                <field name="NUM">1</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="variables_get" id="cd_in_thresh">
+                            <field name="VAR" id="var_under_pred">Under Prediction</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="cd_in_inc">
+                        <field name="VAR" id="var_cd_done">Cooldown Winning Ticks Done</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id="cd_in_inc_c">
+                            <field name="OP">ADD</field>
+                            <value name="A">
+                              <shadow type="math_number" id="cd_in_sa">
+                                <field name="NUM">0</field>
+                              </shadow>
+                              <block type="variables_get" id="cd_in_get">
+                                <field name="VAR" id="var_cd_done">Cooldown Winning Ticks Done</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <shadow type="math_number" id="cd_in_sb">
+                                <field name="NUM">1</field>
+                              </shadow>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                    <statement name="ELSE">
+                      <block type="variables_set" id="cd_in_reset">
+                        <field name="VAR" id="var_cd_done">Cooldown Winning Ticks Done</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="cd_in_reset_z">
+                            <field name="NUM">0</field>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="controls_if" id="cd_in_gate">
+                        <value name="IF0">
+                          <block type="logic_compare" id="cd_in_gate_cmp">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="variables_get" id="cd_in_gate_done">
+                                <field name="VAR" id="var_cd_done">Cooldown Winning Ticks Done</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="cd_in_gate_need">
+                                <field name="VAR" id="var_cd_needed">Cooldown Winning Ticks Needed</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="variables_set" id="cd_in_gate_rst">
+                            <field name="VAR" id="var_cd_done">Cooldown Winning Ticks Done</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="cd_in_gate_rst_z">
+                                <field name="NUM">0</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="controls_if" id="cd_phase_split_u7">
+                                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                <value name="IF0">
+                                  <block type="logic_compare" id="cd_phase_cmp_u7">
+                                    <field name="OP">GT</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="cd_phase_get_u7">
+                                        <field name="VAR" id="var_cd_needed">Cooldown Winning Ticks Needed</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="math_number" id="cd_phase_zero_u7">
+                                        <field name="NUM">0</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <statement name="DO0">
+                                  <block type="variables_set" id="cd_switch_u7">
+                                    <field name="VAR" id="var_cd_needed">Cooldown Winning Ticks Needed</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="cd_switch_z_u7">
+                                        <field name="NUM">0</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </statement>
+                                <statement name="ELSE">
+                              <block type="variables_set" id="cd_conf_flag_init">
+                                <field name="VAR" id="var_all_high">Pattern Match Flag</field>
+                                <value name="VALUE">
+                                  <block type="logic_boolean" id="cd_conf_flag_true">
+                                    <field name="BOOL">TRUE</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="controls_for" id="cd_conf_for">
+                                    <field name="VAR" id="var_i">i</field>
+                                    <value name="FROM">
+                                      <block type="math_number" id="cd_conf_from">
+                                        <field name="NUM">2</field>
+                                      </block>
+                                    </value>
+                                    <value name="TO">
+                                      <block type="math_arithmetic" id="cd_conf_to_calc">
+                                        <field name="OP">ADD</field>
+                                        <value name="A">
+                                          <block type="variables_get" id="cd_conf_to_streak">
+                                            <field name="VAR" id="var_streak_len">Streak Length</field>
+                                          </block>
+                                        </value>
+                                        <value name="B">
+                                          <block type="math_number" id="cd_conf_to_one">
+                                            <field name="NUM">1</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                    <value name="BY">
+                                      <block type="math_number" id="cd_conf_by">
+                                        <field name="NUM">1</field>
+                                      </block>
+                                    </value>
+                                    <statement name="DO">
+                                      <block type="controls_if" id="cd_conf_loop_check">
+                                        <value name="IF0">
+                                          <block type="logic_negate" id="cd_conf_loop_neg">
+                                            <value name="BOOL">
+                                              <block type="logic_compare" id="cd_conf_loop_cmp">
+                                                <field name="OP">GTE</field>
+                                                <value name="A">
+                                                  <block type="lists_getIndex" id="cd_conf_loop_digit">
+                                                    <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"></mutation>
+                                                    <field name="MODE">GET</field>
+                                                    <field name="WHERE">FROM_END</field>
+                                                    <value name="VALUE">
+                                                      <block type="lastDigitList" id="cd_conf_loop_ld"></block>
+                                                    </value>
+                                                    <value name="AT">
+                                                      <block type="variables_get" id="cd_conf_loop_i">
+                                                        <field name="VAR" id="var_i">i</field>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="variables_get" id="cd_conf_loop_hmin">
+                                                    <field name="VAR" id="var_high_min">High Min (&gt;=)</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <statement name="DO0">
+                                          <block type="variables_set" id="cd_conf_loop_clr">
+                                            <field name="VAR" id="var_all_high">Pattern Match Flag</field>
+                                            <value name="VALUE">
+                                              <block type="logic_boolean" id="cd_conf_loop_false">
+                                                <field name="BOOL">FALSE</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </statement>
+                                      </block>
+                                    </statement>
+                                    <next>
+                                      <block type="controls_if" id="cd_conf_gate">
+                                        <value name="IF0">
+                                          <block type="logic_operation" id="cd_conf_gate_and">
+                                            <field name="OP">AND</field>
+                                            <value name="A">
+                                              <block type="variables_get" id="cd_conf_gate_flag">
+                                                <field name="VAR" id="var_all_high">Pattern Match Flag</field>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="logic_compare" id="cd_conf_gate_lte">
+                                                <field name="OP">LTE</field>
+                                                <value name="A">
+                                                  <block type="lists_getIndex" id="cd_conf_gate_digit">
+                                                    <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"></mutation>
+                                                    <field name="MODE">GET</field>
+                                                    <field name="WHERE">FROM_END</field>
+                                                    <value name="VALUE">
+                                                      <block type="lastDigitList" id="cd_conf_gate_ld"></block>
+                                                    </value>
+                                                    <value name="AT">
+                                                      <block type="math_number" id="cd_conf_gate_at">
+                                                        <field name="NUM">1</field>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="variables_get" id="cd_conf_gate_lmax">
+                                                    <field name="VAR" id="var_low_max">Low Max (&lt;=)</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <statement name="DO0">
+                                          <block type="controls_if" id="V/qPdB}PI~+)d9W!AOS_">
+                                            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                            <value name="IF0">
+                                              <block type="variables_get" id="@,dor:W3e=uSFmTckR,Q">
+                                                <field name="VAR" id="var_recovery">Recovery Mode</field>
+                                              </block>
+                                            </value>
+                                            <statement name="DO0">
+                                              <block type="variables_set" id="C-80z|=TX9A7cS}]7[bg">
+                                                <field name="VAR" id="var_pred">Current Prediction</field>
+                                                <value name="VALUE">
+                                                  <block type="variables_get" id="ih-$J-4^d~BmXL?xt(Ii">
+                                                    <field name="VAR" id="var_recovery_pred">Recovery Prediction</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </statement>
+                                            <statement name="ELSE">
+                                              <block type="variables_set" id="baUKkJQOG(C#J@p^*KRU">
+                                                <field name="VAR" id="var_pred">Current Prediction</field>
+                                                <value name="VALUE">
+                                                  <block type="variables_get" id="#Vx@@(p+|Kz;]]#zD!#T">
+                                                    <field name="VAR" id="var_under_pred">Under Prediction</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </statement>
+                                            <next>
+                                              <block type="purchase" id="g6Zxs|;1ZSijc-|.;az]">
+                                                <field name="PURCHASE_LIST">DIGITUNDER</field>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </statement>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                                </statement>
+                              </block>
+                            </next>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                    </statement>
+                  </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="controls_if" id="G,wYGfV?@4Z/vuwWTkf2">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="variables_get" id="6d]kNS/8T]PpIP7a{8zo">
+                    <field name="VAR" id="var_armed">Armed</field>
+                  </block>
+                </value>
+                <statement name="DO0">
+              <block type="controls_if" id="virt_gate_under">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="logic_compare" id="virt_gate_cmp_under">
+                    <field name="OP">LT</field>
+                    <value name="A">
+                      <block type="variables_get" id="virt_gate_done_under">
+                        <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="logic_ternary" id="virt_gate_tern_under">
+                        <value name="IF">
+                          <block type="variables_get" id="virt_gate_rec_under">
+                            <field name="VAR" id="var_recovery">Recovery Mode</field>
+                          </block>
+                        </value>
+                        <value name="THEN">
+                          <block type="variables_get" id="virt_gate_then_under">
+                            <field name="VAR" id="var_virt_needed_recovery">Virtual Losses Needed (Recovery)</field>
+                          </block>
+                        </value>
+                        <value name="ELSE">
+                          <block type="variables_get" id="virt_gate_else_under">
+                            <field name="VAR" id="var_virt_needed">Virtual Losses Needed (Normal)</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="controls_if" id="virt_tick_phase_under">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                    <value name="IF0">
+                      <block type="logic_negate" id="virt_not_in_trade_under">
+                        <value name="BOOL">
+                          <block type="variables_get" id="virt_in_trade_get_under">
+                            <field name="VAR" id="var_virt_in_trade">Virtual Trade In Progress</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="virt_set_in_trade_under">
+                        <field name="VAR" id="var_virt_in_trade">Virtual Trade In Progress</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="virt_in_trade_true_under">
+                            <field name="BOOL">TRUE</field>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                    <statement name="ELSE">
+                      <block type="variables_set" id="virt_clear_in_trade_under">
+                        <field name="VAR" id="var_virt_in_trade">Virtual Trade In Progress</field>
+                        <value name="VALUE">
+                          <block type="logic_boolean" id="virt_in_trade_false_under">
+                            <field name="BOOL">FALSE</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="controls_if" id="virt_loss_check_under">
+                            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                            <value name="IF0">
+                              <block type="logic_compare" id="virt_loss_cmp_under">
+                                <field name="OP">GTE</field>
+                                <value name="A">
+                                  <block type="lists_getIndex" id="virt_loss_digit_under">
+                                    <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"></mutation>
+                                    <field name="MODE">GET</field>
+                                    <field name="WHERE">FROM_END</field>
+                                    <value name="VALUE">
+                                      <block type="lastDigitList" id="virt_loss_ld_under"></block>
+                                    </value>
+                                    <value name="AT">
+                                      <block type="math_number" id="virt_loss_at_under">
+                                        <field name="NUM">1</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="variables_get" id="virt_loss_pred_under">
+                                    <field name="VAR" id="var_under_pred">Under Prediction</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <statement name="DO0">
+                              <block type="variables_set" id="virt_loss_inc_under">
+                                <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                                <value name="VALUE">
+                                  <block type="math_arithmetic" id="virt_loss_calc_under">
+                                    <field name="OP">ADD</field>
+                                    <value name="A">
+                                      <shadow type="math_number" id="virt_loss_calc_sa_under">
+                                        <field name="NUM">0</field>
+                                      </shadow>
+                                      <block type="variables_get" id="virt_loss_get_under">
+                                        <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <shadow type="math_number" id="virt_loss_calc_sb_under">
+                                        <field name="NUM">1</field>
+                                      </shadow>
+                                    </value>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="text_join" id="jnl_u7_vlj">
+                                    <field name="VARIABLE" id="jnl_u7_vlv">Journal VL Msg</field>
+                                    <statement name="STACK">
+                                      <block type="text_statement" id="jnl_u7_vlts1">
+                                        <value name="TEXT">
+                                          <shadow type="text" id="jnl_u7_vls1">
+                                            <field name="TEXT"></field>
+                                          </shadow>
+                                          <block type="text" id="jnl_u7_vlt1">
+                                            <field name="TEXT">⏳ Virtual loss #</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="text_statement" id="jnl_u7_vlts2">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="jnl_u7_vls2">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="variables_get" id="jnl_u7_vlvg">
+                                                <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="text_statement" id="jnl_u7_vlts3">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="jnl_u7_vls3">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="text" id="jnl_u7_vlt3">
+                                                    <field name="TEXT"> confirmed. Bot watching...</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </statement>
+                                    <next>
+                                      <block type="notify" id="jnl_u7_vlp">
+                                        <field name="NOTIFICATION_TYPE">error</field>
+                                        <field name="NOTIFICATION_SOUND">silent</field>
+                                        <value name="MESSAGE">
+                                          <shadow type="text" id="jnl_u7_vlpsh">
+                                            <field name="TEXT">Virtual loss</field>
+                                          </shadow>
+                                          <block type="variables_get" id="jnl_u7_vlpvg">
+                                            <field name="VAR" id="jnl_u7_vlv">Journal VL Msg</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </statement>
+                            <statement name="ELSE">
+                              <block type="variables_set" id="virt_win_reset_under">
+                                <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="virt_win_reset_num_under">
+                                    <field name="NUM">0</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </statement>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="variables_set" id="z.,!q(uEK2`n{jz!Yk[=">
+                    <field name="VAR" id="var_started">Started</field>
+                    <value name="VALUE">
+                      <block type="logic_boolean" id="./|yq]|^!UlkG^UI49m{">
+                        <field name="BOOL">TRUE</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="yUW9uL[G$nSIwPIos`{I">
+                        <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="00hB~y$*L{CnPfb4/d[?">
+                            <field name="NUM">0</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="loc5_virt_in_trade_rst">
+                            <field name="VAR" id="var_virt_in_trade">Virtual Trade In Progress</field>
+                            <value name="VALUE">
+                              <block type="logic_boolean" id="loc5_virt_in_trade_rst_bool">
+                                <field name="BOOL">FALSE</field>
+                              </block>
+                            </value>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="controls_if" id="trig_root">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                    <value name="IF0">
+                      <block type="logic_operation" id="trig_is_streak_digit">
+                        <field name="OP">AND</field>
+                        <value name="A">
+                          <block type="logic_compare" id="trig_is_streak_ge">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="lists_getIndex" id="trig_last_a">
+                                <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"></mutation>
+                                <field name="MODE">GET</field>
+                                <field name="WHERE">FROM_END</field>
+                                <value name="VALUE">
+                                  <block type="lastDigitList" id="trig_ld_a"></block>
+                                </value>
+                                <value name="AT">
+                                  <block type="math_number" id="trig_at_a">
+                                    <field name="NUM">1</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_ternary" id="trig_min_tern">
+                                <value name="IF">
+                                  <block type="variables_get" id="trig_min_rec">
+                                    <field name="VAR" id="var_recovery">Recovery Mode</field>
+                                  </block>
+                                </value>
+                                <value name="THEN">
+                                  <block type="variables_get" id="trig_min_then">
+                                    <field name="VAR" id="var_trig_hmin_r">Trigger Min (Recovery)</field>
+                                  </block>
+                                </value>
+                                <value name="ELSE">
+                                  <block type="variables_get" id="trig_min_else">
+                                    <field name="VAR" id="var_trig_hmin_n">Trigger Min (Normal)</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_compare" id="trig_is_streak_le">
+                            <field name="OP">LTE</field>
+                            <value name="A">
+                              <block type="lists_getIndex" id="trig_last_b">
+                                <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"></mutation>
+                                <field name="MODE">GET</field>
+                                <field name="WHERE">FROM_END</field>
+                                <value name="VALUE">
+                                  <block type="lastDigitList" id="trig_ld_b"></block>
+                                </value>
+                                <value name="AT">
+                                  <block type="math_number" id="trig_at_b">
+                                    <field name="NUM">1</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_ternary" id="trig_max_tern">
+                                <value name="IF">
+                                  <block type="variables_get" id="trig_max_rec">
+                                    <field name="VAR" id="var_recovery">Recovery Mode</field>
+                                  </block>
+                                </value>
+                                <value name="THEN">
+                                  <block type="variables_get" id="trig_max_then">
+                                    <field name="VAR" id="var_trig_lmax_r">Trigger Max (Recovery)</field>
+                                  </block>
+                                </value>
+                                <value name="ELSE">
+                                  <block type="variables_get" id="trig_max_else">
+                                    <field name="VAR" id="var_trig_lmax_n">Trigger Max (Normal)</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="variables_set" id="trig_inc_streak">
+                        <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id="trig_inc_calc">
+                            <field name="OP">ADD</field>
+                            <value name="A">
+                              <shadow type="math_number" id="trig_inc_sa">
+                                <field name="NUM">0</field>
+                              </shadow>
+                              <block type="variables_get" id="trig_inc_get">
+                                <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <shadow type="math_number" id="trig_inc_sb">
+                                <field name="NUM">1</field>
+                              </shadow>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                    <statement name="ELSE">
+                      <block type="controls_if" id="trig_conf_check">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                        <value name="IF0">
+                          <block type="logic_compare" id="trig_conf_cmp">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="variables_get" id="trig_conf_get">
+                                <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_ternary" id="trig_need_tern">
+                                <value name="IF">
+                                  <block type="variables_get" id="trig_need_rec">
+                                    <field name="VAR" id="var_recovery">Recovery Mode</field>
+                                  </block>
+                                </value>
+                                <value name="THEN">
+                                  <block type="variables_get" id="trig_need_then">
+                                    <field name="VAR" id="var_trig_streak_r">Trigger Streak (Recovery)</field>
+                                  </block>
+                                </value>
+                                <value name="ELSE">
+                                  <block type="variables_get" id="trig_need_else">
+                                    <field name="VAR" id="var_trig_streak_n">Trigger Streak (Normal)</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="variables_set" id="trig_fire_started">
+                            <field name="VAR" id="var_armed">Armed</field>
+                            <value name="VALUE">
+                              <block type="logic_boolean" id="trig_fire_true">
+                                <field name="BOOL">TRUE</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="trig_fire_reset">
+                                <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="trig_fire_zero">
+                                    <field name="NUM">0</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="loc6_virt_in_trade_rst">
+                                    <field name="VAR" id="var_virt_in_trade">Virtual Trade In Progress</field>
+                                    <value name="VALUE">
+                                      <block type="logic_boolean" id="loc6_virt_in_trade_rst_bool">
+                                        <field name="BOOL">FALSE</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </statement>
+                        <statement name="ELSE">
+                          <block type="variables_set" id="trig_reset_streak">
+                            <field name="VAR" id="var_virt_losses">Virtual Losses Done</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="trig_reset_zero">
+                                <field name="NUM">0</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="loc7_virt_in_trade_rst">
+                                <field name="VAR" id="var_virt_in_trade">Virtual Trade In Progress</field>
+                                <value name="VALUE">
+                                  <block type="logic_boolean" id="loc7_virt_in_trade_rst_bool">
+                                    <field name="BOOL">FALSE</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </statement>
+                      </block>
+                    </statement>
+                  </block>
+                </statement>
+              </block>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="tick_analysis" id="jnl_u7_ta" x="0" y="5296">
+    <statement name="TICKANALYSIS_STACK">
+      <block type="text_join" id="jnl_u7_dj">
+        <field name="VARIABLE" id="jnl_u7_dmv">Journal Digit Msg</field>
+        <statement name="STACK">
+          <block type="text_statement" id="jnl_u7_dts1">
+            <value name="TEXT">
+              <shadow type="text" id="jnl_u7_ds1">
+                <field name="TEXT"></field>
+              </shadow>
+              <block type="text" id="jnl_u7_dt1">
+                <field name="TEXT">LAST DIGIT :&gt;&gt; </field>
+              </block>
+            </value>
+            <next>
+              <block type="text_statement" id="jnl_u7_dts2">
+                <value name="TEXT">
+                  <shadow type="text" id="jnl_u7_ds2">
+                    <field name="TEXT"></field>
+                  </shadow>
+                  <block type="lists_getIndex" id="jnl_u7_dli3">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"></mutation>
+                    <field name="MODE">GET</field>
+                    <field name="WHERE">FROM_END</field>
+                    <value name="VALUE">
+                      <block type="lastDigitList" id="jnl_u7_dld3"></block>
+                    </value>
+                    <value name="AT">
+                      <block type="math_number" id="jnl_u7_dat3">
+                        <field name="NUM">3</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <next>
+                  <block type="text_statement" id="jnl_u7_dts3">
+                    <value name="TEXT">
+                      <shadow type="text" id="jnl_u7_ds3">
+                        <field name="TEXT"></field>
+                      </shadow>
+                      <block type="text" id="jnl_u7_dt3">
+                        <field name="TEXT"> , </field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="text_statement" id="jnl_u7_dts4">
+                        <value name="TEXT">
+                          <shadow type="text" id="jnl_u7_ds4">
+                            <field name="TEXT"></field>
+                          </shadow>
+                          <block type="lists_getIndex" id="jnl_u7_dli2">
+                            <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"></mutation>
+                            <field name="MODE">GET</field>
+                            <field name="WHERE">FROM_END</field>
+                            <value name="VALUE">
+                              <block type="lastDigitList" id="jnl_u7_dld2"></block>
+                            </value>
+                            <value name="AT">
+                              <block type="math_number" id="jnl_u7_dat2">
+                                <field name="NUM">2</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="text_statement" id="jnl_u7_dts5">
+                            <value name="TEXT">
+                              <shadow type="text" id="jnl_u7_ds5">
+                                <field name="TEXT"></field>
+                              </shadow>
+                              <block type="text" id="jnl_u7_dt5">
+                                <field name="TEXT"> , </field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="text_statement" id="jnl_u7_dts6">
+                                <value name="TEXT">
+                                  <shadow type="text" id="jnl_u7_ds6">
+                                    <field name="TEXT"></field>
+                                  </shadow>
+                                  <block type="lists_getIndex" id="jnl_u7_dli1">
+                                    <mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"></mutation>
+                                    <field name="MODE">GET</field>
+                                    <field name="WHERE">FROM_END</field>
+                                    <value name="VALUE">
+                                      <block type="lastDigitList" id="jnl_u7_dld1"></block>
+                                    </value>
+                                    <value name="AT">
+                                      <block type="math_number" id="jnl_u7_dat1">
+                                        <field name="NUM">1</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <next>
+          <block type="notify" id="jnl_u7_dp">
+            <field name="NOTIFICATION_TYPE">success</field>
+            <field name="NOTIFICATION_SOUND">silent</field>
+            <value name="MESSAGE">
+              <shadow type="text" id="jnl_u7_dpsh">
+                <field name="TEXT">Last digit</field>
+              </shadow>
+              <block type="variables_get" id="jnl_u7_dpvg">
+                <field name="VAR" id="jnl_u7_dmv">Journal Digit Msg</field>
+              </block>
+            </value>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+</xml>

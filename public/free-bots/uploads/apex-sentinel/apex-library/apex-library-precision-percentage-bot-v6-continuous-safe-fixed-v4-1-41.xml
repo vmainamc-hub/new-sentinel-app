@@ -1,0 +1,1376 @@
+<xml xmlns="http://www.w3.org/1999/xhtml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="v_stake">Percentage Strategy Stake</variable>
+    <variable id="v_hicount">HighCount</variable>
+    <variable id="v_apred">Attached Prediction</variable>
+    <variable id="v_initstake">Initial Stake</variable>
+    <variable id="v_countloss">CountLoss</variable>
+    <variable id="v_asignal">Attached Signal</variable>
+    <variable id="v_target">Target Profit Amount</variable>
+    <variable id="v_text">text</variable>
+    <variable id="v_signal">Signal</variable>
+    <variable id="v_i">i</variable>
+    <variable id="v_stoploss">Stop Loss Amount</variable>
+    <variable id="v_ticks">Ticks Analyzed</variable>
+    <variable id="v_pred">Prediction</variable>
+    <variable id="v_digit">Digit</variable>
+    <variable id="v_hipct">High Digit %</variable>
+    <variable id="v_mart">Martingale Factor</variable>
+    <variable id="v_lopct">Low Digit %</variable>
+    <variable id="v_hithresh">High Digit % Threshold</variable>
+    <variable id="v_lothresh">Low Digit % Threshold</variable>
+    <variable id="v_wait">WaitTicks</variable>
+  </variables>
+  <block type="trade_definition" id="td_root" deletable="false" x="0" y="60">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="td_market" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">R_100</field>
+        <next>
+          <block type="trade_definition_tradetype" id="td_type" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="td_ctype" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="td_candle" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="td_restart" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="td_onerror" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="i_stake">
+        <field name="VAR" id="v_stake">Percentage Strategy Stake</field>
+        <value name="VALUE">
+          <block type="math_number" id="i_stake_n">
+            <field name="NUM">1.8</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="i_initstake">
+            <field name="VAR" id="v_initstake">Initial Stake</field>
+            <value name="VALUE">
+              <block type="variables_get" id="i_initstake_g">
+                <field name="VAR" id="v_stake">Percentage Strategy Stake</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="i_target">
+                <field name="VAR" id="v_target">Target Profit Amount</field>
+                <value name="VALUE">
+                  <block type="math_number" id="i_target_n">
+                    <field name="NUM">1.8</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="i_sl">
+                    <field name="VAR" id="v_stoploss">Stop Loss Amount</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="i_sl_n">
+                        <field name="NUM">1000</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="i_mart">
+                        <field name="VAR" id="v_mart">Martingale Factor</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="i_mart_n">
+                            <field name="NUM">1.5</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="i_hit">
+                            <field name="VAR" id="v_hithresh">High Digit % Threshold</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="i_hit_n">
+                                <field name="NUM">60</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="i_lot">
+                                <field name="VAR" id="v_lothresh">Low Digit % Threshold</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="i_lot_n">
+                                    <field name="NUM">60</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="i_ticks">
+                                    <field name="VAR" id="v_ticks">Ticks Analyzed</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="i_ticks_n">
+                                        <field name="NUM">6</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="i_cl">
+                                        <field name="VAR" id="v_countloss">CountLoss</field>
+                                        <value name="VALUE">
+                                          <block type="math_number" id="i_cl_n">
+                                            <field name="NUM">0</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="i_sig">
+                                            <field name="VAR" id="v_signal">Signal</field>
+                                            <value name="VALUE">
+                                              <block type="text" id="i_sig_t">
+                                                <field name="TEXT">WAIT</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="i_pred">
+                                                <field name="VAR" id="v_pred">Prediction</field>
+                                                <value name="VALUE">
+                                                  <block type="math_number" id="i_pred_n">
+                                                    <field name="NUM">2</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="variables_set" id="i_asig">
+                                                    <field name="VAR" id="v_asignal">Attached Signal</field>
+                                                    <value name="VALUE">
+                                                      <block type="text" id="i_asig_t">
+                                                        <field name="TEXT">WAIT</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="variables_set" id="i_apred">
+                                                        <field name="VAR" id="v_apred">Attached Prediction</field>
+                                                        <value name="VALUE">
+                                                          <block type="math_number" id="i_apred_n">
+                                                            <field name="NUM">2</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="variables_set" id="i_hipct">
+                                                            <field name="VAR" id="v_hipct">High Digit %</field>
+                                                            <value name="VALUE">
+                                                              <block type="math_number" id="i_hipct_n">
+                                                                <field name="NUM">0</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="variables_set" id="i_lopct">
+                                                                <field name="VAR" id="v_lopct">Low Digit %</field>
+                                                                <value name="VALUE">
+                                                                  <block type="math_number" id="i_lopct_n">
+                                                                    <field name="NUM">0</field>
+                                                                  </block>
+                                                                </value>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="td_options">
+        <mutation has_first_barrier="false" has_second_barrier="false" has_prediction="true"/>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number" id="td_dur_sh">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number" id="td_amt_sh">
+            <field name="NUM">1</field>
+          </shadow>
+          <block type="variables_get" id="td_amt_g">
+            <field name="VAR" id="v_stake">Percentage Strategy Stake</field>
+          </block>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive" id="td_pred_sh">
+            <field name="NUM">2</field>
+          </shadow>
+          <block type="procedures_callreturn" id="td_pred_call">
+            <mutation name="Decide Barrier"/>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="after_purchase" id="ap_root" deletable="false" x="1351" y="60">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="ap_result_if">
+        <mutation else="1"/>
+        <value name="IF0">
+          <block type="contract_check_result" id="ap_win_check">
+            <field name="CHECK_RESULT">win</field>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="variables_set" id="ap_cl_reset">
+            <field name="VAR" id="v_countloss">CountLoss</field>
+            <value name="VALUE">
+              <block type="math_number" id="ap_cl_reset_n">
+                <field name="NUM">0</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="ap_stake_reset">
+                <field name="VAR" id="v_stake">Percentage Strategy Stake</field>
+                <value name="VALUE">
+                  <block type="variables_get" id="ap_stake_reset_g">
+                    <field name="VAR" id="v_initstake">Initial Stake</field>
+                  </block>
+                </value>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <block type="variables_set" id="ap_cl_inc">
+            <field name="VAR" id="v_countloss">CountLoss</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="ap_cl_add">
+                <field name="OP">ADD</field>
+                <value name="A">
+                  <shadow type="math_number" id="ap_cl_a_sh">
+                    <field name="NUM">0</field>
+                  </shadow>
+                  <block type="variables_get" id="ap_cl_a">
+                    <field name="VAR" id="v_countloss">CountLoss</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <shadow type="math_number" id="ap_cl_b_sh">
+                    <field name="NUM">1</field>
+                  </shadow>
+                </value>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="ap_stake_mart">
+                <field name="VAR" id="v_stake">Percentage Strategy Stake</field>
+                <value name="VALUE">
+                  <block type="math_arithmetic" id="ap_stake_mul">
+                    <field name="OP">MULTIPLY</field>
+                    <value name="A">
+                      <shadow type="math_number" id="ap_stake_a_sh">
+                        <field name="NUM">1</field>
+                      </shadow>
+                      <block type="variables_get" id="ap_stake_a">
+                        <field name="VAR" id="v_stake">Percentage Strategy Stake</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <shadow type="math_number" id="ap_stake_b_sh">
+                        <field name="NUM">2</field>
+                      </shadow>
+                      <block type="variables_get" id="ap_stake_b">
+                        <field name="VAR" id="v_mart">Martingale Factor</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <next>
+          <block type="controls_if" id="ap_stop_if">
+            <mutation elseif="1" else="1"/>
+            <value name="IF0">
+              <block type="logic_compare" id="ap_sl_cmp">
+                <field name="OP">LTE</field>
+                <value name="A">
+                  <block type="total_profit" id="ap_tp2"/>
+                </value>
+                <value name="B">
+                  <block type="math_single" id="ap_sl_neg">
+                    <field name="OP">NEG</field>
+                    <value name="NUM">
+                      <shadow type="math_number" id="ap_sl_sh">
+                        <field name="NUM">1000</field>
+                      </shadow>
+                      <block type="variables_get" id="ap_sl_g">
+                        <field name="VAR" id="v_stoploss">Stop Loss Amount</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="notify" id="ap_sl_print">
+                <field name="NOTIFICATION_TYPE">warn</field>
+                <field name="NOTIFICATION_SOUND">silent</field>
+                <value name="MESSAGE">
+                  <shadow type="text" id="ap_sl_print_sh">
+                    <field name="TEXT">Stop loss hit. Session stopped.</field>
+                  </shadow>
+                </value>
+              </block>
+            </statement>
+            <value name="IF1">
+              <block type="logic_compare" id="ap_tgt_cmp">
+                <field name="OP">GTE</field>
+                <value name="A">
+                  <block type="total_profit" id="ap_tp3"/>
+                </value>
+                <value name="B">
+                  <block type="variables_get" id="ap_tgt_g">
+                    <field name="VAR" id="v_target">Target Profit Amount</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO1">
+              <block type="notify" id="ap_tgt_print">
+                <field name="NOTIFICATION_TYPE">success</field>
+                <field name="NOTIFICATION_SOUND">silent</field>
+                <value name="MESSAGE">
+                  <shadow type="text" id="ap_tgt_print_sh">
+                    <field name="TEXT">Target profit reached. Session stopped.</field>
+                  </shadow>
+                </value>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="trade_again" id="ap_trade_again"/>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="bp_root" deletable="false" x="0" y="1366">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="procedures_callnoreturn" id="bp_refresh_call">
+        <mutation name="Analyse Ticks"/>
+        <next>
+          <block type="variables_set" id="bp_wt_inc">
+            <field name="VAR" id="v_wait">WaitTicks</field>
+            <value name="VALUE">
+              <block type="math_arithmetic" id="bp_wt_add">
+                <field name="OP">ADD</field>
+                <value name="A">
+                  <block type="variables_get" id="bp_wt_g">
+                    <field name="VAR" id="v_wait">WaitTicks</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="math_number" id="bp_wt_1">
+                    <field name="NUM">1</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <block type="controls_if" id="bp_gate">
+                <mutation elseif="1"/>
+                <value name="IF0">
+                  <block type="logic_operation" id="bp_o_confirm">
+                    <field name="OP">AND</field>
+                    <value name="A">
+                      <block type="logic_operation" id="bp_over_and">
+                        <field name="OP">AND</field>
+                        <value name="A">
+                          <block type="logic_compare" id="bp_over_sig_cmp">
+                            <field name="OP">EQ</field>
+                            <value name="A">
+                              <block type="variables_get" id="bp_over_sig_g">
+                                <field name="VAR" id="v_asignal">Attached Signal</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="text" id="bp_over_sig_t">
+                                <field name="TEXT">OVER</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_operation" id="bp_over_or">
+                            <field name="OP">OR</field>
+                            <value name="A">
+                              <block type="logic_operation" id="bp_over_fresh_and">
+                                <field name="OP">AND</field>
+                                <value name="A">
+                                  <block type="logic_compare" id="bp_over_cl_eq0">
+                                    <field name="OP">EQ</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="bp_over_cl_g1">
+                                        <field name="VAR" id="v_countloss">CountLoss</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="math_number" id="bp_over_cl_0n">
+                                        <field name="NUM">0</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="logic_compare" id="bp_over_pred2_eq">
+                                    <field name="OP">EQ</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="bp_over_pred_g1">
+                                        <field name="VAR" id="v_apred">Attached Prediction</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="math_number" id="bp_over_pred2_n">
+                                        <field name="NUM">2</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_operation" id="bp_over_rec_and">
+                                <field name="OP">AND</field>
+                                <value name="A">
+                                  <block type="logic_compare" id="bp_over_cl_gte1">
+                                    <field name="OP">GTE</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="bp_over_cl_g2">
+                                        <field name="VAR" id="v_countloss">CountLoss</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="math_number" id="bp_over_cl_1n">
+                                        <field name="NUM">1</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="logic_compare" id="bp_over_pred3_eq">
+                                    <field name="OP">EQ</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="bp_over_pred_g2">
+                                        <field name="VAR" id="v_apred">Attached Prediction</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="math_number" id="bp_over_pred3_n">
+                                        <field name="NUM">3</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="logic_operation" id="bp_o_or">
+                        <field name="OP">OR</field>
+                        <value name="A">
+                          <block type="logic_compare" id="bp_o_fcmp">
+                            <field name="OP">EQ</field>
+                            <value name="A">
+                              <block type="variables_get" id="bp_o_fs">
+                                <field name="VAR" id="v_signal">Signal</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="text" id="bp_o_ft">
+                                <field name="TEXT">OVER</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_compare" id="bp_o_wcmp">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="variables_get" id="bp_o_wt">
+                                <field name="VAR" id="v_wait">WaitTicks</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="bp_o_wn">
+                                <field name="NUM">3</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="text_join" id="bp_over_join">
+                    <field name="VARIABLE" id="v_text">text</field>
+                    <statement name="STACK">
+                      <block type="text_statement" id="bp_over_txt1">
+                        <value name="TEXT">
+                          <shadow type="text" id="bp_over_txt1_sh">
+                            <field name="TEXT">ENTRY OVER (attached) barrier </field>
+                          </shadow>
+                        </value>
+                        <next>
+                          <block type="text_statement" id="bp_over_txt2">
+                            <value name="TEXT">
+                              <shadow type="text" id="bp_over_txt2_sh">
+                                <field name="TEXT">abc</field>
+                              </shadow>
+                              <block type="variables_get" id="bp_over_txt2_g">
+                                <field name="VAR" id="v_apred">Attached Prediction</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="text_statement" id="bp_over_txt3">
+                                <value name="TEXT">
+                                  <shadow type="text" id="bp_over_txt3_sh">
+                                    <field name="TEXT"> | High % = </field>
+                                  </shadow>
+                                </value>
+                                <next>
+                                  <block type="text_statement" id="bp_over_txt4">
+                                    <value name="TEXT">
+                                      <shadow type="text" id="bp_over_txt4_sh">
+                                        <field name="TEXT">abc</field>
+                                      </shadow>
+                                      <block type="variables_get" id="bp_over_txt4_g">
+                                        <field name="VAR" id="v_hipct">High Digit %</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="text_statement" id="bp_over_txt5">
+                                        <value name="TEXT">
+                                          <shadow type="text" id="bp_over_txt5_sh">
+                                            <field name="TEXT"> | Losses = </field>
+                                          </shadow>
+                                        </value>
+                                        <next>
+                                          <block type="text_statement" id="bp_over_txt6">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="bp_over_txt6_sh">
+                                                <field name="TEXT">abc</field>
+                                              </shadow>
+                                              <block type="variables_get" id="bp_over_txt6_g">
+                                                <field name="VAR" id="v_countloss">CountLoss</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="notify" id="bp_over_print">
+                        <field name="NOTIFICATION_TYPE">info</field>
+                        <field name="NOTIFICATION_SOUND">silent</field>
+                        <value name="MESSAGE">
+                          <shadow type="text" id="bp_over_print_sh">
+                            <field name="TEXT">abc</field>
+                          </shadow>
+                          <block type="variables_get" id="bp_over_print_g">
+                            <field name="VAR" id="v_text">text</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="purchase" id="bp_buy_over">
+                            <field name="PURCHASE_LIST">DIGITOVER</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <value name="IF1">
+                  <block type="logic_operation" id="bp_u_confirm">
+                    <field name="OP">AND</field>
+                    <value name="A">
+                      <block type="logic_operation" id="bp_under_and">
+                        <field name="OP">AND</field>
+                        <value name="A">
+                          <block type="logic_compare" id="bp_under_sig_cmp">
+                            <field name="OP">EQ</field>
+                            <value name="A">
+                              <block type="variables_get" id="bp_under_sig_g">
+                                <field name="VAR" id="v_asignal">Attached Signal</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="text" id="bp_under_sig_t">
+                                <field name="TEXT">UNDER</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_operation" id="bp_under_or">
+                            <field name="OP">OR</field>
+                            <value name="A">
+                              <block type="logic_operation" id="bp_under_fresh_and">
+                                <field name="OP">AND</field>
+                                <value name="A">
+                                  <block type="logic_compare" id="bp_under_cl_eq0">
+                                    <field name="OP">EQ</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="bp_under_cl_g1">
+                                        <field name="VAR" id="v_countloss">CountLoss</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="math_number" id="bp_under_cl_0n">
+                                        <field name="NUM">0</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="logic_compare" id="bp_under_pred7_eq">
+                                    <field name="OP">EQ</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="bp_under_pred_g1">
+                                        <field name="VAR" id="v_apred">Attached Prediction</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="math_number" id="bp_under_pred7_n">
+                                        <field name="NUM">7</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="logic_operation" id="bp_under_rec_and">
+                                <field name="OP">AND</field>
+                                <value name="A">
+                                  <block type="logic_compare" id="bp_under_cl_gte1">
+                                    <field name="OP">GTE</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="bp_under_cl_g2">
+                                        <field name="VAR" id="v_countloss">CountLoss</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="math_number" id="bp_under_cl_1n">
+                                        <field name="NUM">1</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="logic_compare" id="bp_under_pred6_eq">
+                                    <field name="OP">EQ</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="bp_under_pred_g2">
+                                        <field name="VAR" id="v_apred">Attached Prediction</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="math_number" id="bp_under_pred6_n">
+                                        <field name="NUM">6</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="logic_operation" id="bp_u_or">
+                        <field name="OP">OR</field>
+                        <value name="A">
+                          <block type="logic_compare" id="bp_u_fcmp">
+                            <field name="OP">EQ</field>
+                            <value name="A">
+                              <block type="variables_get" id="bp_u_fs">
+                                <field name="VAR" id="v_signal">Signal</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="text" id="bp_u_ft">
+                                <field name="TEXT">UNDER</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="logic_compare" id="bp_u_wcmp">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="variables_get" id="bp_u_wt">
+                                <field name="VAR" id="v_wait">WaitTicks</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="bp_u_wn">
+                                <field name="NUM">3</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO1">
+                  <block type="text_join" id="bp_under_join">
+                    <field name="VARIABLE" id="v_text">text</field>
+                    <statement name="STACK">
+                      <block type="text_statement" id="bp_under_txt1">
+                        <value name="TEXT">
+                          <shadow type="text" id="bp_under_txt1_sh">
+                            <field name="TEXT">ENTRY UNDER (attached) barrier </field>
+                          </shadow>
+                        </value>
+                        <next>
+                          <block type="text_statement" id="bp_under_txt2">
+                            <value name="TEXT">
+                              <shadow type="text" id="bp_under_txt2_sh">
+                                <field name="TEXT">abc</field>
+                              </shadow>
+                              <block type="variables_get" id="bp_under_txt2_g">
+                                <field name="VAR" id="v_apred">Attached Prediction</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="text_statement" id="bp_under_txt3">
+                                <value name="TEXT">
+                                  <shadow type="text" id="bp_under_txt3_sh">
+                                    <field name="TEXT"> | Low % = </field>
+                                  </shadow>
+                                </value>
+                                <next>
+                                  <block type="text_statement" id="bp_under_txt4">
+                                    <value name="TEXT">
+                                      <shadow type="text" id="bp_under_txt4_sh">
+                                        <field name="TEXT">abc</field>
+                                      </shadow>
+                                      <block type="variables_get" id="bp_under_txt4_g">
+                                        <field name="VAR" id="v_lopct">Low Digit %</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="text_statement" id="bp_under_txt5">
+                                        <value name="TEXT">
+                                          <shadow type="text" id="bp_under_txt5_sh">
+                                            <field name="TEXT"> | Losses = </field>
+                                          </shadow>
+                                        </value>
+                                        <next>
+                                          <block type="text_statement" id="bp_under_txt6">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="bp_under_txt6_sh">
+                                                <field name="TEXT">abc</field>
+                                              </shadow>
+                                              <block type="variables_get" id="bp_under_txt6_g">
+                                                <field name="VAR" id="v_countloss">CountLoss</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="notify" id="bp_under_print">
+                        <field name="NOTIFICATION_TYPE">info</field>
+                        <field name="NOTIFICATION_SOUND">silent</field>
+                        <value name="MESSAGE">
+                          <shadow type="text" id="bp_under_print_sh">
+                            <field name="TEXT">abc</field>
+                          </shadow>
+                          <block type="variables_get" id="bp_under_print_g">
+                            <field name="VAR" id="v_text">text</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="purchase" id="bp_buy_under">
+                            <field name="PURCHASE_LIST">DIGITUNDER</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="procedures_defnoreturn" id="fn_analyse" x="0" y="2466">
+    <field name="NAME">Analyse Ticks</field>
+    <comment pinned="false" h="80" w="360">Single source of truth for entries.
+Fresh entries (CountLoss = 0):    OVER 2  /  UNDER 7
+Recovery entries (CountLoss &gt;= 1): OVER 3  /  UNDER 6  — MANDATORY, enforced in before_purchase gate.</comment>
+    <statement name="STACK">
+      <block type="variables_set" id="an_hc0">
+        <field name="VAR" id="v_hicount">HighCount</field>
+        <value name="VALUE">
+          <block type="math_number" id="an_hc0_n">
+            <field name="NUM">0</field>
+          </block>
+        </value>
+        <next>
+          <block type="controls_if" id="an_enough_if">
+            <mutation else="1"/>
+            <value name="IF0">
+              <block type="logic_compare" id="an_enough_cmp">
+                <field name="OP">LT</field>
+                <value name="A">
+                  <block type="lists_length" id="an_len">
+                    <value name="VALUE">
+                      <block type="lastDigitList" id="an_len_list"/>
+                    </value>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="variables_get" id="an_len_ticks">
+                    <field name="VAR" id="v_ticks">Ticks Analyzed</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="variables_set" id="an_wait_sig">
+                <field name="VAR" id="v_signal">Signal</field>
+                <value name="VALUE">
+                  <block type="text" id="an_wait_t">
+                    <field name="TEXT">WAIT</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="an_wait_pred">
+                    <field name="VAR" id="v_pred">Prediction</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="an_wait_pn">
+                        <field name="NUM">2</field>
+                      </block>
+                    </value>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="controls_for" id="an_loop">
+                <field name="VAR" id="v_i">i</field>
+                <value name="FROM">
+                  <shadow type="math_number" id="an_from_sh">
+                    <field name="NUM">1</field>
+                  </shadow>
+                </value>
+                <value name="TO">
+                  <shadow type="math_number" id="an_to_sh">
+                    <field name="NUM">6</field>
+                  </shadow>
+                  <block type="variables_get" id="an_to_g">
+                    <field name="VAR" id="v_ticks">Ticks Analyzed</field>
+                  </block>
+                </value>
+                <value name="BY">
+                  <shadow type="math_number" id="an_by_sh">
+                    <field name="NUM">1</field>
+                  </shadow>
+                </value>
+                <statement name="DO">
+                  <block type="variables_set" id="an_digit_set">
+                    <field name="VAR" id="v_digit">Digit</field>
+                    <value name="VALUE">
+                      <block type="lists_getIndex" id="an_digit_get">
+                        <mutation statement="false" at="true"/>
+                        <field name="MODE">GET</field>
+                        <field name="WHERE">FROM_END</field>
+                        <value name="VALUE">
+                          <block type="lastDigitList" id="an_digit_list"/>
+                        </value>
+                        <value name="AT">
+                          <block type="variables_get" id="an_digit_at">
+                            <field name="VAR" id="v_i">i</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="controls_if" id="an_hi_if">
+                        <value name="IF0">
+                          <block type="logic_compare" id="an_hi_cmp">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="variables_get" id="an_hi_d">
+                                <field name="VAR" id="v_digit">Digit</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="an_hi_5">
+                                <field name="NUM">5</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="variables_set" id="an_hi_inc">
+                            <field name="VAR" id="v_hicount">HighCount</field>
+                            <value name="VALUE">
+                              <block type="math_arithmetic" id="an_hi_add">
+                                <field name="OP">ADD</field>
+                                <value name="A">
+                                  <shadow type="math_number" id="an_hi_a_sh">
+                                    <field name="NUM">0</field>
+                                  </shadow>
+                                  <block type="variables_get" id="an_hi_a">
+                                    <field name="VAR" id="v_hicount">HighCount</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <shadow type="math_number" id="an_hi_b_sh">
+                                    <field name="NUM">1</field>
+                                  </shadow>
+                                </value>
+                              </block>
+                            </value>
+                          </block>
+                        </statement>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <next>
+                  <block type="variables_set" id="an_hipct">
+                    <field name="VAR" id="v_hipct">High Digit %</field>
+                    <value name="VALUE">
+                      <block type="math_arithmetic" id="an_hipct_mul">
+                        <field name="OP">MULTIPLY</field>
+                        <value name="A">
+                          <shadow type="math_number" id="an_hipct_a_sh">
+                            <field name="NUM">0</field>
+                          </shadow>
+                          <block type="math_arithmetic" id="an_hipct_div">
+                            <field name="OP">DIVIDE</field>
+                            <value name="A">
+                              <shadow type="math_number" id="an_hipct_d_sh">
+                                <field name="NUM">0</field>
+                              </shadow>
+                              <block type="variables_get" id="an_hipct_hc">
+                                <field name="VAR" id="v_hicount">HighCount</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <shadow type="math_number" id="an_hipct_t_sh">
+                                <field name="NUM">6</field>
+                              </shadow>
+                              <block type="variables_get" id="an_hipct_tk">
+                                <field name="VAR" id="v_ticks">Ticks Analyzed</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <shadow type="math_number" id="an_hipct_b_sh">
+                            <field name="NUM">100</field>
+                          </shadow>
+                        </value>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="an_lopct">
+                        <field name="VAR" id="v_lopct">Low Digit %</field>
+                        <value name="VALUE">
+                          <block type="math_arithmetic" id="an_lopct_sub">
+                            <field name="OP">MINUS</field>
+                            <value name="A">
+                              <shadow type="math_number" id="an_lopct_a_sh">
+                                <field name="NUM">100</field>
+                              </shadow>
+                            </value>
+                            <value name="B">
+                              <shadow type="math_number" id="an_lopct_b_sh">
+                                <field name="NUM">0</field>
+                              </shadow>
+                              <block type="variables_get" id="an_lopct_hp">
+                                <field name="VAR" id="v_hipct">High Digit %</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="controls_if" id="an_signal_if">
+                            <mutation elseif="1" else="1"/>
+                            <value name="IF0">
+                              <block type="logic_compare" id="an_over_cmp">
+                                <field name="OP">GTE</field>
+                                <value name="A">
+                                  <block type="variables_get" id="an_over_hp">
+                                    <field name="VAR" id="v_hipct">High Digit %</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="variables_get" id="an_over_th">
+                                    <field name="VAR" id="v_hithresh">High Digit % Threshold</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <statement name="DO0">
+                              <block type="variables_set" id="an_set_over">
+                                <field name="VAR" id="v_signal">Signal</field>
+                                <value name="VALUE">
+                                  <block type="text" id="an_over_t">
+                                    <field name="TEXT">OVER</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="an_over_pred">
+                                    <field name="VAR" id="v_pred">Prediction</field>
+                                    <value name="VALUE">
+                                      <block type="logic_ternary" id="an_over_tern">
+                                        <value name="IF">
+                                          <block type="logic_compare" id="an_over_clcmp">
+                                            <field name="OP">EQ</field>
+                                            <value name="A">
+                                              <block type="variables_get" id="an_over_cl">
+                                                <field name="VAR" id="v_countloss">CountLoss</field>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="math_number" id="an_over_cl0">
+                                                <field name="NUM">0</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <value name="THEN">
+                                          <block type="math_number" id="an_over_2">
+                                            <field name="NUM">2</field>
+                                          </block>
+                                        </value>
+                                        <value name="ELSE">
+                                          <block type="math_number" id="an_over_3">
+                                            <field name="NUM">3</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </statement>
+                            <value name="IF1">
+                              <block type="logic_compare" id="an_under_cmp">
+                                <field name="OP">GTE</field>
+                                <value name="A">
+                                  <block type="variables_get" id="an_under_lp">
+                                    <field name="VAR" id="v_lopct">Low Digit %</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="variables_get" id="an_under_th">
+                                    <field name="VAR" id="v_lothresh">Low Digit % Threshold</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <statement name="DO1">
+                              <block type="variables_set" id="an_set_under">
+                                <field name="VAR" id="v_signal">Signal</field>
+                                <value name="VALUE">
+                                  <block type="text" id="an_under_t">
+                                    <field name="TEXT">UNDER</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="an_under_pred">
+                                    <field name="VAR" id="v_pred">Prediction</field>
+                                    <value name="VALUE">
+                                      <block type="logic_ternary" id="an_under_tern">
+                                        <value name="IF">
+                                          <block type="logic_compare" id="an_under_clcmp">
+                                            <field name="OP">EQ</field>
+                                            <value name="A">
+                                              <block type="variables_get" id="an_under_cl">
+                                                <field name="VAR" id="v_countloss">CountLoss</field>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="math_number" id="an_under_cl0">
+                                                <field name="NUM">0</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <value name="THEN">
+                                          <block type="math_number" id="an_under_7">
+                                            <field name="NUM">7</field>
+                                          </block>
+                                        </value>
+                                        <value name="ELSE">
+                                          <block type="math_number" id="an_under_6">
+                                            <field name="NUM">6</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </statement>
+                            <statement name="ELSE">
+                              <block type="variables_set" id="an_set_wait">
+                                <field name="VAR" id="v_signal">Signal</field>
+                                <value name="VALUE">
+                                  <block type="text" id="an_wait_t2">
+                                    <field name="TEXT">WAIT</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="an_wait_pred2">
+                                    <field name="VAR" id="v_pred">Prediction</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="an_wait_pn2">
+                                        <field name="NUM">2</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </next>
+                              </block>
+                            </statement>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="procedures_defreturn" id="fn_barrier" x="0" y="3797">
+    <field name="NAME">Decide Barrier</field>
+    <comment pinned="false" h="80" w="360">Runs the same analysis and records exactly what barrier/direction is attached to this contract, so before_purchase can refuse any mismatch.</comment>
+    <statement name="STACK">
+      <block type="procedures_callnoreturn" id="db_call">
+        <mutation name="Analyse Ticks"/>
+        <next>
+          <block type="controls_if" id="db_wait_if">
+            <value name="IF0">
+              <block type="logic_compare" id="db_w_cmp">
+                <field name="OP">EQ</field>
+                <value name="A">
+                  <block type="variables_get" id="db_w_sg">
+                    <field name="VAR" id="v_signal">Signal</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="text" id="db_w_t">
+                    <field name="TEXT">WAIT</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="controls_if" id="db_bias_if">
+                <mutation else="1"/>
+                <value name="IF0">
+                  <block type="logic_compare" id="db_b_cmp">
+                    <field name="OP">GTE</field>
+                    <value name="A">
+                      <block type="variables_get" id="db_b_hp">
+                        <field name="VAR" id="v_hipct">High Digit %</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="variables_get" id="db_b_lp">
+                        <field name="VAR" id="v_lopct">Low Digit %</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="db_b_so">
+                    <field name="VAR" id="v_signal">Signal</field>
+                    <value name="VALUE">
+                      <block type="text" id="db_b_sot">
+                        <field name="TEXT">OVER</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="db_b_po">
+                        <field name="VAR" id="v_pred">Prediction</field>
+                        <value name="VALUE">
+                          <block type="logic_ternary" id="db_b_po_tern">
+                            <value name="IF">
+                              <block type="logic_compare" id="db_b_po_c">
+                                <field name="OP">EQ</field>
+                                <value name="A">
+                                  <block type="variables_get" id="db_b_po_cl">
+                                    <field name="VAR" id="v_countloss">CountLoss</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="math_number" id="db_b_po_0">
+                                    <field name="NUM">0</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <value name="THEN">
+                              <block type="math_number" id="db_b_po_t">
+                                <field name="NUM">2</field>
+                              </block>
+                            </value>
+                            <value name="ELSE">
+                              <block type="math_number" id="db_b_po_e">
+                                <field name="NUM">3</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="variables_set" id="db_b_su">
+                    <field name="VAR" id="v_signal">Signal</field>
+                    <value name="VALUE">
+                      <block type="text" id="db_b_sut">
+                        <field name="TEXT">UNDER</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="db_b_pu">
+                        <field name="VAR" id="v_pred">Prediction</field>
+                        <value name="VALUE">
+                          <block type="logic_ternary" id="db_b_pu_tern">
+                            <value name="IF">
+                              <block type="logic_compare" id="db_b_pu_c">
+                                <field name="OP">EQ</field>
+                                <value name="A">
+                                  <block type="variables_get" id="db_b_pu_cl">
+                                    <field name="VAR" id="v_countloss">CountLoss</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="math_number" id="db_b_pu_0">
+                                    <field name="NUM">0</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <value name="THEN">
+                              <block type="math_number" id="db_b_pu_t">
+                                <field name="NUM">7</field>
+                              </block>
+                            </value>
+                            <value name="ELSE">
+                              <block type="math_number" id="db_b_pu_e">
+                                <field name="NUM">6</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </statement>
+              </block>
+            </statement>
+            <next>
+              <block type="variables_set" id="db_wt0">
+                <field name="VAR" id="v_wait">WaitTicks</field>
+                <value name="VALUE">
+                  <block type="math_number" id="db_wt0_n">
+                    <field name="NUM">0</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="db_asig">
+                    <field name="VAR" id="v_asignal">Attached Signal</field>
+                    <value name="VALUE">
+                      <block type="variables_get" id="db_asig_g">
+                        <field name="VAR" id="v_signal">Signal</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="db_apred">
+                        <field name="VAR" id="v_apred">Attached Prediction</field>
+                        <value name="VALUE">
+                          <block type="variables_get" id="db_apred_g">
+                            <field name="VAR" id="v_pred">Prediction</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <value name="RETURN">
+      <block type="variables_get" id="db_ret">
+        <field name="VAR" id="v_apred">Attached Prediction</field>
+      </block>
+    </value>
+  </block>
+</xml>

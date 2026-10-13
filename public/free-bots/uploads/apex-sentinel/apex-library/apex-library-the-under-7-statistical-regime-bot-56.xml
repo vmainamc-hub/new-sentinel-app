@@ -1,0 +1,1992 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="v38">Journal Text</variable>
+    <variable id="v01">Stake</variable>
+    <variable id="v23">Deep List</variable>
+    <variable id="v02">Initial Stake</variable>
+    <variable id="v07">Prediction</variable>
+    <variable id="v24">Deep Total</variable>
+    <variable id="v03">Target Profit</variable>
+    <variable id="v11">Deep Window</variable>
+    <variable id="v26">Deep Under7 Count</variable>
+    <variable id="v17">Signal ID</variable>
+    <variable id="v40">Win Rate Pct</variable>
+    <variable id="v18">Trade Count</variable>
+    <variable id="v10">Stop Loss</variable>
+    <variable id="v25">Deep Item</variable>
+    <variable id="v39">Stop Reason</variable>
+    <variable id="v19">Win Count</variable>
+    <variable id="v20">Loss Count</variable>
+    <variable id="v04">Martingale</variable>
+    <variable id="v21">Decision</variable>
+    <variable id="v08">Count Loss</variable>
+    <variable id="v05">Starting Prediction</variable>
+    <variable id="v27">Deep P</variable>
+    <variable id="v32">Short List</variable>
+    <variable id="v28">Deep Under7 Pct</variable>
+    <variable id="v34">Short Total</variable>
+    <variable id="v06">Recovery Prediction</variable>
+    <variable id="v29">Deep SE</variable>
+    <variable id="v15">Short Window</variable>
+    <variable id="v35">Short Loser Count</variable>
+    <variable id="v30">Deep Z</variable>
+    <variable id="v33">Short Item</variable>
+    <variable id="v09">Max Loss Reset</variable>
+    <variable id="v36">Short Loser Pct</variable>
+    <variable id="v43">Micro List</variable>
+    <variable id="v13">Deep P0</variable>
+    <variable id="v45">Micro Total</variable>
+    <variable id="v12">Deep Min Ticks</variable>
+    <variable id="v41">Micro Window</variable>
+    <variable id="v46">Micro Good Count</variable>
+    <variable id="v44">Micro Item</variable>
+    <variable id="v14">Deep Z Threshold</variable>
+    <variable id="v22">Veto Reason</variable>
+    <variable id="v16">Short Veto Percent</variable>
+    <variable id="v42">Micro Min Good</variable>
+  </variables>
+  <block type="trade_definition" id="td_main" deletable="false" x="0" y="110">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="td_mkt" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field>
+        <field name="SUBMARKET_LIST">random_index</field>
+        <field name="SYMBOL_LIST">1HZ25V</field>
+        <next>
+          <block type="trade_definition_tradetype" id="td_tt" deletable="false" movable="false">
+            <field name="TRADETYPECAT_LIST">digits</field>
+            <field name="TRADETYPE_LIST">overunder</field>
+            <next>
+              <block type="trade_definition_contracttype" id="td_ct" deletable="false" movable="false">
+                <field name="TYPE_LIST">both</field>
+                <next>
+                  <block type="trade_definition_candleinterval" id="td_ci" deletable="false" movable="false">
+                    <field name="CANDLEINTERVAL_LIST">60</field>
+                    <next>
+                      <block type="trade_definition_restartbuysell" id="td_rb" deletable="false" movable="false">
+                        <field name="TIME_MACHINE_ENABLED">FALSE</field>
+                        <next>
+                          <block type="trade_definition_restartonerror" id="td_re" deletable="false" movable="false">
+                            <field name="RESTARTONERROR">TRUE</field>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="variables_set" id="i001">
+        <field name="VAR" id="v01">Stake</field>
+        <value name="VALUE">
+          <block type="math_number" id="i001n">
+            <field name="NUM">5</field>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="i002">
+            <field name="VAR" id="v02">Initial Stake</field>
+            <value name="VALUE">
+              <block type="variables_get" id="i002g">
+                <field name="VAR" id="v01">Stake</field>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="i003">
+                <field name="VAR" id="v03">Target Profit</field>
+                <value name="VALUE">
+                  <block type="math_number" id="i003n">
+                    <field name="NUM">5</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="variables_set" id="i004">
+                    <field name="VAR" id="v10">Stop Loss</field>
+                    <value name="VALUE">
+                      <block type="math_number" id="i004n">
+                        <field name="NUM">100</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="i005">
+                        <field name="VAR" id="v04">Martingale</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="i005n">
+                            <field name="NUM">1.7</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="i006">
+                            <field name="VAR" id="v05">Starting Prediction</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="i006n">
+                                <field name="NUM">7</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="virtual_hook" id="9@va]K/!yQS5ev62,$_|">
+                                <field name="ENABLED">TRUE</field>
+                                <field name="START">VIRTUAL</field>
+                                <field name="LOSSES">1</field>
+                                <field name="WINS">2</field>
+                                <next>
+                                  <block type="variables_set" id="i007">
+                                    <field name="VAR" id="v06">Recovery Prediction</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="i007n">
+                                        <field name="NUM">5</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="i008">
+                                        <field name="VAR" id="v07">Prediction</field>
+                                        <value name="VALUE">
+                                          <block type="variables_get" id="i008g">
+                                            <field name="VAR" id="v05">Starting Prediction</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="i009">
+                                            <field name="VAR" id="v08">Count Loss</field>
+                                            <value name="VALUE">
+                                              <block type="math_number" id="i009n">
+                                                <field name="NUM">0</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="i010">
+                                                <field name="VAR" id="v09">Max Loss Reset</field>
+                                                <value name="VALUE">
+                                                  <block type="math_number" id="i010n">
+                                                    <field name="NUM">4</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="variables_set" id="i011">
+                                                    <field name="VAR" id="v11">Deep Window</field>
+                                                    <value name="VALUE">
+                                                      <block type="math_number" id="i011n">
+                                                        <field name="NUM">1000</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="variables_set" id="i012">
+                                                        <field name="VAR" id="v12">Deep Min Ticks</field>
+                                                        <value name="VALUE">
+                                                          <block type="math_number" id="i012n">
+                                                            <field name="NUM">300</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="variables_set" id="i013">
+                                                            <field name="VAR" id="v13">Deep P0</field>
+                                                            <value name="VALUE">
+                                                              <block type="math_number" id="i013n">
+                                                                <field name="NUM">0.7</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="variables_set" id="i014">
+                                                                <field name="VAR" id="v14">Deep Z Threshold</field>
+                                                                <value name="VALUE">
+                                                                  <block type="math_number" id="i014n">
+                                                                    <field name="NUM">1</field>
+                                                                  </block>
+                                                                </value>
+                                                                <next>
+                                                                  <block type="variables_set" id="i015">
+                                                                    <field name="VAR" id="v15">Short Window</field>
+                                                                    <value name="VALUE">
+                                                                      <block type="math_number" id="i015n">
+                                                                        <field name="NUM">20</field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <next>
+                                                                      <block type="variables_set" id="i016">
+                                                                        <field name="VAR" id="v16">Short Veto Percent</field>
+                                                                        <value name="VALUE">
+                                                                          <block type="math_number" id="i016n">
+                                                                            <field name="NUM">35</field>
+                                                                          </block>
+                                                                        </value>
+                                                                        <next>
+                                                                          <block type="variables_set" id="i041">
+                                                                            <field name="VAR" id="v41">Micro Window</field>
+                                                                            <value name="VALUE">
+                                                                              <block type="math_number" id="i041n">
+                                                                                <field name="NUM">10</field>
+                                                                              </block>
+                                                                            </value>
+                                                                            <next>
+                                                                              <block type="variables_set" id="i042">
+                                                                                <field name="VAR" id="v42">Micro Min Good</field>
+                                                                                <value name="VALUE">
+                                                                                  <block type="math_number" id="i042n">
+                                                                                    <field name="NUM">8</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                                <next>
+                                                                                  <block type="variables_set" id="i017">
+                                                                                    <field name="VAR" id="v17">Signal ID</field>
+                                                                                    <value name="VALUE">
+                                                                                      <block type="math_number" id="i017n">
+                                                                                        <field name="NUM">0</field>
+                                                                                      </block>
+                                                                                    </value>
+                                                                                    <next>
+                                                                                      <block type="variables_set" id="i018">
+                                                                                        <field name="VAR" id="v18">Trade Count</field>
+                                                                                        <value name="VALUE">
+                                                                                          <block type="math_number" id="i018n">
+                                                                                            <field name="NUM">0</field>
+                                                                                          </block>
+                                                                                        </value>
+                                                                                        <next>
+                                                                                          <block type="variables_set" id="i019">
+                                                                                            <field name="VAR" id="v19">Win Count</field>
+                                                                                            <value name="VALUE">
+                                                                                              <block type="math_number" id="i019n">
+                                                                                                <field name="NUM">0</field>
+                                                                                              </block>
+                                                                                            </value>
+                                                                                            <next>
+                                                                                              <block type="variables_set" id="i020">
+                                                                                                <field name="VAR" id="v20">Loss Count</field>
+                                                                                                <value name="VALUE">
+                                                                                                  <block type="math_number" id="i020n">
+                                                                                                    <field name="NUM">0</field>
+                                                                                                  </block>
+                                                                                                </value>
+                                                                                                <next>
+                                                                                                  <block type="variables_set" id="i021">
+                                                                                                    <field name="VAR" id="v21">Decision</field>
+                                                                                                    <value name="VALUE">
+                                                                                                      <block type="text" id="i021t">
+                                                                                                        <field name="TEXT">NONE</field>
+                                                                                                      </block>
+                                                                                                    </value>
+                                                                                                    <next>
+                                                                                                      <block type="variables_set" id="i022">
+                                                                                                        <field name="VAR" id="v22">Veto Reason</field>
+                                                                                                        <value name="VALUE">
+                                                                                                          <block type="text" id="i022t">
+                                                                                                            <field name="TEXT"></field>
+                                                                                                          </block>
+                                                                                                        </value>
+                                                                                                      </block>
+                                                                                                    </next>
+                                                                                                  </block>
+                                                                                                </next>
+                                                                                              </block>
+                                                                                            </next>
+                                                                                          </block>
+                                                                                        </next>
+                                                                                      </block>
+                                                                                    </next>
+                                                                                  </block>
+                                                                                </next>
+                                                                              </block>
+                                                                            </next>
+                                                                          </block>
+                                                                        </next>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET">
+      <block type="trade_definition_tradeoptions" id="td_opts">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"></mutation>
+        <field name="DURATIONTYPE_LIST">t</field>
+        <value name="DURATION">
+          <shadow type="math_number" id="td_dur_s">
+            <field name="NUM">1</field>
+          </shadow>
+        </value>
+        <value name="AMOUNT">
+          <shadow type="math_number" id="td_amt_s">
+            <field name="NUM">1</field>
+          </shadow>
+          <block type="variables_get" id="td_amt_g">
+            <field name="VAR" id="v01">Stake</field>
+          </block>
+        </value>
+        <value name="PREDICTION">
+          <shadow type="math_number_positive" id="td_pred_s">
+            <field name="NUM">7</field>
+          </shadow>
+          <block type="variables_get" id="td_pred_g">
+            <field name="VAR" id="v07">Prediction</field>
+          </block>
+        </value>
+      </block>
+    </statement>
+  </block>
+  <block type="during_purchase" id="dp_main" deletable="false" x="2029" y="110"></block>
+  <block type="after_purchase" id="ap_main" deletable="false" x="2029" y="312">
+    <statement name="AFTERPURCHASE_STACK">
+      <block type="controls_if" id="ap001if">
+        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+        <value name="IF0">
+          <block type="logic_operation" id="st001">
+            <field name="OP">OR</field>
+            <value name="A">
+              <block type="logic_compare" id="st001a">
+                <field name="OP">GTE</field>
+                <value name="A">
+                  <block type="total_profit" id="st001tp1"></block>
+                </value>
+                <value name="B">
+                  <block type="variables_get" id="st001g1">
+                    <field name="VAR" id="v03">Target Profit</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <value name="B">
+              <block type="logic_compare" id="st001b">
+                <field name="OP">LTE</field>
+                <value name="A">
+                  <block type="total_profit" id="st001tp2"></block>
+                </value>
+                <value name="B">
+                  <block type="math_single" id="st001neg">
+                    <field name="OP">NEG</field>
+                    <value name="NUM">
+                      <block type="variables_get" id="st001g2">
+                        <field name="VAR" id="v10">Stop Loss</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </value>
+          </block>
+        </value>
+        <statement name="DO0">
+          <block type="controls_if" id="wr001if">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
+              <block type="logic_compare" id="wr001c">
+                <field name="OP">GT</field>
+                <value name="A">
+                  <block type="variables_get" id="wr001g">
+                    <field name="VAR" id="v18">Trade Count</field>
+                  </block>
+                </value>
+                <value name="B">
+                  <block type="math_number" id="wr001n">
+                    <field name="NUM">0</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="variables_set" id="wr001s">
+                <field name="VAR" id="v40">Win Rate Pct</field>
+                <value name="VALUE">
+                  <block type="math_arithmetic" id="wr001a">
+                    <field name="OP">MULTIPLY</field>
+                    <value name="A">
+                      <block type="math_arithmetic" id="wr001b">
+                        <field name="OP">DIVIDE</field>
+                        <value name="A">
+                          <block type="variables_get" id="wr001g1">
+                            <field name="VAR" id="v19">Win Count</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="variables_get" id="wr001g2">
+                            <field name="VAR" id="v18">Trade Count</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="math_number" id="wr001n2">
+                        <field name="NUM">100</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="variables_set" id="wr001e">
+                <field name="VAR" id="v40">Win Rate Pct</field>
+                <value name="VALUE">
+                  <block type="math_number" id="wr001en">
+                    <field name="NUM">0</field>
+                  </block>
+                </value>
+              </block>
+            </statement>
+            <next>
+              <block type="controls_if" id="sr001if">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                <value name="IF0">
+                  <block type="logic_compare" id="sr001c">
+                    <field name="OP">GTE</field>
+                    <value name="A">
+                      <block type="total_profit" id="sr001tp"></block>
+                    </value>
+                    <value name="B">
+                      <block type="variables_get" id="sr001g">
+                        <field name="VAR" id="v03">Target Profit</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="variables_set" id="sr001s">
+                    <field name="VAR" id="v39">Stop Reason</field>
+                    <value name="VALUE">
+                      <block type="text" id="sr001t">
+                        <field name="TEXT">TARGET PROFIT REACHED</field>
+                      </block>
+                    </value>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="variables_set" id="sr001e">
+                    <field name="VAR" id="v39">Stop Reason</field>
+                    <value name="VALUE">
+                      <block type="text" id="sr001et">
+                        <field name="TEXT">STOP LOSS REACHED</field>
+                      </block>
+                    </value>
+                  </block>
+                </statement>
+                <next>
+                  <block type="text_join" id="ss001">
+                    <field name="VARIABLE" id="v38">Journal Text</field>
+                    <statement name="STACK">
+                      <block type="text_statement" id="ss001_ts0">
+                        <value name="TEXT">
+                          <shadow type="text" id="ss001_sh0">
+                            <field name="TEXT"></field>
+                          </shadow>
+                          <block type="text" id="ss001t1">
+                            <field name="TEXT">SESSION STOPPED | Reason: </field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="text_statement" id="ss001_ts1">
+                            <value name="TEXT">
+                              <shadow type="text" id="ss001_sh1">
+                                <field name="TEXT"></field>
+                              </shadow>
+                              <block type="variables_get" id="ss001g1">
+                                <field name="VAR" id="v39">Stop Reason</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="text_statement" id="ss001_ts2">
+                                <value name="TEXT">
+                                  <shadow type="text" id="ss001_sh2">
+                                    <field name="TEXT"></field>
+                                  </shadow>
+                                  <block type="text" id="ss001t2">
+                                    <field name="TEXT"> | Trades: </field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="text_statement" id="ss001_ts3">
+                                    <value name="TEXT">
+                                      <shadow type="text" id="ss001_sh3">
+                                        <field name="TEXT"></field>
+                                      </shadow>
+                                      <block type="variables_get" id="ss001g2">
+                                        <field name="VAR" id="v18">Trade Count</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="text_statement" id="ss001_ts4">
+                                        <value name="TEXT">
+                                          <shadow type="text" id="ss001_sh4">
+                                            <field name="TEXT"></field>
+                                          </shadow>
+                                          <block type="text" id="ss001t3">
+                                            <field name="TEXT"> | Wins: </field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="text_statement" id="ss001_ts5">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="ss001_sh5">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="variables_get" id="ss001g3">
+                                                <field name="VAR" id="v19">Win Count</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="text_statement" id="ss001_ts6">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="ss001_sh6">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="text" id="ss001t4">
+                                                    <field name="TEXT"> | Losses: </field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="text_statement" id="ss001_ts7">
+                                                    <value name="TEXT">
+                                                      <shadow type="text" id="ss001_sh7">
+                                                        <field name="TEXT"></field>
+                                                      </shadow>
+                                                      <block type="variables_get" id="ss001g4">
+                                                        <field name="VAR" id="v20">Loss Count</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="text_statement" id="ss001_ts8">
+                                                        <value name="TEXT">
+                                                          <shadow type="text" id="ss001_sh8">
+                                                            <field name="TEXT"></field>
+                                                          </shadow>
+                                                          <block type="text" id="ss001t5">
+                                                            <field name="TEXT"> | Win Rate: </field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="text_statement" id="ss001_ts9">
+                                                            <value name="TEXT">
+                                                              <shadow type="text" id="ss001_sh9">
+                                                                <field name="TEXT"></field>
+                                                              </shadow>
+                                                              <block type="variables_get" id="ss001g5">
+                                                                <field name="VAR" id="v40">Win Rate Pct</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="text_statement" id="ss001_ts10">
+                                                                <value name="TEXT">
+                                                                  <shadow type="text" id="ss001_sh10">
+                                                                    <field name="TEXT"></field>
+                                                                  </shadow>
+                                                                  <block type="text" id="ss001t6">
+                                                                    <field name="TEXT">% | Total P/L: $</field>
+                                                                  </block>
+                                                                </value>
+                                                                <next>
+                                                                  <block type="text_statement" id="ss001_ts11">
+                                                                    <value name="TEXT">
+                                                                      <shadow type="text" id="ss001_sh11">
+                                                                        <field name="TEXT"></field>
+                                                                      </shadow>
+                                                                      <block type="total_profit" id="ss001tp"></block>
+                                                                    </value>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="notify" id="ss002">
+                        <field name="NOTIFICATION_TYPE">warn</field>
+                        <field name="NOTIFICATION_SOUND">silent</field>
+                        <value name="MESSAGE">
+                          <shadow type="text" id="ss002s">
+                            <field name="TEXT"></field>
+                          </shadow>
+                          <block type="variables_get" id="ss002g">
+                            <field name="VAR" id="v38">Journal Text</field>
+                          </block>
+                        </value>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </statement>
+        <statement name="ELSE">
+          <block type="controls_if" id="wl001if">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+            <value name="IF0">
+              <block type="contract_check_result" id="wl001cr">
+                <field name="CHECK_RESULT">win</field>
+              </block>
+            </value>
+            <statement name="DO0">
+              <block type="math_change" id="w002mc">
+                <field name="VAR" id="v18">Trade Count</field>
+                <value name="DELTA">
+                  <shadow type="math_number" id="w002mcs">
+                    <field name="NUM">1</field>
+                  </shadow>
+                </value>
+                <next>
+                  <block type="math_change" id="w003mc">
+                    <field name="VAR" id="v19">Win Count</field>
+                    <value name="DELTA">
+                      <shadow type="math_number" id="w003mcs">
+                        <field name="NUM">1</field>
+                      </shadow>
+                    </value>
+                    <next>
+                      <block type="variables_set" id="w004">
+                        <field name="VAR" id="v01">Stake</field>
+                        <value name="VALUE">
+                          <block type="variables_get" id="w004g">
+                            <field name="VAR" id="v02">Initial Stake</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="w005">
+                            <field name="VAR" id="v08">Count Loss</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="w005n">
+                                <field name="NUM">0</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="w006">
+                                <field name="VAR" id="v07">Prediction</field>
+                                <value name="VALUE">
+                                  <block type="variables_get" id="w006g">
+                                    <field name="VAR" id="v05">Starting Prediction</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="text_join" id="w001">
+                                    <field name="VARIABLE" id="v38">Journal Text</field>
+                                    <statement name="STACK">
+                                      <block type="text_statement" id="w001_ts0">
+                                        <value name="TEXT">
+                                          <shadow type="text" id="w001_sh0">
+                                            <field name="TEXT"></field>
+                                          </shadow>
+                                          <block type="text" id="w001t1">
+                                            <field name="TEXT">WIN | Signal #</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="text_statement" id="w001_ts1">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="w001_sh1">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="variables_get" id="w001g1">
+                                                <field name="VAR" id="v17">Signal ID</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="text_statement" id="w001_ts2">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="w001_sh2">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="text" id="w001t2">
+                                                    <field name="TEXT"> | Stake was $</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="text_statement" id="w001_ts3">
+                                                    <value name="TEXT">
+                                                      <shadow type="text" id="w001_sh3">
+                                                        <field name="TEXT"></field>
+                                                      </shadow>
+                                                      <block type="variables_get" id="w001g2">
+                                                        <field name="VAR" id="v01">Stake</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="text_statement" id="w001_ts4">
+                                                        <value name="TEXT">
+                                                          <shadow type="text" id="w001_sh4">
+                                                            <field name="TEXT"></field>
+                                                          </shadow>
+                                                          <block type="text" id="w001t3">
+                                                            <field name="TEXT"> | Total P/L: $</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="text_statement" id="w001_ts5">
+                                                            <value name="TEXT">
+                                                              <shadow type="text" id="w001_sh5">
+                                                                <field name="TEXT"></field>
+                                                              </shadow>
+                                                              <block type="total_profit" id="w001tp"></block>
+                                                            </value>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </statement>
+                                    <next>
+                                      <block type="notify" id="w007">
+                                        <field name="NOTIFICATION_TYPE">success</field>
+                                        <field name="NOTIFICATION_SOUND">silent</field>
+                                        <value name="MESSAGE">
+                                          <shadow type="text" id="w007s">
+                                            <field name="TEXT"></field>
+                                          </shadow>
+                                          <block type="variables_get" id="w007g">
+                                            <field name="VAR" id="v38">Journal Text</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="trade_again" id="w008"></block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <statement name="ELSE">
+              <block type="math_change" id="l002mc">
+                <field name="VAR" id="v18">Trade Count</field>
+                <value name="DELTA">
+                  <shadow type="math_number" id="l002mcs">
+                    <field name="NUM">1</field>
+                  </shadow>
+                </value>
+                <next>
+                  <block type="math_change" id="l003mc">
+                    <field name="VAR" id="v20">Loss Count</field>
+                    <value name="DELTA">
+                      <shadow type="math_number" id="l003mcs">
+                        <field name="NUM">1</field>
+                      </shadow>
+                    </value>
+                    <next>
+                      <block type="math_change" id="l004mc">
+                        <field name="VAR" id="v08">Count Loss</field>
+                        <value name="DELTA">
+                          <shadow type="math_number" id="l004mcs">
+                            <field name="NUM">1</field>
+                          </shadow>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="l005">
+                            <field name="VAR" id="v07">Prediction</field>
+                            <value name="VALUE">
+                              <block type="variables_get" id="l005g">
+                                <field name="VAR" id="v06">Recovery Prediction</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="l006">
+                                <field name="VAR" id="v01">Stake</field>
+                                <value name="VALUE">
+                                  <block type="math_arithmetic" id="l006a">
+                                    <field name="OP">MULTIPLY</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="l006g1">
+                                        <field name="VAR" id="v01">Stake</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="variables_get" id="l006g2">
+                                        <field name="VAR" id="v04">Martingale</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="controls_if" id="lr001if">
+                                    <value name="IF0">
+                                      <block type="logic_compare" id="lr001c">
+                                        <field name="OP">GTE</field>
+                                        <value name="A">
+                                          <block type="variables_get" id="lr001g">
+                                            <field name="VAR" id="v08">Count Loss</field>
+                                          </block>
+                                        </value>
+                                        <value name="B">
+                                          <block type="variables_get" id="lr001g2">
+                                            <field name="VAR" id="v09">Max Loss Reset</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                    <statement name="DO0">
+                                      <block type="variables_set" id="lr001s1">
+                                        <field name="VAR" id="v01">Stake</field>
+                                        <value name="VALUE">
+                                          <block type="variables_get" id="lr001g3">
+                                            <field name="VAR" id="v02">Initial Stake</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="lr001s2">
+                                            <field name="VAR" id="v08">Count Loss</field>
+                                            <value name="VALUE">
+                                              <block type="math_number" id="lr001n">
+                                                <field name="NUM">0</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="lr001s3">
+                                                <field name="VAR" id="v07">Prediction</field>
+                                                <value name="VALUE">
+                                                  <block type="variables_get" id="lr001g4">
+                                                    <field name="VAR" id="v05">Starting Prediction</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </statement>
+                                    <next>
+                                      <block type="text_join" id="l001">
+                                        <field name="VARIABLE" id="v38">Journal Text</field>
+                                        <statement name="STACK">
+                                          <block type="text_statement" id="l001_ts0">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="l001_sh0">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="text" id="l001t1">
+                                                <field name="TEXT">LOSS | Signal #</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="text_statement" id="l001_ts1">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="l001_sh1">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="variables_get" id="l001g1">
+                                                    <field name="VAR" id="v17">Signal ID</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="text_statement" id="l001_ts2">
+                                                    <value name="TEXT">
+                                                      <shadow type="text" id="l001_sh2">
+                                                        <field name="TEXT"></field>
+                                                      </shadow>
+                                                      <block type="text" id="l001t2">
+                                                        <field name="TEXT"> | Next stake: $</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="text_statement" id="l001_ts3">
+                                                        <value name="TEXT">
+                                                          <shadow type="text" id="l001_sh3">
+                                                            <field name="TEXT"></field>
+                                                          </shadow>
+                                                          <block type="variables_get" id="l001g2">
+                                                            <field name="VAR" id="v01">Stake</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="text_statement" id="l001_ts4">
+                                                            <value name="TEXT">
+                                                              <shadow type="text" id="l001_sh4">
+                                                                <field name="TEXT"></field>
+                                                              </shadow>
+                                                              <block type="text" id="l001t3">
+                                                                <field name="TEXT"> | Losses in a row: </field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="text_statement" id="l001_ts5">
+                                                                <value name="TEXT">
+                                                                  <shadow type="text" id="l001_sh5">
+                                                                    <field name="TEXT"></field>
+                                                                  </shadow>
+                                                                  <block type="variables_get" id="l001g3">
+                                                                    <field name="VAR" id="v08">Count Loss</field>
+                                                                  </block>
+                                                                </value>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </statement>
+                                        <next>
+                                          <block type="notify" id="l007">
+                                            <field name="NOTIFICATION_TYPE">warn</field>
+                                            <field name="NOTIFICATION_SOUND">silent</field>
+                                            <value name="MESSAGE">
+                                              <shadow type="text" id="l007s">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="variables_get" id="l007g">
+                                                <field name="VAR" id="v38">Journal Text</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="trade_again" id="l008"></block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </statement>
+          </block>
+        </statement>
+      </block>
+    </statement>
+  </block>
+  <block type="before_purchase" id="bp_main" deletable="false" x="0" y="2068">
+    <statement name="BEFOREPURCHASE_STACK">
+      <block type="variables_set" id="d001">
+        <field name="VAR" id="v23">Deep List</field>
+        <value name="VALUE">
+          <block type="lists_getSublist" id="d001ls">
+            <mutation xmlns="http://www.w3.org/1999/xhtml" at1="true" at2="false"></mutation>
+            <field name="WHERE1">FROM_END</field>
+            <field name="WHERE2">LAST</field>
+            <value name="LIST">
+              <block type="lastDigitList" id="d001ld"></block>
+            </value>
+            <value name="AT1">
+              <block type="variables_get" id="d001g">
+                <field name="VAR" id="v11">Deep Window</field>
+              </block>
+            </value>
+          </block>
+        </value>
+        <next>
+          <block type="variables_set" id="d002">
+            <field name="VAR" id="v24">Deep Total</field>
+            <value name="VALUE">
+              <block type="lists_length" id="d002l">
+                <value name="VALUE">
+                  <block type="variables_get" id="d002g">
+                    <field name="VAR" id="v23">Deep List</field>
+                  </block>
+                </value>
+              </block>
+            </value>
+            <next>
+              <block type="variables_set" id="d003">
+                <field name="VAR" id="v26">Deep Under7 Count</field>
+                <value name="VALUE">
+                  <block type="math_number" id="d003n">
+                    <field name="NUM">0</field>
+                  </block>
+                </value>
+                <next>
+                  <block type="controls_forEach" id="d004">
+                    <field name="VAR" id="v25">Deep Item</field>
+                    <value name="LIST">
+                      <block type="variables_get" id="d004g">
+                        <field name="VAR" id="v23">Deep List</field>
+                      </block>
+                    </value>
+                    <statement name="DO">
+                      <block type="controls_if" id="d004if">
+                        <value name="IF0">
+                          <block type="logic_compare" id="d004c">
+                            <field name="OP">LTE</field>
+                            <value name="A">
+                              <block type="variables_get" id="d004a">
+                                <field name="VAR" id="v25">Deep Item</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="d004b">
+                                <field name="NUM">6</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="math_change" id="d004mc">
+                            <field name="VAR" id="v26">Deep Under7 Count</field>
+                            <value name="DELTA">
+                              <shadow type="math_number" id="d004mcs">
+                                <field name="NUM">1</field>
+                              </shadow>
+                            </value>
+                          </block>
+                        </statement>
+                      </block>
+                    </statement>
+                    <next>
+                      <block type="controls_if" id="d011if">
+                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                        <value name="IF0">
+                          <block type="logic_compare" id="d011c">
+                            <field name="OP">GT</field>
+                            <value name="A">
+                              <block type="variables_get" id="d011g">
+                                <field name="VAR" id="v24">Deep Total</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="d011n">
+                                <field name="NUM">0</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="variables_set" id="d011s1">
+                            <field name="VAR" id="v27">Deep P</field>
+                            <value name="VALUE">
+                              <block type="math_arithmetic" id="d005a">
+                                <field name="OP">DIVIDE</field>
+                                <value name="A">
+                                  <block type="variables_get" id="d005g1">
+                                    <field name="VAR" id="v26">Deep Under7 Count</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="variables_get" id="d005g2">
+                                    <field name="VAR" id="v24">Deep Total</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="d011s2">
+                                <field name="VAR" id="v28">Deep Under7 Pct</field>
+                                <value name="VALUE">
+                                  <block type="math_arithmetic" id="d006a">
+                                    <field name="OP">MULTIPLY</field>
+                                    <value name="A">
+                                      <block type="variables_get" id="d006g">
+                                        <field name="VAR" id="v27">Deep P</field>
+                                      </block>
+                                    </value>
+                                    <value name="B">
+                                      <block type="math_number" id="d006n">
+                                        <field name="NUM">100</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="d011s3">
+                                    <field name="VAR" id="v29">Deep SE</field>
+                                    <value name="VALUE">
+                                      <block type="math_single" id="d009s">
+                                        <field name="OP">ROOT</field>
+                                        <value name="NUM">
+                                          <block type="math_arithmetic" id="d008a">
+                                            <field name="OP">DIVIDE</field>
+                                            <value name="A">
+                                              <block type="math_arithmetic" id="d008b">
+                                                <field name="OP">MULTIPLY</field>
+                                                <value name="A">
+                                                  <block type="variables_get" id="d008g1">
+                                                    <field name="VAR" id="v13">Deep P0</field>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="math_arithmetic" id="d007a">
+                                                    <field name="OP">MINUS</field>
+                                                    <value name="A">
+                                                      <block type="math_number" id="d007n">
+                                                        <field name="NUM">1</field>
+                                                      </block>
+                                                    </value>
+                                                    <value name="B">
+                                                      <block type="variables_get" id="d007g">
+                                                        <field name="VAR" id="v13">Deep P0</field>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="variables_get" id="d008g2">
+                                                <field name="VAR" id="v24">Deep Total</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="controls_if" id="d010if">
+                                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                        <value name="IF0">
+                                          <block type="logic_compare" id="d010c">
+                                            <field name="OP">GT</field>
+                                            <value name="A">
+                                              <block type="variables_get" id="d010g">
+                                                <field name="VAR" id="v29">Deep SE</field>
+                                              </block>
+                                            </value>
+                                            <value name="B">
+                                              <block type="math_number" id="d010n">
+                                                <field name="NUM">0</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </value>
+                                        <statement name="DO0">
+                                          <block type="variables_set" id="d010s1">
+                                            <field name="VAR" id="v30">Deep Z</field>
+                                            <value name="VALUE">
+                                              <block type="math_arithmetic" id="d010a">
+                                                <field name="OP">DIVIDE</field>
+                                                <value name="A">
+                                                  <block type="math_arithmetic" id="d010b">
+                                                    <field name="OP">MINUS</field>
+                                                    <value name="A">
+                                                      <block type="variables_get" id="d010g1">
+                                                        <field name="VAR" id="v27">Deep P</field>
+                                                      </block>
+                                                    </value>
+                                                    <value name="B">
+                                                      <block type="variables_get" id="d010g2">
+                                                        <field name="VAR" id="v13">Deep P0</field>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="variables_get" id="d010g3">
+                                                    <field name="VAR" id="v29">Deep SE</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </statement>
+                                        <statement name="ELSE">
+                                          <block type="variables_set" id="d010s2">
+                                            <field name="VAR" id="v30">Deep Z</field>
+                                            <value name="VALUE">
+                                              <block type="math_number" id="d010en">
+                                                <field name="NUM">0</field>
+                                              </block>
+                                            </value>
+                                          </block>
+                                        </statement>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </statement>
+                        <statement name="ELSE">
+                          <block type="variables_set" id="d011e1">
+                            <field name="VAR" id="v27">Deep P</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="d011en1">
+                                <field name="NUM">0</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="d011e2">
+                                <field name="VAR" id="v28">Deep Under7 Pct</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="d011en2">
+                                    <field name="NUM">0</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="d011e3">
+                                    <field name="VAR" id="v29">Deep SE</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="d011en3">
+                                        <field name="NUM">0</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="variables_set" id="d011e4">
+                                        <field name="VAR" id="v30">Deep Z</field>
+                                        <value name="VALUE">
+                                          <block type="math_number" id="d011en4">
+                                            <field name="NUM">0</field>
+                                          </block>
+                                        </value>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </statement>
+                        <next>
+                          <block type="variables_set" id="h001">
+                            <field name="VAR" id="v32">Short List</field>
+                            <value name="VALUE">
+                              <block type="lists_getSublist" id="h001ls">
+                                <mutation xmlns="http://www.w3.org/1999/xhtml" at1="true" at2="false"></mutation>
+                                <field name="WHERE1">FROM_END</field>
+                                <field name="WHERE2">LAST</field>
+                                <value name="LIST">
+                                  <block type="lastDigitList" id="h001ld"></block>
+                                </value>
+                                <value name="AT1">
+                                  <block type="variables_get" id="h001g">
+                                    <field name="VAR" id="v15">Short Window</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="h002">
+                                <field name="VAR" id="v34">Short Total</field>
+                                <value name="VALUE">
+                                  <block type="lists_length" id="h002l">
+                                    <value name="VALUE">
+                                      <block type="variables_get" id="h002g">
+                                        <field name="VAR" id="v32">Short List</field>
+                                      </block>
+                                    </value>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="variables_set" id="h003">
+                                    <field name="VAR" id="v35">Short Loser Count</field>
+                                    <value name="VALUE">
+                                      <block type="math_number" id="h003n">
+                                        <field name="NUM">0</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="controls_forEach" id="h004">
+                                        <field name="VAR" id="v33">Short Item</field>
+                                        <value name="LIST">
+                                          <block type="variables_get" id="h004g">
+                                            <field name="VAR" id="v32">Short List</field>
+                                          </block>
+                                        </value>
+                                        <statement name="DO">
+                                          <block type="controls_if" id="h004if">
+                                            <value name="IF0">
+                                              <block type="logic_compare" id="h004c">
+                                                <field name="OP">GTE</field>
+                                                <value name="A">
+                                                  <block type="variables_get" id="h004a">
+                                                    <field name="VAR" id="v33">Short Item</field>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="math_number" id="h004b">
+                                                    <field name="NUM">7</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <statement name="DO0">
+                                              <block type="math_change" id="h004mc">
+                                                <field name="VAR" id="v35">Short Loser Count</field>
+                                                <value name="DELTA">
+                                                  <shadow type="math_number" id="h004mcs">
+                                                    <field name="NUM">1</field>
+                                                  </shadow>
+                                                </value>
+                                              </block>
+                                            </statement>
+                                          </block>
+                                        </statement>
+                                        <next>
+                                          <block type="controls_if" id="h005if">
+                                            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                            <value name="IF0">
+                                              <block type="logic_compare" id="h005c">
+                                                <field name="OP">GT</field>
+                                                <value name="A">
+                                                  <block type="variables_get" id="h005g">
+                                                    <field name="VAR" id="v34">Short Total</field>
+                                                  </block>
+                                                </value>
+                                                <value name="B">
+                                                  <block type="math_number" id="h005n">
+                                                    <field name="NUM">0</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </value>
+                                            <statement name="DO0">
+                                              <block type="variables_set" id="h005s">
+                                                <field name="VAR" id="v36">Short Loser Pct</field>
+                                                <value name="VALUE">
+                                                  <block type="math_arithmetic" id="h005a">
+                                                    <field name="OP">MULTIPLY</field>
+                                                    <value name="A">
+                                                      <block type="math_arithmetic" id="h005b">
+                                                        <field name="OP">DIVIDE</field>
+                                                        <value name="A">
+                                                          <block type="variables_get" id="h005g1">
+                                                            <field name="VAR" id="v35">Short Loser Count</field>
+                                                          </block>
+                                                        </value>
+                                                        <value name="B">
+                                                          <block type="variables_get" id="h005g2">
+                                                            <field name="VAR" id="v34">Short Total</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                    <value name="B">
+                                                      <block type="math_number" id="h005n2">
+                                                        <field name="NUM">100</field>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </statement>
+                                            <statement name="ELSE">
+                                              <block type="variables_set" id="h005e">
+                                                <field name="VAR" id="v36">Short Loser Pct</field>
+                                                <value name="VALUE">
+                                                  <block type="math_number" id="h005en">
+                                                    <field name="NUM">0</field>
+                                                  </block>
+                                                </value>
+                                              </block>
+                                            </statement>
+                                            <next>
+                                              <block type="variables_set" id="m001">
+                                                <field name="VAR" id="v43">Micro List</field>
+                                                <value name="VALUE">
+                                                  <block type="lists_getSublist" id="m001ls">
+                                                    <mutation xmlns="http://www.w3.org/1999/xhtml" at1="true" at2="false"></mutation>
+                                                    <field name="WHERE1">FROM_END</field>
+                                                    <field name="WHERE2">LAST</field>
+                                                    <value name="LIST">
+                                                      <block type="lastDigitList" id="m001ld"></block>
+                                                    </value>
+                                                    <value name="AT1">
+                                                      <block type="variables_get" id="m001g">
+                                                        <field name="VAR" id="v41">Micro Window</field>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="variables_set" id="m002">
+                                                    <field name="VAR" id="v45">Micro Total</field>
+                                                    <value name="VALUE">
+                                                      <block type="lists_length" id="m002l">
+                                                        <value name="VALUE">
+                                                          <block type="variables_get" id="m002g">
+                                                            <field name="VAR" id="v43">Micro List</field>
+                                                          </block>
+                                                        </value>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="variables_set" id="m003">
+                                                        <field name="VAR" id="v46">Micro Good Count</field>
+                                                        <value name="VALUE">
+                                                          <block type="math_number" id="m003n">
+                                                            <field name="NUM">0</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="controls_forEach" id="m004">
+                                                            <field name="VAR" id="v44">Micro Item</field>
+                                                            <value name="LIST">
+                                                              <block type="variables_get" id="m004g">
+                                                                <field name="VAR" id="v43">Micro List</field>
+                                                              </block>
+                                                            </value>
+                                                            <statement name="DO">
+                                                              <block type="controls_if" id="m004if">
+                                                                <value name="IF0">
+                                                                  <block type="logic_compare" id="m004c">
+                                                                    <field name="OP">LTE</field>
+                                                                    <value name="A">
+                                                                      <block type="variables_get" id="m004a">
+                                                                        <field name="VAR" id="v44">Micro Item</field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <value name="B">
+                                                                      <block type="math_number" id="m004b">
+                                                                        <field name="NUM">6</field>
+                                                                      </block>
+                                                                    </value>
+                                                                  </block>
+                                                                </value>
+                                                                <statement name="DO0">
+                                                                  <block type="math_change" id="m004mc">
+                                                                    <field name="VAR" id="v46">Micro Good Count</field>
+                                                                    <value name="DELTA">
+                                                                      <shadow type="math_number" id="m004mcs">
+                                                                        <field name="NUM">1</field>
+                                                                      </shadow>
+                                                                    </value>
+                                                                  </block>
+                                                                </statement>
+                                                              </block>
+                                                            </statement>
+                                                            <next>
+                                                              <block type="controls_if" id="mainif">
+                                                                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                                                <value name="IF0">
+                                                                  <block type="logic_operation" id="p001">
+                                                                    <field name="OP">AND</field>
+                                                                    <value name="A">
+                                                                      <block type="logic_compare" id="p001a">
+                                                                        <field name="OP">GTE</field>
+                                                                        <value name="A">
+                                                                          <block type="variables_get" id="p001g1">
+                                                                            <field name="VAR" id="v24">Deep Total</field>
+                                                                          </block>
+                                                                        </value>
+                                                                        <value name="B">
+                                                                          <block type="variables_get" id="p001g2">
+                                                                            <field name="VAR" id="v12">Deep Min Ticks</field>
+                                                                          </block>
+                                                                        </value>
+                                                                      </block>
+                                                                    </value>
+                                                                    <value name="B">
+                                                                      <block type="logic_compare" id="p001b">
+                                                                        <field name="OP">GTE</field>
+                                                                        <value name="A">
+                                                                          <block type="variables_get" id="p001g3">
+                                                                            <field name="VAR" id="v30">Deep Z</field>
+                                                                          </block>
+                                                                        </value>
+                                                                        <value name="B">
+                                                                          <block type="math_single" id="p001neg">
+                                                                            <field name="OP">NEG</field>
+                                                                            <value name="NUM">
+                                                                              <block type="variables_get" id="p001g4">
+                                                                                <field name="VAR" id="v14">Deep Z Threshold</field>
+                                                                              </block>
+                                                                            </value>
+                                                                          </block>
+                                                                        </value>
+                                                                      </block>
+                                                                    </value>
+                                                                  </block>
+                                                                </value>
+                                                                <statement name="DO0">
+                                                                  <block type="controls_if" id="innerif">
+                                                                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                                                    <value name="IF0">
+                                                                      <block type="logic_operation" id="p003">
+                                                                        <field name="OP">OR</field>
+                                                                        <value name="A">
+                                                                          <block type="logic_operation" id="p002">
+                                                                            <field name="OP">AND</field>
+                                                                            <value name="A">
+                                                                              <block type="logic_compare" id="p002a">
+                                                                                <field name="OP">GT</field>
+                                                                                <value name="A">
+                                                                                  <block type="variables_get" id="p002g1">
+                                                                                    <field name="VAR" id="v34">Short Total</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                                <value name="B">
+                                                                                  <block type="math_number" id="p002n">
+                                                                                    <field name="NUM">0</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                              </block>
+                                                                            </value>
+                                                                            <value name="B">
+                                                                              <block type="logic_compare" id="p002b">
+                                                                                <field name="OP">GT</field>
+                                                                                <value name="A">
+                                                                                  <block type="variables_get" id="p002g2">
+                                                                                    <field name="VAR" id="v36">Short Loser Pct</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                                <value name="B">
+                                                                                  <block type="variables_get" id="p002g3">
+                                                                                    <field name="VAR" id="v16">Short Veto Percent</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                              </block>
+                                                                            </value>
+                                                                          </block>
+                                                                        </value>
+                                                                        <value name="B">
+                                                                          <block type="logic_operation" id="p004">
+                                                                            <field name="OP">OR</field>
+                                                                            <value name="A">
+                                                                              <block type="logic_compare" id="p004a">
+                                                                                <field name="OP">LT</field>
+                                                                                <value name="A">
+                                                                                  <block type="variables_get" id="p004g1">
+                                                                                    <field name="VAR" id="v45">Micro Total</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                                <value name="B">
+                                                                                  <block type="variables_get" id="p004g2">
+                                                                                    <field name="VAR" id="v41">Micro Window</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                              </block>
+                                                                            </value>
+                                                                            <value name="B">
+                                                                              <block type="logic_compare" id="p004b">
+                                                                                <field name="OP">LT</field>
+                                                                                <value name="A">
+                                                                                  <block type="variables_get" id="p004g3">
+                                                                                    <field name="VAR" id="v46">Micro Good Count</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                                <value name="B">
+                                                                                  <block type="variables_get" id="p004g4">
+                                                                                    <field name="VAR" id="v42">Micro Min Good</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                              </block>
+                                                                            </value>
+                                                                          </block>
+                                                                        </value>
+                                                                      </block>
+                                                                    </value>
+                                                                    <statement name="DO0">
+                                                                      <block type="variables_set" id="vsec">
+                                                                        <field name="VAR" id="v22">Veto Reason</field>
+                                                                        <value name="VALUE">
+                                                                          <block type="text" id="vsect">
+                                                                            <field name="TEXT">CONTEXT VETO: short-term 7/8/9 spike, or fewer than 8 of last 10 digits are 0-6</field>
+                                                                          </block>
+                                                                        </value>
+                                                                      </block>
+                                                                    </statement>
+                                                                    <statement name="ELSE">
+                                                                      <block type="controls_if" id="dec001if">
+                                                                        <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                                                        <value name="IF0">
+                                                                          <block type="logic_compare" id="dec001c">
+                                                                            <field name="OP">GT</field>
+                                                                            <value name="A">
+                                                                              <block type="variables_get" id="dec001g">
+                                                                                <field name="VAR" id="v08">Count Loss</field>
+                                                                              </block>
+                                                                            </value>
+                                                                            <value name="B">
+                                                                              <block type="math_number" id="dec001n">
+                                                                                <field name="NUM">0</field>
+                                                                              </block>
+                                                                            </value>
+                                                                          </block>
+                                                                        </value>
+                                                                        <statement name="DO0">
+                                                                          <block type="variables_set" id="dec001s1">
+                                                                            <field name="VAR" id="v21">Decision</field>
+                                                                            <value name="VALUE">
+                                                                              <block type="text" id="dec001t1">
+                                                                                <field name="TEXT">RECOVERY</field>
+                                                                              </block>
+                                                                            </value>
+                                                                          </block>
+                                                                        </statement>
+                                                                        <statement name="ELSE">
+                                                                          <block type="variables_set" id="dec001s2">
+                                                                            <field name="VAR" id="v21">Decision</field>
+                                                                            <value name="VALUE">
+                                                                              <block type="text" id="dec001t2">
+                                                                                <field name="TEXT">TRADE</field>
+                                                                              </block>
+                                                                            </value>
+                                                                            <next>
+                                                                              <block type="variables_set" id="dec001s3">
+                                                                                <field name="VAR" id="v07">Prediction</field>
+                                                                                <value name="VALUE">
+                                                                                  <block type="variables_get" id="dec001g2">
+                                                                                    <field name="VAR" id="v05">Starting Prediction</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                              </block>
+                                                                            </next>
+                                                                          </block>
+                                                                        </statement>
+                                                                        <next>
+                                                                          <block type="math_change" id="j000mc">
+                                                                            <field name="VAR" id="v17">Signal ID</field>
+                                                                            <value name="DELTA">
+                                                                              <shadow type="math_number" id="j000mcs">
+                                                                                <field name="NUM">1</field>
+                                                                              </shadow>
+                                                                            </value>
+                                                                            <next>
+                                                                              <block type="variables_set" id="j000set">
+                                                                                <field name="VAR" id="v38">Journal Text</field>
+                                                                                <next>
+                                                                                  <block type="notify" id="j002">
+                                                                                    <field name="NOTIFICATION_TYPE">info</field>
+                                                                                    <field name="NOTIFICATION_SOUND">silent</field>
+                                                                                    <value name="MESSAGE">
+                                                                                      <shadow type="text" id="j002s">
+                                                                                        <field name="TEXT"></field>
+                                                                                      </shadow>
+                                                                                      <block type="variables_get" id="j002g">
+                                                                                        <field name="VAR" id="v38">Journal Text</field>
+                                                                                      </block>
+                                                                                    </value>
+                                                                                    <next>
+                                                                                      <block type="purchase" id="j003">
+                                                                                        <field name="PURCHASE_LIST">DIGITUNDER</field>
+                                                                                      </block>
+                                                                                    </next>
+                                                                                  </block>
+                                                                                </next>
+                                                                              </block>
+                                                                            </next>
+                                                                          </block>
+                                                                        </next>
+                                                                      </block>
+                                                                    </statement>
+                                                                  </block>
+                                                                </statement>
+                                                                <statement name="ELSE">
+                                                                  <block type="variables_set" id="vprim">
+                                                                    <field name="VAR" id="v22">Veto Reason</field>
+                                                                    <value name="VALUE">
+                                                                      <block type="text" id="vprimt">
+                                                                        <field name="TEXT">PRIMARY VETO: deep-sample stats not statistically supportive or insufficient sample</field>
+                                                                      </block>
+                                                                    </value>
+                                                                  </block>
+                                                                </statement>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+  <block type="text_join" id="j001" disabled="true" x="0" y="5224">
+    <field name="VARIABLE" id="v38">Journal Text</field>
+    <statement name="STACK">
+      <block type="text_statement" id="j001_ts0">
+        <value name="TEXT">
+          <shadow type="text" id="j001_sh0">
+            <field name="TEXT"></field>
+          </shadow>
+          <block type="text" id="j001t1">
+            <field name="TEXT">UNDER-7 SIGNAL #</field>
+          </block>
+        </value>
+        <next>
+          <block type="text_statement" id="j001_ts1">
+            <value name="TEXT">
+              <shadow type="text" id="j001_sh1">
+                <field name="TEXT"></field>
+              </shadow>
+              <block type="variables_get" id="j001g1">
+                <field name="VAR" id="v17">Signal ID</field>
+              </block>
+            </value>
+            <next>
+              <block type="text_statement" id="j001_ts2">
+                <value name="TEXT">
+                  <shadow type="text" id="j001_sh2">
+                    <field name="TEXT"></field>
+                  </shadow>
+                  <block type="text" id="j001t2">
+                    <field name="TEXT"> | </field>
+                  </block>
+                </value>
+                <next>
+                  <block type="text_statement" id="j001_ts3">
+                    <value name="TEXT">
+                      <shadow type="text" id="j001_sh3">
+                        <field name="TEXT"></field>
+                      </shadow>
+                      <block type="variables_get" id="j001g2">
+                        <field name="VAR" id="v21">Decision</field>
+                      </block>
+                    </value>
+                    <next>
+                      <block type="text_statement" id="j001_ts4">
+                        <value name="TEXT">
+                          <shadow type="text" id="j001_sh4">
+                            <field name="TEXT"></field>
+                          </shadow>
+                          <block type="text" id="j001t3">
+                            <field name="TEXT"> | Prediction=Under </field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="text_statement" id="j001_ts5">
+                            <value name="TEXT">
+                              <shadow type="text" id="j001_sh5">
+                                <field name="TEXT"></field>
+                              </shadow>
+                              <block type="variables_get" id="j001g3">
+                                <field name="VAR" id="v07">Prediction</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="text_statement" id="j001_ts6">
+                                <value name="TEXT">
+                                  <shadow type="text" id="j001_sh6">
+                                    <field name="TEXT"></field>
+                                  </shadow>
+                                  <block type="text" id="j001t4">
+                                    <field name="TEXT"> | Stake=$</field>
+                                  </block>
+                                </value>
+                                <next>
+                                  <block type="text_statement" id="j001_ts7">
+                                    <value name="TEXT">
+                                      <shadow type="text" id="j001_sh7">
+                                        <field name="TEXT"></field>
+                                      </shadow>
+                                      <block type="variables_get" id="j001g4">
+                                        <field name="VAR" id="v01">Stake</field>
+                                      </block>
+                                    </value>
+                                    <next>
+                                      <block type="text_statement" id="j001_ts8">
+                                        <value name="TEXT">
+                                          <shadow type="text" id="j001_sh8">
+                                            <field name="TEXT"></field>
+                                          </shadow>
+                                          <block type="text" id="j001t5">
+                                            <field name="TEXT"> | Deep N=</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="text_statement" id="j001_ts9">
+                                            <value name="TEXT">
+                                              <shadow type="text" id="j001_sh9">
+                                                <field name="TEXT"></field>
+                                              </shadow>
+                                              <block type="variables_get" id="j001g5">
+                                                <field name="VAR" id="v24">Deep Total</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="text_statement" id="j001_ts10">
+                                                <value name="TEXT">
+                                                  <shadow type="text" id="j001_sh10">
+                                                    <field name="TEXT"></field>
+                                                  </shadow>
+                                                  <block type="text" id="j001t6">
+                                                    <field name="TEXT"> Under7%=</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="text_statement" id="j001_ts11">
+                                                    <value name="TEXT">
+                                                      <shadow type="text" id="j001_sh11">
+                                                        <field name="TEXT"></field>
+                                                      </shadow>
+                                                      <block type="variables_get" id="j001g6">
+                                                        <field name="VAR" id="v28">Deep Under7 Pct</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="text_statement" id="j001_ts12">
+                                                        <value name="TEXT">
+                                                          <shadow type="text" id="j001_sh12">
+                                                            <field name="TEXT"></field>
+                                                          </shadow>
+                                                          <block type="text" id="j001t7">
+                                                            <field name="TEXT"> z=</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="text_statement" id="j001_ts13">
+                                                            <value name="TEXT">
+                                                              <shadow type="text" id="j001_sh13">
+                                                                <field name="TEXT"></field>
+                                                              </shadow>
+                                                              <block type="variables_get" id="j001g7">
+                                                                <field name="VAR" id="v30">Deep Z</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="text_statement" id="j001_ts14">
+                                                                <value name="TEXT">
+                                                                  <shadow type="text" id="j001_sh14">
+                                                                    <field name="TEXT"></field>
+                                                                  </shadow>
+                                                                  <block type="text" id="j001t8">
+                                                                    <field name="TEXT"> | ShortLoser%=</field>
+                                                                  </block>
+                                                                </value>
+                                                                <next>
+                                                                  <block type="text_statement" id="j001_ts15">
+                                                                    <value name="TEXT">
+                                                                      <shadow type="text" id="j001_sh15">
+                                                                        <field name="TEXT"></field>
+                                                                      </shadow>
+                                                                      <block type="variables_get" id="j001g8">
+                                                                        <field name="VAR" id="v36">Short Loser Pct</field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <next>
+                                                                      <block type="text_statement" id="j001_ts16">
+                                                                        <value name="TEXT">
+                                                                          <shadow type="text" id="j001_sh16">
+                                                                            <field name="TEXT"></field>
+                                                                          </shadow>
+                                                                          <block type="text" id="j001t9">
+                                                                            <field name="TEXT"> | Last10 0-6=</field>
+                                                                          </block>
+                                                                        </value>
+                                                                        <next>
+                                                                          <block type="text_statement" id="j001_ts17">
+                                                                            <value name="TEXT">
+                                                                              <shadow type="text" id="j001_sh17">
+                                                                                <field name="TEXT"></field>
+                                                                              </shadow>
+                                                                              <block type="variables_get" id="j001g9">
+                                                                                <field name="VAR" id="v46">Micro Good Count</field>
+                                                                              </block>
+                                                                            </value>
+                                                                            <next>
+                                                                              <block type="text_statement" id="j001_ts18">
+                                                                                <value name="TEXT">
+                                                                                  <shadow type="text" id="j001_sh18">
+                                                                                    <field name="TEXT"></field>
+                                                                                  </shadow>
+                                                                                  <block type="text" id="j001t10">
+                                                                                    <field name="TEXT">/10</field>
+                                                                                  </block>
+                                                                                </value>
+                                                                              </block>
+                                                                            </next>
+                                                                          </block>
+                                                                        </next>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
+                                  </block>
+                                </next>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
+                  </block>
+                </next>
+              </block>
+            </next>
+          </block>
+        </next>
+      </block>
+    </statement>
+  </block>
+</xml>

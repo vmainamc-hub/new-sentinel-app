@@ -1,7 +1,7 @@
 {
   "version": 1,
   "site_id": "apex-sentinel",
-  "count": 33,
+  "count": 102,
   "bots": [
     {
       "id": "grffy-v1",
@@ -299,6 +299,627 @@
       "description": "Blockly strategy bundled with Apex Sentinel.",
       "emoji": "SITE BOT",
       "priority": 33
+    },
+    {
+      "id": "apex-library-16-over-2-under-7-randomizer-01",
+      "name": "16. Over 2 Under 7 Randomizer",
+      "file": "16. Over 2 Under 7 Randomizer.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-16-over-2-under-7-randomizer-01.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 34
+    },
+    {
+      "id": "apex-library-2026-hunter-mr-duke-deriv-compatible-v3-02",
+      "name": "2026_HUNTER_MR_DUKE_DERIV_COMPATIBLE_V3",
+      "file": "2026_HUNTER_MR_DUKE_DERIV_COMPATIBLE_V3.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-2026-hunter-mr-duke-deriv-compatible-v3-02.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 35
+    },
+    {
+      "id": "apex-library-5-recover-over-bandwagon-03",
+      "name": "5. Recover Over Bandwagon",
+      "file": "5. Recover Over Bandwagon.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-5-recover-over-bandwagon-03.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 36
+    },
+    {
+      "id": "apex-library-ai-higher-lower-by-masika-04",
+      "name": "AI HIGHER & LOWER BY MASIKA",
+      "file": "AI HIGHER & LOWER BY MASIKA.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-ai-higher-lower-by-masika-04.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 37
+    },
+    {
+      "id": "apex-library-ai-only-ups-downs-apex-bot-05",
+      "name": "AI ONLY UPS DOWNS APEX BOT",
+      "file": "AI ONLY UPS DOWNS APEX BOT.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-ai-only-ups-downs-apex-bot-05.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 38
+    },
+    {
+      "id": "apex-library-amd-sequential-marvel-bot-v8-lastdistwin-06",
+      "name": "AMD_Sequential_Marvel_bot_v8_lastdistwin",
+      "file": "AMD_Sequential_Marvel_bot_v8_lastdistwin.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-amd-sequential-marvel-bot-v8-lastdistwin-06.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 39
+    },
+    {
+      "id": "apex-library-bot-m-21-under-8-under-5-sample2-07",
+      "name": "Bot M 21 Under 8 Under 5 sample2",
+      "file": "Bot M 21 Under 8 Under 5 sample2.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-bot-m-21-under-8-under-5-sample2-07.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 40
+    },
+    {
+      "id": "apex-library-dema-cci-magic-bot-with-virtualhook-fixed-08",
+      "name": "DEMA_CCI_ Magic Bot_With VirtualHook_Fixed",
+      "file": "DEMA_CCI_ Magic Bot_With VirtualHook_Fixed.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-dema-cci-magic-bot-with-virtualhook-fixed-08.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 41
+    },
+    {
+      "id": "apex-library-duke-conditions-on-masika-3-09",
+      "name": "Duke_Conditions_On_Masika (3)",
+      "file": "Duke_Conditions_On_Masika (3).xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-duke-conditions-on-masika-3-09.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 42
+    },
+    {
+      "id": "apex-library-elite-over-2-winning-cooldown-v5-fixed-10",
+      "name": "ELITE_Over_2_winning_cooldown_v5_FIXED",
+      "file": "ELITE_Over_2_winning_cooldown_v5_FIXED.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-elite-over-2-winning-cooldown-v5-fixed-10.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 43
+    },
+    {
+      "id": "apex-library-elite-under7-winning-cooldown-v5-fixed-11",
+      "name": "ELITE_Under7_winning_cooldown_v5_FIXED",
+      "file": "ELITE_Under7_winning_cooldown_v5_FIXED.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-elite-under7-winning-cooldown-v5-fixed-11.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 44
+    },
+    {
+      "id": "apex-library-entry-point-bot-12",
+      "name": "Entry point bot",
+      "file": "Entry point bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-entry-point-bot-12.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 45
+    },
+    {
+      "id": "apex-library-holy-grail-13",
+      "name": "Holy Grail",
+      "file": "Holy Grail .xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-holy-grail-13.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 46
+    },
+    {
+      "id": "apex-library-apex-1-digit-entry-profit-master-14",
+      "name": "Apex  1 digit entry profit master.",
+      "file": "Apex  1 digit entry profit master. .xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-1-digit-entry-profit-master-14.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 47
+    },
+    {
+      "id": "apex-library-apex-over-under-2-digit-entry-copy-15",
+      "name": "Apex  Over under 2 digit entry - Copy",
+      "file": "Apex  Over under 2 digit entry - Copy.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-over-under-2-digit-entry-copy-15.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 48
+    },
+    {
+      "id": "apex-library-apex-rise-and-fall-trend-bot-copy-16",
+      "name": "Apex  Rise and Fall Trend bot - Copy",
+      "file": "Apex  Rise and Fall Trend bot - Copy.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-rise-and-fall-trend-bot-copy-16.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 49
+    },
+    {
+      "id": "apex-library-apex-under-7-17",
+      "name": "Apex  Under 7",
+      "file": "Apex  Under 7.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-under-7-17.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 50
+    },
+    {
+      "id": "apex-library-apex-trend-bot-2-18",
+      "name": "Apex  trend bot 2",
+      "file": "Apex  trend bot 2.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-trend-bot-2-18.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 51
+    },
+    {
+      "id": "apex-library-apex-even-odd-ages-bot-19",
+      "name": "Apex Even Odd %ages bot",
+      "file": "Apex Even Odd %ages bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-even-odd-ages-bot-19.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 52
+    },
+    {
+      "id": "apex-library-apex-over-under-destroyer-bot-20",
+      "name": "Apex Over Under Destroyer Bot",
+      "file": "Apex Over Under Destroyer Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-over-under-destroyer-bot-20.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 53
+    },
+    {
+      "id": "apex-library-apex-massive-recovery-21",
+      "name": "Apex massive recovery",
+      "file": "Apex massive recovery.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-massive-recovery-21.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 54
+    },
+    {
+      "id": "apex-library-apex-oracle-bot-22",
+      "name": "Apex oracle bot",
+      "file": "Apex oracle bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-oracle-bot-22.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 55
+    },
+    {
+      "id": "apex-library-masika-sentinel-under7-pressure-momentum-v7-3-fast-23",
+      "name": "MASIKA_SENTINEL_UNDER7_PRESSURE_MOMENTUM_v7_3_FAST",
+      "file": "MASIKA_SENTINEL_UNDER7_PRESSURE_MOMENTUM_v7_3_FAST.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-masika-sentinel-under7-pressure-momentum-v7-3-fast-23.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 56
+    },
+    {
+      "id": "apex-library-mv-dollar-minner-even-odd-wager-bot-24",
+      "name": "MV Dollar Minner Even Odd wager Bot",
+      "file": "MV Dollar Minner Even Odd wager Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-dollar-minner-even-odd-wager-bot-24.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 57
+    },
+    {
+      "id": "apex-library-mv-dollar-minner-under-8-recovery-bot-25",
+      "name": "MV Dollar Minner Under 8 Recovery Bot",
+      "file": "MV Dollar Minner Under 8 Recovery Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-dollar-minner-under-8-recovery-bot-25.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 58
+    },
+    {
+      "id": "apex-library-mv-dollar-minner-without-entry-point-26",
+      "name": "MV Dollar Minner Without Entry Point",
+      "file": "MV Dollar Minner Without Entry Point.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-dollar-minner-without-entry-point-26.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 59
+    },
+    {
+      "id": "apex-library-mv-dollar-minner-over-1-recovery-over-3-1-27",
+      "name": "MV Dollar Minner, Over 1 Recovery Over 3 (1)",
+      "file": "MV Dollar Minner, Over 1 Recovery Over 3 (1).xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-dollar-minner-over-1-recovery-over-3-1-27.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 60
+    },
+    {
+      "id": "apex-library-mv-dollar-printer-entry-point-bot-28",
+      "name": "MV Dollar Printer Entry Point Bot",
+      "file": "MV Dollar Printer Entry Point Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-dollar-printer-entry-point-bot-28.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 61
+    },
+    {
+      "id": "apex-library-mv-wealth-generator-bot-29",
+      "name": "MV Wealth Generator Bot.",
+      "file": "MV Wealth Generator Bot..xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-wealth-generator-bot-29.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 62
+    },
+    {
+      "id": "apex-library-mv-over-2-nonstop-bot-30",
+      "name": "MV_OVER_2_NONSTOP_BOT",
+      "file": "MV_OVER_2_NONSTOP_BOT.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-over-2-nonstop-bot-30.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 63
+    },
+    {
+      "id": "apex-library-mv-over-2-rescan-every-loss-bot-31",
+      "name": "MV_OVER_2_RESCAN_EVERY_LOSS_BOT",
+      "file": "MV_OVER_2_RESCAN_EVERY_LOSS_BOT.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-over-2-rescan-every-loss-bot-31.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 64
+    },
+    {
+      "id": "apex-library-mv-over-2-two-scan-bot-1-32",
+      "name": "MV_OVER_2_TWO_SCAN_BOT (1)",
+      "file": "MV_OVER_2_TWO_SCAN_BOT (1).xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-over-2-two-scan-bot-1-32.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 65
+    },
+    {
+      "id": "apex-library-mv-under-7-nonstop-bot-33",
+      "name": "MV_UNDER_7_NONSTOP_BOT",
+      "file": "MV_UNDER_7_NONSTOP_BOT.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-under-7-nonstop-bot-33.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 66
+    },
+    {
+      "id": "apex-library-mv-under-7-nonstop-bot-fixed-v3-1-34",
+      "name": "MV_UNDER_7_NONSTOP_BOT_FIXED_V3 (1)",
+      "file": "MV_UNDER_7_NONSTOP_BOT_FIXED_V3 (1).xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-under-7-nonstop-bot-fixed-v3-1-34.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 67
+    },
+    {
+      "id": "apex-library-mv-under-7-rescan-every-loss-bot-35",
+      "name": "MV_UNDER_7_RESCAN_EVERY_LOSS_BOT",
+      "file": "MV_UNDER_7_RESCAN_EVERY_LOSS_BOT.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-under-7-rescan-every-loss-bot-35.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 68
+    },
+    {
+      "id": "apex-library-mv-under-7-two-scan-bot-1-36",
+      "name": "MV_UNDER_7_TWO_SCAN_BOT_1",
+      "file": "MV_UNDER_7_TWO_SCAN_BOT_1.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-under-7-two-scan-bot-1-36.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 69
+    },
+    {
+      "id": "apex-library-masika-under-9-8-7-recovery-bot-37",
+      "name": "Masika under 9,8, 7 recovery bot.",
+      "file": "Masika under 9,8, 7 recovery bot..xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-masika-under-9-8-7-recovery-bot-37.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 70
+    },
+    {
+      "id": "apex-library-masika-under-v7-2-fixed-38",
+      "name": "Masika_under_V7_2_fixed",
+      "file": "Masika_under_V7_2_fixed.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-masika-under-v7-2-fixed-38.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 71
+    },
+    {
+      "id": "apex-library-over-2-3-digits-entry-cashflow-bot-39",
+      "name": "Over 2,3 Digits Entry Cashflow Bot",
+      "file": "Over 2,3 Digits Entry Cashflow Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-over-2-3-digits-entry-cashflow-bot-39.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 72
+    },
+    {
+      "id": "apex-library-over-destroyer-with-entry-point-bot-40",
+      "name": "Over destroyer With entry Point Bot",
+      "file": "Over destroyer With entry Point Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-over-destroyer-with-entry-point-bot-40.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 73
+    },
+    {
+      "id": "apex-library-precision-percentage-bot-v6-continuous-safe-fixed-v4-1-41",
+      "name": "Precision_Percentage_Bot_V6_CONTINUOUS_SAFE_FIXED_v4(1)",
+      "file": "Precision_Percentage_Bot_V6_CONTINUOUS_SAFE_FIXED_v4(1).xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-precision-percentage-bot-v6-continuous-safe-fixed-v4-1-41.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 74
+    },
+    {
+      "id": "apex-library-recover-under-tripple-digit-entry-42",
+      "name": "Recover Under Tripple Digit entry",
+      "file": "Recover Under Tripple Digit entry.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-recover-under-tripple-digit-entry-42.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 75
+    },
+    {
+      "id": "apex-library-recover-under-double-digit-entry-point-43",
+      "name": "Recover_Under Double Digit entry point",
+      "file": "Recover_Under Double Digit entry point.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-recover-under-double-digit-entry-point-43.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 76
+    },
+    {
+      "id": "apex-library-recovery-under-wait-recovery-single-trade-bot-44",
+      "name": "Recovery Under Wait Recovery Single Trade Bot",
+      "file": "Recovery Under Wait Recovery Single Trade Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-recovery-under-wait-recovery-single-trade-bot-44.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 77
+    },
+    {
+      "id": "apex-library-sentinel-under7-recovery-bot-45",
+      "name": "SENTINEL UNDER7 + RECOVERY BOT",
+      "file": "SENTINEL UNDER7 + RECOVERY BOT.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-sentinel-under7-recovery-bot-45.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 78
+    },
+    {
+      "id": "apex-library-sentinel-under7-psychology-v1-from-v7-3-1-1-46",
+      "name": "SENTINEL_UNDER7_PSYCHOLOGY_V1_FROM_V7_3(1) (1)",
+      "file": "SENTINEL_UNDER7_PSYCHOLOGY_V1_FROM_V7_3(1) (1).xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-sentinel-under7-psychology-v1-from-v7-3-1-1-46.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 79
+    },
+    {
+      "id": "apex-library-scalper-trader-bot-english-no-release-prompt-code123-1-47",
+      "name": "Scalper_Trader_Bot_ENGLISH_NO_RELEASE_PROMPT_CODE123 (1)",
+      "file": "Scalper_Trader_Bot_ENGLISH_NO_RELEASE_PROMPT_CODE123 (1).xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-scalper-trader-bot-english-no-release-prompt-code123-1-47.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 80
+    },
+    {
+      "id": "apex-library-sentinel-under-premium-bot-48",
+      "name": "Sentinel Under Premium Bot",
+      "file": "Sentinel Under Premium Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-sentinel-under-premium-bot-48.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 81
+    },
+    {
+      "id": "apex-library-the-masika-over-trading-bot-49",
+      "name": "The Masika Over Trading Bot",
+      "file": "The Masika Over Trading Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-the-masika-over-trading-bot-49.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 82
+    },
+    {
+      "id": "apex-library-the-masika-strike-over-bot-50",
+      "name": "The Masika Strike Over Bot",
+      "file": "The Masika Strike Over Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-the-masika-strike-over-bot-50.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 83
+    },
+    {
+      "id": "apex-library-the-masika-strike-under-bot-51",
+      "name": "The Masika Strike Under Bot",
+      "file": "The Masika Strike Under Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-the-masika-strike-under-bot-51.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 84
+    },
+    {
+      "id": "apex-library-the-masika-under-trading-bot-52",
+      "name": "The Masika Under Trading Bot",
+      "file": "The Masika Under Trading Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-the-masika-under-trading-bot-52.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 85
+    },
+    {
+      "id": "apex-library-the-over-scalper-pro-with-duke-conditions-53",
+      "name": "The Over Scalper Pro With Duke Conditions",
+      "file": "The Over Scalper Pro With Duke Conditions.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-the-over-scalper-pro-with-duke-conditions-53.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 86
+    },
+    {
+      "id": "apex-library-the-under-7-holy-grail-54",
+      "name": "The Under 7 Holy Grail",
+      "file": "The Under 7 Holy Grail.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-the-under-7-holy-grail-54.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 87
+    },
+    {
+      "id": "apex-library-the-under-7-recover-under-masika-strike-bot-55",
+      "name": "The Under 7 Recover Under masika Strike Bot",
+      "file": "The Under 7 Recover Under masika Strike Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-the-under-7-recover-under-masika-strike-bot-55.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 88
+    },
+    {
+      "id": "apex-library-the-under-7-statistical-regime-bot-56",
+      "name": "The Under 7 Statistical Regime Bot",
+      "file": "The Under 7 Statistical Regime Bot .xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-the-under-7-statistical-regime-bot-56.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 89
+    },
+    {
+      "id": "apex-library-the-under-9-smart-entry-bot-57",
+      "name": "The Under 9 Smart entry bot.",
+      "file": "The Under 9 Smart entry bot..xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-the-under-9-smart-entry-bot-57.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 90
+    },
+    {
+      "id": "apex-library-under7-v24-continuous-recovery-1-1-58",
+      "name": "UNDER7_V24_CONTINUOUS_RECOVERY (1) (1)",
+      "file": "UNDER7_V24_CONTINUOUS_RECOVERY (1) (1).xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under7-v24-continuous-recovery-1-1-58.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 91
+    },
+    {
+      "id": "apex-library-under7-v3-winning-stence-v3-59",
+      "name": "UNDER7_V3_WINNING_STENCE_v3",
+      "file": "UNDER7_V3_WINNING_STENCE_v3.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under7-v3-winning-stence-v3-59.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 92
+    },
+    {
+      "id": "apex-library-under-7-1-touch-bot-60",
+      "name": "Under 7 1 Touch bot",
+      "file": "Under 7 1 Touch bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-1-touch-bot-60.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 93
+    },
+    {
+      "id": "apex-library-under-7-killler-bot-dynamic-entry-2-high-digits-entry-61",
+      "name": "Under 7 Killler Bot  Dynamic Entry 2 high Digits entry",
+      "file": "Under 7 Killler Bot  Dynamic Entry 2 high Digits entry.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-killler-bot-dynamic-entry-2-high-digits-entry-61.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 94
+    },
+    {
+      "id": "apex-library-under-7-regime-intelligence-bot-62",
+      "name": "Under 7 Regime Intelligence Bot",
+      "file": "Under 7 Regime Intelligence Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-regime-intelligence-bot-62.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 95
+    },
+    {
+      "id": "apex-library-under-7-with-entry-digit-bot-63",
+      "name": "Under 7 With Entry Digit Bot",
+      "file": "Under 7 With Entry Digit Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-with-entry-digit-bot-63.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 96
+    },
+    {
+      "id": "apex-library-under-7-with-entry-digit-bot-64",
+      "name": "Under 7 with Entry digit Bot",
+      "file": "Under 7 with Entry digit Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-with-entry-digit-bot-64.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 97
+    },
+    {
+      "id": "apex-library-under-streak-confirmation-single-trade-recovery-65",
+      "name": "Under Streak Confirmation Single Trade RECOVERY",
+      "file": "Under Streak Confirmation Single Trade RECOVERY.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-streak-confirmation-single-trade-recovery-65.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 98
+    },
+    {
+      "id": "apex-library-under-6-fixed-dbot-native-66",
+      "name": "Under_6_FIXED_DBOT_NATIVE",
+      "file": "Under_6_FIXED_DBOT_NATIVE.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-6-fixed-dbot-native-66.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 99
+    },
+    {
+      "id": "apex-library-under-streak-confirmation-bot-recovery-67",
+      "name": "Under_Streak_Confirmation_bot_RECOVERY",
+      "file": "Under_Streak_Confirmation_bot_RECOVERY.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-streak-confirmation-bot-recovery-67.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 100
+    },
+    {
+      "id": "apex-library-wager-entry-point-bot-68",
+      "name": "Wager entry point bot",
+      "file": "Wager entry point bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-wager-entry-point-bot-68.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 101
+    },
+    {
+      "id": "apex-library-recover-under-bandwagon-69",
+      "name": "_Recover Under Bandwagon",
+      "file": "_Recover Under Bandwagon.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-recover-under-bandwagon-69.xml",
+      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
+      "emoji": "FREE BOT",
+      "priority": 102
     }
   ]
 }
