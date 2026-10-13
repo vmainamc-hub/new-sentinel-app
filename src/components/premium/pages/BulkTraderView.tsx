@@ -1,6 +1,7 @@
 import type { CSSProperties, RefObject } from 'react';
 import { BULK_MARKETS, FREE_BARRIERS, OVER_BARRIERS, UNDER_BARRIERS, hitRate, type Recommendation } from '../over-under-engine';
 import { MAX_BULK_RUNS, exposure, sanitizeBulk, type Tally } from '../bulk-run';
+import type { AutoLogRow } from '../auto-log';
 
 export type LogRow = {
     id: number;
@@ -19,10 +20,11 @@ export type BulkForm = { duration: string; stake: string; runs: string };
 export type AutoForm = {
     grade: string; cooldownSec: string; maxRuns: string; maxLoss: string; targetProfit: string; entryTicks: string; entryWaitSec: string;
     recovery: string; recoveryOver: string; recoveryUnder: string; martingale: string; maxSteps: string; onCap: string;
+    entryMode: string; lossPauseAfter: string; lossPauseSec: string; dangerCeiling: string; pressure: string;
 };
 export type AutoView = {
     armed: boolean; form: AutoForm; runs: number; pnl: number; note: string; maxRuns: number; maxLoss: number; targetProfit: number; account: string;
-    mode: string; recovery: boolean; next: string;
+    mode: string; recovery: boolean; next: string; rule: string; log: AutoLogRow[];
     entry: { need: number; want: string; symbols: string[]; waiting: boolean } | null;
 };
 
@@ -46,6 +48,8 @@ export type BulkViewProps = {
     onToggleLock: () => void;
     auto: AutoView;
     onAutoToggle: () => void;
+    onLogDownload: () => void;
+    onLogClear: () => void;
     onAutoForm: (key: keyof AutoForm, value: string) => void;
     signalLock: SignalLockView;
     symbol: string;
@@ -115,7 +119,7 @@ const RecommendationBar = ({ rec, watch, onLoadRec, marketsReady, live, locked, 
     </section>
 );
 
-const AutoPanel = ({ auto, running, currency, onAutoToggle, onAutoForm }: Pick<BulkViewProps, 'auto' | 'currency' | 'onAutoToggle' | 'onAutoForm'> & { running: boolean }) => {
+const AutoPanel = ({ auto, running, currency, onAutoToggle, onAutoForm, onLogDownload, onLogClear }: Pick<BulkViewProps, 'auto' | 'currency' | 'onAutoToggle' | 'onAutoForm' | 'onLogDownload' | 'onLogClear'> & { running: boolean }) => {
     const f = auto.form;
     const lock = auto.armed;
     const field = (label: string, key: keyof AutoForm, mode: 'numeric' | 'decimal' = 'numeric') => (
@@ -165,9 +169,29 @@ const AutoPanel = ({ auto, running, currency, onAutoToggle, onAutoForm }: Pick<B
 
             <h3>Entry</h3>
             <div className='apex-bt__auto-form'>
-                {field('Entry ticks (0 = off)', 'entryTicks')}
-                {field('Wait for entry (s)', 'entryWaitSec')}
+                <label>Entry rule
+                    <select value={f.entryMode} disabled={lock} onChange={event => onAutoForm('entryMode', event.target.value)}>
+                        <option value='DYNAMIC'>Dynamic (adapts)</option>
+                        <option value='FIXED'>Fixed</option>
+                    </select>
+                </label>
+                {field(f.entryMode === 'DYNAMIC' ? 'Base entry ticks (0 = off)' : 'Entry ticks (0 = off)', 'entryTicks')}
+                {field(f.entryMode === 'DYNAMIC' ? 'Base wait (s)' : 'Wait for entry (s)', 'entryWaitSec')}
+                <label>Digit pressure check
+                    <select value={f.pressure} disabled={lock} onChange={event => onAutoForm('pressure', event.target.value)}>
+                        <option value='off'>Off</option>
+                        <option value='on'>On</option>
+                    </select>
+                </label>
             </div>
+            {f.entryMode === 'DYNAMIC' && (
+                <div className='apex-bt__auto-form'>
+                    {field('Rest after N losing runs (0 = never)', 'lossPauseAfter')}
+                    {field('Rest for (s)', 'lossPauseSec')}
+                    {field('Skip when danger is at least (0 = off)', 'dangerCeiling')}
+                </div>
+            )}
+            {auto.rule && <p className='apex-bt__rule'>Entry rule now: {auto.rule}</p>}
 
             <h3>Recovery and martingale</h3>
             <div className='apex-bt__auto-form'>
@@ -196,6 +220,29 @@ const AutoPanel = ({ auto, running, currency, onAutoToggle, onAutoForm }: Pick<B
                     </select>
                 </label>
             </div>
+
+            <h3>Run log</h3>
+            <div className='apex-bt__log-actions'>
+                <button type='button' onClick={onLogDownload} disabled={auto.log.length === 0}>Download CSV ({auto.log.length})</button>
+                <button type='button' onClick={onLogClear} disabled={auto.log.length === 0 || auto.armed}>Clear</button>
+            </div>
+            {auto.log.length > 0 && (
+                <div className='apex-bt__log-wrap'>
+                    <table className='apex-bt__log'>
+                        <thead><tr><th>Time</th><th>Contract</th><th>Mode</th><th>Entry rule</th><th>Ticks</th><th>Exit digits</th><th>Result</th><th>P/L</th></tr></thead>
+                        <tbody>
+                            {auto.log.slice(0, 8).map(row => (
+                                <tr key={row.id}>
+                                    <td>{new Date(row.at).toLocaleTimeString()}</td><td>{row.contract}</td><td>{row.mode}</td><td>{row.rule}</td>
+                                    <td>{row.pattern || '–'}</td><td>{row.exits || '–'}</td>
+                                    <td className={row.result === 'WIN' ? 'is-win' : row.result === 'LOSS' ? 'is-loss' : ''}>{row.result}</td>
+                                    <td className={row.pnl >= 0 ? 'is-win' : 'is-loss'}>{row.pnl.toFixed(2)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
 
             <p className='apex-bt__auto-foot'>
                 Runs {auto.runs}/{auto.maxRuns} · Session P/L <b className={auto.pnl >= 0 ? 'is-win' : 'is-loss'}>{auto.pnl.toFixed(2)} {currency}</b>
@@ -231,7 +278,7 @@ const BulkTraderView = (props: BulkViewProps) => {
             <RecommendationBar rec={props.rec} watch={props.watch} onLoadRec={props.onLoadRec} marketsReady={props.marketsReady} live={props.live}
                 locked={props.locked} canLock={props.canLock} onToggleLock={props.onToggleLock} />
 
-            <AutoPanel auto={props.auto} running={props.running} currency={currency} onAutoToggle={props.onAutoToggle} onAutoForm={props.onAutoForm} />
+            <AutoPanel auto={props.auto} running={props.running} currency={currency} onAutoToggle={props.onAutoToggle} onAutoForm={props.onAutoForm} onLogDownload={props.onLogDownload} onLogClear={props.onLogClear} />
 
             <section className='apex-bt__panel' ref={props.traderRef} aria-label='Trading Deck'>
                 <div className='apex-bt__head'>
