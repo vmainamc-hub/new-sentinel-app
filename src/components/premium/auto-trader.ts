@@ -325,16 +325,16 @@ export const stepAuto = (session: AutoSession, config: AutoConfig, input: AutoIn
     // 1) A signal is already waiting for its entry ticks.
     if (next.pending) {
         const pending = next.pending;
+        const pendingRule = pending.rule ?? (target ? entryRule(config, target, next.lossStreak, pending.since) : null);
         const drop = (notice: string): AutoStep => ({ session: { ...next, pending: null, notice }, fire: false, plan: null, note: notice });
-        if (!target || key !== pending.key || !ready) return drop('The signal went away before entry. Skipped.');
+        if (!target || key !== pending.key || !ready || !pendingRule) return drop('The signal went away before entry. Skipped.');
         if (!input.valid) return drop('The signal failed the live check before entry. Skipped.');
-        if (now - pending.since > pending.rule.windowSec * 1000) return drop(`No entry within ${pending.rule.windowSec}s. Signal skipped.`);
+        if (now - pending.since > pendingRule.windowSec * 1000) return drop(`No entry within ${pendingRule.windowSec}s. Signal skipped.`);
         if (input.busy) return { session: next, fire: false, plan: null, note: 'A run is in progress. Still waiting for entry.' };
         const vetted = vetPlan(next, config, target, input);
         if ('stop' in vetted) return stopWith(next, vetted.stop);
         next = vetted.session;
         const plan = vetted.plan;
-        const pendingRule = pending.rule ?? entryRule(config, target, next.lossStreak, pending.since);
         const check = checkEntry(digits, plan, pendingRule, config);
         if (!check.ok) {
             return { session: next, fire: false, plan: null, note: `${vetted.notice} ${entryNote(plan, pendingRule, digits, check.pressure)}`.trim() };
