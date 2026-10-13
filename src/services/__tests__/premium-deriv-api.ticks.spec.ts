@@ -84,3 +84,15 @@ describe('shared tick hub', () => {
 
     it('re-establishes a stream that went silent (forgotten elsewhere, e.g. forget_all)', async () => {
         const api = makeApi();
+        (api_base as any).api = api;
+        const seen: number[] = [];
+        const off = await PremiumDerivApiService.subscribeTicks('R_75', tick => seen.push(tick.quote));
+        api.streams.delete('R_75'); // simulate another part of the app forgetting this stream
+        expect(PremiumDerivApiService.sweepTickHubs(Date.now() + TICK_STALE_MS + 1)).toContain('R_75');
+        await new Promise(resolve => setTimeout(resolve, 10)); // the watchdog refresh is intentionally fire-and-forget
+        expect(api.streams.has('R_75')).toBe(true);
+        api.push('R_75', 75, 10);
+        expect(seen.includes(75)).toBe(true);
+        off();
+    });
+});
