@@ -680,7 +680,7 @@ describe('dynamic entry', () => {
     it('fixes the entry window when the wait starts, so it cannot drift while waiting', () => {
         const weak = over2({ score: 60 });
         const waiting = stepAuto(armSession(), dyn(), { ...base, target: weak, now: 0, digits: [1, 1, 1] });
-        expect(waiting.session.pending?.rule.windowSec).toBe(12);
+        expect(waiting.session.pending?.rule?.windowSec).toBe(12);
         const late = stepAuto(waiting.session, dyn(), { ...base, target: weak, now: 13_000, digits: [1, 1, 1] });
         expect(late.session.pending).toBeNull();
         expect(late.note).toMatch(/No entry within 12s/);
