@@ -183,8 +183,9 @@ const FreeBotsPage = ({ openBotBuilder }: { openBotBuilder?: () => void }) => {
         setRejected(false);
         try {
             const assetFile = bot.asset || bot.file;
-            const localAssetUrl = joinUrl(baseUrl, assetFile);
-            const rawAssetBase = githubRawUrlForLocalPath(baseUrl);
+            const isAbsoluteAssetUrl = /^https?:\/\//i.test(assetFile);
+            const localAssetUrl = isAbsoluteAssetUrl ? assetFile : joinUrl(baseUrl, assetFile);
+            const rawAssetBase = isAbsoluteAssetUrl ? '' : githubRawUrlForLocalPath(baseUrl);
             const payload = await fetchTextWithFallback(
                 [localAssetUrl, rawAssetBase ? joinUrl(rawAssetBase, assetFile) : ''],
                 bot.name || bot.file
