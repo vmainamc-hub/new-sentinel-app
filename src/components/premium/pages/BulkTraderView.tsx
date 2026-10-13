@@ -52,6 +52,7 @@ export type BulkViewProps = {
     onLogClear: () => void;
     onAutoForm: (key: keyof AutoForm, value: string) => void;
     signalLock: SignalLockView;
+    oneTick: { on: boolean; onToggle: () => void };
     symbol: string;
     onSymbol: (symbol: string) => void;
     price: number | null;
@@ -338,6 +339,16 @@ const BulkTraderView = (props: BulkViewProps) => {
             </section>
 
             <section className='apex-bt__panel apex-bt__lower' aria-label='Over and Under'>
+                <div className='apex-bt__siglock'>
+                    <button type='button' role='switch' aria-checked={props.oneTick.on} className={`apex-bt__switch${props.oneTick.on ? ' is-on' : ''}`} onClick={props.oneTick.onToggle}
+                        title='Send only as many trades as reach Deriv before the next tick, so they all share one entry tick and one exit digit'>
+                        <i aria-hidden='true' />
+                        <span>One tick {props.oneTick.on ? 'ON' : 'OFF'}</span>
+                    </button>
+                    <small>{props.oneTick.on
+                        ? 'Deriv takes the buys of one connection one after another, so a big batch spills onto the next tick and settles on another digit. With this on, only as many trades as fit before the next tick are sent, so they all share one exit digit.'
+                        : 'All trades are sent, even if some land on the next tick and settle on a different digit.'}</small>
+                </div>
                 <div className='apex-bt__siglock'>
                     <button type='button' role='switch' aria-checked={lock.on} className={`apex-bt__switch${lock.on ? ' is-on' : ''}`} onClick={lock.onToggle}
                         title={lock.on ? 'Signal lock on: Over/Under open only for a loaded EXECUTE signal' : 'Signal lock off: Over/Under are free with any barrier'}>

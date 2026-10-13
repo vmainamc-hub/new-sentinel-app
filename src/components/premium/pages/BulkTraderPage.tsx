@@ -11,6 +11,7 @@ import {
     type Fill, type Tally,
 } from '../bulk-run';
 import { bulkFeed } from '../bulk-feed';
+import { DEFAULT_BUY_MS, fitOnOneTick, learnPace, tickIntervalMs } from '../burst-pace';
 import {
     DEFAULT_AUTO, armSession, disarmSession, entryRuleFor, entrySlip, lossLimitError, modeText, newSession, planTrade, recordAutoRun, releaseRun, sanitizeAuto, signalKey, slipText,
     stakeFor, stepAuto, tickMoved, tickSymbols,
@@ -37,6 +38,13 @@ const writeLock = (value: Recommendation | null) => {
     } catch { /* storage unavailable: the lock simply lasts for this visit */ }
 };
 // The signal lock (ON = Over/Under only trade a loaded EXECUTE signal, OFF = any barrier, any time). ON unless the person switched it off.
+const ONE_TICK_KEY = 'apex_bulk_one_tick';
+const readOneTick = (): boolean => {
+    try { return typeof localStorage === 'undefined' || localStorage.getItem(ONE_TICK_KEY) !== 'off'; } catch { return true; }
+};
+const writeOneTick = (on: boolean) => {
+    try { if (typeof localStorage !== 'undefined') localStorage.setItem(ONE_TICK_KEY, on ? 'on' : 'off'); } catch { /* storage unavailable: the choice lasts for this visit */ }
+};
 const GATE_KEY = 'apex_bulk_signal_lock';
 const readGate = (): boolean => {
     try { return typeof localStorage === 'undefined' || localStorage.getItem(GATE_KEY) !== 'off'; } catch { return true; }
@@ -73,6 +81,11 @@ const BulkTraderPage = () => {
     const [loaded, setLoaded] = useState<Recommendation | null>(null);
     const [locked, setLocked] = useState<Recommendation | null>(readLock);
     const [signalLock, setSignalLock] = useState<boolean>(readGate);
+    // Keep every trade of a burst on ONE entry tick: send only as many as Deriv can take before the next tick prints.
+    const [oneTick, setOneTick] = useState<boolean>(readOneTick);
+    const oneTickRef = useRef(oneTick);
+    oneTickRef.current = oneTick;
+    const buyMsRef = useRef(DEFAULT_BUY_MS);
     // Auto trader is always OFF on page load; arming is never persisted between visits.
     const [autoForm, setAutoForm] = useState<AutoForm>({
         grade: DEFAULT_AUTO.grade, cooldownSec: String(DEFAULT_AUTO.cooldownSec), maxRuns: String(DEFAULT_AUTO.maxRuns), maxLoss: String(DEFAULT_AUTO.maxLoss),
@@ -227,6 +240,11 @@ const BulkTraderPage = () => {
 
     // Signal lock. ON: the buttons stay shut until the loaded signal reads EXECUTE, then only that signal's button opens.
     // OFF: both buttons are free, with any barrier.
+    const toggleOneTick = () => {
+        const next = !oneTick;
+        setOneTick(next);
+        writeOneTick(next);
+    };
     const toggleSignalLock = () => {
         const next = !signalLock;
         setSignalLock(next);
@@ -292,12 +310,12 @@ const BulkTraderPage = () => {
             setError('');
             const contract: OverUnderContract = side === 0 ? 'DIGITOVER' : 'DIGITUNDER';
             const barrier = Number(side === 0 ? overBarrier : underBarrier);
-            const params = sanitizeBulk({ stake: Number(form.stake), runs: Number(form.runs), duration: Number(form.duration) });
+            const asked = sanitizeBulk({ stake: Number(form.stake), runs: Number(form.runs), duration: Number(form.duration) });
             // Signal lock OFF: a hand-placed trade may use any barrier Deriv offers and is never held back by the engine. The auto trader and
             // the signal lock keep the strict allowlist and the engine checks.
             const free = !signalLock && !autoBusy.current;
             try { if (free) assertFreeContract(contract, barrier); else assertAllowedContract(contract, barrier); } catch (err) { setError(errorText(err)); return; }
-            const tooBig = limitError(params);
+            const tooBig = limitError(asked);
             if (tooBig) { setError(tooBig); return; }
 
             if (!free) {
@@ -320,10 +338,27 @@ const BulkTraderPage = () => {
             // The tick this trade was decided on (auto: the entry-confirming tick; manual: the latest tick at the click). A one-tick
             // contract enters on the first tick after Deriv gets the buy and settles on it, so the buy must go out before the NEXT tick.
             const decidedAt = decidedAtTick > 0 ? decidedAtTick : (bulkFeed.store[market.symbol]?.times.at(-1) ?? 0);
+            // A burst takes (trades x time per buy) at Deriv, and a buy that lands after the next tick prints enters and settles one tick
+            // late on another digit. So send only as many as fit before the next tick (the pace is learned from every run).
+            let capNote = '';
+            let count = asked.runs;
+            if (oneTickRef.current) {
+                const entry = bulkFeed.store[market.symbol];
+                const interval = tickIntervalMs(entry?.times ?? []);
+                if (interval && asked.runs > 1) {
+                    const elapsed = entry?.lastTickAt ? Date.now() - entry.lastTickAt : 0;
+                    const verdict = fitOnOneTick({ requested: asked.runs, intervalMs: interval, elapsedMs: elapsed, perBuyMs: buyMsRef.current });
+                    if (verdict.capped) {
+                        count = verdict.fit;
+                        capNote = `Sending ${count} of ${asked.runs} trades: only that many reach Deriv before the next tick (about ${buyMsRef.current} ms per buy, ticks every ${(interval / 1000).toFixed(1)} s), so they all share one entry tick and one exit digit. Switch "One tick" off to send all ${asked.runs}.`;
+                    }
+                }
+            }
+            const params = { ...asked, runs: count };
             const timingNote = () => {
                 const fills = [...state.fills.values()];
                 const times = bulkFeed.store[market.symbol]?.times ?? [];
-                return [settlementText(fills), slipText(fills.map(fill => entrySlip(times, decidedAt, fill.entryTime)))].filter(Boolean).join(' ');
+                return [capNote, settlementText(fills), slipText(fills.map(fill => entrySlip(times, decidedAt, fill.entryTime)))].filter(Boolean).join(' ');
             };
             run.current = state;
             state.stake = params.stake;
@@ -371,13 +406,15 @@ const BulkTraderPage = () => {
                 setStatus('A new tick printed before the buy was sent. Nothing was purchased. Re-checking the entry.');
                 return;
             }
-            setStatus(`Placing ${params.runs} trades together…`);
+            setStatus(capNote || `Placing ${params.runs} trades together…`);
+            const arrivals: number[] = [];
             // Every copy is bought directly from the same parameters (no shared proposal ID), all sent in one synchronous pass.
             const buyParams = {
                 amount: params.stake, basis: 'stake' as const, contract_type: contract, currency, underlying_symbol: market.symbol,
                 duration: params.duration, duration_unit: 't' as const, barrier: String(barrier),
             };
             const buys = Array.from({ length: params.runs }, () => PremiumDerivApiService.buyNow(buyParams, params.stake).then(bought => {
+                arrivals.push(Date.now());
                 const contractId = Math.trunc(Number(bought.contract_id));
                 const rowId = (rowSeq.current += 1);
                 state.owned.set(contractId, rowId);   // registered the moment the purchase is confirmed, before any update can arrive
@@ -386,6 +423,7 @@ const BulkTraderPage = () => {
                 return bought;
             }));
             const outcomes = await Promise.allSettled(buys);
+            buyMsRef.current = learnPace(buyMsRef.current, arrivals);
             const failures = outcomes.filter((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');
             failures.forEach(failure => {
                 tallyRef.current = recordFailed(tallyRef.current);
@@ -539,6 +577,7 @@ const BulkTraderPage = () => {
         onAutoToggle={toggleAuto} onAutoForm={onAutoForm}
         onLogDownload={() => downloadCsv(toCsv(autoLog))} onLogClear={() => { saveLog([]); setAutoLog([]); }}
         signalLock={{ on: signalLock, openSide: gateSide, note: gateNote, onToggle: toggleSignalLock }}
+        oneTick={{ on: oneTick, onToggle: toggleOneTick }}
         symbol={symbol} onSymbol={setSymbol} price={price} digit={digit} digitPct={digitPct} recent={recent}
         form={form} onForm={onForm} overBarrier={overBarrier} underBarrier={underBarrier} onOverBarrier={setOverBarrier} onUnderBarrier={setUnderBarrier}
         pickSide={pickSide} loadedNote={loadedNote} currency={currency} running={running} status={status} error={error}
