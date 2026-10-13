@@ -12,11 +12,13 @@ import {
 } from '../bulk-run';
 import { bulkFeed } from '../bulk-feed';
 import {
-    DEFAULT_AUTO, armSession, disarmSession, entrySlip, lossLimitError, modeText, newSession, planTrade, recordAutoRun, releaseRun, sanitizeAuto, signalKey, slipText,
+    DEFAULT_AUTO, armSession, disarmSession, entryRuleFor, entrySlip, lossLimitError, modeText, newSession, planTrade, recordAutoRun, releaseRun, sanitizeAuto, signalKey, slipText,
     stakeFor, stepAuto, tickMoved, tickSymbols,
     waitingNote,
-    type AutoConfig, type AutoSession,
+    type AutoConfig, type AutoSession, type EntryInfo,
 } from '../auto-trader';
+import { ruleText } from '../auto-entry';
+import { addLogRow, buildLogRow, loadLog, saveLog, toCsv, type AutoLogRow } from '../auto-log';
 import BulkTraderView, { type AutoForm, type BulkForm, type LogRow } from './BulkTraderView';
 
 const IDLE = 'Bot is not running.';
@@ -51,6 +53,15 @@ const numOrNull = (value: unknown) => { const n = Number(value); return value !=
 const money = (value: number, currency: string) => `${value.toFixed(2)} ${currency}`;
 const errorText = (error: unknown) => (error instanceof Error ? error.message : (error as { message?: string })?.message || String(error));
 
+const downloadCsv = (csv: string) => {
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `apex-auto-log-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
 const BulkTraderPage = () => {
     const { authData } = useApiBase();
     const currency = authData?.currency || 'USD';
@@ -68,7 +79,11 @@ const BulkTraderPage = () => {
         targetProfit: String(DEFAULT_AUTO.targetProfit), entryTicks: String(DEFAULT_AUTO.entryTicks), entryWaitSec: String(DEFAULT_AUTO.entryWaitSec),
         recovery: 'off', recoveryOver: String(DEFAULT_AUTO.recoveryOver), recoveryUnder: String(DEFAULT_AUTO.recoveryUnder),
         martingale: String(DEFAULT_AUTO.martingale), maxSteps: String(DEFAULT_AUTO.maxSteps), onCap: DEFAULT_AUTO.onCap,
+        entryMode: DEFAULT_AUTO.entryMode, lossPauseAfter: String(DEFAULT_AUTO.lossPauseAfter), lossPauseSec: String(DEFAULT_AUTO.lossPauseSec),
+        dangerCeiling: String(DEFAULT_AUTO.dangerCeiling), pressure: 'off',
     });
+    const [autoLog, setAutoLog] = useState<AutoLogRow[]>(loadLog);
+    const entryRef = useRef<{ info: EntryInfo | null; stake: number; market: string } | null>(null);
     const [autoSession, setAutoSession] = useState<AutoSession>(newSession());
     const [autoNote, setAutoNote] = useState('Off.');
     const [pendingAuto, setPendingAuto] = useState<{ rec: Recommendation; nonce: number; decidedAt: number } | null>(null);
@@ -108,6 +123,8 @@ const BulkTraderPage = () => {
         targetProfit: Number(autoForm.targetProfit), entryTicks: Number(autoForm.entryTicks), entryWaitSec: Number(autoForm.entryWaitSec),
         recovery: autoForm.recovery === 'on', recoveryOver: Number(autoForm.recoveryOver), recoveryUnder: Number(autoForm.recoveryUnder),
         martingale: Number(autoForm.martingale), maxSteps: Number(autoForm.maxSteps), onCap: autoForm.onCap === 'RESET' ? 'RESET' : 'STOP',
+        entryMode: autoForm.entryMode === 'FIXED' ? 'FIXED' : 'DYNAMIC', lossPauseAfter: Number(autoForm.lossPauseAfter), lossPauseSec: Number(autoForm.lossPauseSec),
+        dangerCeiling: Number(autoForm.dangerCeiling), pressure: autoForm.pressure === 'on',
     });
     autoRef.current.config = autoConfig;
     useEffect(() => {
@@ -150,6 +167,7 @@ const BulkTraderPage = () => {
                     applyRef.current(target, false, result.plan.barrier);
                     const stake = stakeFor(sized.stake, result.plan);
                     setForm(current => ({ ...current, stake: String(stake) }));
+                    entryRef.current = { info: result.entry ?? null, stake, market: target.market };
                     // The tick the entry was confirmed on. The buy must go out before the NEXT tick prints, or the trade enters a tick late.
                     const decidedAt = bulkFeed.store[target.symbol]?.times.at(-1) ?? 0;
                     setPendingAuto({ rec: target, nonce: now, decidedAt });
@@ -436,6 +454,7 @@ const BulkTraderPage = () => {
                 setAutoNote(`Running ${target.label} on ${target.market}…`);
                 await execute(target.side, decidedAt);
                 if (releasedRef.current) {
+                    entryRef.current = null;
                     // Cancelled before any purchase because the entry tick moved on: give the run back and re-check the entry.
                     const notice = 'The entry tick moved on before the buy was sent. Re-checking the entry on the newest ticks.';
                     const back = releaseRun(autoRef.current.session, signalKey(target), Date.now(), notice);
@@ -444,9 +463,21 @@ const BulkTraderPage = () => {
                     return;
                 }
                 const t = tallyRef.current;
+                const finishedAt = Date.now();
+                const fired = entryRef.current;
+                entryRef.current = null;
+                const exitDigits = [...(run.current?.fills.values() ?? [])].map(fill => fill.exitDigit);
+                setAutoLog(rows => {
+                    const next = addLogRow(rows, buildLogRow({
+                        id: finishedAt, at: finishedAt, market: fired?.market ?? target.market, stake: fired?.stake ?? 0, trades: t.placed, entry: fired?.info ?? null,
+                        exitDigits, wins: t.wins, losses: t.losses, pnl: t.pnl, unsettled: Math.max(0, t.placed - t.settled),
+                    }));
+                    saveLog(next);
+                    return next;
+                });
                 const finished = recordAutoRun(
                     autoRef.current.session,
-                    { placed: t.placed, failed: t.failed, pnl: t.pnl, unsettled: Math.max(0, t.placed - t.settled) },
+                    { placed: t.placed, failed: t.failed, pnl: t.pnl, unsettled: Math.max(0, t.placed - t.settled), at: finishedAt },
                     autoRef.current.config,
                 );
                 autoRef.current.session = finished;
@@ -456,6 +487,7 @@ const BulkTraderPage = () => {
             } catch (err) {
                 if (mounted.current) haltAuto(`Stopped: ${errorText(err)}`);
             } finally {
+                entryRef.current = null;
                 autoBusy.current = false;
                 // The martingale stake and the recovery digit apply to this one run only. Whatever happened (success, rejected purchase,
                 // thrown error, early return) the deck goes back to the base stake and the signal's own digit, so nothing leaks into the
@@ -486,10 +518,11 @@ const BulkTraderPage = () => {
     const watched = autoSession.armed ? (locked ? refreshLocked(locked, bulkFeed.verdicts, now) : offered) : null;
     const nextPlan = watched ? planTrade(watched, autoSession.lossStreak, autoConfig) : null;
     const baseStake = sanitizeBulk({ stake: Number(autoSession.armed ? baseStakeRef.current : form.stake) }).stake;
-    const entryView = nextPlan && autoConfig.entryTicks > 0 && watched
+    const liveRule = watched ? (autoSession.pending?.rule ?? entryRuleFor(watched, autoSession, autoConfig, now)) : null;
+    const entryView = nextPlan && liveRule && liveRule.ticks > 0 && watched
         ? {
-            need: autoConfig.entryTicks, want: nextPlan.contract === 'DIGITOVER' ? 'O' : 'U', waiting: Boolean(autoSession.pending),
-            symbols: tickSymbols(bulkFeed.store[watched.symbol]?.digits ?? [], nextPlan.barrier, Math.max(autoConfig.entryTicks, 6)),
+            need: liveRule.ticks, want: nextPlan.contract === 'DIGITOVER' ? 'O' : 'U', waiting: Boolean(autoSession.pending),
+            symbols: tickSymbols(bulkFeed.store[watched.symbol]?.digits ?? [], nextPlan.barrier, Math.max(liveRule.ticks, 6)),
         }
         : null;
 
@@ -500,10 +533,11 @@ const BulkTraderPage = () => {
         auto={{
             armed: autoSession.armed, form: autoForm, runs: autoSession.runs, pnl: autoSession.pnl, note: autoNote, maxRuns: autoConfig.maxRuns, maxLoss: autoConfig.maxLoss,
             targetProfit: autoConfig.targetProfit, account: authData?.is_virtual === 1 ? 'DEMO' : authData?.is_virtual === 0 ? 'REAL' : '', mode: modeText(autoSession, autoConfig),
-            recovery: autoConfig.recovery, entry: entryView,
+            recovery: autoConfig.recovery, entry: entryView, rule: liveRule ? ruleText(liveRule) : '', log: autoLog,
             next: nextPlan ? `${nextPlan.label} at ${stakeFor(baseStake, nextPlan).toFixed(2)} ${currency}${nextPlan.recovery ? ` (recovery step ${nextPlan.step})` : ''}` : '',
         }}
         onAutoToggle={toggleAuto} onAutoForm={onAutoForm}
+        onLogDownload={() => downloadCsv(toCsv(autoLog))} onLogClear={() => { saveLog([]); setAutoLog([]); }}
         signalLock={{ on: signalLock, openSide: gateSide, note: gateNote, onToggle: toggleSignalLock }}
         symbol={symbol} onSymbol={setSymbol} price={price} digit={digit} digitPct={digitPct} recent={recent}
         form={form} onForm={onForm} overBarrier={overBarrier} underBarrier={underBarrier} onOverBarrier={setOverBarrier} onUnderBarrier={setUnderBarrier}

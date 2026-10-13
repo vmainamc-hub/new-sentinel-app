@@ -84,6 +84,7 @@ const config: Config = {
         '@deriv-com/translations': '<rootDir>/__mocks__/translation.mock.js',
         '@deriv-com/ui': '<rootDir>/node_modules/@deriv-com/ui',
         '^@/config/(.*)$': '<rootDir>/src/config/$1',
+        '^@/lib/(.*)$': '<rootDir>/src/lib/$1',
         '^@/external/(.*)$': '<rootDir>/src/external/$1',
         '^@/adapters/(.*)$': '<rootDir>/src/adapters/$1',
         '^@/utils/(.*)$': '<rootDir>/src/utils/$1',

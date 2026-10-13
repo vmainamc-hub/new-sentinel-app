@@ -10,6 +10,7 @@
 // After a losing run, recovery (if enabled) trades the NEXT signal at a riskier recovery digit with a martingale stake.
 //
 // Loss limit: a run is never fired if its worst case (stake x number of bulk trades) could take the session past its loss limit.
+import { entryRule, pressureReading, ruleText, tooHostile, type EntryMode, type EntryRule, type PressureReading } from './auto-entry';
 import { exposure, sanitizeBulk } from './bulk-run';
 import { ALLOWED_BARRIERS, contractLabel, type OverUnderContract, type Recommendation } from './over-under-engine';
 
@@ -43,15 +44,26 @@ export type AutoConfig = {
     maxSteps: number;
     /** What happens when the recovery limit is hit: stop the auto trader, or go back to normal trading at the base stake. */
     onCap: CapAction;
+    /** FIXED: exactly entryTicks/entryWaitSec. DYNAMIC: those are the base values, adapted to the signal and the session (see auto-entry.ts). */
+    entryMode: EntryMode;
+    /** DYNAMIC: after this many consecutive losing runs the auto trader rests for lossPauseSec before the next entry. 0 = never rest. */
+    lossPauseAfter: number;
+    lossPauseSec: number;
+    /** DYNAMIC: skip signals while the engine's danger reading is at or above this. 0 = off. */
+    dangerCeiling: number;
+    /** Optional: skip the entry while the digits that would lose the contract are over-represented in the last 40 ticks. */
+    pressure: boolean;
 };
 
 export const DEFAULT_AUTO: AutoConfig = {
     grade: 'EXECUTE', cooldownSec: 30, maxRuns: 5, maxLoss: 5, targetProfit: 5, entryTicks: 3, entryWaitSec: 20,
     recovery: false, recoveryOver: 3, recoveryUnder: 6, martingale: 2, maxSteps: 3, onCap: 'STOP',
+    entryMode: 'DYNAMIC', lossPauseAfter: 2, lossPauseSec: 90, dangerCeiling: 80, pressure: false,
 };
 export const AUTO_BOUNDS = {
     cooldownSec: [5, 600], maxRuns: [1, 50], maxLoss: [0.35, 10_000], targetProfit: [0.35, 10_000],
     entryTicks: [0, 10], entryWaitSec: [5, 120], martingale: [1, 5], maxSteps: [1, 6],
+    lossPauseAfter: [0, 6], lossPauseSec: [10, 900], dangerCeiling: [0, 100],
 } as const;
 
 const clamp = (value: number, [min, max]: readonly [number, number]) => Math.min(max, Math.max(min, value));
@@ -78,6 +90,11 @@ export const sanitizeAuto = (input: Partial<AutoConfig>): AutoConfig => {
         martingale: round2(n(input.martingale, DEFAULT_AUTO.martingale, AUTO_BOUNDS.martingale)),
         maxSteps: Math.trunc(n(input.maxSteps, DEFAULT_AUTO.maxSteps, AUTO_BOUNDS.maxSteps)),
         onCap: input.onCap === 'RESET' ? 'RESET' : 'STOP',
+        entryMode: input.entryMode === 'FIXED' ? 'FIXED' : 'DYNAMIC',
+        lossPauseAfter: Math.trunc(n(input.lossPauseAfter, DEFAULT_AUTO.lossPauseAfter, AUTO_BOUNDS.lossPauseAfter)),
+        lossPauseSec: Math.trunc(n(input.lossPauseSec, DEFAULT_AUTO.lossPauseSec, AUTO_BOUNDS.lossPauseSec)),
+        dangerCeiling: Math.trunc(n(input.dangerCeiling, DEFAULT_AUTO.dangerCeiling, AUTO_BOUNDS.dangerCeiling)),
+        pressure: input.pressure === true,
     };
 };
 
@@ -150,8 +167,10 @@ export type AutoSession = {
     lastFiredAt: number | null;
     /** The signal seen on the previous step, and whether it already met the grade. Used to detect a NEW signal. */
     seen: { key: string; ready: boolean } | null;
-    /** A new signal is waiting for its entry ticks. */
-    pending: { key: string; since: number } | null;
+    /** A new signal is waiting for its entry ticks. The entry rule is fixed when the wait starts, so it cannot shift mid-wait. */
+    pending: { key: string; since: number; rule?: EntryRule } | null;
+    /** When the last auto run finished (settled). The loss pause counts from here. */
+    finishedAt: number | null;
     /** Why the last signal was skipped. Stays visible until the next signal arrives, so the reason is never missed. */
     notice: string;
     stopReason: string;
@@ -162,7 +181,7 @@ export const signalKey = (rec: Recommendation) => `${rec.symbol}:${rec.propositi
 const meetsGrade = (rec: Recommendation, grade: AutoGrade) =>
     grade === 'ANY' ? rec.action === 'EXECUTE' || rec.action === 'PREPARE' : rec.action === 'EXECUTE';
 
-export const newSession = (): AutoSession => ({ armed: false, runs: 0, pnl: 0, lossStreak: 0, lastFiredAt: null, seen: null, pending: null, notice: '', stopReason: '' });
+export const newSession = (): AutoSession => ({ armed: false, runs: 0, pnl: 0, lossStreak: 0, lastFiredAt: null, seen: null, pending: null, finishedAt: null, notice: '', stopReason: '' });
 /**
  * Arming always starts fresh counters, so a previous session's limits never carry over silently. Pass the signal that is on
  * screen at the moment of arming: it counts as already seen, so arming never fires on a signal that was there before the click.
@@ -208,16 +227,59 @@ export type AutoInput = {
     bulkRuns?: number;
 };
 
-export type AutoStep = { session: AutoSession; fire: boolean; plan: TradePlan | null; note: string };
+/** Why a run was fired: recorded in the run log so each entry rule can be judged against its results later. */
+export type EntryInfo = {
+    mode: EntryMode;
+    /** The rule in plain English, e.g. "need 4 ticks, 18s window (base 3: after a loss +1)". */
+    rule: string;
+    baseTicks: number;
+    ticks: number;
+    windowSec: number;
+    /** The tick pattern at the moment of entry, measured against the barrier actually traded (O / U / =). */
+    pattern: string;
+    /** The raw last digits behind that pattern. */
+    digits: number[];
+    barrier: number;
+    label: string;
+    recovery: boolean;
+    step: number;
+    lossStreak: number;
+    waitedMs: number;
+    pressure: { observed: number; expected: number } | null;
+};
+
+export type AutoStep = { session: AutoSession; fire: boolean; plan: TradePlan | null; note: string; entry?: EntryInfo | null };
 
 export const waitingNote = (config: AutoConfig) =>
     config.grade === 'ANY' ? 'Armed. Waiting for the next EXECUTE or PREPARE signal.' : 'Armed. Waiting for the next EXECUTE signal.';
 
-const entryNote = (plan: TradePlan, config: AutoConfig, digits: number[]) => {
-    const need = plan.contract === 'DIGITOVER' ? 'O' : 'U';
-    const now = tickSymbols(digits, plan.barrier, config.entryTicks).join(' ') || '…';
-    return `Signal fired. Waiting for entry: the last ${config.entryTicks} ticks must all be ${need} for ${plan.label} (now ${now}).`;
+const sideOf = (plan: TradePlan) => (plan.contract === 'DIGITOVER' ? 'O' : 'U');
+const pct = (value: number) => `${Math.round(value * 100)}%`;
+
+/** The entry check for the contract that will actually be traded: the recovery digit during recovery. */
+const checkEntry = (digits: number[], plan: TradePlan, rule: EntryRule, config: AutoConfig) => {
+    const pressure: PressureReading | null = config.pressure ? pressureReading(digits, plan.contract, plan.barrier) : null;
+    const supported = entrySupports(digits, plan.contract, plan.barrier, rule.ticks);
+    return { ok: supported && (pressure ? pressure.ok : true), supported, pressure };
 };
+
+const entryNote = (plan: TradePlan, rule: EntryRule, digits: number[], pressure: PressureReading | null) => {
+    const now = tickSymbols(digits, plan.barrier, Math.max(rule.ticks, 1)).join(' ') || '…';
+    const ticks = rule.ticks > 0 ? `the last ${rule.ticks} ticks must all be ${sideOf(plan)} for ${plan.label} (now ${now})` : `${plan.label}`;
+    const squeeze = pressure && !pressure.ok ? ` Losing digits are over-represented: ${pct(pressure.observed)} of the last ${pressure.sample} ticks against ${pct(pressure.expected)} expected.` : '';
+    return `Signal fired. Waiting for entry: ${ticks}. Rule: ${ruleText(rule)}.${squeeze}`;
+};
+
+const entryInfo = (plan: TradePlan, rule: EntryRule, digits: number[], pressure: PressureReading | null, lossStreak: number, waitedMs: number): EntryInfo => ({
+    mode: rule.mode, rule: ruleText(rule), baseTicks: rule.baseTicks, ticks: rule.ticks, windowSec: rule.windowSec,
+    pattern: tickSymbols(digits, plan.barrier, rule.ticks).join(' '), digits: rule.ticks > 0 ? digits.slice(-rule.ticks) : [],
+    barrier: plan.barrier, label: plan.label, recovery: plan.recovery, step: plan.step, lossStreak, waitedMs,
+    pressure: pressure ? { observed: pressure.observed, expected: pressure.expected } : null,
+});
+
+/** The entry rule the auto trader would use for this signal right now (for the panel). */
+export const entryRuleFor = (target: Recommendation, session: AutoSession, config: AutoConfig, now: number): EntryRule =>
+    entryRule(config, target, session.lossStreak, now);
 
 type Vetted = { plan: TradePlan; session: AutoSession; notice: string } | { stop: string };
 
@@ -263,20 +325,23 @@ export const stepAuto = (session: AutoSession, config: AutoConfig, input: AutoIn
     // 1) A signal is already waiting for its entry ticks.
     if (next.pending) {
         const pending = next.pending;
+        const pendingRule = pending.rule ?? (target ? entryRule(config, target, next.lossStreak, pending.since) : null);
         const drop = (notice: string): AutoStep => ({ session: { ...next, pending: null, notice }, fire: false, plan: null, note: notice });
-        if (!target || key !== pending.key || !ready) return drop('The signal went away before entry. Skipped.');
+        if (!target || key !== pending.key || !ready || !pendingRule) return drop('The signal went away before entry. Skipped.');
         if (!input.valid) return drop('The signal failed the live check before entry. Skipped.');
-        if (now - pending.since > config.entryWaitSec * 1000) return drop(`No entry within ${config.entryWaitSec}s. Signal skipped.`);
+        if (now - pending.since > pendingRule.windowSec * 1000) return drop(`No entry within ${pendingRule.windowSec}s. Signal skipped.`);
         if (input.busy) return { session: next, fire: false, plan: null, note: 'A run is in progress. Still waiting for entry.' };
         const vetted = vetPlan(next, config, target, input);
         if ('stop' in vetted) return stopWith(next, vetted.stop);
         next = vetted.session;
         const plan = vetted.plan;
-        if (!entrySupports(digits, plan.contract, plan.barrier, config.entryTicks)) {
-            return { session: next, fire: false, plan: null, note: `${vetted.notice} ${entryNote(plan, config, digits)}`.trim() };
+        const check = checkEntry(digits, plan, pendingRule, config);
+        if (!check.ok) {
+            return { session: next, fire: false, plan: null, note: `${vetted.notice} ${entryNote(plan, pendingRule, digits, check.pressure)}`.trim() };
         }
         return {
             session: { ...next, pending: null, notice: '', runs: next.runs + 1, lastFiredAt: now }, fire: true, plan,
+            entry: entryInfo(plan, pendingRule, digits, check.pressure, next.lossStreak, now - pending.since),
             note: `${vetted.notice} Entry confirmed. Firing ${plan.label} on ${target.market}…`.trim(),
         };
     }
@@ -292,18 +357,36 @@ export const stepAuto = (session: AutoSession, config: AutoConfig, input: AutoIn
         const left = Math.ceil((config.cooldownSec * 1000 - (now - session.lastFiredAt)) / 1000);
         return skip(`Cooling down (${left}s). Signal skipped.`);
     }
+    const dynamic = config.entryMode === 'DYNAMIC';
+    // Risk-aware entry: after several losing runs in a row the auto trader rests before it looks at another signal.
+    if (dynamic && config.lossPauseAfter > 0 && session.lossStreak >= config.lossPauseAfter) {
+        const since = session.finishedAt ?? session.lastFiredAt;
+        if (since !== null && now - since < config.lossPauseSec * 1000) {
+            const left = Math.ceil((config.lossPauseSec * 1000 - (now - since)) / 1000);
+            return skip(`Loss pause: ${session.lossStreak} losing runs in a row, resting ${left}s. Signal skipped.`);
+        }
+    }
     if (!input.valid) return skip('Signal failed the live check. Skipped.');
+    if (dynamic && tooHostile(target, config.dangerCeiling)) {
+        return skip(`Market too dangerous (danger ${Math.round(target.danger)}, ceiling ${config.dangerCeiling}). Signal skipped.`);
+    }
     next = { ...next, notice: '' };
 
     const vetted = vetPlan(next, config, target, input);
     if ('stop' in vetted) return stopWith(next, vetted.stop);
     next = vetted.session;
     const plan = vetted.plan;
-    if (config.entryTicks > 0 && !entrySupports(digits, plan.contract, plan.barrier, config.entryTicks)) {
-        next = { ...next, pending: { key: key as string, since: now } };
-        return { session: next, fire: false, plan: null, note: `${vetted.notice} ${entryNote(plan, config, digits)}`.trim() };
+    const rule = entryRule(config, target, next.lossStreak, now);
+    if (config.entryTicks > 0 && rule.windowSec === 0) return skip('The signal has too little life left to enter. Skipped.');
+    const check = checkEntry(digits, plan, rule, config);
+    if (!check.ok) {
+        next = { ...next, pending: { key: key as string, since: now, rule } };
+        return { session: next, fire: false, plan: null, note: `${vetted.notice} ${entryNote(plan, rule, digits, check.pressure)}`.trim() };
     }
-    return { session: { ...next, runs: next.runs + 1, lastFiredAt: now }, fire: true, plan, note: `${vetted.notice} Firing ${plan.label} on ${target.market}…`.trim() };
+    return {
+        session: { ...next, runs: next.runs + 1, lastFiredAt: now }, fire: true, plan, entry: entryInfo(plan, rule, digits, check.pressure, next.lossStreak, 0),
+        note: `${vetted.notice} Firing ${plan.label} on ${target.market}…`.trim(),
+    };
 };
 
 /**
@@ -313,10 +396,10 @@ export const stepAuto = (session: AutoSession, config: AutoConfig, input: AutoIn
  */
 export const recordAutoRun = (
     session: AutoSession,
-    result: { placed: number; failed: number; pnl: number; unsettled?: number },
+    result: { placed: number; failed: number; pnl: number; unsettled?: number; at?: number },
     config: AutoConfig = DEFAULT_AUTO,
 ): AutoSession => {
-    let updated: AutoSession = { ...session, pnl: round2(session.pnl + result.pnl) };
+    let updated: AutoSession = { ...session, pnl: round2(session.pnl + result.pnl), finishedAt: result.at ?? session.finishedAt };
     const off = (reason: string): AutoSession => (session.armed ? disarmSession(updated, reason) : updated);
     const unsettled = result.unsettled ?? 0;
     if (result.placed === 0) return off('Stopped: the run placed no trades. Check the message above.');

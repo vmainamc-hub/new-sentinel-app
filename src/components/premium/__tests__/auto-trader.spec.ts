@@ -22,7 +22,7 @@ const under8 = (over: Partial<Recommendation> & { action?: VerdictAction } = {})
 const rec = over2;
 const base = { valid: true, busy: false };
 // Most tests below are about WHEN it fires, so they run with the entry filter off; the entry tests switch it on.
-const cfg = (over: Partial<AutoConfig> = {}): AutoConfig => ({ ...DEFAULT_AUTO, entryTicks: 0, ...over });
+const cfg = (over: Partial<AutoConfig> = {}): AutoConfig => ({ ...DEFAULT_AUTO, entryMode: 'FIXED', entryTicks: 0, ...over });
 
 describe('config limits', () => {
     it('sanitizes every setting into its bounds and defaults to the strict grade', () => {
@@ -165,7 +165,7 @@ describe('arming', () => {
         expect(step.session.armed).toBe(false);
     });
     it('arming starts fresh counters', () => {
-        expect(armSession()).toEqual({ armed: true, runs: 0, pnl: 0, lossStreak: 0, lastFiredAt: null, seen: null, pending: null, notice: '', stopReason: '' });
+        expect(armSession()).toEqual({ armed: true, runs: 0, pnl: 0, lossStreak: 0, lastFiredAt: null, seen: null, pending: null, finishedAt: null, notice: '', stopReason: '' });
     });
     it('arming never fires on the signal that was already on screen, only on a new one', () => {
         const onScreen = rec();
@@ -570,6 +570,144 @@ describe('finishing a run', () => {
         expect(afterRun.armed).toBe(false);
         expect(afterRun.stopReason).toBe('Stopped by you.');
         expect(afterRun.pnl).toBe(-0.5);
+    });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Dynamic entry
+// ---------------------------------------------------------------------------------------------------------------------
+describe('dynamic entry', () => {
+    const dyn = (over: Partial<AutoConfig> = {}): AutoConfig => ({
+        ...DEFAULT_AUTO, entryMode: 'DYNAMIC', entryTicks: 3, entryWaitSec: 20, cooldownSec: 5, maxRuns: 50, maxLoss: 10_000, targetProfit: 10_000, ...over,
+    });
+    const afterLosses = (n: number, extra: Partial<AutoSession> = {}): AutoSession => ({ ...armSession(), lossStreak: n, ...extra });
+
+    it('uses the base rule in normal trading and records the pattern it fired on', () => {
+        const step = stepAuto(armSession(), dyn(), { ...base, target: over2(), now: 0, digits: [1, 5, 6, 7] });
+        expect(step.fire).toBe(true);
+        expect(step.entry).toMatchObject({ mode: 'DYNAMIC', ticks: 3, baseTicks: 3, pattern: 'O O O', digits: [5, 6, 7], barrier: 2, label: 'Over 2', recovery: false, waitedMs: 0 });
+        expect(step.entry?.rule).toMatch(/need 3 ticks/);
+    });
+
+    it('requires one more confirming tick after a loss, and two more after two losses', () => {
+        const waiting = stepAuto(afterLosses(1), dyn(), { ...base, target: over2(), now: 0, digits: [1, 5, 6, 7] });
+        expect(waiting.fire).toBe(false);                                  // last 3 are O, but 4 are needed now
+        expect(waiting.note).toMatch(/last 4 ticks/);
+        const fired = stepAuto(waiting.session, dyn(), { ...base, target: over2(), now: 2_000, digits: [1, 5, 6, 7, 9] });
+        expect(fired.fire).toBe(true);
+        expect(fired.entry?.ticks).toBe(4);
+        const five = stepAuto(afterLosses(2, { finishedAt: -1_000_000 }), dyn({ lossPauseAfter: 0 }), { ...base, target: over2(), now: 0, digits: [1, 5, 6, 7, 8] });
+        expect(five.fire).toBe(false);
+        expect(five.note).toMatch(/last 5 ticks/);
+    });
+
+    it('goes back to the normal rule after a win', () => {
+        const lost = recordAutoRun(armSession(), { placed: 1, failed: 0, pnl: -1, at: 0 }, dyn());
+        const won = recordAutoRun(lost, { placed: 1, failed: 0, pnl: 0.9, at: 1 }, dyn());
+        expect(won.lossStreak).toBe(0);
+        expect(stepAuto(won, dyn(), { ...base, target: over2(), now: 10_000, digits: [1, 5, 6, 7] }).fire).toBe(true);   // 3 ticks again
+    });
+
+    describe('recovery measures the ticks against the recovery barrier', () => {
+        const recov = dyn({ recovery: true, recoveryOver: 3, recoveryUnder: 6, maxSteps: 3, martingale: 2 });
+        it('after losing on Over 2 and switching to Over 3, a tick is O only above 3, and a 3 is neither O nor U', () => {
+            const session = afterLosses(1);
+            // 4 ticks needed. Against the old barrier (2) these would all be O; against 3 they are not.
+            const threes = stepAuto(session, recov, { ...base, target: over2(), now: 0, digits: [3, 3, 3, 3] });
+            expect(threes.fire).toBe(false);
+            expect(threes.note).toMatch(/Over 3/);
+            expect(threes.note).toMatch(/= = = =/);
+            const low = stepAuto(session, recov, { ...base, target: over2(), now: 0, digits: [2, 2, 2, 2] });
+            expect(low.fire).toBe(false);
+            expect(low.note).toMatch(/U U U U/);
+            const good = stepAuto(session, recov, { ...base, target: over2(), now: 0, digits: [4, 5, 6, 7] });
+            expect(good.fire).toBe(true);
+            expect(good.plan?.label).toBe('Over 3');
+            expect(good.entry).toMatchObject({ barrier: 3, recovery: true, step: 1, pattern: 'O O O O' });
+        });
+        it('the Under side uses the recovery Under digit', () => {
+            const session = afterLosses(1);
+            // against Under 8 these are U; against the recovery digit 6 they are not
+            const old = stepAuto(session, recov, { ...base, target: under8(), now: 0, digits: [7, 7, 7, 7] });
+            expect(old.fire).toBe(false);
+            expect(old.note).toMatch(/Under 6/);
+            const good = stepAuto(session, recov, { ...base, target: under8(), now: 0, digits: [1, 2, 3, 5] });
+            expect(good.fire).toBe(true);
+            expect(good.entry).toMatchObject({ barrier: 6, label: 'Under 6', pattern: 'U U U U' });
+        });
+        it('a recovery entry is stricter than a normal one', () => {
+            const digits = [2, 4, 5, 6];                                       // 3 supporting ticks for Over 2, but a 2 is not above 3
+            expect(stepAuto(armSession(), recov, { ...base, target: over2(), now: 0, digits }).fire).toBe(true);        // normal: Over 2, 3 ticks
+            expect(stepAuto(afterLosses(1), recov, { ...base, target: over2(), now: 0, digits }).fire).toBe(false);     // recovery: 4 ticks
+        });
+    });
+
+    describe('pause after losses', () => {
+        const paused = (now: number) => stepAuto(afterLosses(2, { finishedAt: 100_000, lastFiredAt: 50_000 }), dyn(), { ...base, target: over2(), now, digits: [5, 6, 7, 8, 9] });
+        it('rests after two losing runs in a row, counting from when the last run finished', () => {
+            const step = paused(130_000);
+            expect(step.fire).toBe(false);
+            expect(step.note).toMatch(/Loss pause: 2 losing runs in a row, resting 60s/);
+            expect(step.session.pending).toBeNull();
+        });
+        it('trades again once the pause is over, with the stricter rule', () => {
+            const step = paused(191_000);
+            expect(step.fire).toBe(true);
+            expect(step.entry?.ticks).toBe(5);
+        });
+        it('does not apply with FIXED entry or when set to 0', () => {
+            const session = afterLosses(2, { finishedAt: 100_000 });
+            expect(stepAuto(session, dyn({ entryMode: 'FIXED' }), { ...base, target: over2(), now: 101_000, digits: [5, 6, 7] }).fire).toBe(true);
+            expect(stepAuto(session, dyn({ lossPauseAfter: 0 }), { ...base, target: over2(), now: 101_000, digits: [5, 6, 7, 8, 9] }).fire).toBe(true);
+        });
+        it('a win ends the streak, so there is no pause', () => {
+            const won = recordAutoRun(afterLosses(2, { finishedAt: 100_000 }), { placed: 1, failed: 0, pnl: 0.9, at: 101_000 }, dyn());
+            expect(won.lossStreak).toBe(0);
+            expect(stepAuto(won, dyn(), { ...base, target: over2(), now: 102_000, digits: [5, 6, 7] }).fire).toBe(true);
+        });
+    });
+
+    it('skips a signal in a hostile market, and one that is too old to enter', () => {
+        const hostile = stepAuto(armSession(), dyn(), { ...base, target: over2({ danger: 85 }), now: 0, digits: [5, 6, 7] });
+        expect(hostile.fire).toBe(false);
+        expect(hostile.note).toMatch(/too dangerous/);
+        const old = stepAuto(armSession(), dyn(), { ...base, target: over2({ expiresAt: 6_000 }), now: 0, digits: [1, 1, 1] });
+        expect(old.fire).toBe(false);
+        expect(old.note).toMatch(/too little life/);
+        expect(old.session.pending).toBeNull();
+    });
+
+    it('fixes the entry window when the wait starts, so it cannot drift while waiting', () => {
+        const weak = over2({ score: 60 });
+        const waiting = stepAuto(armSession(), dyn(), { ...base, target: weak, now: 0, digits: [1, 1, 1] });
+        expect(waiting.session.pending?.rule?.windowSec).toBe(12);
+        const late = stepAuto(waiting.session, dyn(), { ...base, target: weak, now: 13_000, digits: [1, 1, 1] });
+        expect(late.session.pending).toBeNull();
+        expect(late.note).toMatch(/No entry within 12s/);
+    });
+
+    it('optional digit pressure blocks an entry while losing digits cluster, even when the confirming ticks are there', () => {
+        const clustered = [...Array(37).fill(1), 5, 6, 7];
+        expect(stepAuto(armSession(), dyn({ pressure: false }), { ...base, target: over2(), now: 0, digits: clustered }).fire).toBe(true);
+        const blocked = stepAuto(armSession(), dyn({ pressure: true }), { ...base, target: over2(), now: 0, digits: clustered });
+        expect(blocked.fire).toBe(false);
+        expect(blocked.note).toMatch(/over-represented/);
+    });
+
+    it('records when each run finished', () => {
+        expect(recordAutoRun(armSession(), { placed: 1, failed: 0, pnl: -1, at: 12_345 }, dyn()).finishedAt).toBe(12_345);
+    });
+
+    it('config limits keep the new settings in range and default to the dynamic rule', () => {
+        expect(sanitizeAuto({}).entryMode).toBe('DYNAMIC');
+        expect(sanitizeAuto({ entryMode: 'FIXED' }).entryMode).toBe('FIXED');
+        expect(sanitizeAuto({ entryMode: 'x' as never }).entryMode).toBe('DYNAMIC');
+        expect(sanitizeAuto({ lossPauseAfter: 99 }).lossPauseAfter).toBe(AUTO_BOUNDS.lossPauseAfter[1]);
+        expect(sanitizeAuto({ lossPauseAfter: -2 }).lossPauseAfter).toBe(0);
+        expect(sanitizeAuto({ lossPauseSec: 1 }).lossPauseSec).toBe(AUTO_BOUNDS.lossPauseSec[0]);
+        expect(sanitizeAuto({ dangerCeiling: 500 }).dangerCeiling).toBe(100);
+        expect(sanitizeAuto({ pressure: true }).pressure).toBe(true);
+        expect(sanitizeAuto({}).pressure).toBe(false);
     });
 });
 

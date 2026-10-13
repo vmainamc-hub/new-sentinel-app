@@ -274,3 +274,14 @@
     .is-loss { color: #ff4d6a; }
 }
 
+
+.apex-bt__rule { margin: 8px 0 0; font-size: 13px; font-weight: 700; color: var(--bt-gold); }
+.apex-bt__log-actions { display: flex; gap: 8px; margin-bottom: 8px; }
+.apex-bt__log-actions button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--bt-line); background: var(--bt-panel-2); color: var(--bt-text); font-weight: 800; cursor: pointer; }
+.apex-bt__log-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.apex-bt__log-wrap { overflow-x: auto; }
+.apex-bt__log { width: 100%; border-collapse: collapse; font-size: 12px; }
+.apex-bt__log th, .apex-bt__log td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--bt-line); white-space: nowrap; }
+.apex-bt__log th { color: var(--bt-muted); font-weight: 700; }
+.apex-bt__log .is-win { color: var(--bt-win); }
+.apex-bt__log .is-loss { color: var(--bt-red); }
