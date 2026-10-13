@@ -51,5 +51,11 @@ jobs:
       - name: Validate managed site customization
         run: node scripts/validate-site-customization.js
 
+      - name: Test Auto Trader entry rules and run log
+        run: npm test -- --runInBand src/components/premium/__tests__/auto-entry.spec.ts src/components/premium/__tests__/auto-log.spec.ts src/components/premium/__tests__/auto-trader.spec.ts
+
+      - name: Type-check TypeScript
+        run: npm run type-check
+
       - name: Build production bundle
         run: npm run build
