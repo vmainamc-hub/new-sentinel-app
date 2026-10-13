@@ -1,7 +1,8 @@
-import React, { lazy, Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
 import { useLocation, useNavigate } from 'react-router-dom';
+import ChunkErrorBoundary from '@/components/error-component/chunk-error-boundary';
 import ChunkLoader from '@/components/loader/chunk-loader';
 import { generateOAuthURL } from '@/components/shared';
 import DesktopWrapper from '@/components/shared_ui/desktop-wrapper';
@@ -21,6 +22,7 @@ import {
     enableUrlParameterApplication,
     setupTradeTypeChangeListener,
 } from '@/utils/blockly-url-param-handler';
+import { lazyWithRetry } from '@/utils/lazy-with-retry';
 import {
     checkAndShowTradeTypeModal,
     getModalState,
@@ -43,8 +45,8 @@ import Dashboard from '../dashboard';
 import RunStrategy from '../dashboard/run-strategy';
 import './main.scss';
 
-const ChartWrapper = lazy(() => import('../chart/chart-wrapper'));
-const Tutorial = lazy(() => import('../tutorials'));
+const ChartWrapper = lazyWithRetry(() => import('../chart/chart-wrapper'));
+const Tutorial = lazyWithRetry(() => import('../tutorials'));
 
 const AppWrapper = observer(() => {
     const { connectionStatus } = useApiBase();
@@ -425,11 +427,13 @@ const AppWrapper = observer(() => {
                                         : 'id-charts'
                                 }
                             >
-                                <Suspense
-                                    fallback={<ChunkLoader message={localize('Please wait, loading chart...')} />}
-                                >
-                                    <ChartWrapper show_digits_stats={false} />
-                                </Suspense>
+                                <ChunkErrorBoundary>
+                                    <Suspense
+                                        fallback={<ChunkLoader message={localize('Please wait, loading chart...')} />}
+                                    >
+                                        <ChartWrapper show_digits_stats={false} />
+                                    </Suspense>
+                                </ChunkErrorBoundary>
                             </div>
                             <div
                                 label={
@@ -446,13 +450,15 @@ const AppWrapper = observer(() => {
                                 id='id-tutorials'
                             >
                                 <div className='tutorials-wrapper'>
-                                    <Suspense
-                                        fallback={
-                                            <ChunkLoader message={localize('Please wait, loading tutorials...')} />
-                                        }
-                                    >
-                                        <Tutorial handleTabChange={handleTabChange} />
-                                    </Suspense>
+                                    <ChunkErrorBoundary>
+                                        <Suspense
+                                            fallback={
+                                                <ChunkLoader message={localize('Please wait, loading tutorials...')} />
+                                            }
+                                        >
+                                            <Tutorial handleTabChange={handleTabChange} />
+                                        </Suspense>
+                                    </ChunkErrorBoundary>
                                 </div>
                             </div>
                         </Tabs>
