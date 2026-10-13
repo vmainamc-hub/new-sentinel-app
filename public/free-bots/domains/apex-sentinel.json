@@ -5,7 +5,7 @@
   "bots": [
     {
       "id": "grffy-v1",
-      "name": "grffy v1",
+      "name": "1. grffy v1",
       "file": "grffy v1.xml",
       "asset": "uploads/apex-sentinel/grffy-v1.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -14,7 +14,7 @@
     },
     {
       "id": "mr-duke-speed-bot-1",
-      "name": "Mr Duke Speed Bot.1",
+      "name": "2. Mr Duke Speed Bot.1",
       "file": "Mr Duke Speed Bot.1.xml",
       "asset": "uploads/apex-sentinel/mr-duke-speed-bot-1.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -23,7 +23,7 @@
     },
     {
       "id": "wealth-generator",
-      "name": "Wealth Generator",
+      "name": "3. Wealth Generator",
       "file": "Wealth Generator.xml",
       "asset": "uploads/apex-sentinel/wealth-generator.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -32,7 +32,7 @@
     },
     {
       "id": "wealth-generator-v2",
-      "name": "WEALTH GENERATOR V2",
+      "name": "4. WEALTH GENERATOR V2",
       "file": "WEALTH GENERATOR V2.xml",
       "asset": "uploads/apex-sentinel/wealth-generator-v2.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -41,7 +41,7 @@
     },
     {
       "id": "m27-original-version",
-      "name": "M27 Original version",
+      "name": "5. M27 Original version",
       "file": "M27 Original version.xml",
       "asset": "uploads/apex-sentinel/m27-original-version.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -50,7 +50,7 @@
     },
     {
       "id": "accumulators-bt",
-      "name": "ACCUMULATORS BT",
+      "name": "6. ACCUMULATORS BT",
       "file": "ACCUMULATORS BT.xml",
       "asset": "uploads/apex-sentinel/accumulators-bt.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -59,7 +59,7 @@
     },
     {
       "id": "black-devil-v2-by-mr-duke",
-      "name": "BLACK DEVIL v2(By MR. DUKE)",
+      "name": "7. BLACK DEVIL v2(By MR. DUKE)",
       "file": "BLACK DEVIL v2(By MR. DUKE).xml",
       "asset": "uploads/apex-sentinel/black-devil-v2-by-mr-duke.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -68,7 +68,7 @@
     },
     {
       "id": "candle-mine-version-3-1",
-      "name": "Candle Mine Version 3.1",
+      "name": "8. Candle Mine Version 3.1",
       "file": "Candle Mine Version 3.1.xml",
       "asset": "uploads/apex-sentinel/candle-mine-version-3-1.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -77,7 +77,7 @@
     },
     {
       "id": "d1-2025-bot",
-      "name": "D1 2025 BOT",
+      "name": "9. D1 2025 BOT",
       "file": "D1 2025 BOT.xml",
       "asset": "uploads/apex-sentinel/d1-2025-bot.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -86,7 +86,7 @@
     },
     {
       "id": "d1-by-mr-duke",
-      "name": "D1 BY MR.DUKE",
+      "name": "10. D1 BY MR.DUKE",
       "file": "D1 BY MR.DUKE.xml",
       "asset": "uploads/apex-sentinel/d1-by-mr-duke.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -95,7 +95,7 @@
     },
     {
       "id": "d2-by-mr-duke",
-      "name": "D2 BY MR.DUKE",
+      "name": "11. D2 BY MR.DUKE",
       "file": "D2 BY MR.DUKE.xml",
       "asset": "uploads/apex-sentinel/d2-by-mr-duke.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -104,7 +104,7 @@
     },
     {
       "id": "d4-update-by-mr-dukefinal",
-      "name": "D4 Update by MR.DUKEFINAL",
+      "name": "12. D4 Update by MR.DUKEFINAL",
       "file": "D4 Update by MR.DUKEFINAL.xml",
       "asset": "uploads/apex-sentinel/d4-update-by-mr-dukefinal.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -113,7 +113,7 @@
     },
     {
       "id": "d5-original-version",
-      "name": "D5 (Original version )",
+      "name": "13. D5 (Original version )",
       "file": "D5 (Original version ).xml",
       "asset": "uploads/apex-sentinel/d5-original-version.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -122,7 +122,7 @@
     },
     {
       "id": "d6-deriv-by-duke",
-      "name": "D6 Deriv by Duke",
+      "name": "14. D6 Deriv by Duke",
       "file": "D6 Deriv by Duke.xml",
       "asset": "uploads/apex-sentinel/d6-deriv-by-duke.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -131,7 +131,7 @@
     },
     {
       "id": "d7-over-2-bot",
-      "name": "D7 Over 2 bot",
+      "name": "15. D7 Over 2 bot",
       "file": "D7 Over 2 bot.xml",
       "asset": "uploads/apex-sentinel/d7-over-2-bot.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -140,7 +140,7 @@
     },
     {
       "id": "differhub",
-      "name": "Differhub",
+      "name": "16. Differhub",
       "file": "Differhub.xml",
       "asset": "uploads/apex-sentinel/differhub.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -149,7 +149,7 @@
     },
     {
       "id": "double-over-with-analysis",
-      "name": "Double Over With analysis",
+      "name": "17. Double Over With analysis",
       "file": "Double Over With analysis.xml",
       "asset": "uploads/apex-sentinel/double-over-with-analysis.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -158,7 +158,7 @@
     },
     {
       "id": "even-odd-killer-bot",
-      "name": "Even Odd Killer bot",
+      "name": "18. Even Odd Killer bot",
       "file": "Even Odd Killer bot.xml",
       "asset": "uploads/apex-sentinel/even-odd-killer-bot.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -167,7 +167,7 @@
     },
     {
       "id": "gibu-v8-pro-2024",
-      "name": "Gibu V8 PRO (2024)",
+      "name": "19. Gibu V8 PRO (2024)",
       "file": "Gibu V8 PRO (2024).xml",
       "asset": "uploads/apex-sentinel/gibu-v8-pro-2024.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -176,7 +176,7 @@
     },
     {
       "id": "kiazala-v1-by-the-risk-manager",
-      "name": "Kiazala v1 by The Risk Manager",
+      "name": "20. Kiazala v1 by The Risk Manager",
       "file": "Kiazala v1 by The Risk Manager.xml",
       "asset": "uploads/apex-sentinel/kiazala-v1-by-the-risk-manager.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -185,7 +185,7 @@
     },
     {
       "id": "mkorean-sv5-2024",
-      "name": "Mkorean SV5 2024",
+      "name": "21. Mkorean SV5 2024",
       "file": "Mkorean SV5 2024.xml",
       "asset": "uploads/apex-sentinel/mkorean-sv5-2024.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -194,7 +194,7 @@
     },
     {
       "id": "mkorean-sv7-2025",
-      "name": "Mkorean SV7 2025",
+      "name": "22. Mkorean SV7 2025",
       "file": "Mkorean SV7 2025.xml",
       "asset": "uploads/apex-sentinel/mkorean-sv7-2025.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -203,7 +203,7 @@
     },
     {
       "id": "mkorean-sv7-bot",
-      "name": "Mkorean sv7 bot",
+      "name": "23. Mkorean sv7 bot",
       "file": "Mkorean sv7 bot.xml",
       "asset": "uploads/apex-sentinel/mkorean-sv7-bot.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -212,7 +212,7 @@
     },
     {
       "id": "mwenda-pole-by-the-risk-manager",
-      "name": "Mwenda Pole By The Risk Manager",
+      "name": "24. Mwenda Pole By The Risk Manager",
       "file": "Mwenda Pole By The Risk Manager.xml",
       "asset": "uploads/apex-sentinel/mwenda-pole-by-the-risk-manager.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -221,7 +221,7 @@
     },
     {
       "id": "new-dollar-printer-bot-vxy",
-      "name": "New Dollar Printer Bot.VXY($)",
+      "name": "25. New Dollar Printer Bot.VXY($)",
       "file": "New Dollar Printer Bot.VXY($).xml",
       "asset": "uploads/apex-sentinel/new-dollar-printer-bot-vxy.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -230,7 +230,7 @@
     },
     {
       "id": "over-1-recovery-over-4",
-      "name": "OVER 1 RECOVERY OVER 4",
+      "name": "26. OVER 1 RECOVERY OVER 4",
       "file": "OVER 1 RECOVERY OVER 4.xml",
       "asset": "uploads/apex-sentinel/over-1-recovery-over-4.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -239,7 +239,7 @@
     },
     {
       "id": "rise-fall-thunder",
-      "name": "Rise fall thunder ⚡",
+      "name": "27. Rise fall thunder ⚡",
       "file": "Rise fall thunder ⚡.xml",
       "asset": "uploads/apex-sentinel/rise-fall-thunder.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -248,7 +248,7 @@
     },
     {
       "id": "simba-ai-v1",
-      "name": "Simba Ai v1",
+      "name": "28. Simba Ai v1",
       "file": "Simba Ai v1.xml",
       "asset": "uploads/apex-sentinel/simba-ai-v1.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -257,7 +257,7 @@
     },
     {
       "id": "speedhack-by-mrduke-site-00",
-      "name": "Speedhack by mrduke.site 00",
+      "name": "29. Speedhack by mrduke.site 00",
       "file": "Speedhack by mrduke.site 00.xml",
       "asset": "uploads/apex-sentinel/speedhack-by-mrduke-site-00.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -266,7 +266,7 @@
     },
     {
       "id": "the-d3-rise-and-fall",
-      "name": "The-D3 rise and fall",
+      "name": "30. The-D3 rise and fall",
       "file": "The-D3 rise and fall.xml",
       "asset": "uploads/apex-sentinel/the-d3-rise-and-fall.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -275,7 +275,7 @@
     },
     {
       "id": "grffy-upated-martingale-2-loss-premium-bot",
-      "name": "grffy upated martingale 2 loss premium bot",
+      "name": "31. grffy upated martingale 2 loss premium bot",
       "file": "grffy upated martingale 2 loss premium bot.xml",
       "asset": "uploads/apex-sentinel/grffy-upated-martingale-2-loss-premium-bot.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -284,7 +284,7 @@
     },
     {
       "id": "grffy",
-      "name": "grffy",
+      "name": "32. grffy",
       "file": "grffy.xml",
       "asset": "uploads/apex-sentinel/grffy.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -293,7 +293,7 @@
     },
     {
       "id": "under-7-8-9-g2-bot-1",
-      "name": "under 7,8,9 g2 bot 1",
+      "name": "33. under 7,8,9 g2 bot 1",
       "file": "under 7,8,9 g2 bot 1.xml",
       "asset": "uploads/apex-sentinel/under-7-8-9-g2-bot-1.xml",
       "description": "Blockly strategy bundled with Apex Sentinel.",
@@ -302,7 +302,7 @@
     },
     {
       "id": "apex-library-16-over-2-under-7-randomizer-01",
-      "name": "16. Over 2 Under 7 Randomizer",
+      "name": "34. Over 2 Under 7 Randomizer",
       "file": "16. Over 2 Under 7 Randomizer.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-16-over-2-under-7-randomizer-01.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -311,7 +311,7 @@
     },
     {
       "id": "apex-library-2026-hunter-mr-duke-deriv-compatible-v3-02",
-      "name": "2026_HUNTER_MR_DUKE_DERIV_COMPATIBLE_V3",
+      "name": "35. 2026_HUNTER_MR_DUKE_DERIV_COMPATIBLE_V3",
       "file": "2026_HUNTER_MR_DUKE_DERIV_COMPATIBLE_V3.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-2026-hunter-mr-duke-deriv-compatible-v3-02.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -320,7 +320,7 @@
     },
     {
       "id": "apex-library-5-recover-over-bandwagon-03",
-      "name": "5. Recover Over Bandwagon",
+      "name": "36. Recover Over Bandwagon",
       "file": "5. Recover Over Bandwagon.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-5-recover-over-bandwagon-03.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -329,7 +329,7 @@
     },
     {
       "id": "apex-library-ai-higher-lower-by-masika-04",
-      "name": "AI HIGHER & LOWER BY MASIKA",
+      "name": "37. AI HIGHER & LOWER BY MASIKA",
       "file": "AI HIGHER & LOWER BY MASIKA.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-ai-higher-lower-by-masika-04.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -338,7 +338,7 @@
     },
     {
       "id": "apex-library-ai-only-ups-downs-apex-bot-05",
-      "name": "AI ONLY UPS DOWNS APEX BOT",
+      "name": "38. AI ONLY UPS DOWNS APEX BOT",
       "file": "AI ONLY UPS DOWNS APEX BOT.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-ai-only-ups-downs-apex-bot-05.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -347,7 +347,7 @@
     },
     {
       "id": "apex-library-amd-sequential-marvel-bot-v8-lastdistwin-06",
-      "name": "AMD_Sequential_Marvel_bot_v8_lastdistwin",
+      "name": "39. AMD_Sequential_Marvel_bot_v8_lastdistwin",
       "file": "AMD_Sequential_Marvel_bot_v8_lastdistwin.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-amd-sequential-marvel-bot-v8-lastdistwin-06.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -356,7 +356,7 @@
     },
     {
       "id": "apex-library-bot-m-21-under-8-under-5-sample2-07",
-      "name": "Bot M 21 Under 8 Under 5 sample2",
+      "name": "40. Bot M 21 Under 8 Under 5 sample2",
       "file": "Bot M 21 Under 8 Under 5 sample2.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-bot-m-21-under-8-under-5-sample2-07.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -365,7 +365,7 @@
     },
     {
       "id": "apex-library-dema-cci-magic-bot-with-virtualhook-fixed-08",
-      "name": "DEMA_CCI_ Magic Bot_With VirtualHook_Fixed",
+      "name": "41. DEMA_CCI_ Magic Bot_With VirtualHook_Fixed",
       "file": "DEMA_CCI_ Magic Bot_With VirtualHook_Fixed.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-dema-cci-magic-bot-with-virtualhook-fixed-08.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -374,7 +374,7 @@
     },
     {
       "id": "apex-library-duke-conditions-on-masika-3-09",
-      "name": "Duke_Conditions_On_Masika (3)",
+      "name": "42. Duke_Conditions_On_Masika (3)",
       "file": "Duke_Conditions_On_Masika (3).xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-duke-conditions-on-masika-3-09.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -383,7 +383,7 @@
     },
     {
       "id": "apex-library-elite-over-2-winning-cooldown-v5-fixed-10",
-      "name": "ELITE_Over_2_winning_cooldown_v5_FIXED",
+      "name": "43. ELITE_Over_2_winning_cooldown_v5_FIXED",
       "file": "ELITE_Over_2_winning_cooldown_v5_FIXED.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-elite-over-2-winning-cooldown-v5-fixed-10.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -392,7 +392,7 @@
     },
     {
       "id": "apex-library-elite-under7-winning-cooldown-v5-fixed-11",
-      "name": "ELITE_Under7_winning_cooldown_v5_FIXED",
+      "name": "44. ELITE_Under7_winning_cooldown_v5_FIXED",
       "file": "ELITE_Under7_winning_cooldown_v5_FIXED.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-elite-under7-winning-cooldown-v5-fixed-11.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -401,7 +401,7 @@
     },
     {
       "id": "apex-library-entry-point-bot-12",
-      "name": "Entry point bot",
+      "name": "45. Entry point bot",
       "file": "Entry point bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-entry-point-bot-12.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -410,7 +410,7 @@
     },
     {
       "id": "apex-library-holy-grail-13",
-      "name": "Holy Grail",
+      "name": "46. Holy Grail",
       "file": "Holy Grail .xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-holy-grail-13.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -419,7 +419,7 @@
     },
     {
       "id": "apex-library-apex-1-digit-entry-profit-master-14",
-      "name": "Apex  1 digit entry profit master.",
+      "name": "47. Apex  1 digit entry profit master.",
       "file": "Apex  1 digit entry profit master. .xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-1-digit-entry-profit-master-14.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -428,7 +428,7 @@
     },
     {
       "id": "apex-library-apex-over-under-2-digit-entry-copy-15",
-      "name": "Apex  Over under 2 digit entry - Copy",
+      "name": "48. Apex  Over under 2 digit entry - Copy",
       "file": "Apex  Over under 2 digit entry - Copy.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-over-under-2-digit-entry-copy-15.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -437,7 +437,7 @@
     },
     {
       "id": "apex-library-apex-rise-and-fall-trend-bot-copy-16",
-      "name": "Apex  Rise and Fall Trend bot - Copy",
+      "name": "49. Apex  Rise and Fall Trend bot - Copy",
       "file": "Apex  Rise and Fall Trend bot - Copy.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-rise-and-fall-trend-bot-copy-16.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -446,7 +446,7 @@
     },
     {
       "id": "apex-library-apex-under-7-17",
-      "name": "Apex  Under 7",
+      "name": "50. Apex  Under 7",
       "file": "Apex  Under 7.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-under-7-17.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -455,7 +455,7 @@
     },
     {
       "id": "apex-library-apex-trend-bot-2-18",
-      "name": "Apex  trend bot 2",
+      "name": "51. Apex  trend bot 2",
       "file": "Apex  trend bot 2.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-trend-bot-2-18.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -464,7 +464,7 @@
     },
     {
       "id": "apex-library-apex-even-odd-ages-bot-19",
-      "name": "Apex Even Odd %ages bot",
+      "name": "52. Apex Even Odd %ages bot",
       "file": "Apex Even Odd %ages bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-even-odd-ages-bot-19.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -473,7 +473,7 @@
     },
     {
       "id": "apex-library-apex-over-under-destroyer-bot-20",
-      "name": "Apex Over Under Destroyer Bot",
+      "name": "53. Apex Over Under Destroyer Bot",
       "file": "Apex Over Under Destroyer Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-over-under-destroyer-bot-20.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -482,7 +482,7 @@
     },
     {
       "id": "apex-library-apex-massive-recovery-21",
-      "name": "Apex massive recovery",
+      "name": "54. Apex massive recovery",
       "file": "Apex massive recovery.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-massive-recovery-21.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -491,7 +491,7 @@
     },
     {
       "id": "apex-library-apex-oracle-bot-22",
-      "name": "Apex oracle bot",
+      "name": "55. Apex oracle bot",
       "file": "Apex oracle bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-apex-oracle-bot-22.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -500,7 +500,7 @@
     },
     {
       "id": "apex-library-masika-sentinel-under7-pressure-momentum-v7-3-fast-23",
-      "name": "MASIKA_SENTINEL_UNDER7_PRESSURE_MOMENTUM_v7_3_FAST",
+      "name": "56. MASIKA_SENTINEL_UNDER7_PRESSURE_MOMENTUM_v7_3_FAST",
       "file": "MASIKA_SENTINEL_UNDER7_PRESSURE_MOMENTUM_v7_3_FAST.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-masika-sentinel-under7-pressure-momentum-v7-3-fast-23.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -509,7 +509,7 @@
     },
     {
       "id": "apex-library-mv-dollar-minner-even-odd-wager-bot-24",
-      "name": "MV Dollar Minner Even Odd wager Bot",
+      "name": "57. MV Dollar Minner Even Odd wager Bot",
       "file": "MV Dollar Minner Even Odd wager Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-dollar-minner-even-odd-wager-bot-24.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -518,7 +518,7 @@
     },
     {
       "id": "apex-library-mv-dollar-minner-under-8-recovery-bot-25",
-      "name": "MV Dollar Minner Under 8 Recovery Bot",
+      "name": "58. MV Dollar Minner Under 8 Recovery Bot",
       "file": "MV Dollar Minner Under 8 Recovery Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-dollar-minner-under-8-recovery-bot-25.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -527,7 +527,7 @@
     },
     {
       "id": "apex-library-mv-dollar-minner-without-entry-point-26",
-      "name": "MV Dollar Minner Without Entry Point",
+      "name": "59. MV Dollar Minner Without Entry Point",
       "file": "MV Dollar Minner Without Entry Point.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-dollar-minner-without-entry-point-26.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -536,7 +536,7 @@
     },
     {
       "id": "apex-library-mv-dollar-minner-over-1-recovery-over-3-1-27",
-      "name": "MV Dollar Minner, Over 1 Recovery Over 3 (1)",
+      "name": "60. MV Dollar Minner, Over 1 Recovery Over 3 (1)",
       "file": "MV Dollar Minner, Over 1 Recovery Over 3 (1).xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-dollar-minner-over-1-recovery-over-3-1-27.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -545,7 +545,7 @@
     },
     {
       "id": "apex-library-mv-dollar-printer-entry-point-bot-28",
-      "name": "MV Dollar Printer Entry Point Bot",
+      "name": "61. MV Dollar Printer Entry Point Bot",
       "file": "MV Dollar Printer Entry Point Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-dollar-printer-entry-point-bot-28.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -554,7 +554,7 @@
     },
     {
       "id": "apex-library-mv-wealth-generator-bot-29",
-      "name": "MV Wealth Generator Bot.",
+      "name": "62. MV Wealth Generator Bot.",
       "file": "MV Wealth Generator Bot..xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-wealth-generator-bot-29.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -563,7 +563,7 @@
     },
     {
       "id": "apex-library-mv-over-2-nonstop-bot-30",
-      "name": "MV_OVER_2_NONSTOP_BOT",
+      "name": "63. MV_OVER_2_NONSTOP_BOT",
       "file": "MV_OVER_2_NONSTOP_BOT.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-over-2-nonstop-bot-30.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -572,7 +572,7 @@
     },
     {
       "id": "apex-library-mv-over-2-rescan-every-loss-bot-31",
-      "name": "MV_OVER_2_RESCAN_EVERY_LOSS_BOT",
+      "name": "64. MV_OVER_2_RESCAN_EVERY_LOSS_BOT",
       "file": "MV_OVER_2_RESCAN_EVERY_LOSS_BOT.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-over-2-rescan-every-loss-bot-31.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -581,7 +581,7 @@
     },
     {
       "id": "apex-library-mv-over-2-two-scan-bot-1-32",
-      "name": "MV_OVER_2_TWO_SCAN_BOT (1)",
+      "name": "65. MV_OVER_2_TWO_SCAN_BOT (1)",
       "file": "MV_OVER_2_TWO_SCAN_BOT (1).xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-over-2-two-scan-bot-1-32.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -590,7 +590,7 @@
     },
     {
       "id": "apex-library-mv-under-7-nonstop-bot-33",
-      "name": "MV_UNDER_7_NONSTOP_BOT",
+      "name": "66. MV_UNDER_7_NONSTOP_BOT",
       "file": "MV_UNDER_7_NONSTOP_BOT.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-under-7-nonstop-bot-33.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -599,7 +599,7 @@
     },
     {
       "id": "apex-library-mv-under-7-nonstop-bot-fixed-v3-1-34",
-      "name": "MV_UNDER_7_NONSTOP_BOT_FIXED_V3 (1)",
+      "name": "67. MV_UNDER_7_NONSTOP_BOT_FIXED_V3 (1)",
       "file": "MV_UNDER_7_NONSTOP_BOT_FIXED_V3 (1).xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-under-7-nonstop-bot-fixed-v3-1-34.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -608,7 +608,7 @@
     },
     {
       "id": "apex-library-mv-under-7-rescan-every-loss-bot-35",
-      "name": "MV_UNDER_7_RESCAN_EVERY_LOSS_BOT",
+      "name": "68. MV_UNDER_7_RESCAN_EVERY_LOSS_BOT",
       "file": "MV_UNDER_7_RESCAN_EVERY_LOSS_BOT.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-under-7-rescan-every-loss-bot-35.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -617,7 +617,7 @@
     },
     {
       "id": "apex-library-mv-under-7-two-scan-bot-1-36",
-      "name": "MV_UNDER_7_TWO_SCAN_BOT_1",
+      "name": "69. MV_UNDER_7_TWO_SCAN_BOT_1",
       "file": "MV_UNDER_7_TWO_SCAN_BOT_1.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-mv-under-7-two-scan-bot-1-36.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -626,7 +626,7 @@
     },
     {
       "id": "apex-library-masika-under-9-8-7-recovery-bot-37",
-      "name": "Masika under 9,8, 7 recovery bot.",
+      "name": "70. Masika under 9,8, 7 recovery bot.",
       "file": "Masika under 9,8, 7 recovery bot..xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-masika-under-9-8-7-recovery-bot-37.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -635,7 +635,7 @@
     },
     {
       "id": "apex-library-masika-under-v7-2-fixed-38",
-      "name": "Masika_under_V7_2_fixed",
+      "name": "71. Masika_under_V7_2_fixed",
       "file": "Masika_under_V7_2_fixed.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-masika-under-v7-2-fixed-38.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -644,7 +644,7 @@
     },
     {
       "id": "apex-library-over-2-3-digits-entry-cashflow-bot-39",
-      "name": "Over 2,3 Digits Entry Cashflow Bot",
+      "name": "72. Over 2,3 Digits Entry Cashflow Bot",
       "file": "Over 2,3 Digits Entry Cashflow Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-over-2-3-digits-entry-cashflow-bot-39.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -653,7 +653,7 @@
     },
     {
       "id": "apex-library-over-destroyer-with-entry-point-bot-40",
-      "name": "Over destroyer With entry Point Bot",
+      "name": "73. Over destroyer With entry Point Bot",
       "file": "Over destroyer With entry Point Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-over-destroyer-with-entry-point-bot-40.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -662,7 +662,7 @@
     },
     {
       "id": "apex-library-precision-percentage-bot-v6-continuous-safe-fixed-v4-1-41",
-      "name": "Precision_Percentage_Bot_V6_CONTINUOUS_SAFE_FIXED_v4(1)",
+      "name": "74. Precision_Percentage_Bot_V6_CONTINUOUS_SAFE_FIXED_v4(1)",
       "file": "Precision_Percentage_Bot_V6_CONTINUOUS_SAFE_FIXED_v4(1).xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-precision-percentage-bot-v6-continuous-safe-fixed-v4-1-41.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -671,7 +671,7 @@
     },
     {
       "id": "apex-library-recover-under-tripple-digit-entry-42",
-      "name": "Recover Under Tripple Digit entry",
+      "name": "75. Recover Under Tripple Digit entry",
       "file": "Recover Under Tripple Digit entry.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-recover-under-tripple-digit-entry-42.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -680,7 +680,7 @@
     },
     {
       "id": "apex-library-recover-under-double-digit-entry-point-43",
-      "name": "Recover_Under Double Digit entry point",
+      "name": "76. Recover_Under Double Digit entry point",
       "file": "Recover_Under Double Digit entry point.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-recover-under-double-digit-entry-point-43.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -689,7 +689,7 @@
     },
     {
       "id": "apex-library-recovery-under-wait-recovery-single-trade-bot-44",
-      "name": "Recovery Under Wait Recovery Single Trade Bot",
+      "name": "77. Recovery Under Wait Recovery Single Trade Bot",
       "file": "Recovery Under Wait Recovery Single Trade Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-recovery-under-wait-recovery-single-trade-bot-44.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -698,7 +698,7 @@
     },
     {
       "id": "apex-library-sentinel-under7-recovery-bot-45",
-      "name": "SENTINEL UNDER7 + RECOVERY BOT",
+      "name": "78. SENTINEL UNDER7 + RECOVERY BOT",
       "file": "SENTINEL UNDER7 + RECOVERY BOT.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-sentinel-under7-recovery-bot-45.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -707,7 +707,7 @@
     },
     {
       "id": "apex-library-sentinel-under7-psychology-v1-from-v7-3-1-1-46",
-      "name": "SENTINEL_UNDER7_PSYCHOLOGY_V1_FROM_V7_3(1) (1)",
+      "name": "79. SENTINEL_UNDER7_PSYCHOLOGY_V1_FROM_V7_3(1) (1)",
       "file": "SENTINEL_UNDER7_PSYCHOLOGY_V1_FROM_V7_3(1) (1).xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-sentinel-under7-psychology-v1-from-v7-3-1-1-46.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -716,7 +716,7 @@
     },
     {
       "id": "apex-library-scalper-trader-bot-english-no-release-prompt-code123-1-47",
-      "name": "Scalper_Trader_Bot_ENGLISH_NO_RELEASE_PROMPT_CODE123 (1)",
+      "name": "80. Scalper_Trader_Bot_ENGLISH_NO_RELEASE_PROMPT_CODE123 (1)",
       "file": "Scalper_Trader_Bot_ENGLISH_NO_RELEASE_PROMPT_CODE123 (1).xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-scalper-trader-bot-english-no-release-prompt-code123-1-47.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -725,7 +725,7 @@
     },
     {
       "id": "apex-library-sentinel-under-premium-bot-48",
-      "name": "Sentinel Under Premium Bot",
+      "name": "81. Sentinel Under Premium Bot",
       "file": "Sentinel Under Premium Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-sentinel-under-premium-bot-48.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -734,7 +734,7 @@
     },
     {
       "id": "apex-library-the-masika-over-trading-bot-49",
-      "name": "The Masika Over Trading Bot",
+      "name": "82. The Masika Over Trading Bot",
       "file": "The Masika Over Trading Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-the-masika-over-trading-bot-49.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -743,7 +743,7 @@
     },
     {
       "id": "apex-library-the-masika-strike-over-bot-50",
-      "name": "The Masika Strike Over Bot",
+      "name": "83. The Masika Strike Over Bot",
       "file": "The Masika Strike Over Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-the-masika-strike-over-bot-50.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -752,7 +752,7 @@
     },
     {
       "id": "apex-library-the-masika-strike-under-bot-51",
-      "name": "The Masika Strike Under Bot",
+      "name": "84. The Masika Strike Under Bot",
       "file": "The Masika Strike Under Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-the-masika-strike-under-bot-51.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -761,7 +761,7 @@
     },
     {
       "id": "apex-library-the-masika-under-trading-bot-52",
-      "name": "The Masika Under Trading Bot",
+      "name": "85. The Masika Under Trading Bot",
       "file": "The Masika Under Trading Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-the-masika-under-trading-bot-52.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -770,7 +770,7 @@
     },
     {
       "id": "apex-library-the-over-scalper-pro-with-duke-conditions-53",
-      "name": "The Over Scalper Pro With Duke Conditions",
+      "name": "86. The Over Scalper Pro With Duke Conditions",
       "file": "The Over Scalper Pro With Duke Conditions.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-the-over-scalper-pro-with-duke-conditions-53.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -779,7 +779,7 @@
     },
     {
       "id": "apex-library-the-under-7-holy-grail-54",
-      "name": "The Under 7 Holy Grail",
+      "name": "87. The Under 7 Holy Grail",
       "file": "The Under 7 Holy Grail.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-the-under-7-holy-grail-54.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -788,7 +788,7 @@
     },
     {
       "id": "apex-library-the-under-7-recover-under-masika-strike-bot-55",
-      "name": "The Under 7 Recover Under masika Strike Bot",
+      "name": "88. The Under 7 Recover Under masika Strike Bot",
       "file": "The Under 7 Recover Under masika Strike Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-the-under-7-recover-under-masika-strike-bot-55.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -797,7 +797,7 @@
     },
     {
       "id": "apex-library-the-under-7-statistical-regime-bot-56",
-      "name": "The Under 7 Statistical Regime Bot",
+      "name": "89. The Under 7 Statistical Regime Bot",
       "file": "The Under 7 Statistical Regime Bot .xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-the-under-7-statistical-regime-bot-56.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -806,7 +806,7 @@
     },
     {
       "id": "apex-library-the-under-9-smart-entry-bot-57",
-      "name": "The Under 9 Smart entry bot.",
+      "name": "90. The Under 9 Smart entry bot.",
       "file": "The Under 9 Smart entry bot..xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-the-under-9-smart-entry-bot-57.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -815,7 +815,7 @@
     },
     {
       "id": "apex-library-under7-v24-continuous-recovery-1-1-58",
-      "name": "UNDER7_V24_CONTINUOUS_RECOVERY (1) (1)",
+      "name": "91. UNDER7_V24_CONTINUOUS_RECOVERY (1) (1)",
       "file": "UNDER7_V24_CONTINUOUS_RECOVERY (1) (1).xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-under7-v24-continuous-recovery-1-1-58.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -824,7 +824,7 @@
     },
     {
       "id": "apex-library-under7-v3-winning-stence-v3-59",
-      "name": "UNDER7_V3_WINNING_STENCE_v3",
+      "name": "92. UNDER7_V3_WINNING_STENCE_v3",
       "file": "UNDER7_V3_WINNING_STENCE_v3.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-under7-v3-winning-stence-v3-59.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -833,7 +833,7 @@
     },
     {
       "id": "apex-library-under-7-1-touch-bot-60",
-      "name": "Under 7 1 Touch bot",
+      "name": "93. Under 7 1 Touch bot",
       "file": "Under 7 1 Touch bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-1-touch-bot-60.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -842,7 +842,7 @@
     },
     {
       "id": "apex-library-under-7-killler-bot-dynamic-entry-2-high-digits-entry-61",
-      "name": "Under 7 Killler Bot  Dynamic Entry 2 high Digits entry",
+      "name": "94. Under 7 Killler Bot  Dynamic Entry 2 high Digits entry",
       "file": "Under 7 Killler Bot  Dynamic Entry 2 high Digits entry.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-killler-bot-dynamic-entry-2-high-digits-entry-61.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -851,7 +851,7 @@
     },
     {
       "id": "apex-library-under-7-regime-intelligence-bot-62",
-      "name": "Under 7 Regime Intelligence Bot",
+      "name": "95. Under 7 Regime Intelligence Bot",
       "file": "Under 7 Regime Intelligence Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-regime-intelligence-bot-62.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -860,7 +860,7 @@
     },
     {
       "id": "apex-library-under-7-with-entry-digit-bot-63",
-      "name": "Under 7 With Entry Digit Bot",
+      "name": "96. Under 7 With Entry Digit Bot",
       "file": "Under 7 With Entry Digit Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-with-entry-digit-bot-63.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -869,7 +869,7 @@
     },
     {
       "id": "apex-library-under-7-with-entry-digit-bot-64",
-      "name": "Under 7 with Entry digit Bot",
+      "name": "97. Under 7 with Entry digit Bot",
       "file": "Under 7 with Entry digit Bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-with-entry-digit-bot-64.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -878,7 +878,7 @@
     },
     {
       "id": "apex-library-under-streak-confirmation-single-trade-recovery-65",
-      "name": "Under Streak Confirmation Single Trade RECOVERY",
+      "name": "98. Under Streak Confirmation Single Trade RECOVERY",
       "file": "Under Streak Confirmation Single Trade RECOVERY.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-under-streak-confirmation-single-trade-recovery-65.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -887,7 +887,7 @@
     },
     {
       "id": "apex-library-under-6-fixed-dbot-native-66",
-      "name": "Under_6_FIXED_DBOT_NATIVE",
+      "name": "99. Under_6_FIXED_DBOT_NATIVE",
       "file": "Under_6_FIXED_DBOT_NATIVE.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-under-6-fixed-dbot-native-66.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -896,7 +896,7 @@
     },
     {
       "id": "apex-library-under-streak-confirmation-bot-recovery-67",
-      "name": "Under_Streak_Confirmation_bot_RECOVERY",
+      "name": "100. Under_Streak_Confirmation_bot_RECOVERY",
       "file": "Under_Streak_Confirmation_bot_RECOVERY.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-under-streak-confirmation-bot-recovery-67.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -905,7 +905,7 @@
     },
     {
       "id": "apex-library-wager-entry-point-bot-68",
-      "name": "Wager entry point bot",
+      "name": "101. Wager entry point bot",
       "file": "Wager entry point bot.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-wager-entry-point-bot-68.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
@@ -914,7 +914,7 @@
     },
     {
       "id": "apex-library-recover-under-bandwagon-69",
-      "name": "_Recover Under Bandwagon",
+      "name": "102. _Recover Under Bandwagon",
       "file": "_Recover Under Bandwagon.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-recover-under-bandwagon-69.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
