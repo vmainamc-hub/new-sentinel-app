@@ -1,8 +1,9 @@
 import { localize } from '@deriv-com/translations';
 import { config } from '../constants/config';
+import { isRiseFall } from './rise-fall';
 
 // TODO: use-shared-functions - These functions are duplicates of trader ones, export and use these instead.
-export const getContractTypeName = contract => {
+export const getContractTypeName = (contract = {}) => {
     const { opposites } = config();
     let name = localize('Unknown');
 
@@ -15,8 +16,7 @@ export const getContractTypeName = contract => {
             if (contract_type_names[0] === contract.contract_type) {
                 // Extra check for CALL & PUT types to distinguish Rise/Fall & Higher/Lower.
                 if (['CALL', 'PUT'].includes(contract_type_names[0])) {
-                    const shortcode_suffix = contract.shortcode.split('_').slice(-2)[0];
-                    const is_risefall = /^S0P$/.test(shortcode_suffix);
+                    const is_risefall = isRiseFall(contract);
                     const req_opposite_name = is_risefall ? 'CALLPUT' : 'HIGHERLOWER';
 
                     if (opposites_name !== req_opposite_name) {
