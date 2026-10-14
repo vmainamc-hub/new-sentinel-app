@@ -256,7 +256,7 @@ const PremiumLayout = observer(() => {
         style={themeStyle}
     >
         <GlobalContractBridge />
-        <Suspense fallback={null}><SentinelAiBridge /></Suspense>
+        <Suspense fallback={null}><SentinelAiBridge openBotBuilder={openBotBuilder} /></Suspense>
         <SignalZoneBridge />
         <PremiumHeader active={section} navigation={customization.navigation} onChange={changeSection} />
         <main className='prodb-premium-content'>

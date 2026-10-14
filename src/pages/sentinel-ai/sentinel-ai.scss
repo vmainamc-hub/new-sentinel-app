@@ -739,6 +739,15 @@
         cursor: pointer;
     }
 
+    &__open:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+
+    &__text &__error {
+        color: #ff8a80;
+    }
+
     &__close {
         flex: none;
         width: 28px;

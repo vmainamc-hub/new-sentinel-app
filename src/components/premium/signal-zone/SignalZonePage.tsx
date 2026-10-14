@@ -3,7 +3,7 @@
 // You press Run in Bot Builder yourself; nothing here ever runs a bot or buys a contract.
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { BULK_MARKETS } from '../over-under-engine';
-import { EMPTY_LIVE, advanceLive, agreedNow, dismissLive, secondsLeft, type LiveSignal, type LiveState } from './signal-zone-live';
+import { EMPTY_LIVE, advanceLive, dismissLive, liveNow, secondsLeft, type LiveSignal, type LiveState } from './signal-zone-live';
 import { loadSignalIntoBot } from './signal-zone-loader';
 import { addEntry, entryFor, loadHistory, saveHistory, summarize, type HistoryEntry } from './signal-zone-history';
 import { mergeCandidates, revalidate, type ZoneCandidate } from './signal-zone-merge';
@@ -96,7 +96,7 @@ const SignalZonePage = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
                 if (liveRef.current.signals.length || liveRef.current.suppressed.length) { liveRef.current = EMPTY_LIVE; setLive(EMPTY_LIVE); }
                 return;
             }
-            const agreed = read.status.warm ? agreedNow(read.sentinel, read.fusion, current, at) : [];
+            const agreed = read.status.warm ? liveNow(read.sentinel, read.fusion, current, at) : [];
             const step = advanceLive(liveRef.current, agreed, at, Math.min(300, Math.max(30, current.signalLifetimeSeconds)) * 1000);
             liveRef.current = step.state;
             setLive(step.state);
@@ -145,7 +145,7 @@ const SignalZonePage = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
         if (problems.length) { setError(problems[0]); return; }
         const now = Date.now();
         const read = readSources(settings.requireMomentum, now);
-        const fresh = from === 'live' ? agreedNow(read.sentinel, read.fusion, settings, now) : mergeCandidates(read.sentinel, read.fusion, settings, now);
+        const fresh = from === 'live' ? liveNow(read.sentinel, read.fusion, settings, now) : mergeCandidates(read.sentinel, read.fusion, settings, now);
         const check = revalidate(candidate, fresh, now);
         if (!check.ok) { setError(check.reason); return; }
         setLoading(true);
@@ -193,7 +193,7 @@ const SignalZonePage = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
             <section className='sz__panel sz-live' aria-label='Live signals'>
                 <div className='sz-live__head'>
                     <h2>Live signals</h2>
-                    <span>{settings.autoPush ? `Both engines agree -> pushed here, gone after ${settings.signalLifetimeSeconds}s` : 'Auto-push is off'}</span>
+                    <span>{settings.autoPush ? `${settings.mergeMode === 'sentinel_only' ? 'Sentinel AI signal' : 'Both engines agree'} -> pushed here, gone after ${settings.signalLifetimeSeconds}s` : 'Auto-push is off'}</span>
                 </div>
                 {!settings.autoPush ? (
                     <p className='sz-stamp'>Turn on "Auto-push agreed signals" in the settings to have agreed signals appear here by themselves.</p>

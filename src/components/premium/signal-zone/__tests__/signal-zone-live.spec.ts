@@ -131,3 +131,16 @@ describe('countdown', () => {
         expect(secondsLeft(signal, T0 + 70_000)).toBe(0);
     });
 });
+
+describe('liveNow', () => {
+    it('uses Sentinel-only signals in sentinel_only mode and agreement otherwise', () => {
+        const { liveNow } = require('../signal-zone-live');
+        const { DEFAULT_SETTINGS } = require('../signal-zone-settings');
+        const sentinel = [{
+            symbol: 'R_50', market: 'Volatility 50', contract: 'DIGITUNDER', barrier: 7, label: 'Under 7', entryDigit: 5, entryStatus: 'ENTER NOW',
+            entryWindow: '', entryWinRate: null, score: 80, danger: 10, engineBlocked: false, momentumBlocked: false, receivedAt: 1,
+        }];
+        expect(liveNow(sentinel, [], { ...DEFAULT_SETTINGS, mergeMode: 'sentinel_only' }, 1)).toHaveLength(1);
+        expect(liveNow(sentinel, [], { ...DEFAULT_SETTINGS, mergeMode: 'both' }, 1)).toHaveLength(0);
+    });
+});
