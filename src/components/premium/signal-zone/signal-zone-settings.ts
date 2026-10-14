@@ -1,9 +1,11 @@
 // SIGNAL ZONE: settings, defaults, validation and persistence. Pure apart from load/save (localStorage, guarded).
 import { ALLOWED_BARRIERS } from '../over-under-engine';
 
-export type MergeMode = 'both' | 'fusion_leads' | 'sentinel_only';
+export type MergeMode = 'both' | 'fusion_leads' | 'fusion_only' | 'sentinel_only';
 
 export const MIN_STAKE = 0.35;
+/** The default entry digits the user can choose from, per side. */
+export const DEFAULT_ENTRY_CHOICES = { DIGITOVER: [2, 4], DIGITUNDER: [7, 5] } as const;
 export const SETTINGS_KEY = 'signalzone.settings.v1';
 
 export type SignalZoneSettings = {
@@ -20,6 +22,10 @@ export type SignalZoneSettings = {
     takeProfit: number;
     /** Enforced by Signal Zone itself, outside the bot. 0 = off. */
     stopLoss: number;
+    /** Entry digit used for an Over signal when Sentinel AI gives no usable one (2 or 4). */
+    defaultOverEntry: number;
+    /** Entry digit used for an Under signal when Sentinel AI gives no usable one (7 or 5). */
+    defaultUnderEntry: number;
     /** Over signals recover on this barrier (Over 1/2/3). */
     recoveryOverBarrier: number;
     /** Under signals recover on this barrier (Under 8/7/6). */
@@ -41,6 +47,8 @@ export const DEFAULT_SETTINGS: SignalZoneSettings = {
     maxStake: 8,
     takeProfit: 3,
     stopLoss: 10,
+    defaultOverEntry: 2,
+    defaultUnderEntry: 7,
     recoveryOverBarrier: 3,
     recoveryUnderBarrier: 6,
     minScore: 0,
@@ -50,7 +58,7 @@ export const DEFAULT_SETTINGS: SignalZoneSettings = {
     excludedMarkets: [],
 };
 
-const MERGE_MODES: readonly MergeMode[] = ['both', 'fusion_leads', 'sentinel_only'];
+const MERGE_MODES: readonly MergeMode[] = ['both', 'fusion_leads', 'fusion_only', 'sentinel_only'];
 
 const finite = (value: unknown, fallback: number): number => {
     const n = typeof value === 'string' && value.trim() === '' ? NaN : Number(value);
@@ -71,6 +79,8 @@ export const normalizeSettings = (raw: unknown): SignalZoneSettings => {
         maxStake: round2(finite(source.maxStake, d.maxStake)),
         takeProfit: round2(finite(source.takeProfit, d.takeProfit)),
         stopLoss: Math.max(0, round2(finite(source.stopLoss, d.stopLoss))),
+        defaultOverEntry: Math.round(finite(source.defaultOverEntry, d.defaultOverEntry)),
+        defaultUnderEntry: Math.round(finite(source.defaultUnderEntry, d.defaultUnderEntry)),
         recoveryOverBarrier: Math.round(finite(source.recoveryOverBarrier, d.recoveryOverBarrier)),
         recoveryUnderBarrier: Math.round(finite(source.recoveryUnderBarrier, d.recoveryUnderBarrier)),
         minScore: Math.max(0, Math.round(finite(source.minScore, d.minScore))),
@@ -92,6 +102,8 @@ export const validateSettings = (settings: SignalZoneSettings): string[] => {
     if (!(settings.maxStake >= settings.stake)) problems.push('Max stake must be at least the stake.');
     if (!(settings.takeProfit > 0)) problems.push('Take profit must be above 0.');
     if (!(settings.stopLoss >= 0)) problems.push('Stop loss cannot be negative (0 turns it off).');
+    if (!(DEFAULT_ENTRY_CHOICES.DIGITOVER as readonly number[]).includes(settings.defaultOverEntry)) problems.push('Default Over entry digit must be 2 or 4.');
+    if (!(DEFAULT_ENTRY_CHOICES.DIGITUNDER as readonly number[]).includes(settings.defaultUnderEntry)) problems.push('Default Under entry digit must be 7 or 5.');
     if (!ALLOWED_BARRIERS.DIGITOVER.includes(settings.recoveryOverBarrier)) problems.push('Recovery Over barrier must be 1, 2 or 3.');
     if (!ALLOWED_BARRIERS.DIGITUNDER.includes(settings.recoveryUnderBarrier)) problems.push('Recovery Under barrier must be 8, 7 or 6.');
     return problems;

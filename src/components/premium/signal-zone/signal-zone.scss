@@ -79,6 +79,8 @@
 .sz-result dd { margin: 2px 0 0; font-size: 13px; }
 .sz-digit { font-size: 28px !important; font-weight: 800; color: var(--sz-gold); }
 .sz-why { margin: 10px 0 0; color: var(--sz-loss); font-size: 12px; }
+.sz-hint { margin: 10px 0 0; color: var(--sz-muted); font-size: 12px; }
+.sz-field select { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--sz-line); background: var(--sz-panel-2); color: var(--sz-text); font-size: 14px; }
 
 .sz-list { margin-top: 12px; font-size: 12px; }
 .sz-list ul { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; }

@@ -1,6 +1,6 @@
 import type { CombinedVerdict } from '../../over-under-engine';
 import {
-    MAX_SCAN_AGE_MS, buildFusionCandidates, entryProblem, mergeCandidates, revalidate, sentinelGate,
+    MAX_SCAN_AGE_MS, buildFusionCandidates, entryProblem, mergeCandidates, resolveEntry, revalidate, sentinelGate,
     type FusionCandidate, type SentinelCandidate,
 } from '../signal-zone-merge';
 import { DEFAULT_SETTINGS, type SignalZoneSettings } from '../signal-zone-settings';
@@ -33,6 +33,26 @@ describe('entry digit usability', () => {
     });
 });
 
+describe('default entry digits', () => {
+    const defaults = { defaultOverEntry: 2, defaultUnderEntry: 7 };
+    it('uses Sentinel AI\'s digit when it has a validated one', () => {
+        expect(resolveEntry(sent(), 'DIGITUNDER', defaults)).toEqual({ digit: 4, source: 'engine', note: null });
+    });
+    it('falls back to the default for the side when Sentinel AI has none, an unvalidated one, or an invalidated one', () => {
+        expect(resolveEntry(sent({ entryDigit: null }), 'DIGITUNDER', defaults)).toMatchObject({ digit: 7, source: 'default' });
+        expect(resolveEntry(sent({ entryStatus: 'UNVALIDATED' }), 'DIGITUNDER', defaults)).toMatchObject({ digit: 7, source: 'default' });
+        expect(resolveEntry(sent({ entryStatus: 'INVALIDATED', contract: 'DIGITOVER', barrier: 2 }), 'DIGITOVER', defaults)).toMatchObject({ digit: 2, source: 'default' });
+        expect(resolveEntry(null, 'DIGITOVER', defaults)).toMatchObject({ digit: 2, source: 'default' });
+    });
+    it('follows the chosen default digits', () => {
+        expect(resolveEntry(null, 'DIGITOVER', { defaultOverEntry: 4, defaultUnderEntry: 5 }).digit).toBe(4);
+        expect(resolveEntry(null, 'DIGITUNDER', { defaultOverEntry: 4, defaultUnderEntry: 5 }).digit).toBe(5);
+    });
+    it('always uses the default when Insight Fusion is on its own', () => {
+        expect(resolveEntry(sent(), 'DIGITUNDER', defaults, false)).toMatchObject({ digit: 7, source: 'default' });
+    });
+});
+
 describe('merge mode: both agree', () => {
     it('loads a signal both engines agree on, with Sentinel\'s entry digit', () => {
         const [top] = mergeCandidates([sent()], [fus()], settings(), NOW);
@@ -58,10 +78,19 @@ describe('merge mode: both agree', () => {
         expect(merged[0].source).toBe('fusion');
         expect(merged[0].loadable).toBe(false);
     });
-    it('does not load a signal with no entry digit', () => {
+    it('still loads when Sentinel has no entry digit, using the default digit', () => {
         const [top] = mergeCandidates([sent({ entryDigit: null })], [fus()], settings(), NOW);
-        expect(top.loadable).toBe(false);
-        expect(top.reason).toContain('no entry digit');
+        expect(top.loadable).toBe(true);
+        expect(top.entryDigit).toBe(7);
+        expect(top.entrySource).toBe('default');
+        expect(top.entryNote).toContain('default entry digit 7');
+    });
+    it('uses the Over default for an Over signal', () => {
+        const [top] = mergeCandidates(
+            [sent({ contract: 'DIGITOVER', barrier: 2, label: 'Over 2', entryDigit: null })], [fus({ contract: 'DIGITOVER', barrier: 2, label: 'Over 2' })],
+            settings({ defaultOverEntry: 4 }), NOW,
+        );
+        expect(top.entryDigit).toBe(4);
     });
 });
 
@@ -72,16 +101,32 @@ describe('merge mode: fusion leads', () => {
         expect(top.loadable).toBe(true);
         expect(top.entryDigit).toBe(4);
     });
-    it('cannot load when Sentinel has no entry for that exact contract', () => {
+    it('loads with the default digit when Sentinel has no entry for that exact contract', () => {
         const merged = mergeCandidates([sent({ barrier: 7, label: 'Under 7' })], [fus()], mode, NOW);
         const fusionRow = merged.find(item => item.fusion !== null);
-        expect(fusionRow?.loadable).toBe(false);
-        expect(fusionRow?.reason).toContain('no entry digit');
-        expect(merged.every(item => !item.loadable)).toBe(true);
+        expect(fusionRow?.loadable).toBe(true);
+        expect(fusionRow?.entryDigit).toBe(7);
+        expect(fusionRow?.entrySource).toBe('default');
+        expect(merged.find(item => item.fusion === null)?.loadable).toBe(false);
     });
     it('does not apply Sentinel\'s score gates, because Sentinel only supplies the digit', () => {
         const [top] = mergeCandidates([sent({ score: 10 })], [fus()], settings({ mergeMode: 'fusion_leads', minScore: 60 }), NOW);
         expect(top.loadable).toBe(true);
+    });
+});
+
+describe('merge mode: fusion only', () => {
+    const mode = settings({ mergeMode: 'fusion_only' });
+    it('loads every Fusion signal with the default entry digit, even with no Sentinel signal at all', () => {
+        const merged = mergeCandidates([], [fus(), fus({ symbol: 'R_50', market: 'Volatility 50', contract: 'DIGITOVER', barrier: 2, label: 'Over 2', score: 90 })], mode, NOW);
+        expect(merged.map(item => item.loadable)).toEqual([true, true]);
+        expect(merged.map(item => [item.label, item.entryDigit, item.entrySource])).toEqual([['Over 2', 2, 'default'], ['Under 8', 7, 'default']]);
+    });
+    it('ignores Sentinel\'s digit and signals', () => {
+        const merged = mergeCandidates([sent(), sent({ symbol: 'R_10', market: 'Volatility 10' })], [fus()], mode, NOW);
+        expect(merged).toHaveLength(1);
+        expect(merged[0].entryDigit).toBe(7);
+        expect(merged[0].sentinel).toBeNull();
     });
 });
 
@@ -127,7 +172,8 @@ describe('ranking', () => {
         );
         expect(merged.map(item => item.symbol)).toEqual(['R_50', 'R_10', 'R_75']);
         expect(merged[0].source).toBe('both');
-        expect(merged[2].loadable).toBe(false);
+        expect(merged[2].loadable).toBe(true);
+        expect(merged[2].entrySource).toBe('default');
     });
     it('breaks equal ranks by the lower danger', () => {
         const merged = mergeCandidates(
@@ -148,9 +194,15 @@ describe('revalidation before loading', () => {
         expect(gone.ok).toBe(false);
     });
     it('refuses when the signal can no longer be loaded', () => {
+        const fresh = mergeCandidates([sent({ engineBlocked: true })], [fus()], settings(), NOW + 1000);
+        const result = revalidate(chosen(), fresh, NOW + 1000);
+        expect(result.ok).toBe(false);
+    });
+    it('asks for a new scan when the entry falls back to a different digit', () => {
         const fresh = mergeCandidates([sent({ entryStatus: 'INVALIDATED' })], [fus()], settings(), NOW + 1000);
         const result = revalidate(chosen(), fresh, NOW + 1000);
         expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.reason).toContain('changed from 4 to 7');
     });
     it('refuses when the entry digit changed', () => {
         const fresh = mergeCandidates([sent({ entryDigit: 6 })], [fus()], settings(), NOW + 1000);

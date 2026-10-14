@@ -19,7 +19,10 @@ export type SentinelCandidate = {
     contract: OverUnderContract;
     barrier: number;
     label: string;
-    entryDigit: number | null;
+    /** The digit the bot waits for. Always present: Sentinel AI's own digit when it has a usable one, else the default digit. */
+    entryDigit: number;
+    /** Where the entry digit came from: Sentinel AI's engine, or the default digits from the settings. */
+    entrySource: 'engine' | 'default';
     entryStatus: string;
     entryWindow: string;
     /** The engine's own estimate, in percent (null when it gave none). Shown as an estimate, never as a promise. */
@@ -73,6 +76,8 @@ export type ZoneCandidate = {
     loadable: boolean;
     /** Plain words: why this cannot be loaded, or null when it can. */
     reason: string | null;
+    /** Plain words: why a default entry digit is in use, or null when Sentinel AI's own digit is used. */
+    entryNote: string | null;
     createdAt: number;
 };
 
@@ -84,17 +89,38 @@ export const MAX_SCAN_AGE_MS = 60_000;
 /** Entry statuses the Sentinel engine uses for a validated entry digit (the digit just printed, or armed and waiting). */
 const USABLE_ENTRY_STATUS = ['ENTER NOW', 'ARMED'];
 
-/** Why Sentinel's entry digit cannot be used, or null when it can. */
+/** Why Sentinel's own entry digit cannot be used, or null when it can. */
 export const entryProblem = (s: SentinelCandidate | null): string | null => {
     if (!s) return 'Sentinel AI has no entry digit for this contract.';
     if (s.entryDigit === null || !Number.isInteger(s.entryDigit) || s.entryDigit < 0 || s.entryDigit > 9) {
-        return 'Sentinel AI gave this signal no entry digit, and none is invented.';
+        return 'Sentinel AI gave this signal no entry digit.';
     }
     if (s.entryStatus === 'INVALIDATED') return `Sentinel AI invalidated entry digit ${s.entryDigit}.`;
     if (!USABLE_ENTRY_STATUS.includes(s.entryStatus)) {
         return `Entry digit ${s.entryDigit} is not validated yet (status: ${s.entryStatus.toLowerCase()}).`;
     }
     return null;
+};
+
+export type ResolvedEntry = { digit: number; source: 'engine' | 'default'; note: string | null };
+
+/**
+ * The entry digit the bot will wait for. Sentinel AI's own digit is used when it has a validated one for this exact contract;
+ * otherwise the user's default digit for the side is used (Over 2 or 4, Under 7 or 5), so a signal is never left without an entry.
+ * `useEngine = false` (Insight Fusion alone) always uses the default.
+ */
+export const resolveEntry = (
+    s: SentinelCandidate | null, contract: OverUnderContract,
+    defaults: Pick<SignalZoneSettings, 'defaultOverEntry' | 'defaultUnderEntry'>, useEngine = true,
+): ResolvedEntry => {
+    if (useEngine) {
+        const problem = entryProblem(s);
+        if (!problem && s && s.entryDigit !== null) return { digit: s.entryDigit, source: 'engine', note: null };
+        const digit = contract === 'DIGITOVER' ? defaults.defaultOverEntry : defaults.defaultUnderEntry;
+        return { digit, source: 'default', note: `${problem} Using the default entry digit ${digit}.` };
+    }
+    const digit = contract === 'DIGITOVER' ? defaults.defaultOverEntry : defaults.defaultUnderEntry;
+    return { digit, source: 'default', note: `Insight Fusion carries no entry digit. Using the default entry digit ${digit}.` };
 };
 
 /** Fusion's recommendable propositions, one per market and contract, restricted to the allowed contracts and fresh data. */
@@ -143,7 +169,10 @@ type Draft = {
     s: SentinelCandidate | null;
     f: FusionCandidate | null;
     source: ZoneSource;
+    /** Why this cannot be loaded, or null when it can. The entry digit never blocks a load: a default is used instead. */
     problem: string | null;
+    /** False when Sentinel's entry digit must not be used (Insight Fusion alone). */
+    useEngine: boolean;
 };
 
 /** What the other engine says about the same market, in plain words (used for the "why not both" explanation). */
@@ -161,9 +190,11 @@ const disagreement = (
 
 /**
  * Builds the ranked list for the chosen merge mode.
- *  - both:          loadable only where both engines read the same market, side and barrier and Sentinel has a usable entry digit.
- *  - fusion_leads:  Insight Fusion picks the contract; Sentinel supplies the entry digit for that exact contract.
- *  - sentinel_only: Sentinel AI picks the contract and the entry digit (Fusion agreement is shown for information).
+ *  - both:          loadable only where both engines read the same market, side and barrier.
+ *  - fusion_leads:  Insight Fusion picks the contract; Sentinel supplies the entry digit for that exact contract when it has one.
+ *  - fusion_only:   Insight Fusion picks the contract and the default entry digit is used.
+ *  - sentinel_only: Sentinel AI picks the contract (Fusion agreement is shown for information).
+ * Whenever Sentinel's entry digit is missing or not validated, the default digit for the side is used, so the entry is never empty.
  * Candidates that cannot be loaded are still listed (with the reason), after the loadable ones.
  */
 export const mergeCandidates = (
@@ -187,41 +218,43 @@ export const mergeCandidates = (
         drafts.push(draft);
     };
 
-    if (mode === 'fusion_leads') {
+    if (mode === 'fusion_leads' || mode === 'fusion_only') {
         for (const f of allowedFusion) {
-            const s = findSentinel(f);
-            const problem = entryProblem(s);
-            push({ s, f, source: s ? 'both' : 'fusion', problem });
+            const s = mode === 'fusion_leads' ? findSentinel(f) : null;
+            push({ s, f, source: s ? 'both' : 'fusion', problem: null, useEngine: mode === 'fusion_leads' });
         }
-        // Sentinel signals Fusion does not back are shown for information only.
-        for (const s of allowedSentinel) {
-            if (findFusion(s) || excluded(s.symbol)) continue;
-            push({ s, f: null, source: 'sentinel', problem: disagreement('sentinel', s.symbol, s.contract, s.barrier, allowedFusion) });
+        // In Fusion-leads, Sentinel signals that Fusion does not back are shown for information only.
+        if (mode === 'fusion_leads') {
+            for (const s of allowedSentinel) {
+                if (findFusion(s) || excluded(s.symbol)) continue;
+                push({ s, f: null, source: 'sentinel', problem: disagreement('sentinel', s.symbol, s.contract, s.barrier, allowedFusion), useEngine: true });
+            }
         }
     } else {
         for (const s of allowedSentinel) {
             const gate = sentinelGate(s, settings);
             const f = findFusion(s);
             if (mode === 'sentinel_only') {
-                push({ s, f, source: f ? 'both' : 'sentinel', problem: gate ?? entryProblem(s) });
+                push({ s, f, source: f ? 'both' : 'sentinel', problem: gate, useEngine: true });
             } else if (f) {
-                push({ s, f, source: 'both', problem: gate ?? entryProblem(s) });
+                push({ s, f, source: 'both', problem: gate, useEngine: true });
             } else {
-                push({ s, f: null, source: 'sentinel', problem: gate ?? disagreement('sentinel', s.symbol, s.contract, s.barrier, allowedFusion) });
+                push({ s, f: null, source: 'sentinel', problem: gate ?? disagreement('sentinel', s.symbol, s.contract, s.barrier, allowedFusion), useEngine: true });
             }
         }
         if (mode === 'both') {
             for (const f of allowedFusion) {
                 if (findSentinel(f)) continue;
-                push({ s: null, f, source: 'fusion', problem: disagreement('fusion', f.symbol, f.contract, f.barrier, allowedSentinel) });
+                push({ s: null, f, source: 'fusion', problem: disagreement('fusion', f.symbol, f.contract, f.barrier, allowedSentinel), useEngine: true });
             }
         }
     }
 
-    const result: ZoneCandidate[] = drafts.map(({ s, f, source, problem }) => {
+    const result: ZoneCandidate[] = drafts.map(({ s, f, source, problem, useEngine }) => {
         const base = (s ?? f) as SentinelCandidate | FusionCandidate;
         const key = keyOf(base.symbol, base.contract, base.barrier);
-        const entry = s && entryProblem(s) === null ? s : null;
+        const entry = resolveEntry(s, base.contract, settings, useEngine);
+        const fromEngine = entry.source === 'engine' && s !== null;
         return {
             id: `${key}@${now}`,
             key,
@@ -233,14 +266,16 @@ export const mergeCandidates = (
             source,
             sentinel: s,
             fusion: f,
-            entryDigit: entry ? entry.entryDigit : s?.entryDigit ?? null,
-            entryStatus: s?.entryStatus ?? 'NONE',
-            entryWindow: s?.entryWindow ?? '',
-            entryWinRate: s?.entryWinRate ?? null,
+            entryDigit: entry.digit,
+            entrySource: entry.source,
+            entryStatus: fromEngine ? (s as SentinelCandidate).entryStatus : 'DEFAULT',
+            entryWindow: fromEngine ? (s as SentinelCandidate).entryWindow : '',
+            entryWinRate: fromEngine ? (s as SentinelCandidate).entryWinRate : null,
             rank: Math.round(meanScore(s, f) * 10) / 10,
             danger: worstDanger(s, f),
-            loadable: problem === null && entry !== null,
+            loadable: problem === null,
             reason: problem,
+            entryNote: entry.note,
             createdAt: now,
         };
     });

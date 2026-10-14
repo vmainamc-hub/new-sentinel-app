@@ -10,6 +10,8 @@ export type HistoryEntry = {
     market: string;
     label: string;
     entryDigit: number | null;
+    /** Whether the digit came from Sentinel AI or the default digits. */
+    entrySource?: 'engine' | 'default';
     source: ZoneSource;
     mode: MergeMode;
     sentinelScore: number | null;
@@ -30,6 +32,7 @@ export const entryFor = (candidate: ZoneCandidate, mode: MergeMode, at: number):
     market: candidate.market,
     label: candidate.label,
     entryDigit: candidate.entryDigit,
+    entrySource: candidate.entrySource,
     source: candidate.source,
     mode,
     sentinelScore: candidate.sentinel ? Math.round(candidate.sentinel.score) : null,

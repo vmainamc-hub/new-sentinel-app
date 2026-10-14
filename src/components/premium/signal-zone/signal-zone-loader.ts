@@ -26,8 +26,8 @@ export const loadSignalIntoBot = async (
     candidate: ZoneCandidate, settings: SignalZoneSettings, openBotBuilder: () => void,
 ): Promise<LoadOutcome> => {
     const entry = candidate.entryDigit;
-    if (!candidate.loadable || entry === null) throw new Error(candidate.reason ?? 'This signal cannot be loaded.');
-    const summary = `${candidate.label} on ${candidate.market}, entry digit ${entry}`;
+    if (!candidate.loadable) throw new Error(candidate.reason ?? 'This signal cannot be loaded.');
+    const summary = `${candidate.label} on ${candidate.market}, entry digit ${entry}${candidate.entrySource === 'default' ? ' (default)' : ''}`;
     try {
         const { bot, xml } = await fetchFreeBotById(MASIKA_BOT_IDS[candidate.contract]);
         const configured = configureMasikaBot(

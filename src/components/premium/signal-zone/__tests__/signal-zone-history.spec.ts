@@ -3,7 +3,7 @@ import type { ZoneCandidate } from '../signal-zone-merge';
 
 const candidate = (over: Partial<ZoneCandidate> = {}): ZoneCandidate => ({
     id: 'R_25|DIGITUNDER|8@1', key: 'R_25|DIGITUNDER|8', symbol: 'R_25', market: 'Volatility 25', contract: 'DIGITUNDER', barrier: 8, label: 'Under 8',
-    source: 'both', sentinel: null, fusion: null, entryDigit: 4, entryStatus: 'ARMED', entryWindow: '', entryWinRate: null, rank: 75, danger: 20,
+    source: 'both', sentinel: null, fusion: null, entryDigit: 4, entrySource: 'engine', entryNote: null, entryStatus: 'ARMED', entryWindow: '', entryWinRate: null, rank: 75,
     loadable: true, reason: null, createdAt: 1, ...over,
 });
 const entry = (over: Partial<HistoryEntry> = {}): HistoryEntry => ({ ...entryFor(candidate(), 'both', 1), ...over });

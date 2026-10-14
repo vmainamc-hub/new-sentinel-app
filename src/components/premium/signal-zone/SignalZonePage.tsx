@@ -6,14 +6,15 @@ import { loadSignalIntoBot } from './signal-zone-loader';
 import { addEntry, entryFor, loadHistory, saveHistory, summarize, type HistoryEntry } from './signal-zone-history';
 import { mergeCandidates, revalidate, type ZoneCandidate } from './signal-zone-merge';
 import { signalZoneSession } from './signal-zone-session';
-import { DEFAULT_SETTINGS, loadSettings, saveSettings, validateSettings, type MergeMode, type SignalZoneSettings } from './signal-zone-settings';
+import { DEFAULT_ENTRY_CHOICES, DEFAULT_SETTINGS, loadSettings, saveSettings, validateSettings, type MergeMode, type SignalZoneSettings } from './signal-zone-settings';
 import { attachSources, readSources, type SourceStatus } from './signal-zone-sources';
 import './signal-zone.scss';
 
 const MODE_TEXT: Record<MergeMode, { title: string; hint: string }> = {
     both: { title: 'Both agree', hint: 'Sentinel AI and Insight Fusion must read the same market, side and barrier. Strictest, fewest signals.' },
-    fusion_leads: { title: 'Fusion leads', hint: 'Insight Fusion picks the contract; Sentinel AI only supplies the entry digit for that exact contract.' },
-    sentinel_only: { title: 'Sentinel AI only', hint: 'Sentinel AI picks the contract and the entry digit. Fusion agreement is shown for information.' },
+    fusion_leads: { title: 'Fusion leads', hint: 'Insight Fusion picks the contract; Sentinel AI supplies the entry digit for that exact contract when it has one, else the default digit is used.' },
+    fusion_only: { title: 'Fusion only', hint: 'Insight Fusion picks the contract and the default entry digit is used. Sentinel AI is not involved.' },
+    sentinel_only: { title: 'Sentinel AI only', hint: 'Sentinel AI picks the contract and its entry digit (the default digit when it has none). Fusion agreement is shown for information.' },
 };
 
 const SOURCE_TEXT = { both: 'Both engines', fusion: 'Fusion only', sentinel: 'Sentinel only' } as const;
@@ -42,6 +43,17 @@ const NumField = ({ label, value, onCommit, hint }: {
         </label>
     );
 };
+
+/** A small choice box for the default entry digits. */
+const DigitChoice = ({ label, value, options, onChange }: { label: string; value: number; options: readonly number[]; onChange: (value: number) => void }) => (
+    <label className='sz-field'>
+        <span>{label}</span>
+        <select value={value} onChange={event => onChange(Number(event.target.value))}>
+            {options.map(option => <option key={option} value={option}>{option}</option>)}
+        </select>
+        <small>Used when Sentinel AI has no validated entry</small>
+    </label>
+);
 
 const Toggle = ({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) => (
     <label className='sz-toggle'>
@@ -91,7 +103,7 @@ const SignalZonePage = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
         const best = candidates.find(item => item.loadable) ?? null;
         setSelectedId(best ? best.id : candidates[0]?.id ?? '');
         if (!read.status.warm) setMessage('The engines are still warming up. Give them a moment and scan again.');
-        else if (best) setMessage(`Best signal: ${best.label} on ${best.market}, entry digit ${best.entryDigit}.`);
+        else if (best) setMessage(`Best signal: ${best.label} on ${best.market}, entry digit ${best.entryDigit}${best.entrySource === 'default' ? ' (default)' : ''}.`);
         else setMessage('No market qualifies right now. The nearest candidates are listed below, with the reason each cannot be loaded.');
     };
 
@@ -159,6 +171,8 @@ const SignalZonePage = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
                         <NumField label='Max stake' value={settings.maxStake} onCommit={v => update('maxStake', v)} />
                         <NumField label='Take profit' value={settings.takeProfit} onCommit={v => update('takeProfit', v)} hint='The bot stops at this session profit' />
                         <NumField label='Stop loss' value={settings.stopLoss} onCommit={v => update('stopLoss', v)} hint='Enforced by Signal Zone; 0 = off' />
+                        <DigitChoice label='Default Over entry digit' value={settings.defaultOverEntry} options={DEFAULT_ENTRY_CHOICES.DIGITOVER} onChange={v => update('defaultOverEntry', v)} />
+                        <DigitChoice label='Default Under entry digit' value={settings.defaultUnderEntry} options={DEFAULT_ENTRY_CHOICES.DIGITUNDER} onChange={v => update('defaultUnderEntry', v)} />
                         <NumField label='Recovery Over barrier' value={settings.recoveryOverBarrier} onCommit={v => update('recoveryOverBarrier', v)} hint='1, 2 or 3' />
                         <NumField label='Recovery Under barrier' value={settings.recoveryUnderBarrier} onCommit={v => update('recoveryUnderBarrier', v)} hint='8, 7 or 6' />
                         <NumField label='Min Sentinel score' value={settings.minScore} onCommit={v => update('minScore', v)} hint='0 = off' />
@@ -201,14 +215,15 @@ const SignalZonePage = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
                                 <em className={`sz-badge sz-badge--${selected.source}`}>{SOURCE_TEXT[selected.source]}</em>
                             </div>
                             <dl>
-                                <div><dt>Entry digit</dt><dd className='sz-digit'>{selected.entryDigit ?? '-'}</dd></div>
-                                <div><dt>Entry status</dt><dd>{selected.entryStatus.toLowerCase()}</dd></div>
+                                <div><dt>Entry digit</dt><dd className='sz-digit'>{selected.entryDigit}</dd></div>
+                                <div><dt>Entry source</dt><dd>{selected.entrySource === 'engine' ? `Sentinel AI (${selected.entryStatus.toLowerCase()})` : 'default digit'}</dd></div>
                                 <div><dt>Window</dt><dd>{selected.entryWindow || '-'}</dd></div>
                                 <div><dt>Entry estimate</dt><dd>{selected.entryWinRate === null ? '-' : `${selected.entryWinRate}%`}</dd></div>
                                 <div><dt>Sentinel</dt><dd>{selected.sentinel ? `score ${num(selected.sentinel.score)} / danger ${num(selected.sentinel.danger)}` : 'no signal'}</dd></div>
                                 <div><dt>Fusion</dt><dd>{selected.fusion ? `${selected.fusion.action.toLowerCase().replace('_', ' ')} / score ${num(selected.fusion.score)} / danger ${num(selected.fusion.danger)}` : 'no signal'}</dd></div>
                             </dl>
                             {selected.reason ? <p className='sz-why'>{selected.reason}</p> : null}
+                            {!selected.reason && selected.entryNote ? <p className='sz-hint'>{selected.entryNote}</p> : null}
                         </article>
                     ) : null}
 
@@ -221,7 +236,7 @@ const SignalZonePage = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
                                         <button type='button' className={item.id === selectedId ? 'is-active' : ''} onClick={() => setSelectedId(item.id)}>
                                             <span>{item.label} / {item.market}</span>
                                             <span>{SOURCE_TEXT[item.source]}</span>
-                                            <span>{item.loadable ? `digit ${item.entryDigit}` : 'not loadable'}</span>
+                                            <span>{item.loadable ? `digit ${item.entryDigit}${item.entrySource === 'default' ? ' (default)' : ''}` : 'not loadable'}</span>
                                         </button>
                                     </li>
                                 ))}
