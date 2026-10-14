@@ -22,10 +22,10 @@ const overSignal: ScannerSignal = { symbol: 'R_50', contract: 'DIGITOVER', barri
 const underSignal: ScannerSignal = { symbol: '1HZ25V', contract: 'DIGITUNDER', barrier: 7 };
 
 describe('scanner bots', () => {
-    it('are bot 11 for Under and bot 26 for Over, by their numbers in the Free Bots list', () => {
-        expect(entryFor(SCANNER_BOTS.DIGITUNDER.id).name).toMatch(/^11\. /);
+    it('are bot 46 Holy Grail for Under and bot 26 for Over, by their numbers in the Free Bots list', () => {
+        expect(entryFor(SCANNER_BOTS.DIGITUNDER.id).name).toMatch(/^46\. Holy Grail/);
         expect(entryFor(SCANNER_BOTS.DIGITOVER.id).name).toMatch(/^26\. /);
-        expect(SCANNER_BOTS.DIGITUNDER.number).toBe(11);
+        expect(SCANNER_BOTS.DIGITUNDER.number).toBe(46);
         expect(SCANNER_BOTS.DIGITOVER.number).toBe(26);
     });
 
@@ -36,14 +36,15 @@ describe('scanner bots', () => {
     });
 
     it('buy only their own side as shipped', () => {
-        expect(readScannerBot(UNDER_XML, 'DIGITUNDER').purchases).toEqual(['DIGITUNDER', 'DIGITUNDER']);
+        // Holy Grail has a single standard `purchase` block; bot 26 has two `apollo_purchase` blocks.
+        expect(readScannerBot(UNDER_XML, 'DIGITUNDER').purchases).toEqual(['DIGITUNDER']);
         expect(readScannerBot(OVER_XML, 'DIGITOVER').purchases).toEqual(['DIGITOVER', 'DIGITOVER']);
     });
 
     it('document the recovery each bot really has', () => {
-        // Bot 11 draws Under 4 after a loss, bot 26 uses Recovery Prediction 4 on Over.
-        expect(UNDER_XML).toMatch(/math_random_int[\s\S]*?<field name="NUM">4<\/field>/);
-        expect(SCANNER_BOTS.DIGITUNDER.recovery).toEqual({ contract: 'DIGITUNDER', barrier: 4 });
+        // Holy Grail sets RECOVERY PREDICTION 5 and trades Under; bot 26 uses Recovery Prediction 4 on Over.
+        expect(readScannerBot(UNDER_XML, 'DIGITUNDER')).toMatchObject({ barriers: [7], recovery: 5 });
+        expect(SCANNER_BOTS.DIGITUNDER.recovery).toEqual({ contract: 'DIGITUNDER', barrier: 5 });
         expect(SCANNER_BOTS.DIGITOVER.recovery).toEqual({ contract: 'DIGITOVER', barrier: 4 });
     });
 });
@@ -74,18 +75,32 @@ describe('configureScannerBot (Over -> bot 26)', () => {
     });
 });
 
-describe('configureScannerBot (Under -> bot 11)', () => {
-    it('writes the market and the main barrier in all three places, keeping the Under 4 recovery', () => {
-        const out = configureScannerBot(UNDER_XML, underSignal);
+describe('configureScannerBot (Under -> bot 46 Holy Grail)', () => {
+    it('writes the market and the main barrier, keeping the Under 5 recovery', () => {
+        const out = configureScannerBot(UNDER_XML, { ...underSignal, barrier: 8 });
         const bot = readScannerBot(out, 'DIGITUNDER');
         expect(bot).toMatchObject({ market: 'synthetic_index', symbol: '1HZ25V', submarket: 'random_index_1s', tradeType: 'overunder' });
-        // three draws (first trade, after a win, after a loss), each "random integer from 7 to 7": a FROM and a TO field
-        expect(bot.barriers).toEqual([7, 7, 7, 7, 7, 7]);
-        expect(bot.purchases).toEqual(['DIGITUNDER', 'DIGITUNDER']);
+        expect(bot.barriers).toEqual([8]);
+        expect(bot.purchases).toEqual(['DIGITUNDER']);
         expect(structureOf(out)).toEqual(structureOf(UNDER_XML));
-        // the recovery draw (Under 4) is untouched
-        expect(bot.recovery).toBe(4);
-        expect(readScannerBot(UNDER_XML, 'DIGITUNDER').barriers).toEqual([9, 9, 9, 9, 9, 9]);
+        // the recovery barrier (Under 5) is untouched, and the bot as shipped trades Under 7
+        expect(bot.recovery).toBe(5);
+        expect(readScannerBot(UNDER_XML, 'DIGITUNDER').barriers).toEqual([7]);
+    });
+
+    it('leaves the stake, martingale, target profit and recovery as shipped', () => {
+        const out = configureScannerBot(UNDER_XML, { ...underSignal, barrier: 6 });
+        const valueOf = (xml: string, variable: string) => {
+            const doc = new DOMParser().parseFromString(xml, 'application/xml');
+            const set = Array.from(doc.getElementsByTagName('block')).find(block =>
+                block.getAttribute('type') === 'variables_set'
+                && Array.from(block.children).some(c => c.localName === 'field' && c.textContent === variable));
+            return set?.getElementsByTagName('field')[1]?.textContent;
+        };
+        ['Stake', 'Martingale', 'Target Profit', 'RECOVERY PREDICTION'].forEach(variable => {
+            expect(valueOf(out, variable)).toBe(valueOf(UNDER_XML, variable));
+        });
+        expect(valueOf(out, 'STARTING PREDICTION')).toBe('6');
     });
 
     it('uses the live submarket when the active symbols supply one', () => {

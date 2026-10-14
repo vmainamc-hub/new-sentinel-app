@@ -49,17 +49,17 @@ describe('loadSignalIntoScannerBot', () => {
         expect(readScannerBot(xml, 'DIGITOVER')).toMatchObject({ symbol: 'R_75', barriers: [2], recovery: 4 });
     });
 
-    it('loads bot 11 for an Under signal', async () => {
+    it('loads bot 46 Holy Grail for an Under signal', async () => {
         serve();
         const open = jest.fn();
         const { loadSignalIntoScannerBot } = freshLoader();
         const outcome = await loadSignalIntoScannerBot({ symbol: '1HZ10V', contract: 'DIGITUNDER', barrier: 7, submarket: 'random_index_1s' }, open);
 
         expect(mockFetchFreeBotById).toHaveBeenCalledWith(SCANNER_BOTS.DIGITUNDER.id);
-        expect(outcome.bot.number).toBe(11);
+        expect(outcome.bot.number).toBe(46);
         const [xml, fileName] = mockLoadBotXmlIntoBuilder.mock.calls[0];
-        expect(fileName).toBe('AI 1HZ10V Under 7 (bot 11).xml');
-        expect(readScannerBot(xml, 'DIGITUNDER')).toMatchObject({ symbol: '1HZ10V', submarket: 'random_index_1s', recovery: 4 });
+        expect(fileName).toBe('AI 1HZ10V Under 7 (bot 46).xml');
+        expect(readScannerBot(xml, 'DIGITUNDER')).toMatchObject({ symbol: '1HZ10V', submarket: 'random_index_1s', barriers: [7], recovery: 5 });
     });
 
     it('opens Bot Builder only after the bot is configured and checked', async () => {
@@ -93,7 +93,7 @@ describe('when the site starts refusing requests (HTTP 401)', () => {
         const open = jest.fn();
         const { loadSignalIntoScannerBot } = freshLoader();
         await expect(loadSignalIntoScannerBot({ symbol: 'R_50', contract: 'DIGITUNDER', barrier: 8 }, open))
-            .rejects.toThrow(/Bot 11 \(D2 BY MR\.DUKE\) was refused by the site .*Reload the page/);
+            .rejects.toThrow(/Bot 46 \(Holy Grail\) was refused by the site .*Reload the page/);
         expect(open).not.toHaveBeenCalled();
     });
 

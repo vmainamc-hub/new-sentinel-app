@@ -1,4 +1,4 @@
-// AI ENTRY SCANNER: turns a scan result into a configured bot 11 (Under) or bot 26 (Over) and loads it into DBot. It never presses Run.
+// AI ENTRY SCANNER: turns a scan result into a configured bot 46 Holy Grail (Under) or bot 26 (Over) and loads it into DBot. It never presses Run.
 import { fetchFreeBotById, loadBotXmlIntoBuilder } from '../pages/FreeBotsPage';
 import { configureScannerBot, SCANNER_BOTS, type ScannerBot, type ScannerContract, type ScannerSignal } from './scanner-bots';
 

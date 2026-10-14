@@ -1,6 +1,6 @@
 // AI ENTRY SCANNER: the two bots it loads, and how a scan result is written into them.
 //
-// Under signals load bot 11 (D2 BY MR.DUKE, buys DIGITUNDER) and Over signals load bot 26 (OVER 1 RECOVERY OVER 4, buys DIGITOVER).
+// Under signals load bot 46 (Holy Grail, buys DIGITUNDER) and Over signals load bot 26 (OVER 1 RECOVERY OVER 4, buys DIGITOVER).
 // They are resolved by manifest id (the way Signal Zone does it), never by file path.
 //
 // Configuring a bot ONLY sets values the bot already has: the market fields and the main barrier. It never adds, removes or
@@ -26,15 +26,21 @@ export type ScannerBot = {
     contract: ScannerContract;
     /** What the bot does after a loss. It trades its own direction only, so this is fixed by the bot. */
     recovery: { contract: ScannerContract; barrier: number };
+    /**
+     * The two variables the bot sets once, from plain numbers, in its INITIALIZATION: the barrier it trades first (and after a
+     * win), and the barrier it recovers on. Names are matched exactly, as the bot spells them. The scanner writes `main` only.
+     */
+    variables: { main: string; recovery: string };
 };
 
 export const SCANNER_BOTS: Record<ScannerContract, ScannerBot> = {
     DIGITUNDER: {
-        id: 'd2-by-mr-duke',
-        number: 11,
-        name: 'D2 BY MR.DUKE',
+        id: 'apex-library-holy-grail-13',
+        number: 46,
+        name: 'Holy Grail',
         contract: 'DIGITUNDER',
-        recovery: { contract: 'DIGITUNDER', barrier: 4 },
+        recovery: { contract: 'DIGITUNDER', barrier: 5 },
+        variables: { main: 'STARTING PREDICTION', recovery: 'RECOVERY PREDICTION' },
     },
     DIGITOVER: {
         id: 'over-1-recovery-over-4',
@@ -42,6 +48,7 @@ export const SCANNER_BOTS: Record<ScannerContract, ScannerBot> = {
         name: 'OVER 1 RECOVERY OVER 4',
         contract: 'DIGITOVER',
         recovery: { contract: 'DIGITOVER', barrier: 4 },
+        variables: { main: 'Over Prediction', recovery: 'Recovery Prediction' },
     },
 };
 
@@ -82,7 +89,7 @@ const numberFieldOfValue = (value: Element | undefined): Element | undefined => 
     return holder?.getAttribute('type') === 'math_number' ? direct(holder, 'field', 'NUM') : undefined;
 };
 
-/** Bot 26: the numeric field of the single initial `variables_set` for `variable`. */
+/** The numeric field of the single initial `variables_set` for `variable` (bots 26 and 46 both keep their barriers this way). */
 const initialVariableField = (doc: Document, variable: string): Element => {
     const hits = blocksOf(doc, 'variables_set').filter(block =>
         inInitialization(block) && direct(block, 'field', 'VAR')?.textContent?.trim() === variable);
@@ -92,40 +99,20 @@ const initialVariableField = (doc: Document, variable: string): Element => {
     return field;
 };
 
-/**
- * Bot 11 sets `predict 3` from a `random integer from N to N` block in four places, in document order: the first trade, after a
- * win, after a loss (the three main-barrier draws), and the recovery draw. They are found by what they feed, never by their
- * current number, so the same lookup works on the shipped bot and on a configured one. Each draw is its FROM and TO field.
- */
-const predictDraws = (doc: Document): Element[][] => {
-    const draws = blocksOf(doc, 'math_random_int').filter(block => {
-        const input = block.parentElement;
-        const set = input?.parentElement;
-        return input?.localName === 'value' && input.getAttribute('name') === 'VALUE'
-            && set?.getAttribute('type') === 'variables_set'
-            && direct(set, 'field', 'VAR')?.textContent?.trim() === 'predict 3';
-    }).map(block => [numberFieldOfValue(direct(block, 'value', 'FROM')), numberFieldOfValue(direct(block, 'value', 'TO'))]);
-    if (draws.length !== 4 || draws.some(pair => !pair[0] || !pair[1])) {
-        throw new Error(`Bot 11 should draw "predict 3" in 4 places (found ${draws.length}).`);
-    }
-    return draws as Element[][];
-};
-
-/** The main-barrier fields of a bot, in document order. */
-const barrierFields = (doc: Document, contract: ScannerContract): Element[] => {
-    if (contract === 'DIGITOVER') return [initialVariableField(doc, 'Over Prediction')];
-    const main = predictDraws(doc).slice(0, 3).flat();
-    // The three draws are one barrier written three times; a bot whose draws disagree is not the bot this was written for.
-    if (new Set(main.map(field => field.textContent)).size !== 1) throw new Error('Bot 11 draws different main barriers in different places.');
-    return main;
-};
+/** The main-barrier fields of a bot: the one number it trades first and after a win. */
+const barrierFields = (doc: Document, contract: ScannerContract): Element[] =>
+    [initialVariableField(doc, SCANNER_BOTS[contract].variables.main)];
 
 /** The recovery barrier of a bot: what it plays after a loss. The scanner never writes it. */
 const recoveryField = (doc: Document, contract: ScannerContract): Element =>
-    contract === 'DIGITOVER' ? initialVariableField(doc, 'Recovery Prediction') : predictDraws(doc)[3][0];
+    initialVariableField(doc, SCANNER_BOTS[contract].variables.recovery);
+
+// Bots 26 and the other site bots buy with an `apollo_purchase` block; bot 46 (Holy Grail) uses the standard `purchase` block.
+const PURCHASE_BLOCKS = ['apollo_purchase', 'purchase'];
 
 const purchaseContracts = (doc: Document): string[] =>
-    blocksOf(doc, 'apollo_purchase').map(block => direct(block, 'field', 'PURCHASE_LIST')?.textContent?.trim() ?? '');
+    PURCHASE_BLOCKS.flatMap(type => blocksOf(doc, type))
+        .map(block => direct(block, 'field', 'PURCHASE_LIST')?.textContent?.trim() ?? '');
 
 export type ScannerBotReadback = {
     market: string;
