@@ -1,23 +1,23 @@
 {
-  "brand_name": "Apex Dominion",
-  "brand_domain": "apexdominion.netlify.app",
+  "brand_name": "Ultimate Traders",
+  "brand_domain": "ultimatetraders.netlify.app",
   "brand_hostname": {
-    "staging": "apexdominion.netlify.app",
-    "production": "apexdominion.netlify.app"
+    "staging": "ultimatetraders.netlify.app",
+    "production": "ultimatetraders.netlify.app"
   },
-  "domain_name": "apexdominion.netlify.app",
+  "domain_name": "ultimatetraders.netlify.app",
   "sites": {
     "default_site": "apex-sentinel",
     "entries": [
       {
         "id": "apex-sentinel",
         "hosts": [
-          "apexdominion.netlify.app",
+          "ultimatetraders.netlify.app",
           "localhost"
         ],
-        "display_domain": "Apex Dominion",
-        "website_url": "https://apexdominion.netlify.app",
-        "redirect_uri": "https://apexdominion.netlify.app/callback",
+        "display_domain": "Ultimate Traders",
+        "website_url": "https://ultimatetraders.netlify.app",
+        "redirect_uri": "https://ultimatetraders.netlify.app/callback",
         "client_id": "34BIr72thLXMJHaL9PQxN",
         "scopes": [
           "trade",
@@ -145,14 +145,14 @@
     "css_variable_prefix": "--brand"
   },
   "platform": {
-    "name": "Apex Dominion",
+    "name": "Ultimate Traders",
     "logo": {
       "type": "component",
       "component_name": "BrandLogo",
-      "alt_text": "Apex Dominion",
+      "alt_text": "Ultimate Traders",
       "link_url": "/",
       "show_text": true,
-      "text": "Apex Dominion"
+      "text": "Ultimate Traders"
     },
     "footer": {
       "enable_language_settings": false,
@@ -160,10 +160,10 @@
     },
     "hostname": {
       "production": {
-        "com": "apexdominion.netlify.app"
+        "com": "ultimatetraders.netlify.app"
       },
       "staging": {
-        "com": "apexdominion.netlify.app"
+        "com": "ultimatetraders.netlify.app"
       }
     },
     "auth2_url": {
