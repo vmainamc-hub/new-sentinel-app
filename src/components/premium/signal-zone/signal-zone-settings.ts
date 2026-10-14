@@ -22,6 +22,10 @@ export type SignalZoneSettings = {
     takeProfit: number;
     /** Enforced by Signal Zone itself, outside the bot. 0 = off. */
     stopLoss: number;
+    /** Push a signal onto the Live signals list by itself whenever Sentinel AI and Insight Fusion agree. */
+    autoPush: boolean;
+    /** How long an auto-pushed signal stays on screen before it disappears (30 to 300 seconds). */
+    signalLifetimeSeconds: number;
     /** Entry digit used for an Over signal when Sentinel AI gives no usable one (2 or 4). */
     defaultOverEntry: number;
     /** Entry digit used for an Under signal when Sentinel AI gives no usable one (7 or 5). */
@@ -47,6 +51,8 @@ export const DEFAULT_SETTINGS: SignalZoneSettings = {
     maxStake: 8,
     takeProfit: 3,
     stopLoss: 10,
+    autoPush: true,
+    signalLifetimeSeconds: 90,
     defaultOverEntry: 2,
     defaultUnderEntry: 7,
     recoveryOverBarrier: 3,
@@ -79,6 +85,8 @@ export const normalizeSettings = (raw: unknown): SignalZoneSettings => {
         maxStake: round2(finite(source.maxStake, d.maxStake)),
         takeProfit: round2(finite(source.takeProfit, d.takeProfit)),
         stopLoss: Math.max(0, round2(finite(source.stopLoss, d.stopLoss))),
+        autoPush: typeof source.autoPush === 'boolean' ? source.autoPush : d.autoPush,
+        signalLifetimeSeconds: Math.round(finite(source.signalLifetimeSeconds, d.signalLifetimeSeconds)),
         defaultOverEntry: Math.round(finite(source.defaultOverEntry, d.defaultOverEntry)),
         defaultUnderEntry: Math.round(finite(source.defaultUnderEntry, d.defaultUnderEntry)),
         recoveryOverBarrier: Math.round(finite(source.recoveryOverBarrier, d.recoveryOverBarrier)),
@@ -102,6 +110,7 @@ export const validateSettings = (settings: SignalZoneSettings): string[] => {
     if (!(settings.maxStake >= settings.stake)) problems.push('Max stake must be at least the stake.');
     if (!(settings.takeProfit > 0)) problems.push('Take profit must be above 0.');
     if (!(settings.stopLoss >= 0)) problems.push('Stop loss cannot be negative (0 turns it off).');
+    if (!(settings.signalLifetimeSeconds >= 30 && settings.signalLifetimeSeconds <= 300)) problems.push('Signal lifetime must be between 30 and 300 seconds.');
     if (!(DEFAULT_ENTRY_CHOICES.DIGITOVER as readonly number[]).includes(settings.defaultOverEntry)) problems.push('Default Over entry digit must be 2 or 4.');
     if (!(DEFAULT_ENTRY_CHOICES.DIGITUNDER as readonly number[]).includes(settings.defaultUnderEntry)) problems.push('Default Under entry digit must be 7 or 5.');
     if (!ALLOWED_BARRIERS.DIGITOVER.includes(settings.recoveryOverBarrier)) problems.push('Recovery Over barrier must be 1, 2 or 3.');

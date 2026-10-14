@@ -1,7 +1,9 @@
-// SIGNAL ZONE: scan Sentinel AI and Insight Fusion together, pick the best market with an entry digit, and load it into a Masika bot.
+// SIGNAL ZONE: Sentinel AI and Insight Fusion are watched together. Signals on which both agree appear on their own (Live signals) and
+// fade after a set time; Scan lists everything, including near misses. Either way, Load Bot puts the signal into a Masika bot.
 // You press Run in Bot Builder yourself; nothing here ever runs a bot or buys a contract.
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { BULK_MARKETS } from '../over-under-engine';
+import { EMPTY_LIVE, advanceLive, agreedNow, dismissLive, secondsLeft, type LiveSignal, type LiveState } from './signal-zone-live';
 import { loadSignalIntoBot } from './signal-zone-loader';
 import { addEntry, entryFor, loadHistory, saveHistory, summarize, type HistoryEntry } from './signal-zone-history';
 import { mergeCandidates, revalidate, type ZoneCandidate } from './signal-zone-merge';
@@ -73,16 +75,45 @@ const SignalZonePage = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory());
+    const [live, setLive] = useState<LiveState>(EMPTY_LIVE);
+    const [clock, setClock] = useState(() => Date.now());
     const session = useSyncExternalStore(signalZoneSession.subscribe, signalZoneSession.getSnapshot);
+    const settingsRef = useRef(settings);
+    settingsRef.current = settings;
+    const liveRef = useRef<LiveState>(EMPTY_LIVE);
 
     useEffect(() => attachSources(), []);
     useEffect(() => { saveSettings(settings); }, [settings]);
+    // One watcher: it keeps the engine status fresh and, when auto-push is on, pushes every new agreement onto the Live signals list.
     useEffect(() => {
-        const refresh = () => setStatus(readSources(settings.requireMomentum, Date.now()).status);
-        refresh();
-        const timer = window.setInterval(refresh, 2000);
+        const watch = () => {
+            const current = settingsRef.current;
+            const at = Date.now();
+            const read = readSources(current.requireMomentum, at);
+            setStatus(read.status);
+            setClock(at);
+            if (!current.autoPush) {
+                if (liveRef.current.signals.length || liveRef.current.suppressed.length) { liveRef.current = EMPTY_LIVE; setLive(EMPTY_LIVE); }
+                return;
+            }
+            const agreed = read.status.warm ? agreedNow(read.sentinel, read.fusion, current, at) : [];
+            const step = advanceLive(liveRef.current, agreed, at, Math.min(300, Math.max(30, current.signalLifetimeSeconds)) * 1000);
+            liveRef.current = step.state;
+            setLive(step.state);
+            if (step.fresh.length) {
+                const first = step.fresh[0].candidate;
+                setMessage(`New signal: ${first.label} on ${first.market}, entry digit ${first.entryDigit}${first.entrySource === 'default' ? ' (default)' : ''}.`);
+            }
+        };
+        watch();
+        const timer = window.setInterval(watch, 2000);
         return () => window.clearInterval(timer);
-    }, [settings.requireMomentum]);
+    }, []);
+    // Drives the countdowns on the signal cards between watcher passes.
+    useEffect(() => {
+        const timer = window.setInterval(() => setClock(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, []);
     // The log is written by the app-level bridge when a run ends; re-read it whenever the session changes.
     useEffect(() => { setHistory(loadHistory()); }, [session.running, session.stoppedBy]);
 
@@ -107,19 +138,20 @@ const SignalZonePage = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
         else setMessage('No market qualifies right now. The nearest candidates are listed below, with the reason each cannot be loaded.');
     };
 
-    const loadBot = async () => {
+    /** Loads a candidate after re-checking it against a FRESH read: the scan list uses the chosen source, live signals use agreement. */
+    const loadCandidate = async (candidate: ZoneCandidate | null, from: 'scan' | 'live') => {
         if (loading) return;
         setError('');
         if (problems.length) { setError(problems[0]); return; }
         const now = Date.now();
         const read = readSources(settings.requireMomentum, now);
-        const fresh = mergeCandidates(read.sentinel, read.fusion, settings, now);
-        const check = revalidate(selected, fresh, now);
+        const fresh = from === 'live' ? agreedNow(read.sentinel, read.fusion, settings, now) : mergeCandidates(read.sentinel, read.fusion, settings, now);
+        const check = revalidate(candidate, fresh, now);
         if (!check.ok) { setError(check.reason); return; }
         setLoading(true);
         try {
             const outcome = await loadSignalIntoBot(check.candidate, settings, openBotBuilder);
-            const next = addEntry(loadHistory(), entryFor(check.candidate, settings.mergeMode, now));
+            const next = addEntry(loadHistory(), entryFor(check.candidate, from === 'live' ? 'both' : settings.mergeMode, now));
             saveHistory(next);
             setHistory(next);
             setMessage(`Loaded ${outcome.botName}: ${outcome.summary}. Press Run in Bot Builder.`);
@@ -128,6 +160,13 @@ const SignalZonePage = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const loadBot = () => loadCandidate(selected, 'scan');
+    const loadLive = (signal: LiveSignal) => loadCandidate(signal.candidate, 'live');
+    const dismiss = (key: string) => {
+        liveRef.current = dismissLive(liveRef.current, key);
+        setLive(liveRef.current);
     };
 
     const toggleMarket = (symbol: string) => update(
@@ -143,13 +182,53 @@ const SignalZonePage = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
             <header className='sz__head'>
                 <div>
                     <h1>Signal Zone</h1>
-                    <p>Scan Sentinel AI and Insight Fusion together, then load the best market into a Masika bot. You press Run.</p>
+                    <p>Sentinel AI and Insight Fusion are watched together. When both agree, the signal appears by itself. Load it into a Masika bot, then you press Run.</p>
                 </div>
                 <div className='sz__engines' aria-label='Engine status'>
                     <span className={status && status.sentinelOnline > 0 ? 'is-on' : ''}>Sentinel AI {status ? `${status.sentinelOnline}/${status.sentinelTotal}` : '...'}</span>
                     <span className={status && status.fusionReady > 0 ? 'is-on' : ''}>Insight Fusion {status ? `${status.fusionReady}/${status.fusionTotal}` : '...'}</span>
                 </div>
             </header>
+
+            <section className='sz__panel sz-live' aria-label='Live signals'>
+                <div className='sz-live__head'>
+                    <h2>Live signals</h2>
+                    <span>{settings.autoPush ? `Both engines agree -> pushed here, gone after ${settings.signalLifetimeSeconds}s` : 'Auto-push is off'}</span>
+                </div>
+                {!settings.autoPush ? (
+                    <p className='sz-stamp'>Turn on "Auto-push agreed signals" in the settings to have agreed signals appear here by themselves.</p>
+                ) : live.signals.filter(signal => secondsLeft(signal, clock) > 0).length === 0 ? (
+                    <p className='sz-stamp'>{status?.warm ? 'Watching both engines. A signal appears here by itself the moment they agree.' : 'The engines are warming up.'}</p>
+                ) : (
+                    <ul className='sz-live__list'>
+                        {live.signals.filter(signal => secondsLeft(signal, clock) > 0).map(signal => {
+                            const item = signal.candidate;
+                            const left = secondsLeft(signal, clock);
+                            return (
+                                <li key={signal.key} className={`sz-live__card ${signal.agreed ? '' : 'is-lost'}`}>
+                                    <div className='sz-live__main'>
+                                        <strong>{item.label}</strong>
+                                        <span>{item.market}</span>
+                                        {clock - signal.firstSeen < 8000 && signal.agreed ? <em className='sz-badge sz-badge--new'>NEW</em> : null}
+                                        {!signal.agreed ? <em className='sz-badge'>Agreement lost</em> : null}
+                                    </div>
+                                    <div className='sz-live__facts'>
+                                        <span>Entry <b className='sz-live__digit'>{item.entryDigit}</b>{item.entrySource === 'default' ? ' (default)' : ''}</span>
+                                        <span>Sentinel {num(item.sentinel?.score)}</span>
+                                        <span>Fusion {num(item.fusion?.score)}</span>
+                                        <span>{left}s left</span>
+                                    </div>
+                                    <div className='sz-live__bar' aria-hidden='true'><i style={{ width: `${Math.min(100, (left * 1000) / Math.max(1, signal.expiresAt - signal.firstSeen) * 100)}%` }} /></div>
+                                    <div className='sz-live__actions'>
+                                        <button type='button' className='sz-btn sz-btn--load' disabled={!signal.agreed || loading || Boolean(problems.length)} onClick={() => loadLive(signal)}>Load Bot</button>
+                                        <button type='button' className='sz-link' onClick={() => dismiss(signal.key)}>Dismiss</button>
+                                    </div>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
+            </section>
 
             <div className='sz__grid'>
                 <section className='sz__panel' aria-label='Settings'>
@@ -165,6 +244,7 @@ const SignalZonePage = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
                         ))}
                     </fieldset>
                     <div className='sz-fields'>
+                        <NumField label='Signal lifetime (seconds)' value={settings.signalLifetimeSeconds} onCommit={v => update('signalLifetimeSeconds', v)} hint='How long a pushed signal stays, 30 to 300' />
                         <NumField label='Stake' value={settings.stake} onCommit={v => update('stake', v)} />
                         <NumField label='Martingale multiplier' value={settings.martingaleMultiplier} onCommit={v => update('martingaleMultiplier', v)} hint='1 keeps the stake flat' />
                         <NumField label='Martingale level' value={settings.martingaleLevel} onCommit={v => update('martingaleLevel', v)} hint='Bot stops after this many losses in a row' />
@@ -179,6 +259,7 @@ const SignalZonePage = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
                         <NumField label='Max Sentinel danger' value={settings.maxDanger} onCommit={v => update('maxDanger', v)} hint='0 = off' />
                     </div>
                     <div className='sz-toggles'>
+                        <Toggle label='Auto-push agreed signals' checked={settings.autoPush} onChange={v => update('autoPush', v)} />
                         <Toggle label='Require momentum' checked={settings.requireMomentum} onChange={v => update('requireMomentum', v)} />
                         <Toggle label='Skip blocked signals' checked={settings.skipBlocked} onChange={v => update('skipBlocked', v)} />
                     </div>

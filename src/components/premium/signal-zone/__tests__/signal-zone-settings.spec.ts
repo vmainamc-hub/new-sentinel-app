@@ -18,6 +18,15 @@ describe('settings', () => {
         expect(DEFAULT_SETTINGS.defaultUnderEntry).toBe(7);
         expect(validateSettings({ ...DEFAULT_SETTINGS, defaultOverEntry: 4, defaultUnderEntry: 5 })).toEqual([]);
     });
+    it('turns auto-push on by default with a lifetime between 30 and 300 seconds', () => {
+        expect(DEFAULT_SETTINGS.autoPush).toBe(true);
+        expect(DEFAULT_SETTINGS.signalLifetimeSeconds).toBe(90);
+        expect(validateSettings({ ...DEFAULT_SETTINGS, signalLifetimeSeconds: 60 })).toEqual([]);
+        expect(validateSettings({ ...DEFAULT_SETTINGS, signalLifetimeSeconds: 120 })).toEqual([]);
+        expect(validateSettings({ ...DEFAULT_SETTINGS, signalLifetimeSeconds: 10 })[0]).toContain('lifetime');
+        expect(validateSettings({ ...DEFAULT_SETTINGS, signalLifetimeSeconds: 900 })[0]).toContain('lifetime');
+        expect(normalizeSettings({ autoPush: false }).autoPush).toBe(false);
+    });
     it('accepts the defaults', () => {
         expect(validateSettings(DEFAULT_SETTINGS)).toEqual([]);
     });
