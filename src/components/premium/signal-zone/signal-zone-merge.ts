@@ -66,6 +66,8 @@ export type ZoneCandidate = {
     sentinel: SentinelCandidate | null;
     fusion: FusionCandidate | null;
     entryDigit: number | null;
+    /** Where the entry digit came from: Sentinel AI's engine, or the default digits from the settings. */
+    entrySource: 'engine' | 'default';
     entryStatus: string;
     entryWindow: string;
     entryWinRate: number | null;

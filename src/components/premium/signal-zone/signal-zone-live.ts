@@ -35,7 +35,14 @@ export const agreedNow = (
     sentinel: SentinelCandidate[], fusion: FusionCandidate[], settings: SignalZoneSettings, now: number,
 ): ZoneCandidate[] => mergeCandidates(sentinel, fusion, { ...settings, mergeMode: 'both' }, now).filter(item => item.source === 'both' && item.loadable);
 
-const order = (a: LiveSignal, b: LiveSignal) =>
+/** What the Live list shows: Sentinel AI's own loadable signals in "Sentinel AI only" mode, otherwise the signals both engines agree on. */
+export const liveNow = (
+    sentinel: SentinelCandidate[], fusion: FusionCandidate[], settings: SignalZoneSettings, now: number,
+): ZoneCandidate[] => settings.mergeMode === 'sentinel_only'
+    ? mergeCandidates(sentinel, fusion, settings, now).filter(item => item.loadable)
+    : agreedNow(sentinel, fusion, settings, now);
+
+const order =(a: LiveSignal, b: LiveSignal) =>
     Number(b.agreed) - Number(a.agreed) || b.candidate.rank - a.candidate.rank || b.firstSeen - a.firstSeen || a.key.localeCompare(b.key);
 
 /**
