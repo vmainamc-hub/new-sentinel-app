@@ -20,7 +20,9 @@ const SentinelAiBridge = observer(() => {
     const store = useStore();
     const { isAuthorized } = useApiBase();
     const navigate = useNavigate();
-    const snapshot = useSentinelAi(false);
+    // Always watching: the engine must keep analysing all 15 markets (and keep their tick streams alive) on every tab, including
+    // Bot Builder. Without this it only ran while the Sentinel AI or Signal Zone page was open, so every visit started cold and stale.
+    const snapshot = useSentinelAi(true);
     const [notice, setNotice] = useState<{ seq: number; text: string; detail: string } | null>(null);
     const seenSeq = useRef(snapshot.alertSeq);
 

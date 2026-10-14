@@ -20,6 +20,9 @@ const HEALTH_POLL_MS = 4_000;
 // Self-healing: a feed that stays unhealthy this long is re-synced, then fully re-attached on the next try.
 const RECOVER_AFTER_MS = 20_000;
 const RECOVER_COOLDOWN_MS = 30_000;
+// The bus reports "error" only when at least half the markets cannot be seeded. A brief error is normal while Deriv
+// answers slowly, so the engine is rebuilt only when the error persists, instead of on every health check.
+const ERROR_REBUILD_AFTER_MS = 15_000;
 const WARMUP_MS = 30_000;
 const UNHEALTHY = ['FEED STALE', 'ANALYSIS LAG', 'BACKEND DEGRADED'];
 
@@ -54,6 +57,7 @@ class RealSentinelAiEngine implements SentinelAiEngine {
     private badSince = 0;
     private lastRecoverAt = 0;
     private recoveries = 0;
+    private errorSince = 0;
 
     retain() {
         this.holders += 1;
@@ -111,12 +115,18 @@ class RealSentinelAiEngine implements SentinelAiEngine {
         const api = (api_base as { api?: unknown }).api;
         const replaced = Boolean(api) && Boolean(this.boundApi) && api !== this.boundApi;
         const errored = apexCore.getStatus() === 'error' && Boolean(api);
-        if (replaced || errored) {
+        if (!errored) this.errorSince = 0;
+        else if (!this.errorSince) this.errorSince = Date.now();
+        const erroredLong = errored && Date.now() - this.errorSince > ERROR_REBUILD_AFTER_MS;
+        if (replaced || erroredLong) {
+            this.errorSince = 0;
             this.detach();
             if (replaced) resetBusListener();
             this.attach();
             return;
         }
+        // The bus watches each market on its own; this nudge just makes it check right away (e.g. after a bot stopped).
+        if (api && this.holders > 0) derivBus.checkFeed();
         this.recoverIfStalled(Boolean(api));
     }
 

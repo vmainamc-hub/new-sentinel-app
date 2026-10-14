@@ -6,8 +6,17 @@ const makeApi = (handler: (request: Sent) => any) => {
     const messageUnsubscribe = jest.fn();
     // Failures reject asynchronously, like the real socket (a synchronous throw would race subscribe()'s own status).
     const send = jest.fn(async (request: Sent) => handler(request));
-    const onMessage = jest.fn(() => ({ subscribe: jest.fn(() => ({ unsubscribe: messageUnsubscribe })) }));
-    return { send, onMessage, messageUnsubscribe };
+    let listener: ((message: unknown) => void) | null = null;
+    const onMessage = jest.fn(() => ({
+        subscribe: jest.fn((callback: (message: unknown) => void) => {
+            listener = callback;
+            return { unsubscribe: messageUnsubscribe };
+        }),
+    }));
+    // Delivers a live tick message exactly like the socket would.
+    const emitTick = (symbol: string, epoch: number, quote = 100) =>
+        listener?.({ msg_type: 'tick', tick: { symbol, epoch, quote, pip_size: 2 } });
+    return { send, onMessage, messageUnsubscribe, emitTick };
 };
 
 // The bus is a singleton, so every test loads a fresh copy of it (and of the mocked socket holder).
@@ -108,5 +117,101 @@ describe('derivBus self-healing', () => {
     it('resync does nothing without a socket', async () => {
         setApi(null);
         await expect(derivBus.resync()).resolves.toBeUndefined();
+    });
+
+    const healthyApi = () =>
+        makeApi(request => {
+            if (request.ticks_history) return { history: { prices: [5.1], times: [10] } };
+            if (request.ticks) return { subscription: { id: `stream-${request.ticks}` } };
+            return {};
+        });
+
+    it('goes back to live after a re-sync instead of staying on connecting', async () => {
+        setApi(healthyApi());
+        const release = derivBus.subscribe(['LIVE_A', 'LIVE_B']);
+        await flush();
+        await derivBus.resync();
+        await flush();
+        expect(derivBus.getStatus()).toBe('live');
+        release();
+    });
+
+    it('does not mark the whole bus as broken when only a minority of markets fail', async () => {
+        setApi(
+            makeApi(request => {
+                if (request.ticks_history === 'BAD_MKT') throw new Error('no data');
+                if (request.ticks_history) return { history: { prices: [5.1], times: [10] } };
+                return { subscription: { id: `stream-${request.ticks}` } };
+            })
+        );
+        const release = derivBus.subscribe(['OK_1', 'OK_2', 'BAD_MKT']);
+        await flush();
+        expect(derivBus.getStatus()).toBe('live');
+        release();
+    });
+
+    it('keeps retrying a market for as long as it is subscribed (no give-up after a few attempts)', async () => {
+        jest.useFakeTimers();
+        let historyCalls = 0;
+        setApi(
+            makeApi(request => {
+                if (request.ticks_history) {
+                    historyCalls += 1;
+                    throw new Error('down');
+                }
+                return {};
+            })
+        );
+        const release = derivBus.subscribe(['STUBBORN']);
+        await flush();
+        for (let i = 0; i < 40; i += 1) {
+            await jest.advanceTimersByTimeAsync(31_000);
+            await flush();
+        }
+        expect(historyCalls).toBeGreaterThan(10);
+        release();
+    });
+
+    it('re-opens only the market whose stream went silent, without refetching its history', async () => {
+        jest.useFakeTimers();
+        const api = healthyApi();
+        setApi(api);
+        const release = derivBus.subscribe(['TALK_A', 'QUIET_B']);
+        await flush();
+        const historyBefore = api.send.mock.calls.filter(([r]) => r.ticks_history).length;
+
+        // A keeps ticking every 2 s; B goes quiet (e.g. DBot forgot all tick streams when a bot stopped).
+        let epoch = 100;
+        for (let i = 0; i < 8; i += 1) {
+            await jest.advanceTimersByTimeAsync(2_000);
+            epoch += 2;
+            api.emitTick('TALK_A', epoch);
+        }
+        await jest.advanceTimersByTimeAsync(2_000);
+        await flush();
+
+        const forgotten = api.send.mock.calls.filter(([r]) => r.forget).map(([r]) => r.forget);
+        expect(forgotten).toEqual(['stream-QUIET_B']);
+        const resubscribed = api.send.mock.calls.filter(([r]) => r.ticks === 'QUIET_B' && r.subscribe).length;
+        expect(resubscribed).toBe(2); // the first subscription plus the revive
+        expect(api.send.mock.calls.filter(([r]) => r.ticks === 'TALK_A' && r.subscribe).length).toBe(1);
+        expect(api.send.mock.calls.filter(([r]) => r.ticks_history).length).toBe(historyBefore);
+        expect(derivBus.getStatus()).toBe('live');
+        release();
+    });
+
+    it('re-syncs everything when the Deriv socket instance was replaced', async () => {
+        jest.useFakeTimers();
+        const first = healthyApi();
+        setApi(first);
+        const release = derivBus.subscribe(['SWAP_A']);
+        await flush();
+        const second = healthyApi();
+        setApi(second);
+        await jest.advanceTimersByTimeAsync(5_000);
+        await flush();
+        expect(first.messageUnsubscribe).toHaveBeenCalled();
+        expect(second.send.mock.calls.some(([r]) => r.ticks_history === 'SWAP_A')).toBe(true);
+        release();
     });
 });
