@@ -1,0 +1,31 @@
+import { DEFAULT_SETTINGS, MIN_STAKE, normalizeSettings, validateSettings } from '../signal-zone-settings';
+
+describe('settings', () => {
+    it('fills every missing field with the defaults', () => {
+        expect(normalizeSettings(null)).toEqual(DEFAULT_SETTINGS);
+        expect(normalizeSettings({ stake: '2.5' }).stake).toBe(2.5);
+        expect(normalizeSettings({ stake: '2.5' }).martingaleLevel).toBe(DEFAULT_SETTINGS.martingaleLevel);
+    });
+    it('falls back on garbage and rounds stakes to cents', () => {
+        const s = normalizeSettings({ stake: 'abc', maxStake: 7.456, mergeMode: 'nonsense', excludedMarkets: ['R_10', 'R_10', ' '] });
+        expect(s.stake).toBe(DEFAULT_SETTINGS.stake);
+        expect(s.maxStake).toBe(7.46);
+        expect(s.mergeMode).toBe('both');
+        expect(s.excludedMarkets).toEqual(['R_10']);
+    });
+    it('accepts the defaults', () => {
+        expect(validateSettings(DEFAULT_SETTINGS)).toEqual([]);
+    });
+    it('names each problem in plain words', () => {
+        expect(validateSettings({ ...DEFAULT_SETTINGS, stake: MIN_STAKE - 0.01 })[0]).toContain('Stake');
+        expect(validateSettings({ ...DEFAULT_SETTINGS, martingaleMultiplier: 0.5 })[0]).toContain('multiplier');
+        expect(validateSettings({ ...DEFAULT_SETTINGS, martingaleLevel: 0 })[0]).toContain('level');
+        expect(validateSettings({ ...DEFAULT_SETTINGS, stake: 5, maxStake: 2 })[0]).toContain('Max stake');
+        expect(validateSettings({ ...DEFAULT_SETTINGS, takeProfit: 0 })[0]).toContain('Take profit');
+        expect(validateSettings({ ...DEFAULT_SETTINGS, recoveryOverBarrier: 4 })[0]).toContain('Over barrier');
+        expect(validateSettings({ ...DEFAULT_SETTINGS, recoveryUnderBarrier: 5 })[0]).toContain('Under barrier');
+    });
+    it('lets the stop loss be switched off with 0', () => {
+        expect(validateSettings({ ...DEFAULT_SETTINGS, stopLoss: 0 })).toEqual([]);
+    });
+});

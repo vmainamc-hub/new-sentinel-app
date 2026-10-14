@@ -5,7 +5,7 @@ import { ungzip } from 'pako';
 import { getTemplateDomain } from '../domain-brand';
 import { DownloadIcon } from '../icons';
 
-type DomainBot = {
+export type DomainBot = {
     id?: string;
     name?: string;
     title?: string;
@@ -131,6 +131,46 @@ const loadManifest = async (urls: string[]): Promise<DomainBot[]> => {
     return bots;
 };
 
+/** Downloads one bot's XML text (same URLs, fallbacks and decoding the Free Bots tab uses). */
+const fetchBotXml = async (bot: DomainBot, baseUrl: string): Promise<string> => {
+    const assetFile = bot.asset || bot.file;
+    const isAbsoluteAssetUrl = /^https?:\/\//i.test(assetFile);
+    const localAssetUrl = isAbsoluteAssetUrl ? assetFile : joinUrl(baseUrl, assetFile);
+    const rawAssetBase = isAbsoluteAssetUrl ? '' : githubRawUrlForLocalPath(baseUrl);
+    const payload = await fetchTextWithFallback(
+        [localAssetUrl, rawAssetBase ? joinUrl(rawAssetBase, assetFile) : ''],
+        bot.name || bot.file
+    );
+    const xml = bot.encoding === 'gzip-base64' ? decodeGzipBase64(payload) : payload;
+    if (!/<xml[\s>]/i.test(xml) && !/<block[\s>]/i.test(xml)) {
+        throw new Error(`${bot.file} is not a Blockly XML bot.`);
+    }
+    return xml;
+};
+
+/** Looks a free bot up by its manifest id and returns its XML. Used by Signal Zone, which must not depend on file paths. */
+export const fetchFreeBotById = async (id: string): Promise<{ bot: DomainBot; xml: string }> => {
+    const { baseUrl, manifestFallbacks } = manifestUrlsForSite();
+    const bots = await loadManifest(manifestFallbacks);
+    const bot = bots.find(item => item.id === id);
+    if (!bot) throw new Error(`The free bot "${id}" is not in this site's bot library.`);
+    return { bot, xml: await fetchBotXml(bot, baseUrl) };
+};
+
+/** Loads bot XML into the Bot Builder workspace exactly as the Free Bots tab does. Call after the Bot Builder is opened. */
+export const loadBotXmlIntoBuilder = async (xml: string, fileName: string): Promise<void> => {
+    const workspace = await waitForWorkspace();
+    await load({
+        block_string: xml,
+        file_name: fileName,
+        workspace,
+        from: save_types.LOCAL,
+        drop_event: {},
+        strategy_id: null,
+        showIncompatibleStrategyDialog: false,
+    });
+};
+
 // Called once when the app starts so the list is already in memory before the Free Bots tab is opened.
 export const prefetchFreeBots = () => {
     try {
@@ -182,30 +222,10 @@ const FreeBotsPage = ({ openBotBuilder }: { openBotBuilder?: () => void }) => {
         setError('');
         setRejected(false);
         try {
-            const assetFile = bot.asset || bot.file;
-            const isAbsoluteAssetUrl = /^https?:\/\//i.test(assetFile);
-            const localAssetUrl = isAbsoluteAssetUrl ? assetFile : joinUrl(baseUrl, assetFile);
-            const rawAssetBase = isAbsoluteAssetUrl ? '' : githubRawUrlForLocalPath(baseUrl);
-            const payload = await fetchTextWithFallback(
-                [localAssetUrl, rawAssetBase ? joinUrl(rawAssetBase, assetFile) : ''],
-                bot.name || bot.file
-            );
-            const xml = bot.encoding === 'gzip-base64' ? decodeGzipBase64(payload) : payload;
-            if (!/<xml[\s>]/i.test(xml) && !/<block[\s>]/i.test(xml)) {
-                throw new Error(`${bot.file} is not a Blockly XML bot.`);
-            }
+            const xml = await fetchBotXml(bot, baseUrl);
 
             openBotBuilder();
-            const workspace = await waitForWorkspace();
-            await load({
-                block_string: xml,
-                file_name: bot.file,
-                workspace,
-                from: save_types.LOCAL,
-                drop_event: {},
-                strategy_id: null,
-                showIncompatibleStrategyDialog: false,
-            });
+            await loadBotXmlIntoBuilder(xml, bot.file);
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err));
             setRejected(err instanceof FetchFailure && isRejectedByServer(err.status));

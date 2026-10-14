@@ -20,6 +20,10 @@
       "label": "Auto Trades"
     },
     {
+      "id": "signal_zone",
+      "label": "Signal Zone"
+    },
+    {
       "id": "sentinel_ai",
       "label": "Sentinel AI"
     },
@@ -70,6 +74,7 @@
       "bot_builder",
       "free_bots",
       "auto_trader",
+      "signal_zone",
       "sentinel_ai",
       "manual_trading",
       "tradingview",

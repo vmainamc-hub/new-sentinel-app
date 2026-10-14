@@ -14,6 +14,7 @@ const NAV_ICONS: Partial<Record<PremiumSection, typeof HomeIcon>> = {
     bot_builder: GearIcon,
     free_bots: RobotIcon,
     auto_trader: RobotIcon,
+    signal_zone: BoltIcon,
     sentinel_ai: ShieldIcon,
     manual_trading: BoltIcon,
     tradingview: SearchIcon,
