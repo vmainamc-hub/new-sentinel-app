@@ -108,6 +108,7 @@ const SentinelAiBridge = observer(({ openBotBuilder }: { openBotBuilder?: () => 
                 <span>{notice.text}</span>
                 <span>{notice.detail}</span>
                 {notice.reason ? <span>Cannot load: {notice.reason}</span> : null}
+                {botRunning && notice.candidate ? <span>A bot is running. Stop it to load this signal.</span> : null}
                 {loadError ? <span className='sentinel-ai-notice__error'>{loadError}</span> : null}
             </div>
             {openBotBuilder && notice.candidate ? (
