@@ -1,17 +1,19 @@
 import { type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { load, save_types } from '@/external/bot-skeleton';
 import { useStore } from '@/hooks/useStore';
 import { PremiumDerivApiService } from '@/services/premium-deriv-api.service';
+import { SCANNER_BOTS } from './ai-scanner/scanner-bots';
+import { loadSignalIntoScannerBot, prefetchScannerBots } from './ai-scanner/scanner-loader';
 
 type StrategyId = 'over1_under8' | 'over2_under7' | 'over3_under6';
 type ContractSide = 'DIGITOVER' | 'DIGITUNDER';
 type Point = { x: number; y: number };
 type Strategy = { id: StrategyId; label: string; over: number; under: number };
-type Market = { symbol: string; name: string; pipSize: number };
+type Market = { symbol: string; name: string; pipSize: number; submarket?: string };
 type Result = {
     symbol: string;
     market: string;
+    submarket?: string;
     primarySide: ContractSide;
     primaryBarrier: number;
     recoverySide: ContractSide;
@@ -29,14 +31,12 @@ const STRATEGIES: Strategy[] = [
 ];
 const ORB_KEY = 'prodb.ai2.orb.v1';
 const PANEL_KEY = 'prodb.ai2.panel.v1';
-const TEMPLATE_URL = '/ai-scanner/grffy.xml';
 const ORB = 58;
 const PANEL_W = 430;
 const PANEL_H = 520;
 const GAP = 10;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max));
-const sleep = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 const textFor = (side: ContractSide, barrier: number) => `${side === 'DIGITOVER' ? 'Over' : 'Under'} ${barrier}`;
 
 const readPoint = (key: string, fallback: Point): Point => {
@@ -86,7 +86,8 @@ const marketsFrom = (items: any[]): Market[] => {
         const name = String(item?.underlying_symbol_name || item?.display_name || item?.name || symbol).trim();
         if (!symbol) return;
         if (!/^R_\d+$/i.test(symbol) && !/^1HZ\d+V$/i.test(symbol) && !/volatility/i.test(name)) return;
-        unique.set(symbol, { symbol, name: name || symbol, pipSize: pipSize(item) });
+        const submarket = String(item?.submarket || '').trim();
+        unique.set(symbol, { symbol, name: name || symbol, pipSize: pipSize(item), ...(submarket ? { submarket } : {}) });
     });
     return [...unique.values()];
 };
@@ -119,70 +120,7 @@ const analyze = async (market: Market, strategy: Strategy, requestedTicks: numbe
         return { ...candidate, primaryRate, recentRate, confidence };
     });
     const best = candidates.sort((a, b) => b.confidence - a.confidence)[0];
-    return { symbol: market.symbol, market: market.name, sampleSize: digits.length, ...best, confidence: clamp(best.confidence, 0, 1) };
-};
-
-const direct = (element: Element, tag: string, name?: string) => Array.from(element.children).find(child =>
-    child.localName === tag && (!name || child.getAttribute('name') === name)
-);
-
-const numericField = (block: Element) => {
-    const value = direct(block, 'value', 'VALUE');
-    if (!value) return undefined;
-    return Array.from(value.getElementsByTagName('field')).find(field => field.getAttribute('name') === 'NUM');
-};
-
-const configureTemplate = (xml: string, result: Result) => {
-    const doc = new DOMParser().parseFromString(xml, 'application/xml');
-    if (doc.getElementsByTagName('parsererror').length) throw new Error('Scanner bot XML is invalid.');
-    const fields = Array.from(doc.getElementsByTagName('field'));
-    const setFirst = (name: string, value: string) => {
-        const field = fields.find(item => item.getAttribute('name') === name);
-        if (!field) throw new Error(`Scanner template is missing ${name}.`);
-        field.textContent = value;
-    };
-
-    setFirst('MARKET_LIST', 'synthetic_index');
-    setFirst('SUBMARKET_LIST', result.symbol.startsWith('1HZ') ? 'random_index_1s' : 'random_index');
-    setFirst('SYMBOL_LIST', result.symbol);
-    setFirst('TRADETYPECAT_LIST', 'digits');
-    setFirst('TRADETYPE_LIST', 'overunder');
-    setFirst('TYPE_LIST', 'both');
-
-    const blocks = Array.from(doc.getElementsByTagName('block'));
-    blocks.filter(block => block.getAttribute('type') === 'variables_set').forEach(block => {
-        const variable = direct(block, 'field', 'VAR')?.textContent?.trim();
-        const number = numericField(block);
-        if (!number) return;
-        if (variable === 'Prediction before loss') number.textContent = String(result.primaryBarrier);
-        if (variable === 'Prediction after loss') number.textContent = String(result.recoveryBarrier);
-    });
-
-    const beforePurchase = blocks.find(block => block.getAttribute('type') === 'before_purchase');
-    const purchases = beforePurchase
-        ? Array.from(beforePurchase.getElementsByTagName('block')).filter(block => block.getAttribute('type') === 'purchase')
-        : [];
-    const primary = purchases[0]?.getElementsByTagName('field')[0];
-    const recovery = purchases[1]?.getElementsByTagName('field')[0];
-    if (!primary || !recovery) throw new Error('Scanner template purchase blocks are missing.');
-    primary.textContent = result.primarySide;
-    recovery.textContent = result.recoverySide;
-
-    // Verify the generated bot before it reaches Blockly. The visible scanner
-    // signal and the first purchase branch must always be identical.
-    if (primary.textContent !== result.primarySide || recovery.textContent !== result.recoverySide) {
-        throw new Error('Scanner signal and generated bot do not match.');
-    }
-    return new XMLSerializer().serializeToString(doc.documentElement);
-};
-
-const waitForWorkspace = async () => {
-    for (let attempt = 0; attempt < 60; attempt += 1) {
-        const workspace = window.Blockly?.derivWorkspace;
-        if (workspace) return workspace;
-        await sleep(100);
-    }
-    throw new Error('Bot Builder is not ready. Try Load Scanner Bot again.');
+    return { symbol: market.symbol, market: market.name, submarket: market.submarket, sampleSize: digits.length, ...best, confidence: clamp(best.confidence, 0, 1) };
 };
 
 const GlobalAIScannerV2 = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
@@ -217,6 +155,11 @@ const GlobalAIScannerV2 = ({ openBotBuilder }: { openBotBuilder: () => void }) =
     useEffect(() => {
         if (isRunPanelOpen) setOpen(false);
     }, [isRunPanelOpen]);
+
+    // Download bots 11 and 26 as soon as the scanner opens, so loading one later never depends on a fresh request.
+    useEffect(() => {
+        if (open) prefetchScannerBots();
+    }, [open]);
 
     useEffect(() => { try { localStorage.setItem(ORB_KEY, JSON.stringify(orb)); } catch { /* UI only */ } }, [orb]);
     useEffect(() => { try { localStorage.setItem(PANEL_KEY, JSON.stringify(panel)); } catch { /* UI only */ } }, [panel]);
@@ -291,32 +234,28 @@ const GlobalAIScannerV2 = ({ openBotBuilder }: { openBotBuilder: () => void }) =
 
     const loadBot = useCallback(async () => {
         if (!result || loading) return;
+        const bot = SCANNER_BOTS[result.primarySide];
         setLoading(true); setError('');
-        setStatus(`Configuring bot for ${textFor(result.primarySide, result.primaryBarrier)} on ${result.market}…`);
+        setStatus(`Configuring bot ${bot.number} for ${textFor(result.primarySide, result.primaryBarrier)} on ${result.market}…`);
         try {
-            const response = await fetch(TEMPLATE_URL, { cache: 'no-store' });
-            if (!response.ok) throw new Error(`Scanner template returned HTTP ${response.status}.`);
-            const configured = configureTemplate(await response.text(), result);
-            localStorage.setItem('prodb.ai2.last-signal', JSON.stringify({
+            await loadSignalIntoScannerBot({
                 symbol: result.symbol,
-                market: result.market,
-                trade: result.primarySide,
+                contract: result.primarySide,
                 barrier: result.primaryBarrier,
-                recovery_trade: result.recoverySide,
-                recovery_barrier: result.recoveryBarrier,
-            }));
-            openBotBuilder();
-            const workspace = await waitForWorkspace();
-            await load({
-                block_string: configured,
-                file_name: `AI ${result.symbol} ${textFor(result.primarySide, result.primaryBarrier)}.xml`,
-                workspace,
-                from: save_types.LOCAL,
-                drop_event: {},
-                strategy_id: null,
-                showIncompatibleStrategyDialog: false,
-            });
-            setStatus(`Loaded bot: ${textFor(result.primarySide, result.primaryBarrier)} · recovery ${textFor(result.recoverySide, result.recoveryBarrier)} · ${result.market}`);
+                submarket: result.submarket,
+            }, openBotBuilder);
+            try {
+                localStorage.setItem('prodb.ai2.last-signal', JSON.stringify({
+                    symbol: result.symbol,
+                    market: result.market,
+                    trade: result.primarySide,
+                    barrier: result.primaryBarrier,
+                    recovery_trade: bot.recovery.contract,
+                    recovery_barrier: bot.recovery.barrier,
+                    bot_number: bot.number,
+                }));
+            } catch { /* the signal note is a convenience only */ }
+            setStatus(`Loaded bot ${bot.number} (${bot.name}): ${textFor(result.primarySide, result.primaryBarrier)} · recovery ${textFor(bot.recovery.contract, bot.recovery.barrier)} · ${result.market}. Press Run in Bot Builder.`);
             setOpen(false);
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
@@ -337,7 +276,7 @@ const GlobalAIScannerV2 = ({ openBotBuilder }: { openBotBuilder: () => void }) =
         <div className='prodb-ai2-panel__body'>
             <div className='prodb-ai2-tabs'>{STRATEGIES.map(item => <button key={item.id} type='button' className={strategyId === item.id ? 'is-active' : ''} onClick={() => { setStrategyId(item.id); setResult(null); setTop([]); setStatus('Not scanned yet'); setError(''); }}>{item.label}</button>)}</div>
             <div className='prodb-ai2-intro'><div><strong>Digits Scanner</strong><small>Scans all supported volatility markets and configures the XML bot to the winning signal.</small></div><label><span>TICKS</span><input type='number' min='100' max='5000' step='100' value={tickCount} onChange={e => setTickCount(Number(e.target.value))} /></label></div>
-            <div className='prodb-ai2-selection'><div><span>SELECTED MARKET</span><strong>{result?.market || 'Scan to find the best market'}</strong><small>{result ? `${result.symbol} · ${result.sampleSize} ticks` : '—'}</small></div><div><span>TRADE TYPE</span><strong>{result ? textFor(result.primarySide, result.primaryBarrier) : 'Waiting for scan'}</strong><small>{result ? `Recovery: ${textFor(result.recoverySide, result.recoveryBarrier)}` : '—'}</small></div></div>
+            <div className='prodb-ai2-selection'><div><span>SELECTED MARKET</span><strong>{result?.market || 'Scan to find the best market'}</strong><small>{result ? `${result.symbol} · ${result.sampleSize} ticks` : '—'}</small></div><div><span>TRADE TYPE</span><strong>{result ? textFor(result.primarySide, result.primaryBarrier) : 'Waiting for scan'}</strong><small>{result ? `Bot ${SCANNER_BOTS[result.primarySide].number} · Recovery: ${textFor(SCANNER_BOTS[result.primarySide].recovery.contract, SCANNER_BOTS[result.primarySide].recovery.barrier)}` : '—'}</small></div></div>
             <div className={`prodb-ai2-status ${error ? 'is-error' : result ? 'is-ready' : ''}`}>{scanning && <i />}<span>{error || status}</span></div>
             {top.length > 0 && <div className='prodb-ai2-ranking'>{top.map((item, index) => <div key={item.symbol} className={index === 0 ? 'is-best' : ''}><b>#{index + 1}</b><span>{item.market}<small>{textFor(item.primarySide, item.primaryBarrier)}</small></span><strong>{(item.confidence * 100).toFixed(1)}%</strong></div>)}</div>}
             <div className='prodb-ai2-actions'><button type='button' className='is-primary' disabled={scanning || loading} onClick={() => void scan()}>{scanning ? 'Scanning…' : 'Scan Markets'}</button><button type='button' disabled={!result || scanning || loading} onClick={() => void loadBot()}>{loading ? 'Configuring…' : 'Load Matching Bot'}</button></div>
