@@ -90,3 +90,8 @@ Not done / unverified:
 - Not tested here: jest specs (jest/rxjs not installed in this container), and no live run. Only the pure MultiMarket logic was checked under bun.
 - Known (from the author's guide): "Maximum session loss" does not trigger (session profit is hard-wired to 0, inherited from v2). Run on demo first.
 - Next: run `npm test` locally, then try the bot on a demo account.
+
+## Ultemate profit bot v4 (heat-ranked), Free Bot 104
+- Done: copy of v3 where, among markets that ALREADY signal, the one with the lowest "heat" is traded (heat = losing digits 6/7/8/9 in the last 20 ticks + 2 x the last 3 ticks); score only breaks ties. No signal is gated. Settings in INITIALIZATION: Loss digits, Heat window, Recent window, Recent weight, Heat ranking enabled (0 = v3 behaviour).
+- Checked in an XML interpreter simulation (6 seeds x 400 ticks x 10 markets): signals identical to v3 on every tick, heat-off identical to v3, chosen market always the minimum-heat qualifier. Not run live. Digits on synthetic indices are random, so no change in long-run win rate is claimed.
+- Still open: v3/v4 "Maximum session loss" never triggers (session profit stuck at 0).

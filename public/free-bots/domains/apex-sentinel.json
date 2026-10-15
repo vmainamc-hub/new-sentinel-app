@@ -1,7 +1,7 @@
 {
   "version": 1,
   "site_id": "apex-sentinel",
-  "count": 103,
+  "count": 104,
   "bots": [
     {
       "id": "grffy-v1",
@@ -929,6 +929,15 @@
       "description": "Digit Under bot that scans 10 markets every tick and trades the best qualifying one. Needs the multi-market blocks of this app.",
       "emoji": "FREE BOT",
       "priority": 103
+    },
+    {
+      "id": "apex-library-ultemate-profit-bot-v4-heat-ranked-71",
+      "name": "104. Ultemate profit bot v4 (Multi-market, heat-ranked)",
+      "file": "Ultemate_profit_bot_v4_heat_ranked.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-ultemate-profit-bot-v4-heat-ranked-71.xml",
+      "description": "v3 multi-market bot that, among markets already signalling, picks the one with the fewest recent 6/7/8/9 digits. No signal is blocked.",
+      "emoji": "FREE BOT",
+      "priority": 104
     }
   ]
 }
