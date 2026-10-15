@@ -38,6 +38,15 @@ describe.each(BOTS)('Ultemate profit bot $version entry formula', ({ file }) => 
         expect(xml.indexOf('type="purchase"')).toBeGreaterThan(xml.indexOf('>Entry OK</field><value name="VALUE"><block type="logic_ternary"'));
     });
 
+    it('keeps the procedure calls and else-branches Blockly needs (mutation tags are not rewritten)', () => {
+        // Re-serialising the XML once turned <mutation xmlns="..xhtml"/> into <html:mutation/>, which Blockly ignores:
+        // the bot then failed on Run with "pon_final_01662 is not defined".
+        expect(xml).not.toContain('html:');
+        expect(xml).toContain('<mutation xmlns="http://www.w3.org/1999/xhtml" name="Validate settings and risk"/>');
+        expect(xml).toContain('<mutation xmlns="http://www.w3.org/1999/xhtml" name="Evaluate market"/>');
+        expect(xml).toContain('<mutation xmlns="http://www.w3.org/1999/xhtml" else="1"/>');
+    });
+
     it('counts digits of the market being traded, and never in an empty history', () => {
         expect(xml).toMatch(/type="market_digit_count"[^]*?<field name="VAR" id="[^"]+">Trade market<\/field>/);
     });
