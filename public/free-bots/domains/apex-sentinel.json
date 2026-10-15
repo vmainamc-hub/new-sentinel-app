@@ -926,7 +926,7 @@
       "name": "103. Ultemate profit bot v3 (Multi-market)",
       "file": "Ultemate_profit_bot_v3_multimarket.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-ultemate-profit-bot-v3-multimarket-70.xml",
-      "description": "Digit Under bot that scans 10 markets every tick and trades the best qualifying one. Needs the multi-market blocks of this app.",
+      "description": "Digit Under bot that scans 10 markets every tick and trades the best qualifying one. Needs the multi-market blocks of this app. Entry: buys only when the last 3 digits are all winning digits (0-5).",
       "emoji": "FREE BOT",
       "priority": 103
     },
@@ -935,7 +935,7 @@
       "name": "104. Ultemate profit bot v4 (Multi-market, heat-ranked)",
       "file": "Ultemate_profit_bot_v4_heat_ranked.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-ultemate-profit-bot-v4-heat-ranked-71.xml",
-      "description": "v3 multi-market bot that, among markets already signalling, picks the one with the fewest recent 6/7/8/9 digits. No signal is blocked.",
+      "description": "v3 multi-market bot that, among markets already signalling, picks the one with the fewest recent 6/7/8/9 digits. No signal is blocked. Entry: buys when digit 4, 7 or 9 is touched.",
       "emoji": "FREE BOT",
       "priority": 104
     },
@@ -944,7 +944,7 @@
       "name": "105. Ultemate profit bot v5 (Multi-market, transition)",
       "file": "Ultemate_profit_bot_v5_transition.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-ultemate-profit-bot-v5-transition-72.xml",
-      "description": "v4 plus multi-window digit-transition ranking: prefers markets whose losing digits (6-9) were hot and are now cooling. No signal is blocked.",
+      "description": "v4 plus multi-window digit-transition ranking: prefers markets whose losing digits (6-9) were hot and are now cooling. No signal is blocked. Entry: waits for at least 3 digits in 6-9 in a row, then buys on a digit in 0-5.",
       "emoji": "FREE BOT",
       "priority": 105
     }
