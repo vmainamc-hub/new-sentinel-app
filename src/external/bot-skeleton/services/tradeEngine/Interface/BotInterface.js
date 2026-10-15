@@ -30,6 +30,13 @@ const getBotInterface = tradeEngine => {
 
             return symbol;
         },
+        // Multi-market (see trade/MultiMarket.js). watchMarkets is async and registered in interpreter.js.
+        watchMarkets: markets => tradeEngine.watchMarkets(markets),
+        getMarketTickCount: symbol => tradeEngine.getMarketTickCount(symbol),
+        getMarketDigitCount: (symbol, window, skip, digits) =>
+            tradeEngine.getMarketDigitCount(symbol, window, skip, digits),
+        getMarketDigits: symbol => tradeEngine.getMarketDigits(symbol),
+        setTradeMarket: symbol => tradeEngine.setTradeMarket(symbol),
         getAskPrice: contract_type => Number(getProposal(contract_type, tradeEngine).ask_price),
         getPayout: contract_type => Number(getProposal(contract_type, tradeEngine).payout),
         getPurchaseReference: () => tradeEngine.getPurchaseReference(),

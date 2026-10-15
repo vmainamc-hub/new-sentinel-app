@@ -149,6 +149,11 @@ const Interpreter = () => {
         );
         js_interpreter.setProperty(
             pseudo_bot_interface,
+            'watchMarkets',
+            createAsync(js_interpreter, bot_interface.watchMarkets)
+        );
+        js_interpreter.setProperty(
+            pseudo_bot_interface,
             'sellAtMarket',
             createAsync(js_interpreter, bot_interface.sellAtMarket)
         );
@@ -221,6 +226,8 @@ const Interpreter = () => {
                 $scope.stopped = true;
                 $scope.is_error_triggered = false;
                 globalObserver.emit('bot.stop');
+                // Release the extra market feeds opened by "Watch markets" (no-op for single-market bots).
+                bot.tradeEngine?.releaseMarkets?.();
                 const { ticksService } = $scope;
                 // Unsubscribe previous ticks_history subscription
                 // Unsubscribe the subscriptions from Proposal, Balance and OpenContract

@@ -59,6 +59,31 @@ class DerivTickBus {
   getPipSize(s: string) {
     return this.pip.get(s) ?? 2;
   }
+  /** Milliseconds since this market last delivered anything (Infinity if it never has). */
+  getAgeMs(s: string) {
+    const at = this.lastSeenAt.get(s);
+    return at === undefined ? Number.POSITIVE_INFINITY : Date.now() - at;
+  }
+  /** Number of last digits currently buffered for a market (cheap: no copy). */
+  getDigitCount(s: string) {
+    return this.digits.get(s)?.length ?? 0;
+  }
+  /**
+   * How many of the `window` ticks that end `skip` ticks before the newest one have a last digit in `wanted`.
+   * skip = 0 is the latest `window` ticks, skip = window is the `window` ticks before that (equal-sized samples).
+   * Returns NaN when the market does not have `skip + window` ticks yet, so callers can never mistake "no data" for "zero".
+   */
+  countDigits(s: string, window: number, skip: number, wanted: ArrayLike<number>) {
+    const d = this.digits.get(s);
+    const w = Math.trunc(Number(window));
+    const k = Math.trunc(Number(skip));
+    if (!d || !Number.isFinite(w) || !Number.isFinite(k) || w < 1 || k < 0 || d.length < w + k) return NaN;
+    const set = new Set<number>();
+    for (let i = 0; i < wanted.length; i += 1) set.add(Number(wanted[i]));
+    let n = 0;
+    for (let i = d.length - k - w; i < d.length - k; i += 1) if (set.has(d[i])) n += 1;
+    return n;
+  }
   onTick(cb: TickListener) {
     this.tickLs.add(cb);
     return () => {
@@ -96,6 +121,31 @@ class DerivTickBus {
     const bad = this.failed.size;
     if (bad > 0 && bad * 2 >= this.refs.size) this.setStatus("error");
     else if (this.inflight === 0) this.setStatus("live");
+  }
+
+  /** Deriv reports pip size as a number of decimals (2) but some payloads use the pip value (0.01): accept both. */
+  private static decimals(p: unknown) {
+    const n = Number(p);
+    if (!Number.isFinite(n) || n < 0) return null;
+    if (n > 0 && n < 1) return Math.max(0, Math.round(-Math.log10(n)));
+    return Math.trunc(n);
+  }
+  /**
+   * Last digits depend on how many decimals the market quotes (Volatility 10/25 use 3, Volatility 50/75 use 4, the rest 2).
+   * History used to be digitised with a default of 2 before the first live tick revealed the real value, which gave wrong
+   * digits for those markets. Whenever the pip size becomes known or changes, the buffered digits are recomputed.
+   */
+  private applyPip(s: string, p: unknown) {
+    const decimals = DerivTickBus.decimals(p);
+    if (decimals === null || this.pip.get(s) === decimals) return;
+    this.pip.set(s, decimals);
+    const buf = this.buffers.get(s);
+    if (buf) {
+      this.digits.set(
+        s,
+        buf.map((v) => this.digit(s, v.price)),
+      );
+    }
   }
 
   private digit(s: string, p: number) {
@@ -238,6 +288,7 @@ class DerivTickBus {
         style: "ticks",
       });
       if (r?.history?.prices) {
+        this.applyPip(s, r.pip_size ?? (api_base as any).pip_sizes?.[s]);
         const times = r.history.times || [];
         this.setBuffer(
           s,
@@ -275,7 +326,7 @@ class DerivTickBus {
         price = Number(m.tick.quote);
       if (!s || !Number.isFinite(epoch) || !Number.isFinite(price)) return;
       if (epoch <= (this.lastEpoch.get(s) || 0)) return;
-      if (m.tick.pip_size !== undefined) this.pip.set(s, Number(m.tick.pip_size));
+      if (m.tick.pip_size !== undefined) this.applyPip(s, m.tick.pip_size);
       const t = { t: epoch * 1000, price };
       this.append(s, t);
       this.tickLs.forEach((f) => f(s, t));

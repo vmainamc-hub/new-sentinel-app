@@ -10,6 +10,7 @@ import { proposalsReady, start } from './state/actions';
 import * as constants from './state/constants';
 import rootReducer from './state/reducers';
 import Balance from './Balance';
+import MultiMarket from './MultiMarket';
 import OpenContract from './OpenContract';
 import Proposal from './Proposal';
 import Purchase from './Purchase';
@@ -63,7 +64,7 @@ const watchScope = ({ store, stopScope, passScope, passFlag }) => {
     });
 };
 
-export default class TradeEngine extends Balance(Purchase(VirtualHook(Sell(OpenContract(Proposal(Ticks(Total(class {})))))))) {
+export default class TradeEngine extends Balance(Purchase(VirtualHook(Sell(OpenContract(Proposal(Ticks(MultiMarket(Total(class {}))))))))) {
     constructor($scope) {
         super();
         this.observer = $scope.observer;

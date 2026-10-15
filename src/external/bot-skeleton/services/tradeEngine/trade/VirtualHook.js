@@ -183,9 +183,10 @@ export default Engine =>
             this.vh.subscription = api_base.api.onMessage().subscribe(({ data }) => {
                 if (data?.msg_type !== 'tick' || !data.tick) return;
                 const tick = data.tick;
-                // Resolve the intended market on every tick: some engine instances populate the symbol only after purchase starts.
+                // Resolve the intended market on every tick: the market this trade was placed on first (multi-market bots), else the
+                // watched one; some engine instances populate the symbol only after purchase starts.
                 // If it is still unknown, do not let an arbitrary market's tick settle this virtual trade.
-                const symbol = this.symbol || options.symbol || this.options?.symbol;
+                const symbol = options.symbol || this.symbol || this.options?.symbol;
                 if (!symbol) return;
                 if ((tick.symbol || tick.underlying_symbol) !== symbol) return;
                 if (tick.epoch && tick.epoch === last_epoch) return;

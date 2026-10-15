@@ -83,3 +83,10 @@ Not done / unverified:
 - [ ] `npm run build`, repo jest/eslint (registry blocked here); tests ran under bun.
 - [ ] No live or demo run; nothing was traded.
 - Logged candidates are the ones left after Sentinel AI's own quality/exclusion filters (`surfaceVetRank(eligible)`), not the engine's unfiltered list.
+
+## Multi-market Ultemate profit bot v3 (user-supplied patch)
+- Done: engine mixin `MultiMarket` (watch markets, read digits of any market, trade on a chosen market), 5 new Bot Builder blocks + toolbox entries, Virtual Hook settles on the traded market, tick-bus pip-size/digit-count/age readers.
+- Done: bot added to Free Bots as #103 (`apex-library-ultemate-profit-bot-v3-multimarket-70`).
+- Not tested here: jest specs (jest/rxjs not installed in this container), and no live run. Only the pure MultiMarket logic was checked under bun.
+- Known (from the author's guide): "Maximum session loss" does not trigger (session profit is hard-wired to 0, inherited from v2). Run on demo first.
+- Next: run `npm test` locally, then try the bot on a demo account.

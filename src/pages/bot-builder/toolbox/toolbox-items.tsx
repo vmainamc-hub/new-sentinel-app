@@ -395,6 +395,11 @@ export const ToolboxItems = () =>
                     <Block type='stat_list' />
                     <Block type='ticks' />
                     <Block type='lastDigitList' />
+                    <Block type='market_watch' />
+                    <Block type='market_tick_count' />
+                    <Block type='market_digit_count' />
+                    <Block type='market_last_digit_list' />
+                    <Block type='trade_market' />
                     <Block type='check_direction' />
                     <Block type='is_candle_black' />
                     <Block type='read_ohlc'>
