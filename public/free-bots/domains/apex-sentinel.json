@@ -1,7 +1,7 @@
 {
   "version": 1,
   "site_id": "apex-sentinel",
-  "count": 104,
+  "count": 105,
   "bots": [
     {
       "id": "grffy-v1",
@@ -938,6 +938,15 @@
       "description": "v3 multi-market bot that, among markets already signalling, picks the one with the fewest recent 6/7/8/9 digits. No signal is blocked.",
       "emoji": "FREE BOT",
       "priority": 104
+    },
+    {
+      "id": "apex-library-ultemate-profit-bot-v5-transition-72",
+      "name": "105. Ultemate profit bot v5 (Multi-market, transition)",
+      "file": "Ultemate_profit_bot_v5_transition.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-ultemate-profit-bot-v5-transition-72.xml",
+      "description": "v4 plus multi-window digit-transition ranking: prefers markets whose losing digits (6-9) were hot and are now cooling. No signal is blocked.",
+      "emoji": "FREE BOT",
+      "priority": 105
     }
   ]
 }

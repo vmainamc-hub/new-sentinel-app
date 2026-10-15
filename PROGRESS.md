@@ -95,3 +95,8 @@ Not done / unverified:
 - Done: copy of v3 where, among markets that ALREADY signal, the one with the lowest "heat" is traded (heat = losing digits 6/7/8/9 in the last 20 ticks + 2 x the last 3 ticks); score only breaks ties. No signal is gated. Settings in INITIALIZATION: Loss digits, Heat window, Recent window, Recent weight, Heat ranking enabled (0 = v3 behaviour).
 - Checked in an XML interpreter simulation (6 seeds x 400 ticks x 10 markets): signals identical to v3 on every tick, heat-off identical to v3, chosen market always the minimum-heat qualifier. Not run live. Digits on synthetic indices are random, so no change in long-run win rate is claimed.
 - Still open: v3/v4 "Maximum session loss" never triggers (session profit stuck at 0).
+
+## Ultemate profit bot v5 (transition ranking), Free Bot 105
+- Done: v4 plus a "Transition score" procedure, evaluated only for markets that already signal. It adds: loss-digit cooling per window (10/24/40/60), hot-to-cold hand-off per window, per-digit cooling (window 24, hot count 3), fast (6) under slow (40) average. Rank = heat - Transition weight x score; lowest rank is traded, score breaks ties. Transition weight 0 = v4. Nothing is blocked.
+- Checked in the XML interpreter (6 seeds x 400 ticks x 10 markets): signals identical to v3 on every tick, weight 0 identical to v4, the bot's transition score equals an independent Python reference, chosen market always has the minimum rank. Not run live; no claim of a higher win rate (digits are random).
+- Next: backtest v3/v4/v5 on recorded real ticks if the user supplies a CSV; fix the broken session loss cap.
