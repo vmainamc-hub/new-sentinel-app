@@ -33,9 +33,32 @@ describe.each(BOTS)('Ultemate profit bot $version entry formula', ({ file }) => 
         expect(xml).toContain('>Entry formula enabled</field>');
         expect(numberVariable(xml, 'Entry formula enabled')).toBe(1);
         // The gate: the existing purchase condition AND Entry OK = 1.
-        expect(xml).toMatch(/<block type="logic_operation" id="ent_b\d+"><field name="OP">AND<\/field><value name="A"><block type="logic_operation"/);
+        expect(xml).toMatch(/<block type="logic_operation" id="ent_fix_and"><field name="OP">AND<\/field><value name="A"><block type="logic_operation"/);
         expect(xml).toMatch(/<field name="VAR" id="ent_v\d+">Entry OK<\/field>/);
         expect(xml.indexOf('type="purchase"')).toBeGreaterThan(xml.indexOf('>Entry OK</field><value name="VALUE"><block type="logic_ternary"'));
+    });
+
+    it('applies Entry OK to the buy condition only, never to the in-flight reset', () => {
+        const blockXml = (id: string): string => {
+            const start = xml.indexOf(`id="${id}"`);
+            if (start < 0) throw new Error(`block ${id} not found`);
+            const open = xml.lastIndexOf('<block ', start);
+            let depth = 0;
+            const tags = /<block\b|<\/block>/g;
+            tags.lastIndex = open;
+            for (let tag = tags.exec(xml); tag; tag = tags.exec(xml)) {
+                depth += tag[0] === '</block>' ? -1 : 1;
+                if (depth === 0) return xml.slice(open, tags.lastIndex);
+            }
+            throw new Error(`block ${id} is not closed`);
+        };
+        const condition = (id: string) => /<value name="IF0">([^]*?)<statement name="DO0">/.exec(blockXml(id))?.[1] ?? '';
+        // vh_if_1 only clears a stuck "In flight" state: it must not wait for Entry OK.
+        expect(condition('vh_if_1')).not.toContain('>Entry OK<');
+        // pon_final_01470 is the buy decision: its condition carries the Entry OK = 1 check and wraps the purchase.
+        expect(condition('pon_final_01470')).toContain('>Entry OK<');
+        expect(blockXml('pon_final_01470')).toContain('type="purchase"');
+        expect(blockXml('ent_fix_and')).toContain('id="pon_final_01471"');
     });
 
     it('keeps the procedure calls and else-branches Blockly needs (mutation tags are not rewritten)', () => {
