@@ -1,5 +1,5 @@
 jest.mock('@deriv-com/translations', () => ({ localize: text => text }));
-jest.mock('../../../../utils', () => ({ modifyContextMenu: jest.fn() }));
+jest.mock('../../../../scratch/utils', () => ({ modifyContextMenu: jest.fn() }));
 
 const colour = { colour: '#111', colourSecondary: '#222', colourTertiary: '#333' };
 

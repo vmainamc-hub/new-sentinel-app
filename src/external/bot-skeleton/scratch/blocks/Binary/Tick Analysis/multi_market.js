@@ -1,5 +1,5 @@
 import { localize } from '@deriv-com/translations';
-import { modifyContextMenu } from '../../../../utils';
+import { modifyContextMenu } from '../../../utils';
 
 /*
  * Multi-market blocks. They let ONE strategy scan the digits of several markets on every tick and place the next
