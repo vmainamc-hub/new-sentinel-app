@@ -926,7 +926,7 @@
       "name": "103. Ultemate profit bot v3 (Multi-market)",
       "file": "Ultemate_profit_bot_v3_multimarket.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-ultemate-profit-bot-v3-multimarket-70.xml",
-      "description": "Digit Under bot that scans 10 markets every tick and trades the best qualifying one. Needs the multi-market blocks of this app. Entry: buys only when the last 3 digits are all winning digits (0-5).",
+      "description": "Digit Under bot that scans 10 markets every tick and trades the best qualifying one. Needs the multi-market blocks of this app. Entry: buys only when the last 3 digits are all in 6-9.",
       "emoji": "FREE BOT",
       "priority": 103
     },

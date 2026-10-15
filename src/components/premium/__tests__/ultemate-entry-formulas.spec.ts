@@ -53,10 +53,10 @@ describe.each(BOTS)('Ultemate profit bot $version entry formula', ({ file }) => 
 });
 
 describe('entry formula settings', () => {
-    it('v3: the last 3 digits must be winning digits (0-5)', () => {
+    it('v3: the last 3 digits must all be in 6-9', () => {
         const xml = read('v3-multimarket-70');
-        expect(listDigits(xml, 'Entry win digits')).toEqual([0, 1, 2, 3, 4, 5]);
-        expect(numberVariable(xml, 'Entry wins needed')).toBe(3);
+        expect(listDigits(xml, 'Entry digits')).toEqual([6, 7, 8, 9]);
+        expect(numberVariable(xml, 'Entry digits needed')).toBe(3);
     });
 
     it('v4: entry digits 4, 7 or 9, touched', () => {
