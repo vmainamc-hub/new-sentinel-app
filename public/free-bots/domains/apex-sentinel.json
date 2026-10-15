@@ -1,7 +1,7 @@
 {
   "version": 1,
   "site_id": "apex-sentinel",
-  "count": 102,
+  "count": 103,
   "bots": [
     {
       "id": "grffy-v1",
@@ -920,6 +920,15 @@
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
       "emoji": "FREE BOT",
       "priority": 102
+    },
+    {
+      "id": "apex-library-ultemate-profit-bot-v3-multimarket-70",
+      "name": "103. Ultemate profit bot v3 (Multi-market)",
+      "file": "Ultemate_profit_bot_v3_multimarket.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-ultemate-profit-bot-v3-multimarket-70.xml",
+      "description": "Digit Under bot that scans 10 markets every tick and trades the best qualifying one. Needs the multi-market blocks of this app.",
+      "emoji": "FREE BOT",
+      "priority": 103
     }
   ]
 }
