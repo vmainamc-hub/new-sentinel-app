@@ -73,11 +73,13 @@ const SentinelAiBridge = lazy(() => import('@/pages/sentinel-ai/sentinel-ai-brid
 // Signal Zone reads both the Sentinel and the Insight Fusion engines, so its page also loads on demand. Its small bridge stays mounted
 // so the stop loss keeps working while Bot Builder is open.
 const SignalZonePage = lazy(() => import('./signal-zone/SignalZonePage'));
+// Sixfold carries its own simulator and crowd model, so it also loads on demand.
+const SixfoldPage = lazy(() => import('./sixfold/SixfoldPage'));
 
 const validSections: PremiumSection[] = [
     'dashboard', 'bot_ideas', 'quick_bot', 'bot_builder', 'free_bots', 'signal_ai', 'auto_trader', 'signal_zone', 'sentinel_ai',
     'manual_trading', 'bulk_trader', 'batch_trader', 'copy_trading', 'speedbot', 'calculator', 'pro_ai', 'analysis_tools',
-    'analysis_hub', 'charts', 'tradingview', 'dtrader', 'ai_bots', 'digits_analysis',
+    'analysis_hub', 'charts', 'tradingview', 'dtrader', 'ai_bots', 'digits_analysis', 'sixfold',
 ];
 
 const sectionFromHash = (hash: string): PremiumSection => {
@@ -237,6 +239,7 @@ const PremiumLayout = observer(() => {
             case 'dtrader': return <DTraderPage />;
             case 'ai_bots': return <AIBotsPage />;
             case 'digits_analysis': return <DigitsAnalysisPage openBotBuilder={openBotBuilder} />;
+            case 'sixfold': return <Suspense fallback={<PremiumLoader />}><SixfoldPage openBotBuilder={openBotBuilder} /></Suspense>;
             default: return null;
         }
     };

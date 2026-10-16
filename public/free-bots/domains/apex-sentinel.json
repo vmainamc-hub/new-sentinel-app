@@ -1,7 +1,7 @@
 {
   "version": 1,
   "site_id": "apex-sentinel",
-  "count": 105,
+  "count": 107,
   "bots": [
     {
       "id": "grffy-v1",
@@ -947,6 +947,24 @@
       "description": "Masika Strategies Digit Over on 1HZ25V without entry-digit filtering; prediction digits 0, 1, 2, 4.",
       "emoji": "FREE BOT",
       "priority": 105
+    },
+    {
+      "id": "recover-under-bandwagon-no-entry",
+      "name": "106. Recover Under Bandwagon No Entry",
+      "file": "Recover_Under_Bandwagon_No_Entry.xml",
+      "asset": "uploads/apex-sentinel/apex-library/recover-under-bandwagon-no-entry.xml",
+      "description": "Under recovery bot with no entry condition: buys DIGITUNDER on every cycle, stake x2 after a loss. Meant to be loaded from a Sixfold signal.",
+      "emoji": "FREE BOT",
+      "priority": 106
+    },
+    {
+      "id": "recover-over-bandwagon-no-entry",
+      "name": "107. Recover Over Bandwagon No Entry",
+      "file": "Recover_Over_Bandwagon_No_Entry.xml",
+      "asset": "uploads/apex-sentinel/apex-library/recover-over-bandwagon-no-entry.xml",
+      "description": "Over recovery bot with no entry condition: buys DIGITOVER on every cycle, stake x2 after a loss. Meant to be loaded from a Sixfold signal.",
+      "emoji": "FREE BOT",
+      "priority": 107
     }
   ]
 }

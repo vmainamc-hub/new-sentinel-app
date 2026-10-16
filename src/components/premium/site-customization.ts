@@ -23,6 +23,7 @@ export const NAVIGATION_CATALOG: Array<{ id: PremiumSection; label: string; requ
     { id: 'auto_trader', label: 'Auto Trades' },
     { id: 'signal_zone', label: 'Signal Zone' },
     { id: 'sentinel_ai', label: 'Sentinel AI' },
+    { id: 'sixfold', label: 'Sixfold' },
     { id: 'manual_trading', label: 'DTrader' },
     { id: 'tradingview', label: 'TradingView' },
     { id: 'bulk_trader', label: 'Bulk Trader' },

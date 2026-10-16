@@ -4,7 +4,7 @@ import { observer } from 'mobx-react-lite';
 import useThemeSwitcher from '@/hooks/useThemeSwitcher';
 import BrandMark from './BrandMark';
 import PremiumAccountSwitcher from './PremiumAccountSwitcher';
-import { BoltIcon, CalculatorIcon, CopyIcon, GearIcon, GridIcon, HomeIcon, MoonIcon, RobotIcon, SearchIcon, ShieldIcon, SunIcon } from './icons';
+import { BoltIcon, CalculatorIcon, CopyIcon, GearIcon, GridIcon, HomeIcon, MoonIcon, PulseIcon, RobotIcon, SearchIcon, ShieldIcon, SunIcon } from './icons';
 import { NAVIGATION_CATALOG } from './site-customization';
 import PremiumTicker from './PremiumTicker';
 import type { PremiumSection } from './types';
@@ -26,6 +26,7 @@ const NAV_ICONS: Partial<Record<PremiumSection, typeof HomeIcon>> = {
     calculator: CalculatorIcon,
     ai_bots: RobotIcon,
     digits_analysis: SearchIcon,
+    sixfold: PulseIcon,
 };
 
 const NAV_LABELS = Object.fromEntries(NAVIGATION_CATALOG.map(item => [item.id, item.label])) as Partial<Record<PremiumSection, string>>;

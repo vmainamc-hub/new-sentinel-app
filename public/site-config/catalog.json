@@ -28,6 +28,10 @@
       "label": "Sentinel AI"
     },
     {
+      "id": "sixfold",
+      "label": "Sixfold"
+    },
+    {
       "id": "manual_trading",
       "label": "DTrader"
     },
@@ -76,6 +80,7 @@
       "auto_trader",
       "signal_zone",
       "sentinel_ai",
+      "sixfold",
       "manual_trading",
       "tradingview",
       "bulk_trader",

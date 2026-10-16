@@ -1,0 +1,710 @@
+.sixfold {
+    --bg: #07101d;
+    --panel: #0d1929;
+    --line: #1c3046;
+    --muted: #8294aa;
+    --teal: #5de0c0;
+    --blue: #74a9ff;
+    --amber: #f4bf69;
+    --red: #ff7e86;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    color: #e7edf7;
+    background: radial-gradient(ellipse at 72% -12%, #142a43 0, transparent 38%), var(--bg);
+    min-height: 100%;
+    border-radius: 10px;
+    overflow: hidden;
+}
+.sixfold * {
+    box-sizing: border-box;
+}
+.sixfold button,
+.sixfold select,
+.sixfold textarea {
+    font: inherit;
+}
+.sixfold button {
+    cursor: pointer;
+}
+.sixfold button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.sixfold h1 {
+    font:
+        700 clamp(25px, 3vw, 34px) Manrope,
+        sans-serif;
+    letter-spacing: -1px;
+    margin: 10px 0 8px;
+    color: #f1f5fc;
+}
+.sixfold h2 {
+    font:
+        650 17px Manrope,
+        sans-serif;
+    letter-spacing: -0.35px;
+    margin: 7px 0 5px;
+    color: #e8f0f8;
+}
+.sixfold .eyebrow {
+    font:
+        500 10px 'DM Mono',
+        monospace;
+    letter-spacing: 1.15px;
+    color: #7991a9;
+}
+.sixfold .panel {
+    background: linear-gradient(150deg, #0d1a2a, #0b1726);
+    border: 1px solid #203349;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+    min-width: 0;
+}
+.sixfold .panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 18px;
+    margin-bottom: 16px;
+}
+.sixfold .panel-head p {
+    margin: 0;
+    color: #8ca0b5;
+    font-size: 11px;
+    line-height: 1.65;
+    max-width: 650px;
+}
+.sixfold .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    padding: 10px 13px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    transition: 0.15s;
+}
+.sixfold .btn.primary {
+    background: var(--teal);
+    color: #06201f;
+    border: 1px solid var(--teal);
+}
+.sixfold .btn.secondary {
+    background: #102034;
+    border: 1px solid #2b4058;
+    color: #c7d7e7;
+}
+.sixfold .btn.subtle {
+    background: transparent;
+    border: 1px solid transparent;
+    color: #9aafc4;
+    padding: 7px 9px;
+}
+.sixfold .notice {
+    display: flex;
+    gap: 9px;
+    background: #211f1c;
+    border: 1px solid #4b3c2b;
+    color: #d5b98b;
+    padding: 11px 12px;
+    border-radius: 7px;
+    font-size: 11px;
+    line-height: 1.6;
+}
+.sixfold .notice.okmsg {
+    background: #10302b;
+    border-color: #2b6a5c;
+    color: #9be8d5;
+}
+.sixfold .error-banner {
+    display: flex;
+    gap: 10px;
+    background: #351d27;
+    border: 1px solid #74404a;
+    border-radius: 8px;
+    padding: 12px;
+    color: #ffb6b9;
+    font-size: 12px;
+}
+.sixfold .error-banner span {
+    flex: 1;
+}
+.sixfold .mini-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin: 16px 0 10px;
+}
+.sixfold .mini-stats > div {
+    border: 1px solid #1d3348;
+    background: #0b1726;
+    border-radius: 6px;
+    padding: 9px;
+}
+.sixfold .mini-stats small {
+    display: block;
+    color: #8297aa;
+    font-size: 9px;
+}
+.sixfold .mini-stats b {
+    display: block;
+    font:
+        600 13px Manrope,
+        sans-serif;
+    margin-top: 6px;
+}
+.sixfold .digit-bars {
+    height: 172px;
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    padding: 9px 0 0;
+}
+.sixfold .digit-bar {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+}
+.sixfold .digit-value {
+    font:
+        9px 'DM Mono',
+        monospace;
+    color: #9eb2c6;
+}
+.sixfold .digit-bar-track {
+    height: 112px;
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+    background: linear-gradient(0deg, #14263a, #0e1b2b);
+    border-radius: 5px 5px 2px 2px;
+    overflow: hidden;
+}
+.sixfold .digit-bar-fill {
+    width: 100%;
+    background: linear-gradient(0deg, #1e5a64, #4ba8a1);
+    border-radius: 4px 4px 0 0;
+    min-height: 2px;
+}
+.sixfold .digit-bar > b {
+    font:
+        10px 'DM Mono',
+        monospace;
+    color: #b7c6d5;
+}
+.sixfold .digit-input {
+    display: block;
+    width: 100%;
+    min-height: 110px;
+    resize: vertical;
+    background: #091523;
+    border: 1px solid #2a4057;
+    border-radius: 7px;
+    color: #dce9f4;
+    padding: 13px;
+    font:
+        12px 'DM Mono',
+        monospace;
+    outline: 0;
+}
+.sixfold .form-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+}
+.sixfold .sigs {
+    display: grid;
+    gap: 8px;
+}
+.sixfold .sig {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 12px;
+    background: #0b1726;
+    border: 1px solid #1d3348;
+    border-radius: 8px;
+}
+.sixfold .sig > div {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.sixfold .sig b {
+    font-size: 13px;
+}
+.sixfold .sig small {
+    font-size: 10px;
+    color: #7f95a9;
+}
+.sixfold .sigs + .notice,
+.sixfold .sigs + .error-banner {
+    margin-top: 12px;
+}
+
+.sixfold {
+    min-height: 100vh;
+}
+.sixfold .sf-top {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    height: 52px;
+    padding: 0 20px;
+    background: #081321ee;
+    border-bottom: 1px solid #182a3d;
+    backdrop-filter: blur(6px);
+}
+.sixfold .sf-brand {
+    font: 800 15px Manrope;
+    letter-spacing: 2px;
+}
+.sixfold .sf-top nav {
+    display: flex;
+    gap: 4px;
+    flex: 1;
+    overflow-x: auto;
+}
+.sixfold .sf-top nav button {
+    background: none;
+    border: 1px solid transparent;
+    color: #94a7bb;
+    padding: 7px 12px;
+    border-radius: 7px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+.sixfold .sf-top nav button.on {
+    background: #102a38;
+    border-color: #214a56;
+    color: #7ce5cf;
+}
+.sixfold .sf-feed {
+    font: 9px 'DM Mono';
+    letter-spacing: 0.6px;
+    color: #8ca0b5;
+    border: 1px solid #2a3c50;
+    padding: 4px 7px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+.sixfold .sf-feed.live {
+    color: var(--teal);
+    border-color: #286557;
+}
+.sixfold .sf-feed.error {
+    color: var(--red);
+}
+.sixfold .sf-feedbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 14px 20px 0;
+}
+.sixfold .sf-feedbar label {
+    font: 10px 'DM Mono';
+    color: #7790a7;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+.sixfold .sf-feedbar input {
+    background: #102035;
+    border: 1px solid #293f57;
+    border-radius: 6px;
+    color: #d7e4f1;
+    padding: 8px;
+    font: 11px 'DM Mono';
+    width: 200px;
+}
+.sixfold .sf-feedbar small {
+    color: #7f95a9;
+    font-size: 10px;
+}
+.sixfold .sf-feedbar .notice,
+.sixfold .sf-feedbar .error-banner {
+    flex-basis: 100%;
+    margin: 0;
+}
+.sixfold .sf-board,
+.sixfold .sf-desk {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 22px 20px 10px;
+}
+.sixfold .lede {
+    color: #9bb0c4;
+    font-size: 12px;
+    line-height: 1.65;
+    margin: 0 0 14px;
+    max-width: 780px;
+}
+.sixfold .muted {
+    color: #7f95a9;
+    font-size: 11px;
+}
+.sixfold .sf-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+}
+.sixfold .mcard {
+    background: linear-gradient(140deg, #101f31, #0c1827);
+    border: 1px solid #203349;
+    border-radius: 10px;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+.sixfold .mcard header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.sixfold .mcard header b {
+    font-size: 13px;
+}
+.sixfold .dg {
+    font: 700 22px Manrope;
+    color: var(--teal);
+}
+.sixfold .mrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.sixfold .mrow button {
+    background: #102034;
+    border: 1px solid #2b4058;
+    color: #c7d7e7;
+    border-radius: 6px;
+    padding: 5px 9px;
+    font: 11px 'DM Mono';
+}
+.sixfold .mrow small {
+    margin-left: auto;
+    color: #7f95a9;
+    font-size: 10px;
+}
+.sixfold .crowdline {
+    font-size: 11px;
+    color: #c8b98e;
+    line-height: 1.5;
+    margin: 0;
+}
+.sixfold .vstate {
+    display: inline-block;
+    font: 700 9px 'DM Mono';
+    letter-spacing: 0.5px;
+    padding: 4px 7px;
+    border-radius: 4px;
+    background: #17283b;
+    color: #93abc2;
+    vertical-align: middle;
+}
+.sixfold .vs-viable {
+    background: #15372f;
+    color: #75e1b9;
+}
+.sixfold .vs-steady {
+    background: #173040;
+    color: #8fc3df;
+}
+.sixfold .vs-unstable {
+    background: #332a20;
+    color: var(--amber);
+}
+.sixfold .vs-trap {
+    background: #3a202c;
+    color: #ff91a2;
+}
+.sixfold .vs-hostile {
+    background: #3c242c;
+    color: #ff7e86;
+}
+.sixfold .vs-warming {
+    background: #1b2636;
+    color: #8094a8;
+}
+.sixfold .ev-edge {
+    background: #15372f;
+    color: #75e1b9;
+}
+.sixfold .ev-leans_edge {
+    background: #332a20;
+    color: var(--amber);
+}
+.sixfold .ev-no_edge,
+.sixfold .ev-too_few {
+    background: #1b2636;
+    color: #9bb0c4;
+}
+.sixfold .sf-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: end;
+    padding: 14px;
+    background: #0c1928;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-bottom: 16px;
+}
+.sixfold .sf-controls label {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    font: 9px 'DM Mono';
+    color: #7790a7;
+    letter-spacing: 0.7px;
+}
+.sixfold .sf-controls select {
+    background: #102035;
+    border: 1px solid #293f57;
+    border-radius: 6px;
+    color: #d7e4f1;
+    padding: 8px 10px;
+    font-size: 11px;
+    min-width: 110px;
+}
+.sixfold .sf-hero {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 20px;
+}
+.sixfold .sf-hero h1 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+.sixfold .sf-verdict {
+    border-left: 2px solid #2f6a63;
+    padding-left: 16px;
+}
+.sixfold .sf-verdict b {
+    font: 10px 'DM Mono';
+    color: #7edbc9;
+}
+.sixfold .sf-verdict p {
+    font-size: 12px;
+    color: #c9d7e5;
+    line-height: 1.7;
+    margin: 8px 0 0;
+}
+.sixfold .wl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+.sixfold .wlchip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 46px;
+    padding: 7px 4px;
+    border-radius: 7px;
+    font: 800 14px Manrope;
+}
+.sixfold .wlchip small {
+    font: 8px 'DM Mono';
+    opacity: 0.75;
+    margin-top: 2px;
+}
+.sixfold .wlchip.w {
+    background: #15372f;
+    color: #75e1b9;
+    border: 1px solid #286557;
+}
+.sixfold .wlchip.l {
+    background: #3c242c;
+    color: #ff9da5;
+    border: 1px solid #6a3a44;
+}
+.sixfold .stats4 {
+    grid-template-columns: repeat(4, 1fr);
+}
+.sixfold .ladder {
+    display: grid;
+    gap: 6px;
+}
+.sixfold .lrow {
+    display: grid;
+    grid-template-columns: 70px 110px 1fr 80px;
+    align-items: center;
+    gap: 10px;
+    background: #0b1726;
+    border: 1px solid #1d3348;
+    border-radius: 7px;
+    padding: 8px 10px;
+    color: #d7e4f1;
+    text-align: left;
+}
+.sixfold .lrow.sel {
+    border-color: #347c70;
+    background: #102a2d;
+}
+.sixfold .lrow b {
+    font: 700 12px 'DM Mono';
+}
+.sixfold .lrow small {
+    font: 10px 'DM Mono';
+    color: #9bb0c4;
+    text-align: right;
+}
+.sixfold .lbar {
+    height: 6px;
+    background: #1c3044;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.sixfold .lbar i {
+    display: block;
+    height: 100%;
+}
+.sixfold .lbar i.pos {
+    background: #4fd9b5;
+}
+.sixfold .lbar i.neg {
+    background: #d86a78;
+}
+.sixfold .callout {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border: 1px solid #2f6a63;
+    background: #102a2d;
+    border-radius: 7px;
+    color: #9be8d5;
+    font-size: 12px;
+}
+.sixfold .crowd {
+    display: grid;
+    gap: 8px;
+}
+.sixfold .crow {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1.3fr 1fr;
+    gap: 12px;
+    align-items: center;
+    padding: 12px;
+    background: #0b1726;
+    border: 1px solid #1d3348;
+    border-radius: 8px;
+}
+.sixfold .crow small {
+    display: block;
+    font-size: 9px;
+    color: #7f95a9;
+    margin-bottom: 3px;
+}
+.sixfold .crow b {
+    font-size: 12px;
+}
+.sixfold .cwho small {
+    font-size: 10px;
+    line-height: 1.4;
+}
+.sixfold .cnote {
+    grid-column: 1/-1;
+    margin: 0;
+    font-size: 11px;
+    color: #9bb0c4;
+    line-height: 1.5;
+}
+.sixfold .cstate {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+}
+.sixfold .cbar {
+    width: 100%;
+    height: 5px;
+    background: #1c3044;
+    border-radius: 5px;
+    overflow: hidden;
+}
+.sixfold .cbar i {
+    display: block;
+    height: 100%;
+    background: #7aa9ff;
+}
+.sixfold .cs-trapped {
+    border-color: #7a4552;
+    background: #241a24;
+}
+.sixfold .cs-trapped .vstate {
+    background: #3a202c;
+    color: #ff91a2;
+}
+.sixfold .cs-trapped .cbar i {
+    background: #ff7e86;
+}
+.sixfold .cs-chasing .vstate {
+    background: #173040;
+    color: #8fc3df;
+}
+.sixfold .cs-wavering .vstate {
+    background: #332a20;
+    color: var(--amber);
+}
+.sixfold .sf-foot {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 14px 20px 26px;
+    color: #60758a;
+    font: 9px 'DM Mono';
+    line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+    .sixfold .sf-hero {
+        grid-template-columns: 1fr;
+    }
+    .sixfold .sf-verdict {
+        border-left: 0;
+        padding-left: 0;
+        border-top: 2px solid #2f6a63;
+        padding-top: 12px;
+    }
+    .sixfold .stats4 {
+        grid-template-columns: 1fr 1fr;
+    }
+    .sixfold .lrow {
+        grid-template-columns: 58px 92px 1fr;
+    }
+    .sixfold .lrow small {
+        display: none;
+    }
+    .sixfold .crow {
+        grid-template-columns: 1fr 1fr;
+    }
+    .sixfold .cwho {
+        grid-column: 1/-1;
+    }
+    .sixfold .sf-feedbar input {
+        width: 150px;
+    }
+    .sixfold .sf-top {
+        padding: 0 10px;
+        gap: 8px;
+    }
+    .sixfold .sf-controls label {
+        flex: 1 1 130px;
+    }
+}
