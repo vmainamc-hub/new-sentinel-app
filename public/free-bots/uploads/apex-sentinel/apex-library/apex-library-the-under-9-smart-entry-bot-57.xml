@@ -10,14 +10,20 @@
     <variable id="v5r?ynHo|Z{lS=(B~];6">duke</variable>
     <variable id="qQ]^z(23IIrz6z~JnY#h">tick 3</variable>
     <variable id=".5ELQ4[J.e4czk,qPqKM">Martingale split</variable>
+    <variable id="vrd01">Recovery Digit</variable>
+    <variable id="vrw01">Recovery Wait</variable>
+    <variable id="vhc01">High Count 6-9</variable>
+    <variable id="vlc01">Low Count 0-5</variable>
     <variable id=";}P!2i/+%E]l5:QV~?PL">Time</variable>
+    <variable id="vhn01">Highs Needed 6-9</variable>
+    <variable id="vln01">Lows Needed 0-5</variable>
   </variables>
   <block type="trade_definition" id="=;b|aw3,G(o+jI6HNU0_" deletable="false" x="0" y="110">
     <statement name="TRADE_OPTIONS">
       <block type="trade_definition_market" id="GrbKdLI=66(KGnSGl*=_" deletable="false" movable="false">
         <field name="MARKET_LIST">synthetic_index</field>
         <field name="SUBMARKET_LIST">random_index</field>
-        <field name="SYMBOL_LIST">R_100</field>
+        <field name="SYMBOL_LIST">1HZ30V</field>
         <next>
           <block type="trade_definition_tradetype" id="F)`ky6X[Pq]/Anl_CQ%)" deletable="false" movable="false">
             <field name="TRADETYPECAT_LIST">digits</field>
@@ -65,7 +71,7 @@
                 <field name="VAR" id="y)BE|l7At6oT)ur0Dsw?">Stake</field>
                 <value name="VALUE">
                   <block type="math_number" id="TDv/W;dNI84TFbp}8X8=">
-                    <field name="NUM">3</field>
+                    <field name="NUM">0.5</field>
                   </block>
                 </value>
                 <next>
@@ -80,7 +86,7 @@
                       <block type="virtual_hook" id="T[[MPd]~s2DvudO=[PS#">
                         <field name="ENABLED">TRUE</field>
                         <field name="START">VIRTUAL</field>
-                        <field name="LOSSES">2</field>
+                        <field name="LOSSES">1</field>
                         <field name="WINS">1</field>
                         <next>
                           <block type="variables_set" id="8OjS@VNW$Nt8OYrII56k">
@@ -130,6 +136,86 @@
                                             <field name="NUM">1</field>
                                           </block>
                                         </value>
+                                        <next>
+                                          <block type="variables_set" id="rv016">
+                                            <field name="VAR" id="r?~+}!_;Ctu04Jt[UsmH">count loss</field>
+                                            <value name="VALUE">
+                                              <block type="math_number" id="rv001">
+                                                <field name="NUM">0</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="rv015">
+                                                <field name="VAR" id="*zK:Il8Xu:h!eeGE76W_">Total lost</field>
+                                                <value name="VALUE">
+                                                  <block type="math_number" id="rv002">
+                                                    <field name="NUM">0</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="variables_set" id="rv014">
+                                                    <field name="VAR" id="vrd01">Recovery Digit</field>
+                                                    <value name="VALUE">
+                                                      <block type="math_number" id="rv003">
+                                                        <field name="NUM">6</field>
+                                                      </block>
+                                                    </value>
+                                                    <next>
+                                                      <block type="variables_set" id="rv013">
+                                                        <field name="VAR" id="vrw01">Recovery Wait</field>
+                                                        <value name="VALUE">
+                                                          <block type="math_number" id="rv004">
+                                                            <field name="NUM">0</field>
+                                                          </block>
+                                                        </value>
+                                                        <next>
+                                                          <block type="variables_set" id="rv012">
+                                                            <field name="VAR" id="vhc01">High Count 6-9</field>
+                                                            <value name="VALUE">
+                                                              <block type="math_number" id="rv005">
+                                                                <field name="NUM">0</field>
+                                                              </block>
+                                                            </value>
+                                                            <next>
+                                                              <block type="variables_set" id="rv011">
+                                                                <field name="VAR" id="vlc01">Low Count 0-5</field>
+                                                                <value name="VALUE">
+                                                                  <block type="math_number" id="rv006">
+                                                                    <field name="NUM">0</field>
+                                                                  </block>
+                                                                </value>
+                                                                <next>
+                                                                  <block type="variables_set" id="rv010">
+                                                                    <field name="VAR" id="vhn01">Highs Needed 6-9</field>
+                                                                    <value name="VALUE">
+                                                                      <block type="math_number" id="rv007">
+                                                                        <field name="NUM">3</field>
+                                                                      </block>
+                                                                    </value>
+                                                                    <next>
+                                                                      <block type="variables_set" id="rv009">
+                                                                        <field name="VAR" id="vln01">Lows Needed 0-5</field>
+                                                                        <value name="VALUE">
+                                                                          <block type="math_number" id="rv008">
+                                                                            <field name="NUM">1</field>
+                                                                          </block>
+                                                                        </value>
+                                                                      </block>
+                                                                    </next>
+                                                                  </block>
+                                                                </next>
+                                                              </block>
+                                                            </next>
+                                                          </block>
+                                                        </next>
+                                                      </block>
+                                                    </next>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
                                       </block>
                                     </next>
                                   </block>
@@ -179,7 +265,7 @@
       </block>
     </statement>
   </block>
-  <block type="after_purchase" id="RSFi6b^1!S1=u5HT9ij5" x="815" y="110">
+  <block type="after_purchase" id="RSFi6b^1!S1=u5HT9ij5" x="1250" y="110">
     <statement name="AFTERPURCHASE_STACK">
       <block type="controls_if" id="5G%tFh@!t)3.mm8J/bh9">
         <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
@@ -243,6 +329,36 @@
                         </value>
                       </block>
                     </statement>
+                    <next>
+                      <block type="variables_set" id="rv023">
+                        <field name="VAR" id="vrw01">Recovery Wait</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="rv018">
+                            <field name="NUM">1</field>
+                          </block>
+                        </value>
+                        <next>
+                          <block type="variables_set" id="rv022">
+                            <field name="VAR" id="vhc01">High Count 6-9</field>
+                            <value name="VALUE">
+                              <block type="math_number" id="rv019">
+                                <field name="NUM">0</field>
+                              </block>
+                            </value>
+                            <next>
+                              <block type="variables_set" id="rv021">
+                                <field name="VAR" id="vlc01">Low Count 0-5</field>
+                                <value name="VALUE">
+                                  <block type="math_number" id="rv020">
+                                    <field name="NUM">0</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </next>
+                          </block>
+                        </next>
+                      </block>
+                    </next>
                   </block>
                 </next>
               </block>
@@ -350,17 +466,8 @@
               <block type="variables_set" id=",hV/+o9jVI%*8omyXRaY">
                 <field name="VAR" id="jZ@oue8^bFSf$W^OcBHK">predict 3</field>
                 <value name="VALUE">
-                  <block type="math_random_int" id=")Z#^yPp8JKvbN,Vq*.4#">
-                    <value name="FROM">
-                      <shadow type="math_number" id="Kd7:R_;XF7lw0@X7b$m;">
-                        <field name="NUM">4</field>
-                      </shadow>
-                    </value>
-                    <value name="TO">
-                      <shadow type="math_number" id="2,tvs*ufK8h)Zb)e#4B2">
-                        <field name="NUM">4</field>
-                      </shadow>
-                    </value>
+                  <block type="variables_get" id="rv017">
+                    <field name="VAR" id="vrd01">Recovery Digit</field>
                   </block>
                 </value>
                 <next>
@@ -469,7 +576,7 @@
                     <field name="VAR" id="y)BE|l7At6oT)ur0Dsw?">Stake</field>
                     <value name="VALUE">
                       <block type="math_number" id=".i,wLAq.KO?QhI-33l7e">
-                        <field name="NUM">3</field>
+                        <field name="NUM">1</field>
                       </block>
                     </value>
                   </block>
@@ -513,7 +620,7 @@
       </block>
     </statement>
   </block>
-  <block type="before_purchase" id="m^:eB90FBG!Q9f85%x-K" deletable="false" x="0" y="1300">
+  <block type="before_purchase" id="m^:eB90FBG!Q9f85%x-K" deletable="false" x="0" y="1684">
     <statement name="BEFOREPURCHASE_STACK">
       <block type="notify" id="^KrKto{h0?O`i5y!Uo!k">
         <field name="NOTIFICATION_TYPE">success</field>
@@ -524,77 +631,204 @@
           </shadow>
         </value>
         <next>
-          <block type="controls_if" id="!|E$w4ASJTKG-y?12,8^">
-            <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+          <block type="controls_if" id="rv049">
             <value name="IF0">
-              <block type="logic_compare" id="(AhTMHT@riEtCYt91p9D">
-                <field name="OP">GTE</field>
+              <block type="logic_compare" id="rv044">
+                <field name="OP">EQ</field>
                 <value name="A">
-                  <block type="variables_get" id="W8s(cb-X_NH2@SD}IFuh">
-                    <field name="VAR" id="7S=JB!;S?@%x@F=5xFsK">tick 2</field>
+                  <block type="variables_get" id="rv042">
+                    <field name="VAR" id="vrw01">Recovery Wait</field>
                   </block>
                 </value>
                 <value name="B">
-                  <block type="math_number" id="[dO-UK.kQPX;~kqXeQFn">
-                    <field name="NUM">6</field>
+                  <block type="math_number" id="rv043">
+                    <field name="NUM">1</field>
                   </block>
                 </value>
               </block>
             </value>
             <statement name="DO0">
-              <block type="purchase" id="it}Zt@Ou$Y97bED_*(nZ">
-                <field name="PURCHASE_LIST">DIGITUNDER</field>
-              </block>
-            </statement>
-            <statement name="ELSE">
-              <block type="controls_if" id="@IzKPQiv2bN!(4.+k_7N">
+              <block type="controls_if" id="rv041">
+                <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
                 <value name="IF0">
-                  <block type="logic_compare" id="`G9FBnU)5NsiK2?b::6M">
-                    <field name="OP">EQ</field>
+                  <block type="logic_compare" id="rv026">
+                    <field name="OP">GTE</field>
                     <value name="A">
-                      <block type="variables_get" id="Zmj0R;cpLy=u($hD8-ZJ">
-                        <field name="VAR" id="v5r?ynHo|Z{lS=(B~];6">duke</field>
+                      <block type="variables_get" id="rv024">
+                        <field name="VAR" id=":yGQ!WYKA[R_sO1MkSjL">tick1</field>
                       </block>
                     </value>
                     <value name="B">
-                      <block type="math_number" id="],X_z={lX{q8,ZO:U_,U">
-                        <field name="NUM">1</field>
+                      <block type="math_number" id="rv025">
+                        <field name="NUM">6</field>
                       </block>
                     </value>
                   </block>
                 </value>
                 <statement name="DO0">
-                  <block type="controls_if" id="h?8Dvn!QafEhCQ:.n^4^">
+                  <block type="math_change" id="rv027">
+                    <field name="VAR" id="vhc01">High Count 6-9</field>
+                    <value name="DELTA">
+                      <shadow type="math_number" id="rv028">
+                        <field name="NUM">1</field>
+                      </shadow>
+                    </value>
+                  </block>
+                </statement>
+                <statement name="ELSE">
+                  <block type="math_change" id="rv029">
+                    <field name="VAR" id="vlc01">Low Count 0-5</field>
+                    <value name="DELTA">
+                      <shadow type="math_number" id="rv030">
+                        <field name="NUM">1</field>
+                      </shadow>
+                    </value>
+                  </block>
+                </statement>
+                <next>
+                  <block type="controls_if" id="rv040">
                     <value name="IF0">
-                      <block type="logic_compare" id="pz|+Nt/:I$FcDn%|=,8D">
-                        <field name="OP">LTE</field>
+                      <block type="logic_operation" id="rv031">
+                        <field name="OP">AND</field>
                         <value name="A">
-                          <block type="variables_get" id="4Wu%+eV4l2nh}B1w@`4A">
-                            <field name="VAR" id="7S=JB!;S?@%x@F=5xFsK">tick 2</field>
+                          <block type="logic_compare" id="rv034">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="variables_get" id="rv032">
+                                <field name="VAR" id="vhc01">High Count 6-9</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="rv033">
+                                <field name="VAR" id="vhn01">Highs Needed 6-9</field>
+                              </block>
+                            </value>
                           </block>
                         </value>
                         <value name="B">
-                          <block type="math_number" id="O:Xl7CYTA91wqNE;AEW|">
-                            <field name="NUM">2</field>
+                          <block type="logic_compare" id="rv037">
+                            <field name="OP">GTE</field>
+                            <value name="A">
+                              <block type="variables_get" id="rv035">
+                                <field name="VAR" id="vlc01">Low Count 0-5</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="variables_get" id="rv036">
+                                <field name="VAR" id="vln01">Lows Needed 0-5</field>
+                              </block>
+                            </value>
                           </block>
                         </value>
                       </block>
                     </value>
                     <statement name="DO0">
-                      <block type="purchase" id="w([~9^nq1#q3jCkvgTh0">
+                      <block type="variables_set" id="rv039">
+                        <field name="VAR" id="vrw01">Recovery Wait</field>
+                        <value name="VALUE">
+                          <block type="math_number" id="rv038">
+                            <field name="NUM">0</field>
+                          </block>
+                        </value>
+                      </block>
+                    </statement>
+                  </block>
+                </next>
+              </block>
+            </statement>
+            <next>
+              <block type="controls_if" id="rv048">
+                <value name="IF0">
+                  <block type="logic_compare" id="rv047">
+                    <field name="OP">EQ</field>
+                    <value name="A">
+                      <block type="variables_get" id="rv045">
+                        <field name="VAR" id="vrw01">Recovery Wait</field>
+                      </block>
+                    </value>
+                    <value name="B">
+                      <block type="math_number" id="rv046">
+                        <field name="NUM">0</field>
+                      </block>
+                    </value>
+                  </block>
+                </value>
+                <statement name="DO0">
+                  <block type="controls_if" id="!|E$w4ASJTKG-y?12,8^">
+                    <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                    <value name="IF0">
+                      <block type="logic_compare" id="(AhTMHT@riEtCYt91p9D">
+                        <field name="OP">GTE</field>
+                        <value name="A">
+                          <block type="variables_get" id="W8s(cb-X_NH2@SD}IFuh">
+                            <field name="VAR" id="7S=JB!;S?@%x@F=5xFsK">tick 2</field>
+                          </block>
+                        </value>
+                        <value name="B">
+                          <block type="math_number" id="[dO-UK.kQPX;~kqXeQFn">
+                            <field name="NUM">6</field>
+                          </block>
+                        </value>
+                      </block>
+                    </value>
+                    <statement name="DO0">
+                      <block type="purchase" id="it}Zt@Ou$Y97bED_*(nZ">
                         <field name="PURCHASE_LIST">DIGITUNDER</field>
+                      </block>
+                    </statement>
+                    <statement name="ELSE">
+                      <block type="controls_if" id="@IzKPQiv2bN!(4.+k_7N">
+                        <value name="IF0">
+                          <block type="logic_compare" id="`G9FBnU)5NsiK2?b::6M">
+                            <field name="OP">EQ</field>
+                            <value name="A">
+                              <block type="variables_get" id="Zmj0R;cpLy=u($hD8-ZJ">
+                                <field name="VAR" id="v5r?ynHo|Z{lS=(B~];6">duke</field>
+                              </block>
+                            </value>
+                            <value name="B">
+                              <block type="math_number" id="],X_z={lX{q8,ZO:U_,U">
+                                <field name="NUM">1</field>
+                              </block>
+                            </value>
+                          </block>
+                        </value>
+                        <statement name="DO0">
+                          <block type="controls_if" id="h?8Dvn!QafEhCQ:.n^4^">
+                            <value name="IF0">
+                              <block type="logic_compare" id="pz|+Nt/:I$FcDn%|=,8D">
+                                <field name="OP">LTE</field>
+                                <value name="A">
+                                  <block type="variables_get" id="4Wu%+eV4l2nh}B1w@`4A">
+                                    <field name="VAR" id="7S=JB!;S?@%x@F=5xFsK">tick 2</field>
+                                  </block>
+                                </value>
+                                <value name="B">
+                                  <block type="math_number" id="O:Xl7CYTA91wqNE;AEW|">
+                                    <field name="NUM">2</field>
+                                  </block>
+                                </value>
+                              </block>
+                            </value>
+                            <statement name="DO0">
+                              <block type="purchase" id="w([~9^nq1#q3jCkvgTh0">
+                                <field name="PURCHASE_LIST">DIGITUNDER</field>
+                              </block>
+                            </statement>
+                          </block>
+                        </statement>
                       </block>
                     </statement>
                   </block>
                 </statement>
               </block>
-            </statement>
+            </next>
           </block>
         </next>
       </block>
     </statement>
   </block>
-  <block type="variables_set" id="$:45$(QTl*]diAL!!5v|" disabled="true" x="0" y="1890">
+  <block type="variables_set" id="$:45$(QTl*]diAL!!5v|" disabled="true" x="0" y="2830">
     <field name="VAR" id="r?~+}!_;Ctu04Jt[UsmH">count loss</field>
     <value name="VALUE">
       <block type="math_number" id="L`t.Z4ePm+=42a`U`8AJ">
@@ -612,16 +846,16 @@
       </block>
     </next>
   </block>
-  <block type="math_number" id=")DHWp{-|#(fSukZ24pKY" disabled="true" x="0" y="2042">
+  <block type="math_number" id=")DHWp{-|#(fSukZ24pKY" disabled="true" x="0" y="2982">
     <field name="NUM">7</field>
   </block>
-  <block type="math_number" id="NO_siJz!he{6d)z(tg!T" disabled="true" x="0" y="2130">
+  <block type="math_number" id="NO_siJz!he{6d)z(tg!T" disabled="true" x="0" y="3070">
     <field name="NUM">2</field>
   </block>
-  <block type="math_number" id="A,03dq_`*LBUTM9$A:mr" disabled="true" x="0" y="2218">
+  <block type="math_number" id="A,03dq_`*LBUTM9$A:mr" disabled="true" x="0" y="3158">
     <field name="NUM">2</field>
   </block>
-  <block type="math_random_int" id="hct+!n]sA3?DDLmP!OUQ" disabled="true" x="0" y="2306">
+  <block type="math_random_int" id="hct+!n]sA3?DDLmP!OUQ" disabled="true" x="0" y="3246">
     <value name="FROM">
       <shadow type="math_number" id="[ELhuN7Fz,5~2!kqQ*l4">
         <field name="NUM">2</field>
@@ -633,10 +867,10 @@
       </shadow>
     </value>
   </block>
-  <block type="math_number" id="!%tF4KJR)p2WLG5f_Uti" disabled="true" x="0" y="2394">
+  <block type="math_number" id="!%tF4KJR)p2WLG5f_Uti" disabled="true" x="0" y="3334">
     <field name="NUM">2</field>
   </block>
-  <block type="tick_analysis" id="C1)t(KjgV5)#c:5Fz2@_" collapsed="true" x="0" y="2482">
+  <block type="tick_analysis" id="C1)t(KjgV5)#c:5Fz2@_" collapsed="true" x="0" y="3422">
     <statement name="TICKANALYSIS_STACK">
       <block type="variables_set" id="/K_P8vj*(@v:6j]Bu~P=">
         <field name="VAR" id=":yGQ!WYKA[R_sO1MkSjL">tick1</field>
