@@ -1,40 +1,40 @@
 <xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
   <variables>
-    <variable id="x_uXJs8,GNt]U*wsQw8h">Valor Inicial</variable>
-    <variable id="RN6pQFkcpv:iEEg+E]X^">Valor ApÃ³s Primeira VitÃ³ria :</variable>
-    <variable id="?=#`tn+(A4pB^gEc[jLu">Meta de Ganhos :</variable>
+    <variable id="x_uXJs8,GNt]U*wsQw8h">Initial Value</variable>
+    <variable id="RN6pQFkcpv:iEEg+E]X^">Value After First Win :</variable>
+    <variable id="?=#`tn+(A4pB^gEc[jLu">Profit Target :</variable>
     <variable id="xCq})yRjt~7hZmI+;~fK">thick26</variable>
-    <variable id="NF4F:F)/OD%/WGw?#p21">Digito a Evitar</variable>
-    <variable id="1Y`Bw3SBh%+B9{+}2xNf">MÃ¡ximo de Perdas:</variable>
+    <variable id="NF4F:F)/OD%/WGw?#p21">Digit to Avoid</variable>
+    <variable id="1Y`Bw3SBh%+B9{+}2xNf">Maximum Losses:</variable>
     <variable id="wxn?5bpGfZuM2auxS|!Q">thick25</variable>
-    <variable id="}G,`;e!g|OoK75e/kj6)">Pausa ApÃ³s Loss (Em segundos)</variable>
+    <variable id="}G,`;e!g|OoK75e/kj6)">Pause After Loss (In seconds)</variable>
     <variable id="a^aKY!cC4BZg#`=brIwD">text2</variable>
     <variable id="NSvN3ysiE245;GS#]|kR">thick24</variable>
     <variable id="5X@E2GY#1])*,RO|{6e_">text3</variable>
     <variable id=")MEB3FW)WCZ2SOZ{H2mC">Martingale</variable>
     <variable id="9b}vG:)skuB(p|)!JVkm">thick23</variable>
-    <variable id="1_Cj:6]uDZP{g-u,yq%V">Porcentagem p/entrar na Ordem</variable>
+    <variable id="1_Cj:6]uDZP{g-u,yq%V">Percentage to Enter the Order</variable>
     <variable id="wm3V2SRsb.*H7~}h87BF">thick22</variable>
     <variable id="Bcb^PFt~f305Qk|vy+=A">thick21</variable>
-    <variable id="3DAJK|_+za(+no1:9sxw">DÃ­gito -&gt; 0</variable>
+    <variable id="3DAJK|_+za(+no1:9sxw">Digit -&gt; 0</variable>
     <variable id="+HJ0|~zQZ4vq)A.-k7]x">thick20</variable>
-    <variable id="$CeF4Ry-FJho!i2GX|sD">DÃ­gito -&gt; 1</variable>
+    <variable id="$CeF4Ry-FJho!i2GX|sD">Digit -&gt; 1</variable>
     <variable id="=K)D5LCl,epxK0e-~SGK">thick19</variable>
-    <variable id="jp/qa8~BQc/oO:k9bpk.">DÃ­gito -&gt; 2</variable>
+    <variable id="jp/qa8~BQc/oO:k9bpk.">Digit -&gt; 2</variable>
     <variable id="PdAjG1!PKtgQPol`S!QZ">thick18</variable>
-    <variable id="wkKF0dk9{Asb:|yWy28N">DÃ­gito -&gt; 3</variable>
+    <variable id="wkKF0dk9{Asb:|yWy28N">Digit -&gt; 3</variable>
     <variable id="AV{g9h:y.tJw9F#xUP^e">thick17</variable>
-    <variable id="$#!Lr+Kb)?7?Y=g#uawG">DÃ­gito -&gt; 4</variable>
+    <variable id="$#!Lr+Kb)?7?Y=g#uawG">Digit -&gt; 4</variable>
     <variable id="+Ik;REU0I{N*1h.T$qt)">thick16</variable>
-    <variable id="FT0~-Ekf*Qyoj|~h|A+v">DÃ­gito -&gt; 5</variable>
+    <variable id="FT0~-Ekf*Qyoj|~h|A+v">Digit -&gt; 5</variable>
     <variable id="{n_)!|zf}.|$E/c8qq33">thick15</variable>
-    <variable id="##to44~=.+gn*w!7[YK*">DÃ­gito -&gt; 6</variable>
+    <variable id="##to44~=.+gn*w!7[YK*">Digit -&gt; 6</variable>
     <variable id="DH3+6toh#S`.qN=$F`KP">thick14</variable>
-    <variable id="k#uDj?ji`I*uGD9Ta0ls">DÃ­gito -&gt; 7</variable>
+    <variable id="k#uDj?ji`I*uGD9Ta0ls">Digit -&gt; 7</variable>
     <variable id="631E%?I36mE5v4u5SwG3">thick13</variable>
-    <variable id="(de-+rqZ.hC.(gW2hD3t">DÃ­gito -&gt; 8</variable>
+    <variable id="(de-+rqZ.hC.(gW2hD3t">Digit -&gt; 8</variable>
     <variable id="[Q_P%9O+SCY3RHn5+BL@">thick12</variable>
-    <variable id="S};R_EvJXkU1[oekSsx.">DÃ­gito -&gt; 9</variable>
+    <variable id="S};R_EvJXkU1[oekSsx.">Digit -&gt; 9</variable>
     <variable id="_^^2a4OqAo@;;D:^(Dn`">thick11</variable>
     <variable id="sn@cz[0:pcAhD@eR|YTd">thick10</variable>
     <variable id="l5DFmU7vzj|,o|!0*r?[">thick9</variable>
@@ -46,7 +46,7 @@
     <variable id="JX=NDaO$pb*xe!z){2kT">thick3</variable>
     <variable id="O9;Xw)b/Gowe3KF/havM">thick2</variable>
     <variable id="Gw;coEw+hIpu8cvhgjx`">thick1</variable>
-    <variable id="CRR]NG9Ca*xo-A7@3wW7">A Carregar</variable>
+    <variable id="CRR]NG9Ca*xo-A7@3wW7">Loading</variable>
     <variable id=".lUT|2oJG5b]#5OtD?p7">text</variable>
     <variable id="{1#Ky_bQ.1kEr{M)-o9%">text1</variable>
   </variables>
@@ -86,7 +86,7 @@
     </statement>
     <statement name="INITIALIZATION">
       <block type="variables_set" id="!rghgJ7Ze[A9U{|O2Vrj">
-        <field name="VAR" id="x_uXJs8,GNt]U*wsQw8h">Valor Inicial</field>
+        <field name="VAR" id="x_uXJs8,GNt]U*wsQw8h">Initial Value</field>
         <value name="VALUE">
           <block type="math_number" id="w;CI+$:l`u`10QTSy6zY">
             <field name="NUM">0.35</field>
@@ -94,7 +94,7 @@
         </value>
         <next>
           <block type="variables_set" id="IPX}@[Dw,b|d|(K]M_aS">
-            <field name="VAR" id="RN6pQFkcpv:iEEg+E]X^">Valor ApÃ³s Primeira VitÃ³ria :</field>
+            <field name="VAR" id="RN6pQFkcpv:iEEg+E]X^">Value After First Win :</field>
             <value name="VALUE">
               <block type="math_number" id="@2!8yqweE+lyeyEtsibi">
                 <field name="NUM">0.35</field>
@@ -102,7 +102,7 @@
             </value>
             <next>
               <block type="variables_set" id="HWl)Rk|iQ5X_bW;QHL%/">
-                <field name="VAR" id="?=#`tn+(A4pB^gEc[jLu">Meta de Ganhos :</field>
+                <field name="VAR" id="?=#`tn+(A4pB^gEc[jLu">Profit Target :</field>
                 <value name="VALUE">
                   <block type="math_number" id="G#l=#GM~mD$w(aGe+m+[">
                     <field name="NUM">99999</field>
@@ -110,7 +110,7 @@
                 </value>
                 <next>
                   <block type="variables_set" id="NQ!iWOm/%sP3Cj2QL/%0">
-                    <field name="VAR" id="1Y`Bw3SBh%+B9{+}2xNf">MÃ¡ximo de Perdas:</field>
+                    <field name="VAR" id="1Y`Bw3SBh%+B9{+}2xNf">Maximum Losses:</field>
                     <value name="VALUE">
                       <block type="math_number" id="Rr0iOzF5Fx|/njho,;Dz">
                         <field name="NUM">9999</field>
@@ -118,7 +118,7 @@
                     </value>
                     <next>
                       <block type="variables_set" id="GqdkIw{Xt+y%b5U`Q!,3">
-                        <field name="VAR" id="}G,`;e!g|OoK75e/kj6)">Pausa ApÃ³s Loss (Em segundos)</field>
+                        <field name="VAR" id="}G,`;e!g|OoK75e/kj6)">Pause After Loss (In seconds)</field>
                         <value name="VALUE">
                           <block type="math_number" id="q6#cXb^4Zmou2@o%7/:(">
                             <field name="NUM">0</field>
@@ -134,7 +134,7 @@
                             </value>
                             <next>
                               <block type="variables_set" id="s(gr=:WMT}h~=R!5;kZh">
-                                <field name="VAR" id="1_Cj:6]uDZP{g-u,yq%V">Porcentagem p/entrar na Ordem</field>
+                                <field name="VAR" id="1_Cj:6]uDZP{g-u,yq%V">Percentage to Enter the Order</field>
                                 <value name="VALUE">
                                   <block type="math_number" id="4@R-X5|IViJUMuT3-{:,">
                                     <field name="NUM">30</field>
@@ -142,7 +142,7 @@
                                 </value>
                                 <next>
                                   <block type="variables_set" id="esH}`6xVW!H{yu_DM)LZ">
-                                    <field name="VAR" id="NF4F:F)/OD%/WGw?#p21">Digito a Evitar</field>
+                                    <field name="VAR" id="NF4F:F)/OD%/WGw?#p21">Digit to Avoid</field>
                                     <value name="VALUE">
                                       <block type="math_number" id="+-[i}j@A~R@J6Sw61;_)">
                                         <field name="NUM">6</field>
@@ -150,7 +150,7 @@
                                     </value>
                                     <next>
                                       <block type="variables_set" id="s{p(=1NhEQSL-xeaQ[9w" collapsed="true">
-                                        <field name="VAR" id="3DAJK|_+za(+no1:9sxw">DÃ­gito -&gt; 0</field>
+                                        <field name="VAR" id="3DAJK|_+za(+no1:9sxw">Digit -&gt; 0</field>
                                         <value name="VALUE">
                                           <block type="math_number" id="dNx1_QqHq{ST]R%,!vdT">
                                             <field name="NUM">0</field>
@@ -158,7 +158,7 @@
                                         </value>
                                         <next>
                                           <block type="variables_set" id="w~N#A+o_K/;-GyBl/%z`" collapsed="true">
-                                            <field name="VAR" id="$CeF4Ry-FJho!i2GX|sD">DÃ­gito -&gt; 1</field>
+                                            <field name="VAR" id="$CeF4Ry-FJho!i2GX|sD">Digit -&gt; 1</field>
                                             <value name="VALUE">
                                               <block type="math_number" id="@;VU+;|t7mNIcwB3Pqu/">
                                                 <field name="NUM">0</field>
@@ -166,7 +166,7 @@
                                             </value>
                                             <next>
                                               <block type="variables_set" id="dpeLi5`O?4eb?EtQ6,o~" collapsed="true">
-                                                <field name="VAR" id="jp/qa8~BQc/oO:k9bpk.">DÃ­gito -&gt; 2</field>
+                                                <field name="VAR" id="jp/qa8~BQc/oO:k9bpk.">Digit -&gt; 2</field>
                                                 <value name="VALUE">
                                                   <block type="math_number" id="F#gmbmPGH|FQ88DOKv)R">
                                                     <field name="NUM">0</field>
@@ -174,7 +174,7 @@
                                                 </value>
                                                 <next>
                                                   <block type="variables_set" id="m;=KmVfr09O!hq4Z{[qz" collapsed="true">
-                                                    <field name="VAR" id="wkKF0dk9{Asb:|yWy28N">DÃ­gito -&gt; 3</field>
+                                                    <field name="VAR" id="wkKF0dk9{Asb:|yWy28N">Digit -&gt; 3</field>
                                                     <value name="VALUE">
                                                       <block type="math_number" id="x4pFacbi8T1^^V:*8BD}">
                                                         <field name="NUM">0</field>
@@ -182,7 +182,7 @@
                                                     </value>
                                                     <next>
                                                       <block type="variables_set" id="|+nfW^xSkZHf}@x0%hpM" collapsed="true">
-                                                        <field name="VAR" id="$#!Lr+Kb)?7?Y=g#uawG">DÃ­gito -&gt; 4</field>
+                                                        <field name="VAR" id="$#!Lr+Kb)?7?Y=g#uawG">Digit -&gt; 4</field>
                                                         <value name="VALUE">
                                                           <block type="math_number" id="^##~p3#B?@p2X]QcJ$2u">
                                                             <field name="NUM">0</field>
@@ -190,7 +190,7 @@
                                                         </value>
                                                         <next>
                                                           <block type="variables_set" id="[Emly}2)[+kD]S$,#j:i" collapsed="true">
-                                                            <field name="VAR" id="FT0~-Ekf*Qyoj|~h|A+v">DÃ­gito -&gt; 5</field>
+                                                            <field name="VAR" id="FT0~-Ekf*Qyoj|~h|A+v">Digit -&gt; 5</field>
                                                             <value name="VALUE">
                                                               <block type="math_number" id="0V)*=l~Eetbuz0;([g|,">
                                                                 <field name="NUM">0</field>
@@ -198,7 +198,7 @@
                                                             </value>
                                                             <next>
                                                               <block type="variables_set" id="pRywr,[}?SA5;q@[^}j1" collapsed="true">
-                                                                <field name="VAR" id="##to44~=.+gn*w!7[YK*">DÃ­gito -&gt; 6</field>
+                                                                <field name="VAR" id="##to44~=.+gn*w!7[YK*">Digit -&gt; 6</field>
                                                                 <value name="VALUE">
                                                                   <block type="math_number" id="Z+g:O*?,7,9mX7A{Qr-@">
                                                                     <field name="NUM">0</field>
@@ -206,7 +206,7 @@
                                                                 </value>
                                                                 <next>
                                                                   <block type="variables_set" id="c[#hE{Xt6L?~5U%AztMm" collapsed="true">
-                                                                    <field name="VAR" id="k#uDj?ji`I*uGD9Ta0ls">DÃ­gito -&gt; 7</field>
+                                                                    <field name="VAR" id="k#uDj?ji`I*uGD9Ta0ls">Digit -&gt; 7</field>
                                                                     <value name="VALUE">
                                                                       <block type="math_number" id="J]0nF]ZXK]o^g96=~Bt:">
                                                                         <field name="NUM">0</field>
@@ -214,7 +214,7 @@
                                                                     </value>
                                                                     <next>
                                                                       <block type="variables_set" id="OxOg6~luySGrwox8`5_T" collapsed="true">
-                                                                        <field name="VAR" id="(de-+rqZ.hC.(gW2hD3t">DÃ­gito -&gt; 8</field>
+                                                                        <field name="VAR" id="(de-+rqZ.hC.(gW2hD3t">Digit -&gt; 8</field>
                                                                         <value name="VALUE">
                                                                           <block type="math_number" id="ZmH9Lz.;T#T=Rje6JAXD">
                                                                             <field name="NUM">0</field>
@@ -222,7 +222,7 @@
                                                                         </value>
                                                                         <next>
                                                                           <block type="variables_set" id="Xh8/#*!nBc7jV(`tbh[X" collapsed="true">
-                                                                            <field name="VAR" id="S};R_EvJXkU1[oekSsx.">DÃ­gito -&gt; 9</field>
+                                                                            <field name="VAR" id="S};R_EvJXkU1[oekSsx.">Digit -&gt; 9</field>
                                                                             <value name="VALUE">
                                                                               <block type="math_number" id="#9zFt/{a4h@o2yY1X#|?">
                                                                                 <field name="NUM">0</field>
@@ -499,7 +499,7 @@
                                                                                                                         </value>
                                                                                                                         <statement name="DO0">
                                                                                                                           <block type="math_change" id="e{eo56{q=`/.)6qdqZ*R">
-                                                                                                                            <field name="VAR" id="3DAJK|_+za(+no1:9sxw">DÃ­gito -&gt; 0</field>
+                                                                                                                            <field name="VAR" id="3DAJK|_+za(+no1:9sxw">Digit -&gt; 0</field>
                                                                                                                             <value name="DELTA">
                                                                                                                               <shadow type="math_number" id="C,-QPk7%OCc^Tk|$jg%e">
                                                                                                                                 <field name="NUM">4</field>
@@ -526,7 +526,7 @@
                                                                                                                             </value>
                                                                                                                             <statement name="DO0">
                                                                                                                               <block type="math_change" id="g~nvm^6fT?G]lb34]eT%">
-                                                                                                                                <field name="VAR" id="3DAJK|_+za(+no1:9sxw">DÃ­gito -&gt; 0</field>
+                                                                                                                                <field name="VAR" id="3DAJK|_+za(+no1:9sxw">Digit -&gt; 0</field>
                                                                                                                                 <value name="DELTA">
                                                                                                                                   <shadow type="math_number" id="21abyJGRLK-}%7whn`?b">
                                                                                                                                     <field name="NUM">-4</field>
@@ -553,7 +553,7 @@
                                                                                                                                 </value>
                                                                                                                                 <statement name="DO0">
                                                                                                                                   <block type="math_change" id="TCN,Bdp7;H@J6Ne}WR:W">
-                                                                                                                                    <field name="VAR" id="$CeF4Ry-FJho!i2GX|sD">DÃ­gito -&gt; 1</field>
+                                                                                                                                    <field name="VAR" id="$CeF4Ry-FJho!i2GX|sD">Digit -&gt; 1</field>
                                                                                                                                     <value name="DELTA">
                                                                                                                                       <shadow type="math_number" id="U?[185GCVn?l0NH.f;h_">
                                                                                                                                         <field name="NUM">4</field>
@@ -580,7 +580,7 @@
                                                                                                                                     </value>
                                                                                                                                     <statement name="DO0">
                                                                                                                                       <block type="math_change" id="71,xm.,fWqNV%cEC}H$5">
-                                                                                                                                        <field name="VAR" id="$CeF4Ry-FJho!i2GX|sD">DÃ­gito -&gt; 1</field>
+                                                                                                                                        <field name="VAR" id="$CeF4Ry-FJho!i2GX|sD">Digit -&gt; 1</field>
                                                                                                                                         <value name="DELTA">
                                                                                                                                           <shadow type="math_number" id="_UEns9#V?Avr4]W|k~#]">
                                                                                                                                             <field name="NUM">-4</field>
@@ -607,7 +607,7 @@
                                                                                                                                         </value>
                                                                                                                                         <statement name="DO0">
                                                                                                                                           <block type="math_change" id="{-*@i}oFu*b?o5Dr3le=">
-                                                                                                                                            <field name="VAR" id="jp/qa8~BQc/oO:k9bpk.">DÃ­gito -&gt; 2</field>
+                                                                                                                                            <field name="VAR" id="jp/qa8~BQc/oO:k9bpk.">Digit -&gt; 2</field>
                                                                                                                                             <value name="DELTA">
                                                                                                                                               <shadow type="math_number" id="lVfR[NMMEu!4H!wxlXYq">
                                                                                                                                                 <field name="NUM">4</field>
@@ -634,7 +634,7 @@
                                                                                                                                             </value>
                                                                                                                                             <statement name="DO0">
                                                                                                                                               <block type="math_change" id="90[dVb4`!5I(CBz#jmW.">
-                                                                                                                                                <field name="VAR" id="jp/qa8~BQc/oO:k9bpk.">DÃ­gito -&gt; 2</field>
+                                                                                                                                                <field name="VAR" id="jp/qa8~BQc/oO:k9bpk.">Digit -&gt; 2</field>
                                                                                                                                                 <value name="DELTA">
                                                                                                                                                   <shadow type="math_number" id="H.saZQ4R4r7T7C=OV:;i">
                                                                                                                                                     <field name="NUM">-4</field>
@@ -661,7 +661,7 @@
                                                                                                                                                 </value>
                                                                                                                                                 <statement name="DO0">
                                                                                                                                                   <block type="math_change" id="-,^0K5NH@cxI9?SL?lQu">
-                                                                                                                                                    <field name="VAR" id="wkKF0dk9{Asb:|yWy28N">DÃ­gito -&gt; 3</field>
+                                                                                                                                                    <field name="VAR" id="wkKF0dk9{Asb:|yWy28N">Digit -&gt; 3</field>
                                                                                                                                                     <value name="DELTA">
                                                                                                                                                       <shadow type="math_number" id="EHX-e0ZCK2BHWq$[P)$Z">
                                                                                                                                                         <field name="NUM">4</field>
@@ -688,7 +688,7 @@
                                                                                                                                                     </value>
                                                                                                                                                     <statement name="DO0">
                                                                                                                                                       <block type="math_change" id="TGDaGlZ#8E=++Od#^.c!">
-                                                                                                                                                        <field name="VAR" id="wkKF0dk9{Asb:|yWy28N">DÃ­gito -&gt; 3</field>
+                                                                                                                                                        <field name="VAR" id="wkKF0dk9{Asb:|yWy28N">Digit -&gt; 3</field>
                                                                                                                                                         <value name="DELTA">
                                                                                                                                                           <shadow type="math_number" id="Xf,qo(XWWDAKZ@]gQs].">
                                                                                                                                                             <field name="NUM">-4</field>
@@ -715,7 +715,7 @@
                                                                                                                                                         </value>
                                                                                                                                                         <statement name="DO0">
                                                                                                                                                           <block type="math_change" id="80D8^HhCNPbT#vm4m|(,">
-                                                                                                                                                            <field name="VAR" id="$#!Lr+Kb)?7?Y=g#uawG">DÃ­gito -&gt; 4</field>
+                                                                                                                                                            <field name="VAR" id="$#!Lr+Kb)?7?Y=g#uawG">Digit -&gt; 4</field>
                                                                                                                                                             <value name="DELTA">
                                                                                                                                                               <shadow type="math_number" id="D033:7dF#ji^sOWuA.x2">
                                                                                                                                                                 <field name="NUM">4</field>
@@ -742,7 +742,7 @@
                                                                                                                                                             </value>
                                                                                                                                                             <statement name="DO0">
                                                                                                                                                               <block type="math_change" id="#qt.n;,S`5`OejT/eQ_w">
-                                                                                                                                                                <field name="VAR" id="$#!Lr+Kb)?7?Y=g#uawG">DÃ­gito -&gt; 4</field>
+                                                                                                                                                                <field name="VAR" id="$#!Lr+Kb)?7?Y=g#uawG">Digit -&gt; 4</field>
                                                                                                                                                                 <value name="DELTA">
                                                                                                                                                                   <shadow type="math_number" id="e/`IoT,*`K;,V^l4A$g?">
                                                                                                                                                                     <field name="NUM">-4</field>
@@ -769,7 +769,7 @@
                                                                                                                                                                 </value>
                                                                                                                                                                 <statement name="DO0">
                                                                                                                                                                   <block type="math_change" id="`m#1Vmjt2dg?IYQeF3NX">
-                                                                                                                                                                    <field name="VAR" id="FT0~-Ekf*Qyoj|~h|A+v">DÃ­gito -&gt; 5</field>
+                                                                                                                                                                    <field name="VAR" id="FT0~-Ekf*Qyoj|~h|A+v">Digit -&gt; 5</field>
                                                                                                                                                                     <value name="DELTA">
                                                                                                                                                                       <shadow type="math_number" id="#S#(-I(GX?{wp:K/rQw1">
                                                                                                                                                                         <field name="NUM">4</field>
@@ -796,7 +796,7 @@
                                                                                                                                                                     </value>
                                                                                                                                                                     <statement name="DO0">
                                                                                                                                                                       <block type="math_change" id="z`|)Pytx4NPy}(SW@]S1">
-                                                                                                                                                                        <field name="VAR" id="FT0~-Ekf*Qyoj|~h|A+v">DÃ­gito -&gt; 5</field>
+                                                                                                                                                                        <field name="VAR" id="FT0~-Ekf*Qyoj|~h|A+v">Digit -&gt; 5</field>
                                                                                                                                                                         <value name="DELTA">
                                                                                                                                                                           <shadow type="math_number" id="aV}HfMmOu:@;-:o@cm[J">
                                                                                                                                                                             <field name="NUM">-4</field>
@@ -823,7 +823,7 @@
                                                                                                                                                                         </value>
                                                                                                                                                                         <statement name="DO0">
                                                                                                                                                                           <block type="math_change" id="cMBc$At@eM9WfFZqqm_Z">
-                                                                                                                                                                            <field name="VAR" id="##to44~=.+gn*w!7[YK*">DÃ­gito -&gt; 6</field>
+                                                                                                                                                                            <field name="VAR" id="##to44~=.+gn*w!7[YK*">Digit -&gt; 6</field>
                                                                                                                                                                             <value name="DELTA">
                                                                                                                                                                               <shadow type="math_number" id="`(ecZ(wOU`XX:b;x,$/}">
                                                                                                                                                                                 <field name="NUM">4</field>
@@ -850,7 +850,7 @@
                                                                                                                                                                             </value>
                                                                                                                                                                             <statement name="DO0">
                                                                                                                                                                               <block type="math_change" id="mrt_#%jV$zU1r*EI1EcT">
-                                                                                                                                                                                <field name="VAR" id="##to44~=.+gn*w!7[YK*">DÃ­gito -&gt; 6</field>
+                                                                                                                                                                                <field name="VAR" id="##to44~=.+gn*w!7[YK*">Digit -&gt; 6</field>
                                                                                                                                                                                 <value name="DELTA">
                                                                                                                                                                                   <shadow type="math_number" id="x,wtR6pX56xiimfazhKH">
                                                                                                                                                                                     <field name="NUM">-4</field>
@@ -877,7 +877,7 @@
                                                                                                                                                                                 </value>
                                                                                                                                                                                 <statement name="DO0">
                                                                                                                                                                                   <block type="math_change" id="%{.0/:L!?wJ)+7@@-+Tn">
-                                                                                                                                                                                    <field name="VAR" id="k#uDj?ji`I*uGD9Ta0ls">DÃ­gito -&gt; 7</field>
+                                                                                                                                                                                    <field name="VAR" id="k#uDj?ji`I*uGD9Ta0ls">Digit -&gt; 7</field>
                                                                                                                                                                                     <value name="DELTA">
                                                                                                                                                                                       <shadow type="math_number" id="AV6LP[j}Lpta2t1!^4/E">
                                                                                                                                                                                         <field name="NUM">4</field>
@@ -904,7 +904,7 @@
                                                                                                                                                                                     </value>
                                                                                                                                                                                     <statement name="DO0">
                                                                                                                                                                                       <block type="math_change" id=";n[w^dElWhco/v[TZ6n{">
-                                                                                                                                                                                        <field name="VAR" id="k#uDj?ji`I*uGD9Ta0ls">DÃ­gito -&gt; 7</field>
+                                                                                                                                                                                        <field name="VAR" id="k#uDj?ji`I*uGD9Ta0ls">Digit -&gt; 7</field>
                                                                                                                                                                                         <value name="DELTA">
                                                                                                                                                                                           <shadow type="math_number" id="W2eP-:7hp/r704.)O,~?">
                                                                                                                                                                                             <field name="NUM">-4</field>
@@ -931,7 +931,7 @@
                                                                                                                                                                                         </value>
                                                                                                                                                                                         <statement name="DO0">
                                                                                                                                                                                           <block type="math_change" id="@LQO)L#nQszL()rgI?-P">
-                                                                                                                                                                                            <field name="VAR" id="(de-+rqZ.hC.(gW2hD3t">DÃ­gito -&gt; 8</field>
+                                                                                                                                                                                            <field name="VAR" id="(de-+rqZ.hC.(gW2hD3t">Digit -&gt; 8</field>
                                                                                                                                                                                             <value name="DELTA">
                                                                                                                                                                                               <shadow type="math_number" id=".0?$Whn`Mp~cO!c5o1[r">
                                                                                                                                                                                                 <field name="NUM">4</field>
@@ -958,7 +958,7 @@
                                                                                                                                                                                             </value>
                                                                                                                                                                                             <statement name="DO0">
                                                                                                                                                                                               <block type="math_change" id="lJRPuCg)UWE*+0U82Im;">
-                                                                                                                                                                                                <field name="VAR" id="(de-+rqZ.hC.(gW2hD3t">DÃ­gito -&gt; 8</field>
+                                                                                                                                                                                                <field name="VAR" id="(de-+rqZ.hC.(gW2hD3t">Digit -&gt; 8</field>
                                                                                                                                                                                                 <value name="DELTA">
                                                                                                                                                                                                   <shadow type="math_number" id="$F]dc4]1/H7[S$|e9Ieh">
                                                                                                                                                                                                     <field name="NUM">-4</field>
@@ -985,7 +985,7 @@
                                                                                                                                                                                                 </value>
                                                                                                                                                                                                 <statement name="DO0">
                                                                                                                                                                                                   <block type="math_change" id="j@Djoo*9{s9Q_wV7#W7Q">
-                                                                                                                                                                                                    <field name="VAR" id="S};R_EvJXkU1[oekSsx.">DÃ­gito -&gt; 9</field>
+                                                                                                                                                                                                    <field name="VAR" id="S};R_EvJXkU1[oekSsx.">Digit -&gt; 9</field>
                                                                                                                                                                                                     <value name="DELTA">
                                                                                                                                                                                                       <shadow type="math_number" id="EK0I:u3MU+^t$VfU9ys+">
                                                                                                                                                                                                         <field name="NUM">4</field>
@@ -997,8 +997,7 @@
                                                                                                                                                                                                   <block type="controls_if" id="7i%`1?jKQ+3#sr)!:*Yf">
                                                                                                                                                                                                     <value name="IF0">
                                                                                                                                                                                                       <block type="logic_compare" id="@*W8th?|%4s7,tQ~7Yac">
-                                                                                                                                                                                                        <field name="OP">EQ</field>
-                                                                                                                                                                                                        <value name="A">
+                                                                                                                                                                                                        <field name="OP">EQ</field>                                                                                                                                                                                                        <value name="A">
                                                                                                                                                                                                           <block type="variables_get" id="yXUDY2.gbN+G*~1G[*MM">
                                                                                                                                                                                                             <field name="VAR" id="xCq})yRjt~7hZmI+;~fK">thick26</field>
                                                                                                                                                                                                           </block>
@@ -1012,7 +1011,7 @@
                                                                                                                                                                                                     </value>
                                                                                                                                                                                                     <statement name="DO0">
                                                                                                                                                                                                       <block type="math_change" id="(ApqO*G|O.FyTbzwHBV4">
-                                                                                                                                                                                                        <field name="VAR" id="S};R_EvJXkU1[oekSsx.">DÃ­gito -&gt; 9</field>
+                                                                                                                                                                                                        <field name="VAR" id="S};R_EvJXkU1[oekSsx.">Digit -&gt; 9</field>
                                                                                                                                                                                                         <value name="DELTA">
                                                                                                                                                                                                           <shadow type="math_number" id="`G+I~)S)UNz2Lr}ijKZJ">
                                                                                                                                                                                                             <field name="NUM">-4</field>
@@ -1048,7 +1047,7 @@
                                                                                                                                                                                                                         <field name="TEXT"></field>
                                                                                                                                                                                                                       </shadow>
                                                                                                                                                                                                                       <block type="text" id="M@D=YKHB)p{_bt9JUMQ|">
-                                                                                                                                                                                                                        <field name="TEXT">Porcentagem. NÂ° 6 -&gt; </field>
+                                                                                                                                                                                                                        <field name="TEXT">Percentage. No. 6 -&gt; </field>
                                                                                                                                                                                                                       </block>
                                                                                                                                                                                                                     </value>
                                                                                                                                                                                                                     <next>
@@ -1058,7 +1057,7 @@
                                                                                                                                                                                                                             <field name="TEXT"></field>
                                                                                                                                                                                                                           </shadow>
                                                                                                                                                                                                                           <block type="variables_get" id="PU#/mfn!xLBEY,WIiuHX">
-                                                                                                                                                                                                                            <field name="VAR" id="##to44~=.+gn*w!7[YK*">DÃ­gito -&gt; 6</field>
+                                                                                                                                                                                                                            <field name="VAR" id="##to44~=.+gn*w!7[YK*">Digit -&gt; 6</field>
                                                                                                                                                                                                                           </block>
                                                                                                                                                                                                                         </value>
                                                                                                                                                                                                                         <next>
@@ -1088,7 +1087,7 @@
                                                                                                                                                                                                                                         <field name="TEXT"></field>
                                                                                                                                                                                                                                       </shadow>
                                                                                                                                                                                                                                       <block type="text" id="]~mL8(OXj_*-0Prx9bvd">
-                                                                                                                                                                                                                                        <field name="TEXT">Porcentagem. NÂ° 7 -&gt; </field>
+                                                                                                                                                                                                                                        <field name="TEXT">Percentage. No. 7 -&gt; </field>
                                                                                                                                                                                                                                       </block>
                                                                                                                                                                                                                                     </value>
                                                                                                                                                                                                                                     <next>
@@ -1098,7 +1097,7 @@
                                                                                                                                                                                                                                             <field name="TEXT"></field>
                                                                                                                                                                                                                                           </shadow>
                                                                                                                                                                                                                                           <block type="variables_get" id="Z.5h$r`-+K:=OUPn4.oL">
-                                                                                                                                                                                                                                            <field name="VAR" id="k#uDj?ji`I*uGD9Ta0ls">DÃ­gito -&gt; 7</field>
+                                                                                                                                                                                                                                            <field name="VAR" id="k#uDj?ji`I*uGD9Ta0ls">Digit -&gt; 7</field>
                                                                                                                                                                                                                                           </block>
                                                                                                                                                                                                                                         </value>
                                                                                                                                                                                                                                         <next>
@@ -1128,7 +1127,7 @@
                                                                                                                                                                                                                                                         <field name="TEXT"></field>
                                                                                                                                                                                                                                                       </shadow>
                                                                                                                                                                                                                                                       <block type="text" id="QT2~LU%@2t#ZG(bN3VdJ">
-                                                                                                                                                                                                                                                        <field name="TEXT">Porcentagem. NÂ° 8 -&gt; </field>
+                                                                                                                                                                                                                                                        <field name="TEXT">Percentage. No. 8 -&gt; </field>
                                                                                                                                                                                                                                                       </block>
                                                                                                                                                                                                                                                     </value>
                                                                                                                                                                                                                                                     <next>
@@ -1138,7 +1137,7 @@
                                                                                                                                                                                                                                                             <field name="TEXT"></field>
                                                                                                                                                                                                                                                           </shadow>
                                                                                                                                                                                                                                                           <block type="variables_get" id="uQQI622]dn)R9[J90VIx">
-                                                                                                                                                                                                                                                            <field name="VAR" id="(de-+rqZ.hC.(gW2hD3t">DÃ­gito -&gt; 8</field>
+                                                                                                                                                                                                                                                            <field name="VAR" id="(de-+rqZ.hC.(gW2hD3t">Digit -&gt; 8</field>
                                                                                                                                                                                                                                                           </block>
                                                                                                                                                                                                                                                         </value>
                                                                                                                                                                                                                                                         <next>
@@ -1168,7 +1167,7 @@
                                                                                                                                                                                                                                                                         <field name="TEXT"></field>
                                                                                                                                                                                                                                                                       </shadow>
                                                                                                                                                                                                                                                                       <block type="text" id="veC^*4fd6UQT],~bFs:?">
-                                                                                                                                                                                                                                                                        <field name="TEXT">Porcentagem. NÂ° 0 -&gt; </field>
+                                                                                                                                                                                                                                                                        <field name="TEXT">Percentage. No. 0 -&gt; </field>
                                                                                                                                                                                                                                                                       </block>
                                                                                                                                                                                                                                                                     </value>
                                                                                                                                                                                                                                                                     <next>
@@ -1178,7 +1177,7 @@
                                                                                                                                                                                                                                                                             <field name="TEXT"></field>
                                                                                                                                                                                                                                                                           </shadow>
                                                                                                                                                                                                                                                                           <block type="variables_get" id="II)DY=Z#YN3SzjcGDRl;">
-                                                                                                                                                                                                                                                                            <field name="VAR" id="S};R_EvJXkU1[oekSsx.">DÃ­gito -&gt; 9</field>
+                                                                                                                                                                                                                                                                            <field name="VAR" id="S};R_EvJXkU1[oekSsx.">Digit -&gt; 9</field>
                                                                                                                                                                                                                                                                           </block>
                                                                                                                                                                                                                                                                         </value>
                                                                                                                                                                                                                                                                         <next>
@@ -1243,7 +1242,7 @@
                                                                                                                                                                                                         </statement>
                                                                                                                                                                                                         <statement name="ELSE">
                                                                                                                                                                                                           <block type="math_change" id="_-7#[?3.y0r2@8z3#]#)">
-                                                                                                                                                                                                            <field name="VAR" id="CRR]NG9Ca*xo-A7@3wW7">A Carregar</field>
+                                                                                                                                                                                                            <field name="VAR" id="CRR]NG9Ca*xo-A7@3wW7">Loading</field>
                                                                                                                                                                                                             <value name="DELTA">
                                                                                                                                                                                                               <shadow type="math_number" id="~R,W!5Ua4mxmx3scfMU$">
                                                                                                                                                                                                                 <field name="NUM">1</field>
@@ -1259,7 +1258,7 @@
                                                                                                                                                                                                                         <field name="TEXT"></field>
                                                                                                                                                                                                                       </shadow>
                                                                                                                                                                                                                       <block type="text" id="4Mu?7@e%J+iVT:8BbToh">
-                                                                                                                                                                                                                        <field name="TEXT">Carregando Dados .... </field>
+                                                                                                                                                                                                                        <field name="TEXT">Loading Data .... </field>
                                                                                                                                                                                                                       </block>
                                                                                                                                                                                                                     </value>
                                                                                                                                                                                                                     <next>
@@ -1269,7 +1268,7 @@
                                                                                                                                                                                                                             <field name="TEXT"></field>
                                                                                                                                                                                                                           </shadow>
                                                                                                                                                                                                                           <block type="variables_get" id="!8Ekyoc3z0HZLRX}i/-f">
-                                                                                                                                                                                                                            <field name="VAR" id="CRR]NG9Ca*xo-A7@3wW7">A Carregar</field>
+                                                                                                                                                                                                                            <field name="VAR" id="CRR]NG9Ca*xo-A7@3wW7">Loading</field>
                                                                                                                                                                                                                           </block>
                                                                                                                                                                                                                         </value>
                                                                                                                                                                                                                         <next>
@@ -1294,7 +1293,7 @@
                                                                                                                                                                                                                     <field name="NOTIFICATION_SOUND">silent</field>
                                                                                                                                                                                                                     <value name="MESSAGE">
                                                                                                                                                                                                                       <shadow type="text" id="kUIXsWvkj?cvrqg#9Wx1">
-                                                                                                                                                                                                                        <field name="TEXT">CARREGANDO</field>
+                                                                                                                                                                                                                        <field name="TEXT">LOADING</field>
                                                                                                                                                                                                                       </shadow>
                                                                                                                                                                                                                       <block type="variables_get" id="#f!0a^9ol@5q{oWR$oz@">
                                                                                                                                                                                                                         <field name="VAR" id="{1#Ky_bQ.1kEr{M)-o9%">text1</field>
@@ -1306,7 +1305,7 @@
                                                                                                                                                                                                                         <field name="NOTIFICATION_SOUND">silent</field>
                                                                                                                                                                                                                         <value name="MESSAGE">
                                                                                                                                                                                                                           <shadow type="text" id="f,Gx#1zN%Ux?@Gk|DKn%">
-                                                                                                                                                                                                                            <field name="TEXT">Inscreva-se no Canal Flavio F.L.A</field>
+                                                                                                                                                                                                                            <field name="TEXT">Subscribe to the Flavio F.L.A Channel</field>
                                                                                                                                                                                                                           </shadow>
                                                                                                                                                                                                                         </value>
                                                                                                                                                                                                                       </block>
@@ -1342,12 +1341,12 @@
                                                                                                                                                                                                                         <field name="OP">LTE</field>
                                                                                                                                                                                                                         <value name="A">
                                                                                                                                                                                                                           <block type="variables_get" id="FIX_D6_INPUT_20260906">
-                                                                                                                                                                                                                            <field name="VAR" id="##to44~=.+gn*w!7[YK*">DÃ­gito -&gt; 6</field>
+                                                                                                                                                                                                                            <field name="VAR" id="##to44~=.+gn*w!7[YK*">Digit -&gt; 6</field>
                                                                                                                                                                                                                           </block>
                                                                                                                                                                                                                         </value>
                                                                                                                                                                                                                         <value name="B">
                                                                                                                                                                                                                           <block type="variables_get" id="(3[O}eZqXOvang~E,S%)">
-                                                                                                                                                                                                                            <field name="VAR" id="1_Cj:6]uDZP{g-u,yq%V">Porcentagem p/entrar na Ordem</field>
+                                                                                                                                                                                                                            <field name="VAR" id="1_Cj:6]uDZP{g-u,yq%V">Percentage to Enter the Order</field>
                                                                                                                                                                                                                           </block>
                                                                                                                                                                                                                         </value>
                                                                                                                                                                                                                       </block>
@@ -1363,7 +1362,7 @@
                                                                                                                                                                                                                                 <field name="NUM">1</field>
                                                                                                                                                                                                                               </shadow>
                                                                                                                                                                                                                               <block type="variables_get" id="?+V~Zz-`+Xn^^9D!qm0-">
-                                                                                                                                                                                                                                <field name="VAR" id="##to44~=.+gn*w!7[YK*">DÃ­gito -&gt; 6</field>
+                                                                                                                                                                                                                                <field name="VAR" id="##to44~=.+gn*w!7[YK*">Digit -&gt; 6</field>
                                                                                                                                                                                                                               </block>
                                                                                                                                                                                                                             </value>
                                                                                                                                                                                                                             <value name="B">
@@ -1377,7 +1376,7 @@
                                                                                                                                                                                                                                     <field name="NUM">1</field>
                                                                                                                                                                                                                                   </shadow>
                                                                                                                                                                                                                                   <block type="variables_get" id="hWXtq/|lRo*D];Qdsm{J">
-                                                                                                                                                                                                                                    <field name="VAR" id="k#uDj?ji`I*uGD9Ta0ls">DÃ­gito -&gt; 7</field>
+                                                                                                                                                                                                                                    <field name="VAR" id="k#uDj?ji`I*uGD9Ta0ls">Digit -&gt; 7</field>
                                                                                                                                                                                                                                   </block>
                                                                                                                                                                                                                                 </value>
                                                                                                                                                                                                                                 <value name="B">
@@ -1391,7 +1390,7 @@
                                                                                                                                                                                                                                         <field name="NUM">1</field>
                                                                                                                                                                                                                                       </shadow>
                                                                                                                                                                                                                                       <block type="variables_get" id=";w-6_?s+Da@@,Xjm1?(p">
-                                                                                                                                                                                                                                        <field name="VAR" id="(de-+rqZ.hC.(gW2hD3t">DÃ­gito -&gt; 8</field>
+                                                                                                                                                                                                                                        <field name="VAR" id="(de-+rqZ.hC.(gW2hD3t">Digit -&gt; 8</field>
                                                                                                                                                                                                                                       </block>
                                                                                                                                                                                                                                     </value>
                                                                                                                                                                                                                                     <value name="B">
@@ -1399,7 +1398,7 @@
                                                                                                                                                                                                                                         <field name="NUM">1</field>
                                                                                                                                                                                                                                       </shadow>
                                                                                                                                                                                                                                       <block type="variables_get" id="%d7+];r#Q?md;WjSo`.-">
-                                                                                                                                                                                                                                        <field name="VAR" id="S};R_EvJXkU1[oekSsx.">DÃ­gito -&gt; 9</field>
+                                                                                                                                                                                                                                        <field name="VAR" id="S};R_EvJXkU1[oekSsx.">Digit -&gt; 9</field>
                                                                                                                                                                                                                                       </block>
                                                                                                                                                                                                                                     </value>
                                                                                                                                                                                                                                   </block>
@@ -1410,7 +1409,7 @@
                                                                                                                                                                                                                         </value>
                                                                                                                                                                                                                         <value name="B">
                                                                                                                                                                                                                           <block type="variables_get" id="5`ajbM-018de(qw#lCLO">
-                                                                                                                                                                                                                            <field name="VAR" id="1_Cj:6]uDZP{g-u,yq%V">Porcentagem p/entrar na Ordem</field>
+                                                                                                                                                                                                                            <field name="VAR" id="1_Cj:6]uDZP{g-u,yq%V">Percentage to Enter the Order</field>
                                                                                                                                                                                                                           </block>
                                                                                                                                                                                                                         </value>
                                                                                                                                                                                                                       </block>
@@ -1419,7 +1418,7 @@
                                                                                                                                                                                                                 </value>
                                                                                                                                                                                                                 <statement name="DO0">
                                                                                                                                                                                                                   <block type="variables_set" id="xe2f@yd)yP7iFcp2G=*a">
-                                                                                                                                                                                                                    <field name="VAR" id="NF4F:F)/OD%/WGw?#p21">Digito a Evitar</field>
+                                                                                                                                                                                                                    <field name="VAR" id="NF4F:F)/OD%/WGw?#p21">Digit to Avoid</field>
                                                                                                                                                                                                                     <value name="VALUE">
                                                                                                                                                                                                                       <block type="math_number" id="ZUr4=s0=,YMGDg`.gH[-">
                                                                                                                                                                                                                         <field name="NUM">6</field>
@@ -1431,7 +1430,7 @@
                                                                                                                                                                                                                         <field name="NOTIFICATION_SOUND">silent</field>
                                                                                                                                                                                                                         <value name="MESSAGE">
                                                                                                                                                                                                                           <shadow type="text" id="N~4JnB*0ku8|S.1D{S?:">
-                                                                                                                                                                                                                            <field name="TEXT">EstratÃ©gia Confirmada ! </field>
+                                                                                                                                                                                                                            <field name="TEXT">Strategy Confirmed ! </field>
                                                                                                                                                                                                                           </shadow>
                                                                                                                                                                                                                         </value>
                                                                                                                                                                                                                         <next>
@@ -1559,7 +1558,7 @@
             </value>
             <value name="AMOUNT">
               <block type="variables_get" id="@/ofD9HP|CE1r),USs(V">
-                <field name="VAR" id="x_uXJs8,GNt]U*wsQw8h">Valor Inicial</field>
+                <field name="VAR" id="x_uXJs8,GNt]U*wsQw8h">Initial Value</field>
               </block>
             </value>
             <value name="PREDICTION">
@@ -1567,7 +1566,7 @@
                 <field name="NUM">0</field>
               </shadow>
               <block type="variables_get" id="C:1NI6]*MwJa,tIfQZO/">
-                <field name="VAR" id="NF4F:F)/OD%/WGw?#p21">Digito a Evitar</field>
+                <field name="VAR" id="NF4F:F)/OD%/WGw?#p21">Digit to Avoid</field>
               </block>
             </value>
           </block>
@@ -1575,7 +1574,7 @@
       </block>
     </statement>
   </block>
-  <block type="after_purchase" id="}V8lI@bc4U4km8Au:S(g" collapsed="true" x="799" y="110">
+  <block type="after_purchase" id="}V8lI@bc4U4km8Au:S(g" collapsed="true" x="2093" y="110">
     <statement name="AFTERPURCHASE_STACK">
       <block type="controls_if" id="RD:2r@nv=eMA~@YoqpJu">
         <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
@@ -1590,15 +1589,15 @@
             <field name="NOTIFICATION_SOUND">silent</field>
             <value name="MESSAGE">
               <shadow type="text" id="mp4E;_5PET4O8E];.OBa">
-                <field name="TEXT">VitÃ³ria !!! Inscreva-se no canal Flavio F.L.A</field>
+                <field name="TEXT">Win !!! Subscribe to the Flavio F.L.A channel</field>
               </shadow>
             </value>
             <next>
               <block type="variables_set" id="#lI!L$HT=WChZWn]_Q}g">
-                <field name="VAR" id="x_uXJs8,GNt]U*wsQw8h">Valor Inicial</field>
+                <field name="VAR" id="x_uXJs8,GNt]U*wsQw8h">Initial Value</field>
                 <value name="VALUE">
                   <block type="variables_get" id="!hTKGc:@@ug0$us5jmXd">
-                    <field name="VAR" id="RN6pQFkcpv:iEEg+E]X^">Valor ApÃ³s Primeira VitÃ³ria :</field>
+                    <field name="VAR" id="RN6pQFkcpv:iEEg+E]X^">Value After First Win :</field>
                   </block>
                 </value>
               </block>
@@ -1611,14 +1610,14 @@
             <field name="NOTIFICATION_SOUND">silent</field>
             <value name="MESSAGE">
               <shadow type="text" id="i3=!?J^)!,BrcmDeP^b#">
-                <field name="TEXT">&gt;&gt; PAUSA DE SEGURANÃ‡A &lt;&lt;</field>
+                <field name="TEXT">&gt;&gt; SAFETY PAUSE &lt;&lt;</field>
               </shadow>
             </value>
             <next>
               <block type="timeout" id="Q;`PP]NjkcEyCiIBaJ=K">
                 <statement name="TIMEOUTSTACK">
                   <block type="math_change" id="H}G^@?%u~+.`.8l?jaL[">
-                    <field name="VAR" id="x_uXJs8,GNt]U*wsQw8h">Valor Inicial</field>
+                    <field name="VAR" id="x_uXJs8,GNt]U*wsQw8h">Initial Value</field>
                     <value name="DELTA">
                       <shadow type="math_number" id="ysnVF9q}XA},n:5/T#S?">
                         <field name="NUM">1</field>
@@ -1636,7 +1635,7 @@
                                 <field name="NUM">9</field>
                               </shadow>
                               <block type="variables_get" id="3P|otA+3^Tk{MSpcRN+^">
-                                <field name="VAR" id="x_uXJs8,GNt]U*wsQw8h">Valor Inicial</field>
+                                <field name="VAR" id="x_uXJs8,GNt]U*wsQw8h">Initial Value</field>
                               </block>
                             </value>
                           </block>
@@ -1658,7 +1657,7 @@
                     <field name="NUM">150</field>
                   </shadow>
                   <block type="variables_get" id="hAcEU]s9(RR+$g[j@Fv%">
-                    <field name="VAR" id="}G,`;e!g|OoK75e/kj6)">Pausa ApÃ³s Loss (Em segundos)</field>
+                    <field name="VAR" id="}G,`;e!g|OoK75e/kj6)">Pause After Loss (In seconds)</field>
                   </block>
                 </value>
               </block>
@@ -1685,17 +1684,17 @@
                 </value>
                 <value name="B">
                   <block type="variables_get" id="lJ8VV?--wP4]{[PZx/{3">
-                    <field name="VAR" id="1Y`Bw3SBh%+B9{+}2xNf">MÃ¡ximo de Perdas:</field>
+                    <field name="VAR" id="1Y`Bw3SBh%+B9{+}2xNf">Maximum Losses:</field>
                   </block>
                 </value>
               </block>
             </value>
             <statement name="DO0">
               <block type="variables_set" id="_/Tr[9(RP%S}1rRLo!%B">
-                <field name="VAR" id="x_uXJs8,GNt]U*wsQw8h">Valor Inicial</field>
+                <field name="VAR" id="x_uXJs8,GNt]U*wsQw8h">Initial Value</field>
                 <value name="VALUE">
                   <block type="variables_get" id="d`_95-(;FNUBe?clx]ut">
-                    <field name="VAR" id="RN6pQFkcpv:iEEg+E]X^">Valor ApÃ³s Primeira VitÃ³ria :</field>
+                    <field name="VAR" id="RN6pQFkcpv:iEEg+E]X^">Value After First Win :</field>
                   </block>
                 </value>
               </block>
@@ -1711,7 +1710,7 @@
                     </value>
                     <value name="B">
                       <block type="variables_get" id="?R=XOJl=FG.w8N|u8u@;">
-                        <field name="VAR" id="?=#`tn+(A4pB^gEc[jLu">Meta de Ganhos :</field>
+                        <field name="VAR" id="?=#`tn+(A4pB^gEc[jLu">Profit Target :</field>
                       </block>
                     </value>
                   </block>
@@ -1726,7 +1725,7 @@
                             <field name="TEXT"></field>
                           </shadow>
                           <block type="text" id=",(K-^)j9Db,FI#fRD[5I" collapsed="true">
-                            <field name="TEXT">|| Meta Atingida !!! Canal Flavio F.L.A Os Melhores Bots GrÃ¡tis e VÃ­deos Aulas de criaÃ§Ã£o de bots 100% GrÃ¡tis ||| </field>
+                            <field name="TEXT">|| Target Reached !!! Flavio F.L.A Channel The Best Free Bots and Video Lessons on creating bots 100% Free ||| </field>
                           </block>
                         </value>
                         <next>
@@ -1736,7 +1735,7 @@
                                 <field name="TEXT"></field>
                               </shadow>
                               <block type="text" id="Lk._~iqfHrBt6X8rr)%!" collapsed="true">
-                                <field name="TEXT">Inscreva-se </field>
+                                <field name="TEXT">Subscribe </field>
                               </block>
                             </value>
                           </block>
@@ -1791,7 +1790,7 @@
                             </value>
                             <value name="B">
                               <block type="variables_get" id="g~D[`6Rg9j3ajL2ZtG=G">
-                                <field name="VAR" id="1Y`Bw3SBh%+B9{+}2xNf">MÃ¡ximo de Perdas:</field>
+                                <field name="VAR" id="1Y`Bw3SBh%+B9{+}2xNf">Maximum Losses:</field>
                               </block>
                             </value>
                           </block>
@@ -1808,7 +1807,7 @@
                                 <field name="TEXT"></field>
                               </shadow>
                               <block type="text" id="!mTgUO~W!NomYEGu~}#O" collapsed="true">
-                                <field name="TEXT">MÃ¡ximo de Perdas Atingida - Analise o Mercado ou Mude de EstratÃ©gia Hoje !!!  Bot Free do canal Flavio F.L.A $  </field>
+                                <field name="TEXT">Maximum Losses Reached - Analyze the Market or Change Strategy Today !!!  Free Bot from the Flavio F.L.A channel $  </field>
                               </block>
                             </value>
                             <next>
@@ -1849,7 +1848,7 @@
       </block>
     </statement>
   </block>
-  <block type="before_purchase" id="Q8K$-C+4j)cL?ip1s1Vg" deletable="false" x="219" y="1582">
+  <block type="before_purchase" id="Q8K$-C+4j)cL?ip1s1Vg" deletable="false" x="0" y="7600">
     <statement name="BEFOREPURCHASE_STACK">
       <block type="purchase" id="`YWs$,ol66v,|lYHrf@C">
         <field name="PURCHASE_LIST">DIGITUNDER</field>
