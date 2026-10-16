@@ -1,7 +1,7 @@
 {
   "version": 1,
   "site_id": "apex-sentinel",
-  "count": 101,
+  "count": 103,
   "bots": [
     {
       "id": "grffy-v1",
@@ -911,6 +911,24 @@
       "description": "v4 plus multi-window digit-transition ranking: prefers markets whose losing digits (6-9) were hot and are now cooling. No signal is blocked. Entry: waits for at least 3 digits in 6-9 in a row, then buys on a digit in 0-5.",
       "emoji": "FREE BOT",
       "priority": 101
+    },
+    {
+      "id": "apex-library-masika-strategies-digit-under-102",
+      "name": "102. Masika Strategies (Digit Under)",
+      "file": "Masika Strategies Digit Under.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-masika-strategies-digit-under-102.xml",
+      "description": "Masika Strategies Digit Under bot for 1HZ25V; prediction digits 9, 8, 6, 5.",
+      "emoji": "FREE BOT",
+      "priority": 102
+    },
+    {
+      "id": "apex-library-masika-strategies-digit-over-103",
+      "name": "103. Masika Strategies (Digit Over)",
+      "file": "Masika Strategies Digit Over.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-masika-strategies-digit-over-103.xml",
+      "description": "Masika Strategies Digit Over bot for 1HZ25V; prediction digits 0, 1, 2, 4.",
+      "emoji": "FREE BOT",
+      "priority": 103
     }
   ]
 }
