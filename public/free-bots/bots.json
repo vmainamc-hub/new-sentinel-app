@@ -1,7 +1,7 @@
 {
   "version": 1,
   "site_id": "apex-sentinel",
-  "count": 105,
+  "count": 102,
   "bots": [
     {
       "id": "grffy-v1",
@@ -832,121 +832,94 @@
       "priority": 92
     },
     {
-      "id": "apex-library-under-7-1-touch-bot-60",
-      "name": "93. Under 7 1 Touch bot",
-      "file": "Under 7 1 Touch bot.xml",
-      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-1-touch-bot-60.xml",
+      "id": "apex-library-under-7-killler-bot-dynamic-entry-2-high-digits-entry-61",
+      "name": "93. Under 7 Killler Bot  Dynamic Entry 2 high Digits entry",
+      "file": "Under 7 Killler Bot  Dynamic Entry 2 high Digits entry.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-killler-bot-dynamic-entry-2-high-digits-entry-61.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
       "emoji": "FREE BOT",
       "priority": 93
     },
     {
-      "id": "apex-library-under-7-killler-bot-dynamic-entry-2-high-digits-entry-61",
-      "name": "94. Under 7 Killler Bot  Dynamic Entry 2 high Digits entry",
-      "file": "Under 7 Killler Bot  Dynamic Entry 2 high Digits entry.xml",
-      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-killler-bot-dynamic-entry-2-high-digits-entry-61.xml",
+      "id": "apex-library-under-7-with-entry-digit-bot-63",
+      "name": "94. Under 7 With Entry Digit Bot",
+      "file": "Under 7 With Entry Digit Bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-with-entry-digit-bot-63.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
       "emoji": "FREE BOT",
       "priority": 94
     },
     {
-      "id": "apex-library-under-7-regime-intelligence-bot-62",
-      "name": "95. Under 7 Regime Intelligence Bot",
-      "file": "Under 7 Regime Intelligence Bot.xml",
-      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-regime-intelligence-bot-62.xml",
+      "id": "apex-library-under-streak-confirmation-single-trade-recovery-65",
+      "name": "95. Under Streak Confirmation Single Trade RECOVERY",
+      "file": "Under Streak Confirmation Single Trade RECOVERY.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-streak-confirmation-single-trade-recovery-65.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
       "emoji": "FREE BOT",
       "priority": 95
     },
     {
-      "id": "apex-library-under-7-with-entry-digit-bot-63",
-      "name": "96. Under 7 With Entry Digit Bot",
-      "file": "Under 7 With Entry Digit Bot.xml",
-      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-with-entry-digit-bot-63.xml",
+      "id": "apex-library-under-6-fixed-dbot-native-66",
+      "name": "96. Under_6_FIXED_DBOT_NATIVE",
+      "file": "Under_6_FIXED_DBOT_NATIVE.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-6-fixed-dbot-native-66.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
       "emoji": "FREE BOT",
       "priority": 96
     },
     {
-      "id": "apex-library-under-7-with-entry-digit-bot-64",
-      "name": "97. Under 7 with Entry digit Bot",
-      "file": "Under 7 with Entry digit Bot.xml",
-      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-7-with-entry-digit-bot-64.xml",
+      "id": "apex-library-under-streak-confirmation-bot-recovery-67",
+      "name": "97. Under_Streak_Confirmation_bot_RECOVERY",
+      "file": "Under_Streak_Confirmation_bot_RECOVERY.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-streak-confirmation-bot-recovery-67.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
       "emoji": "FREE BOT",
       "priority": 97
     },
     {
-      "id": "apex-library-under-streak-confirmation-single-trade-recovery-65",
-      "name": "98. Under Streak Confirmation Single Trade RECOVERY",
-      "file": "Under Streak Confirmation Single Trade RECOVERY.xml",
-      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-streak-confirmation-single-trade-recovery-65.xml",
+      "id": "apex-library-wager-entry-point-bot-68",
+      "name": "98. Wager entry point bot",
+      "file": "Wager entry point bot.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-wager-entry-point-bot-68.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
       "emoji": "FREE BOT",
       "priority": 98
     },
     {
-      "id": "apex-library-under-6-fixed-dbot-native-66",
-      "name": "99. Under_6_FIXED_DBOT_NATIVE",
-      "file": "Under_6_FIXED_DBOT_NATIVE.xml",
-      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-6-fixed-dbot-native-66.xml",
+      "id": "apex-library-recover-under-bandwagon-69",
+      "name": "99. _Recover Under Bandwagon",
+      "file": "_Recover Under Bandwagon.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-recover-under-bandwagon-69.xml",
       "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
       "emoji": "FREE BOT",
       "priority": 99
     },
     {
-      "id": "apex-library-under-streak-confirmation-bot-recovery-67",
-      "name": "100. Under_Streak_Confirmation_bot_RECOVERY",
-      "file": "Under_Streak_Confirmation_bot_RECOVERY.xml",
-      "asset": "uploads/apex-sentinel/apex-library/apex-library-under-streak-confirmation-bot-recovery-67.xml",
-      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
-      "emoji": "FREE BOT",
-      "priority": 100
-    },
-    {
-      "id": "apex-library-wager-entry-point-bot-68",
-      "name": "101. Wager entry point bot",
-      "file": "Wager entry point bot.xml",
-      "asset": "uploads/apex-sentinel/apex-library/apex-library-wager-entry-point-bot-68.xml",
-      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
-      "emoji": "FREE BOT",
-      "priority": 101
-    },
-    {
-      "id": "apex-library-recover-under-bandwagon-69",
-      "name": "102. _Recover Under Bandwagon",
-      "file": "_Recover Under Bandwagon.xml",
-      "asset": "uploads/apex-sentinel/apex-library/apex-library-recover-under-bandwagon-69.xml",
-      "description": "Original Blockly strategy from the Apex Dominion bot library; trading logic preserved.",
-      "emoji": "FREE BOT",
-      "priority": 102
-    },
-    {
       "id": "apex-library-ultemate-profit-bot-v3-multimarket-70",
-      "name": "103. Ultemate profit bot v3 (Multi-market)",
+      "name": "100. Ultemate profit bot v3 (Multi-market)",
       "file": "Ultemate_profit_bot_v3_multimarket.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-ultemate-profit-bot-v3-multimarket-70.xml",
       "description": "Digit Under bot that scans 10 markets every tick and trades the best qualifying one. Needs the multi-market blocks of this app. Entry: buys only when the last 3 digits are all in 6-9.",
       "emoji": "FREE BOT",
-      "priority": 103
+      "priority": 100
     },
     {
       "id": "apex-library-ultemate-profit-bot-v4-heat-ranked-71",
-      "name": "104. Ultemate profit bot v4 (Multi-market, heat-ranked)",
+      "name": "101. Ultemate profit bot v4 (Multi-market, heat-ranked)",
       "file": "Ultemate_profit_bot_v4_heat_ranked.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-ultemate-profit-bot-v4-heat-ranked-71.xml",
       "description": "v3 multi-market bot that, among markets already signalling, picks the one with the fewest recent 6/7/8/9 digits. No signal is blocked. Entry: buys when digit 4, 7 or 9 is touched.",
       "emoji": "FREE BOT",
-      "priority": 104
+      "priority": 101
     },
     {
       "id": "apex-library-ultemate-profit-bot-v5-transition-72",
-      "name": "105. Ultemate profit bot v5 (Multi-market, transition)",
+      "name": "102. Ultemate profit bot v5 (Multi-market, transition)",
       "file": "Ultemate_profit_bot_v5_transition.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-ultemate-profit-bot-v5-transition-72.xml",
       "description": "v4 plus multi-window digit-transition ranking: prefers markets whose losing digits (6-9) were hot and are now cooling. No signal is blocked. Entry: waits for at least 3 digits in 6-9 in a row, then buys on a digit in 0-5.",
       "emoji": "FREE BOT",
-      "priority": 105
+      "priority": 102
     }
   ],
   "source": "Apex Sentinel bundled strategies"
