@@ -1,0 +1,88 @@
+<xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
+  <variables>
+    <variable id="initialStake">Initial Stake</variable>
+    <variable id="stake">Stake</variable>
+    <variable id="prediction">Prediction</variable>
+    <variable id="takeProfit">Take Profit</variable>
+    <variable id="lossCount">L_Count</variable>
+    <variable id="martangle">Martangle</variable>
+    <variable id="predictionList">Prediction List</variable>
+    <variable id="martangleLevel">Martangle Level</variable>
+  </variables>
+  <block type="trade_definition" id="trade-definition" deletable="false" x="0" y="50">
+    <statement name="TRADE_OPTIONS">
+      <block type="trade_definition_market" id="market" deletable="false" movable="false">
+        <field name="MARKET_LIST">synthetic_index</field><field name="SUBMARKET_LIST">random_index</field><field name="SYMBOL_LIST">1HZ25V</field>
+        <next><block type="trade_definition_tradetype" id="trade-type" deletable="false" movable="false">
+          <field name="TRADETYPECAT_LIST">digits</field><field name="TRADETYPE_LIST">overunder</field>
+          <next><block type="trade_definition_contracttype" id="contract-type" deletable="false" movable="false"><field name="TYPE_LIST">both</field>
+            <next><block type="trade_definition_candleinterval" id="candle-interval" deletable="false" movable="false"><field name="CANDLEINTERVAL_LIST">60</field>
+              <next><block type="trade_definition_restartbuysell" id="restart-buy-sell" deletable="false" movable="false"><field name="TIME_MACHINE_ENABLED">FALSE</field>
+                <next><block type="trade_definition_restartonerror" id="restart-on-error" deletable="false" movable="false"><field name="RESTARTONERROR">TRUE</field></block></next>
+              </block></next>
+            </block></next>
+          </block></next>
+        </block></next>
+      </block>
+    </statement>
+    <statement name="INITIALIZATION">
+      <block type="text_print" id="welcome"><value name="TEXT"><shadow type="text" id="welcome-text"><field name="TEXT">Welcome to Masika Strategies</field></shadow></value>
+        <next><block type="variables_set" id="set-stake"><field name="VAR" id="stake">Stake</field><value name="VALUE"><block type="math_number" id="stake-number"><field name="NUM">2</field></block></value>
+          <next><block type="variables_set" id="set-martangle"><field name="VAR" id="martangle">Martangle</field><value name="VALUE"><block type="math_number" id="martangle-number"><field name="NUM">2</field></block></value>
+            <next><block type="variables_set" id="set-profit"><field name="VAR" id="takeProfit">Take Profit</field><value name="VALUE"><block type="math_number" id="profit-number"><field name="NUM">2</field></block></value>
+              <next><block type="variables_set" id="set-level"><field name="VAR" id="martangleLevel">Martangle Level</field><value name="VALUE"><block type="math_number" id="level-number"><field name="NUM">4</field></block></value>
+                <next><block type="lists_create_with" id="prediction-list"><field name="VARIABLE" id="predictionList">Prediction List</field><statement name="STACK">
+                  <block type="lists_statement" id="list-item-1"><value name="VALUE"><block type="math_number" id="digit-1"><field name="NUM">0</field></block></value>
+                    <next><block type="lists_statement" id="list-item-2"><value name="VALUE"><block type="math_number" id="digit-2"><field name="NUM">1</field></block></value>
+                      <next><block type="lists_statement" id="list-item-3"><value name="VALUE"><block type="math_number" id="digit-3"><field name="NUM">2</field></block></value>
+                        <next><block type="lists_statement" id="list-item-4"><value name="VALUE"><block type="math_number" id="digit-4"><field name="NUM">4</field></block></value></block></next>
+                      </block></next>
+                    </block></next>
+                  </block>
+                </statement>
+                  <next><block type="procedures_callnoreturn" id="start-info-call"><mutation xmlns="http://www.w3.org/1999/xhtml" name="Start Info"/><data>start-info</data></block></next>
+                </block></next>
+              </block></next>
+            </block></next>
+          </block></next>
+        </block></next>
+      </block>
+    </statement>
+    <statement name="SUBMARKET"><block type="trade_definition_tradeoptions" id="trade-options"><mutation xmlns="http://www.w3.org/1999/xhtml" has_first_barrier="false" has_second_barrier="false" has_prediction="true"/><field name="DURATIONTYPE_LIST">t</field>
+      <value name="DURATION"><shadow type="math_number_positive" id="duration"><field name="NUM">1</field></shadow></value>
+      <value name="AMOUNT"><shadow type="math_number_positive" id="amount-shadow"><field name="NUM">1</field></shadow><block type="variables_get" id="stake-get"><field name="VAR" id="stake">Stake</field></block></value>
+      <value name="PREDICTION"><shadow type="math_number_positive" id="prediction-shadow" inline="true"><field name="NUM">1</field></shadow><block type="lists_getIndex" id="prediction-index" collapsed="true"><mutation xmlns="http://www.w3.org/1999/xhtml" statement="false" at="true"/><field name="MODE">GET</field><field name="WHERE">FROM_START</field><value name="VALUE"><block type="variables_get" id="list-get"><field name="VAR" id="predictionList">Prediction List</field></block></value><value name="AT"><block type="variables_get" id="prediction-get"><field name="VAR" id="prediction">Prediction</field></block></value></block></value>
+    </block></statement>
+  </block>
+  <block type="after_purchase" id="after-purchase" collapsed="true" x="795" y="50"><statement name="AFTERPURCHASE_STACK">
+    <block type="controls_if" id="profit-check"><mutation xmlns="http://www.w3.org/1999/xhtml" else="1"/><value name="IF0"><block type="logic_compare" id="profit-compare"><field name="OP">GTE</field><value name="A"><block type="total_profit" id="total-profit"/></value><value name="B"><block type="variables_get" id="profit-get"><field name="VAR" id="takeProfit">Take Profit</field></block></value></block></value>
+      <statement name="DO0"><block type="text_print" id="profit-reached"><value name="TEXT"><shadow type="text" id="profit-text"><field name="TEXT">Target Profit Has Reached</field></shadow></value></block></statement>
+      <statement name="ELSE"><block type="controls_if" id="win-check"><mutation xmlns="http://www.w3.org/1999/xhtml" else="1"/><value name="IF0"><block type="contract_check_result" id="check-win"><field name="CHECK_RESULT">win</field></block></value>
+        <statement name="DO0"><block type="variables_set" id="reset-stake"><field name="VAR" id="stake">Stake</field><value name="VALUE"><block type="variables_get" id="initial-stake-get"><field name="VAR" id="initialStake">Initial Stake</field></block></value>
+          <next><block type="variables_set" id="reset-loss-count"><field name="VAR" id="lossCount">L_Count</field><value name="VALUE"><block type="math_number" id="loss-count-one"><field name="NUM">1</field></block></value>
+            <next><block type="variables_set" id="reset-prediction"><field name="VAR" id="prediction">Prediction</field><value name="VALUE"><block type="math_number" id="prediction-two"><field name="NUM">2</field></block></value></block></next>
+          </block></next>
+        </block></statement>
+        <statement name="ELSE"><block type="variables_set" id="increase-stake"><field name="VAR" id="stake">Stake</field><value name="VALUE"><block type="math_arithmetic" id="multiply-stake"><field name="OP">MULTIPLY</field><value name="A"><shadow type="math_number" id="stake-one"><field name="NUM">1</field></shadow><block type="variables_get" id="current-stake-get"><field name="VAR" id="stake">Stake</field></block></value><value name="B"><shadow type="math_number" id="martangle-two"><field name="NUM">1</field></shadow><block type="variables_get" id="martangle-get"><field name="VAR" id="martangle">Martangle</field></block></value></block></value>
+          <next><block type="math_change" id="increment-loss-count"><field name="VAR" id="lossCount">L_Count</field><value name="DELTA"><shadow type="math_number" id="increment-one"><field name="NUM">1</field></shadow></value>
+            <next><block type="controls_if" id="prediction-adjust"><value name="IF0"><block type="logic_compare" id="loss-count-equals-two"><field name="OP">EQ</field><value name="A"><block type="variables_get" id="loss-count-get-one"><field name="VAR" id="lossCount">L_Count</field></block></value><value name="B"><block type="math_number" id="two"><field name="NUM">2</field></block></value></block></value>
+              <statement name="DO0"><block type="variables_set" id="set-prediction-three"><field name="VAR" id="prediction">Prediction</field><value name="VALUE"><block type="math_number" id="three"><field name="NUM">3</field></block></value></block></statement>
+              <next><block type="controls_if" id="prediction-adjust-four"><value name="IF0"><block type="logic_compare" id="loss-count-greater-two"><field name="OP">GT</field><value name="A"><block type="variables_get" id="loss-count-get-two"><field name="VAR" id="lossCount">L_Count</field></block></value><value name="B"><block type="math_number" id="two-again"><field name="NUM">2</field></block></value></block></value>
+                <statement name="DO0"><block type="variables_set" id="set-prediction-four"><field name="VAR" id="prediction">Prediction</field><value name="VALUE"><block type="math_number" id="four"><field name="NUM">4</field></block></value></block></statement>
+              </block></next>
+            </block></next>
+          </block></next>
+        </block></statement>
+      </block></statement>
+      <next><block type="controls_if" id="martangle-level-check"><value name="IF0"><block type="logic_compare" id="losses-within-level"><field name="OP">LTE</field><value name="A"><block type="variables_get" id="loss-count-get-three"><field name="VAR" id="lossCount">L_Count</field></block></value><value name="B"><block type="variables_get" id="level-get"><field name="VAR" id="martangleLevel">Martangle Level</field></block></value></block></value><statement name="DO0"><block type="trade_again" id="trade-again"/></statement></block></next>
+    </block>
+  </statement></block>
+  <block type="before_purchase" id="before-purchase" deletable="false" x="0" y="1338"><statement name="BEFOREPURCHASE_STACK"><block type="purchase" id="purchase"><field name="PURCHASE_LIST">DIGITOVER</field></block></statement></block>
+  <block type="procedures_defnoreturn" id="start-info" collapsed="true" x="0" y="1516"><field name="NAME">Start Info</field><comment pinned="false" h="80" w="160">Describe this function...</comment><statement name="STACK">
+    <block type="variables_set" id="set-initial-stake"><field name="VAR" id="initialStake">Initial Stake</field><value name="VALUE"><block type="variables_get" id="get-stake-for-initial"><field name="VAR" id="stake">Stake</field></block></value>
+      <next><block type="variables_set" id="set-initial-prediction"><field name="VAR" id="prediction">Prediction</field><value name="VALUE"><block type="math_number" id="prediction-one"><field name="NUM">1</field></block></value>
+        <next><block type="variables_set" id="set-initial-loss-count"><field name="VAR" id="lossCount">L_Count</field><value name="VALUE"><block type="math_number" id="loss-count-start"><field name="NUM">1</field></block></value></block></next>
+      </block></next>
+    </block>
+  </statement></block>
+</xml>

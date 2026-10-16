@@ -1,7 +1,7 @@
 {
   "version": 1,
   "site_id": "apex-sentinel",
-  "count": 103,
+  "count": 105,
   "bots": [
     {
       "id": "grffy-v1",
@@ -914,21 +914,39 @@
     },
     {
       "id": "apex-library-masika-strategies-digit-under-102",
-      "name": "102. Masika Strategies (Digit Under)",
+      "name": "102. Masika Strategies (Digit Under — With Entry Digit)",
       "file": "Masika Strategies Digit Under.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-masika-strategies-digit-under-102.xml",
-      "description": "Masika Strategies Digit Under bot for 1HZ25V; prediction digits 9, 8, 6, 5.",
+      "description": "Masika Strategies Digit Under variant with entry-digit filtering; prediction digits 9, 8, 6, 5.",
       "emoji": "FREE BOT",
       "priority": 102
     },
     {
       "id": "apex-library-masika-strategies-digit-over-103",
-      "name": "103. Masika Strategies (Digit Over)",
+      "name": "103. Masika Strategies (Digit Over — With Entry Digit)",
       "file": "Masika Strategies Digit Over.xml",
       "asset": "uploads/apex-sentinel/apex-library/apex-library-masika-strategies-digit-over-103.xml",
-      "description": "Masika Strategies Digit Over bot for 1HZ25V; prediction digits 0, 1, 2, 4.",
+      "description": "Masika Strategies Digit Over variant with entry-digit filtering; prediction digits 0, 1, 2, 4.",
       "emoji": "FREE BOT",
       "priority": 103
+    },
+    {
+      "id": "apex-library-masika-strategies-digit-under-without-entry-digit-104",
+      "name": "104. Masika Strategies (Digit Under — Without Entry Digit)",
+      "file": "Masika Strategies Digit Under Without Entry Digit.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-masika-strategies-digit-under-104.xml",
+      "description": "Masika Strategies Digit Under on 1HZ25V without entry-digit filtering; prediction digits 9, 8, 6, 5.",
+      "emoji": "FREE BOT",
+      "priority": 104
+    },
+    {
+      "id": "apex-library-masika-strategies-digit-over-without-entry-digit-105",
+      "name": "105. Masika Strategies (Digit Over — Without Entry Digit)",
+      "file": "Masika Strategies Digit Over Without Entry Digit.xml",
+      "asset": "uploads/apex-sentinel/apex-library/apex-library-masika-strategies-digit-over-105.xml",
+      "description": "Masika Strategies Digit Over on 1HZ25V without entry-digit filtering; prediction digits 0, 1, 2, 4.",
+      "emoji": "FREE BOT",
+      "priority": 105
     }
   ]
 }
