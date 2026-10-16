@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import {
-    DIGITS_BOT_IDS, configureDigitsBot, contractForTrade, marketOf, purchaseOf,
+    DIGITS_BOT_IDS, PREDICTION_LISTS, configureDigitsBot, contractForTrade, marketOf, predictionListOf, purchaseOf,
 } from '../digits-analysis-loader';
 
 const LIBRARY = path.join(process.cwd(), 'public/free-bots/uploads/apex-sentinel/apex-library');
@@ -26,11 +26,27 @@ describe('contractForTrade', () => {
 });
 
 describe('configureDigitsBot', () => {
+    it('sets Over 2 / Over 3-on-loss and Under 7 / Under 6-on-loss', () => {
+        expect(PREDICTION_LISTS.DIGITOVER).toEqual([2, 2, 3, 3]);
+        expect(PREDICTION_LISTS.DIGITUNDER).toEqual([7, 7, 6, 6]);
+        expect(predictionListOf(configureDigitsBot(OVER, 'R_100', 'DIGITOVER'))).toEqual([2, 2, 3, 3]);
+        expect(predictionListOf(configureDigitsBot(UNDER, 'R_100', 'DIGITUNDER'))).toEqual([7, 7, 6, 6]);
+    });
+
+    it('keeps the stake, martingale and take profit as shipped', () => {
+        const numbers = (text: string) => Array.from(text.matchAll(/<field name="NUM">([^<]*)<\/field>/g)).map(match => match[1]);
+        const drop = (text: string) => text.replace(/<block type="lists_create_with"[\s\S]*?<\/statement>/, '');
+        expect(numbers(drop(configureDigitsBot(OVER, 'R_100', 'DIGITOVER')))).toEqual(numbers(drop(OVER)));
+        expect(numbers(drop(configureDigitsBot(UNDER, 'R_100', 'DIGITUNDER')))).toEqual(numbers(drop(UNDER)));
+    });
+
     it('points the Over bot at the ranked market and keeps everything else', () => {
         const xml = configureDigitsBot(OVER, '1HZ10V', 'DIGITOVER');
         expect(marketOf(xml)).toEqual({ market: 'synthetic_index', submarket: 'random_index', symbol: '1HZ10V' });
         expect(purchaseOf(xml)).toBe('DIGITOVER');
-        const strip = (text: string) => text.replace(/<field name="SYMBOL_LIST">[^<]*<\/field>/, '');
+        const strip = (text: string) => text
+            .replace(/<field name="SYMBOL_LIST">[^<]*<\/field>/, '')
+            .replace(/<block type="lists_create_with"[\s\S]*?<\/statement>/, '');
         expect(strip(xml).length).toBe(strip(OVER).length);
     });
 
