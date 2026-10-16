@@ -1,23 +1,23 @@
 {
-  "brand_name": "Ultimate Traders",
-  "brand_domain": "ultimatetraders.netlify.app",
+  "brand_name": "Vantage Traders",
+  "brand_domain": "vantagetraders.netlify.app",
   "brand_hostname": {
-    "staging": "ultimatetraders.netlify.app",
-    "production": "ultimatetraders.netlify.app"
+    "staging": "vantagetraders.netlify.app",
+    "production": "vantagetraders.netlify.app"
   },
-  "domain_name": "ultimatetraders.netlify.app",
+  "domain_name": "vantagetraders.netlify.app",
   "sites": {
     "default_site": "apex-sentinel",
     "entries": [
       {
         "id": "apex-sentinel",
         "hosts": [
-          "ultimatetraders.netlify.app",
+          "vantagetraders.netlify.app",
           "localhost"
         ],
-        "display_domain": "Ultimate Traders",
-        "website_url": "https://ultimatetraders.netlify.app",
-        "redirect_uri": "https://ultimatetraders.netlify.app/callback",
+        "display_domain": "Vantage Traders",
+        "website_url": "https://vantagetraders.netlify.app",
+        "redirect_uri": "https://vantagetraders.netlify.app/callback",
         "client_id": "34BIr72thLXMJHaL9PQxN",
         "scopes": [
           "trade",
@@ -145,14 +145,14 @@
     "css_variable_prefix": "--brand"
   },
   "platform": {
-    "name": "Ultimate Traders",
+    "name": "Vantage Traders",
     "logo": {
       "type": "component",
       "component_name": "BrandLogo",
-      "alt_text": "Ultimate Traders",
+      "alt_text": "Vantage Traders",
       "link_url": "/",
       "show_text": true,
-      "text": "Ultimate Traders"
+      "text": "Vantage Traders"
     },
     "footer": {
       "enable_language_settings": false,
@@ -160,10 +160,10 @@
     },
     "hostname": {
       "production": {
-        "com": "ultimatetraders.netlify.app"
+        "com": "vantagetraders.netlify.app"
       },
       "staging": {
-        "com": "ultimatetraders.netlify.app"
+        "com": "vantagetraders.netlify.app"
       }
     },
     "auth2_url": {
