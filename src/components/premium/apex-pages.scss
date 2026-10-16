@@ -64,6 +64,8 @@ $gold: #e8b84a; $win: #19d38a; $loss: #ff4d6a;
         button { padding: 8px 14px; border-radius: 8px; border: 1px solid $line; background: $panel-2; color: $text; font-weight: 800; cursor: pointer;
             &.is-active { border-color: $gold; color: $gold; } } }
     &__error { color: $loss; }
+    &__load { display: block; width: 100%; margin-bottom: 14px; padding: 12px 14px; border-radius: 10px; border: 1px solid $gold; background: $gold; color: #0b1218; font-weight: 800; font-size: 14px; cursor: pointer;
+        &:disabled { opacity: .55; cursor: not-allowed; } }
     &__body { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(320px, 1fr); gap: 20px; margin-top: 18px;
         @media (max-width: 960px) { grid-template-columns: 1fr; } }
     &__ranking h2 { margin: 0 0 10px; font-size: 24px; color: #fff; }

@@ -4,6 +4,7 @@ import {
     type AnalysisMode, DIGIT_PAIRS, type DigitPair, type MarketDigits, candidateTrades, digitsFromPrices, rankMarkets,
     streakStats,
 } from '../apex-logic';
+import { contractForTrade, loadBestMarketIntoBot } from '../digits-analysis-loader';
 
 type MarketDef = { symbol: string; name: string; pip: number };
 
@@ -35,7 +36,7 @@ const clampInt = (value: string, min: number, max: number, fallback: number) => 
     return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
 };
 
-const DigitsAnalysisPage = () => {
+const DigitsAnalysisPage = ({ openBotBuilder }: { openBotBuilder?: () => void }) => {
     const [mode, setMode] = useState<AnalysisMode>('over_under');
     const [pairIndex, setPairIndex] = useState(1);
     const [marketSymbol, setMarketSymbol] = useState('R_100');
@@ -46,6 +47,8 @@ const DigitsAnalysisPage = () => {
     const [viewInput, setViewInput] = useState('100');
     const [error, setError] = useState('');
     const [version, setVersion] = useState(0);
+    const [loadingBot, setLoadingBot] = useState(false);
+    const [loadError, setLoadError] = useState('');
     const store = useRef<Record<string, number[]>>({});
     const decimals = useRef<Record<string, number>>(Object.fromEntries(MARKETS.map(m => [m.symbol, m.pip])));
     const dirty = useRef(false);
@@ -119,6 +122,22 @@ const DigitsAnalysisPage = () => {
     const stats = useMemo(() => (best ? streakStats(bestDigits, best.trade, viewLast) : null), [best, bestDigits, viewLast]);
     const tradeOptions = candidateTrades(mode, pair);
 
+    // Always loads the market ranked #1 at the moment of the click, whether or not a market is locked above.
+    const top = ranking[0] || null;
+    const topContract = top ? contractForTrade(top.trade) : null;
+    const loadTopMarket = useCallback(async () => {
+        if (!top || !openBotBuilder || loadingBot) return;
+        setLoadingBot(true);
+        setLoadError('');
+        try {
+            await loadBestMarketIntoBot(top, openBotBuilder);
+        } catch (err) {
+            setLoadError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setLoadingBot(false);
+        }
+    }, [top, openBotBuilder, loadingBot]);
+
     const applySettings = useCallback(() => {
         setViewLast(clampInt(viewInput, 10, 1000, 100));
         const next = clampInt(analysisInput, 100, 5000, 1000);
@@ -170,6 +189,7 @@ const DigitsAnalysisPage = () => {
                 </div>
 
                 {error && <p className='apex-da__error'>{error}</p>}
+                {loadError && <p className='apex-da__error'>{loadError}</p>}
 
                 <div className='apex-da__body'>
                     <div className='apex-da__ranking'>
@@ -192,6 +212,18 @@ const DigitsAnalysisPage = () => {
                     </div>
 
                     <div className='apex-da__best'>
+                        {openBotBuilder && (
+                            <button
+                                type='button' className='apex-da__load' onClick={() => void loadTopMarket()}
+                                disabled={!top || !topContract || loadingBot}
+                            >
+                                {loadingBot
+                                    ? 'Loading bot…'
+                                    : top && topContract
+                                        ? `Load #1 into Bot Builder · ${top.name} · ${top.trade.label}`
+                                        : top ? 'Switch Mode to Over / Under to load a bot' : 'Waiting for market data…'}
+                            </button>
+                        )}
                         <small>{locked ? 'LOCKED MARKET' : 'BEST MARKET'}</small>
                         {best && stats ? (
                             <>

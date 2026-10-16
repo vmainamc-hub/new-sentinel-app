@@ -236,7 +236,7 @@ const PremiumLayout = observer(() => {
             case 'tradingview': return <TradingViewPage />;
             case 'dtrader': return <DTraderPage />;
             case 'ai_bots': return <AIBotsPage />;
-            case 'digits_analysis': return <DigitsAnalysisPage />;
+            case 'digits_analysis': return <DigitsAnalysisPage openBotBuilder={openBotBuilder} />;
             default: return null;
         }
     };
