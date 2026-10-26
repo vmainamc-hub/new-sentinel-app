@@ -108,6 +108,11 @@ export default Engine =>
             return last_n.length > 0 && last_n.every(compare);
         }
 
+        async getLastNDigitsText(n = 10) {
+            const list = await this.getLastDigitList();
+            return list.slice(-Math.max(1, Number(n) || 1)).join(' ');
+        }
+
         async getDigitFrequency({ rank = 'MOST', n = 1000 } = {}) {
             const list = await this.getLastDigitList();
             const last_n = list.slice(-Math.max(1, Number(n) || 1));

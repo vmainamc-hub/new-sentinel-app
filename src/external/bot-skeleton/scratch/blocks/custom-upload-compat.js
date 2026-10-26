@@ -113,3 +113,50 @@ javascriptGenerator.forBlock.active_symbol_changer = block => {
     if (!symbol || symbol === 'disable') return '';
     return `Bot.changeSymbol('${symbol}');\n`;
 };
+
+// Used by "Auto Switch by Mr Duke". Returns the latest N last digits as text
+// (e.g. "3 7 1 0 ...") so it can be shown in a Notify block.
+window.Blockly.Blocks.analysis_last_n_digits = {
+    init() {
+        this.jsonInit({
+            message0: 'Last %1 digits as text',
+            args0: [{ type: 'input_value', name: 'N', check: 'Number' }],
+            output: 'String',
+            outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
+            colour: window.Blockly.Colours.Base.colour,
+            colourSecondary: window.Blockly.Colours.Base.colourSecondary,
+            colourTertiary: window.Blockly.Colours.Base.colourTertiary,
+            tooltip: 'Returns the latest N last digits as a text string.',
+            category: window.Blockly.Categories.Tick_Analysis,
+        });
+    },
+};
+
+javascriptGenerator.forBlock.analysis_last_n_digits = block => {
+    const n = javascriptGenerator.valueToCode(block, 'N', javascriptGenerator.ORDER_ATOMIC) || '10';
+    return [`Bot.getLastNDigitsText(${n})`, javascriptGenerator.ORDER_ATOMIC];
+};
+
+// Used by "Auto Switch by Mr Duke" as an entry gate in Before Purchase.
+// The original implementation was not available, so this is a pass-through:
+// it always allows the entry and leaves the bot's own analysis state logic
+// (analysis / gk / Auto Switch) to decide the trade.
+window.Blockly.Blocks.duke_selected_overunder_midpoint_entry = {
+    init() {
+        this.jsonInit({
+            message0: 'Over/Under midpoint entry allowed',
+            output: 'Boolean',
+            outputShape: window.Blockly.OUTPUT_SHAPE_HEXAGONAL,
+            colour: window.Blockly.Colours.Base.colour,
+            colourSecondary: window.Blockly.Colours.Base.colourSecondary,
+            colourTertiary: window.Blockly.Colours.Base.colourTertiary,
+            tooltip: 'Entry gate for Over/Under bots. Currently always true.',
+            category: window.Blockly.Categories.Logic,
+        });
+    },
+};
+
+javascriptGenerator.forBlock.duke_selected_overunder_midpoint_entry = () => [
+    'true',
+    javascriptGenerator.ORDER_ATOMIC,
+];

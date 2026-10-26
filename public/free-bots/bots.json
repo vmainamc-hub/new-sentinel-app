@@ -911,6 +911,15 @@
       "description": "v4 plus multi-window digit-transition ranking: prefers markets whose losing digits (6-9) were hot and are now cooling. No signal is blocked. Entry: waits for at least 3 digits in 6-9 in a row, then buys on a digit in 0-5.",
       "emoji": "FREE BOT",
       "priority": 101
+    },
+    {
+      "id": "auto-switch-by-mr-duke",
+      "name": "102. Auto Switch by Mr Duke",
+      "file": "Auto Switch by Mr Duke.xml",
+      "asset": "uploads/apex-sentinel/auto-switch-by-mr-duke.xml",
+      "description": "Digits Under 7 with auto switch to Under 6 and martingale recovery.",
+      "emoji": "SITE BOT",
+      "priority": 102
     }
   ],
   "source": "Apex Sentinel bundled strategies"

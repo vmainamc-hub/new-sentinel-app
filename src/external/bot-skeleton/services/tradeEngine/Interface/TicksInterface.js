@@ -12,6 +12,7 @@ const getTicksInterface = tradeEngine => {
         getLastDigitList: (...args) => tradeEngine.getLastDigitList(...args),
         getDigitFrequencyAnalysis: (...args) => tradeEngine.getDigitFrequencyAnalysis(...args),
         // Analysis Logics helpers
+        getLastNDigitsText: (...args) => tradeEngine.getLastNDigitsText(...args),
         getLastDigitsCondition: (...args) => tradeEngine.getLastDigitsCondition(...args),
         getDigitFrequency: (...args) => tradeEngine.getDigitFrequency(...args),
         getEvenOddPercent: (...args) => tradeEngine.getEvenOddPercent(...args),

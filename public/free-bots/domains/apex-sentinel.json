@@ -965,6 +965,15 @@
       "description": "Over recovery bot with no entry condition: buys DIGITOVER on every cycle, stake x2 after a loss. Meant to be loaded from a Sixfold signal.",
       "emoji": "FREE BOT",
       "priority": 107
+    },
+    {
+      "id": "auto-switch-by-mr-duke",
+      "name": "108. Auto Switch by Mr Duke",
+      "file": "Auto Switch by Mr Duke.xml",
+      "asset": "uploads/apex-sentinel/auto-switch-by-mr-duke.xml",
+      "description": "Digits Under 7 with auto switch to Under 6 and martingale recovery.",
+      "emoji": "SITE BOT",
+      "priority": 108
     }
   ]
 }
