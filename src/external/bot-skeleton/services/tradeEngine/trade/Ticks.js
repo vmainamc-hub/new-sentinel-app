@@ -117,8 +117,10 @@ export default Engine =>
         }
 
         async getLastNDigitsText(n = 10) {
+            const count = Math.max(1, Number(n) || 1);
             const list = await this.getLastDigitList();
-            return list.slice(-Math.max(1, Number(n) || 1)).join(' ');
+            // Oldest to newest, e.g. "Last 2 digits: 8, 3" (matches the original bot's journal).
+            return `Last ${count} digits: ${list.slice(-count).join(', ')}`;
         }
 
         async getDigitFrequency({ rank = 'MOST', n = 1000 } = {}) {

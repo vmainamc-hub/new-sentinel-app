@@ -115,11 +115,11 @@ javascriptGenerator.forBlock.active_symbol_changer = block => {
 };
 
 // Used by "Auto Switch by Mr Duke". Returns the latest N last digits as text
-// (e.g. "3 7 1 0 ...") so it can be shown in a Notify block.
+// (e.g. "Last 2 digits: 8, 3") so it can be shown in a Notify block.
 window.Blockly.Blocks.analysis_last_n_digits = {
     init() {
         this.jsonInit({
-            message0: 'Last %1 digits as text',
+            message0: 'Last %1 digits text (e.g. Last 2 digits: 8, 3)',
             args0: [{ type: 'input_value', name: 'N', check: 'Number' }],
             output: 'String',
             outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
