@@ -108,6 +108,14 @@ export default Engine =>
             return last_n.length > 0 && last_n.every(compare);
         }
 
+        // "Automatic entry": Over contracts enter on last digits 0-4, Under on 5-9.
+        async isOverUnderMidpointEntry(contract_type) {
+            const digit = Number(await this.getLastDigit());
+            if (contract_type === 'DIGITUNDER') return digit >= 5;
+            if (contract_type === 'DIGITOVER') return digit <= 4;
+            return true;
+        }
+
         async getLastNDigitsText(n = 10) {
             const list = await this.getLastDigitList();
             return list.slice(-Math.max(1, Number(n) || 1)).join(' ');

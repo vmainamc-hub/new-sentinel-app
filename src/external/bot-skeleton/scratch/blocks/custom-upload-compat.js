@@ -138,25 +138,25 @@ javascriptGenerator.forBlock.analysis_last_n_digits = block => {
 };
 
 // Used by "Auto Switch by Mr Duke" as an entry gate in Before Purchase.
-// The original implementation was not available, so this is a pass-through:
-// it always allows the entry and leaves the bot's own analysis state logic
-// (analysis / gk / Auto Switch) to decide the trade.
+// "Automatic entry": uses the contract type selected in Trade Options and
+// allows Over entries on last digits 0-4 and Under entries on last digits 5-9.
 window.Blockly.Blocks.duke_selected_overunder_midpoint_entry = {
     init() {
         this.jsonInit({
-            message0: 'Over/Under midpoint entry allowed',
+            message0: 'Automatic entry \u2022 Over 0\u20134 / Under 5\u20139',
             output: 'Boolean',
-            outputShape: window.Blockly.OUTPUT_SHAPE_HEXAGONAL,
+            outputShape: window.Blockly.OUTPUT_SHAPE_ROUND,
             colour: window.Blockly.Colours.Base.colour,
             colourSecondary: window.Blockly.Colours.Base.colourSecondary,
             colourTertiary: window.Blockly.Colours.Base.colourTertiary,
-            tooltip: 'Entry gate for Over/Under bots. Currently always true.',
-            category: window.Blockly.Categories.Logic,
+            tooltip: 'True when the last digit suits the selected contract: Over 0-4, Under 5-9.',
+            category: window.Blockly.Categories.Tick_Analysis,
         });
     },
 };
 
-javascriptGenerator.forBlock.duke_selected_overunder_midpoint_entry = () => [
-    'true',
-    javascriptGenerator.ORDER_ATOMIC,
-];
+javascriptGenerator.forBlock.duke_selected_overunder_midpoint_entry = block => {
+    const [contract_block] = block.workspace.getBlocksByType('trade_definition_contracttype');
+    const contract_type = contract_block?.getFieldValue('TYPE_LIST') || '';
+    return [`Bot.isOverUnderMidpointEntry('${contract_type}')`, javascriptGenerator.ORDER_ATOMIC];
+};
