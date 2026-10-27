@@ -3,12 +3,13 @@ import { configError, DTraderRunner, type MarketView, type RunConfig, type Runne
 type Listener = (symbol: string) => void;
 
 /** A fake market + Deriv. Ticks are pushed by the test; every buy confirms, then settles on the exit tick the test chooses. */
-const makeWorld = (opts: { settleProfit?: (n: number) => number; failBuys?: boolean; exitOffsetTicks?: number } = {}) => {
+const makeWorld = (opts: { settleProfit?: (n: number) => number; failBuys?: boolean; exitOffsetTicks?: number; silentStream?: boolean; pollReadsOpen?: boolean } = {}) => {
     const symbol = '1HZ100V';
     const view: MarketView = { digits: [], times: [], decimals: 2, lastTickAt: 0 };
     const tickListeners = new Set<Listener>();
     const contractListeners = new Set<(c: any) => void>();
     const buys: any[] = [];
+    const known = new Map<number, any>();
     let nextId = 100;
     let clock = 1_000_000;
     const epochOfIndex = (i: number) => Math.round(view.times[i] / 1000);
@@ -35,7 +36,12 @@ const makeWorld = (opts: { settleProfit?: (n: number) => number; failBuys?: bool
             // Deriv reports one entry tick (the tick after the buy) and one exit tick, the same for every contract in the burst.
             const entryTime = Math.round((view.times[view.times.length - 1] + 1000) / 1000);
             const exitTime = entryTime + (opts.exitOffsetTicks ?? 0);
-            setTimeout(() => {
+            const closed = (profit: number) => ({
+                contract_id: id, status: profit > 0 ? 'won' : 'lost', is_sold: 1, profit, entry_tick_time: entryTime, exit_tick_time: exitTime,
+                entry_tick_display_value: '1100.10', exit_tick_display_value: '1100.15',
+            });
+            known.set(id, closed((opts.settleProfit ?? (() => 0.95))(n)));
+            if (!opts.silentStream) setTimeout(() => {
                 const profit = (opts.settleProfit ?? (() => 0.95))(n);
                 contractListeners.forEach(l => l({
                     contract_id: id, status: profit > 0 ? 'won' : 'lost', is_sold: 1, profit, entry_tick_time: entryTime, exit_tick_time: exitTime,
@@ -47,7 +53,9 @@ const makeWorld = (opts: { settleProfit?: (n: number) => number; failBuys?: bool
         onContractUpdate: l => { contractListeners.add(l); return () => { contractListeners.delete(l); }; },
         isClosed: c => Boolean(c?.is_sold),
         digitAt: (_s, epoch) => { const i = view.times.findIndex(t => Math.round(t / 1000) === epoch); return i >= 0 ? view.digits[i] : null; },
-        sleep: ms => new Promise(resolve => setTimeout(resolve, Math.min(ms, 5))),
+        // With a silent stream, time must pass for the runner's fallback polling to start.
+        sleep: ms => new Promise(resolve => setTimeout(() => { if (opts.silentStream) clock += ms; resolve(undefined); }, Math.min(ms, 5))),
+        lookupContract: async id => (opts.pollReadsOpen ? { contract_id: id, status: 'open', is_sold: 0 } : known.get(Number(id))),
     };
     return { symbol, view, io, pushTick, buys, epochOfIndex, advance: (ms: number) => { clock += ms; } };
 };
@@ -66,6 +74,24 @@ const seed = (w: ReturnType<typeof makeWorld>, digits: number[]) => digits.forEa
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
 describe('DTraderRunner', () => {
+    it('settles every trade by asking Deriv directly when the settlement stream stays silent', async () => {
+        const w = makeWorld({ silentStream: true });
+        seed(w, [4, 5, 6, 7]);
+        const c = collect();
+        const runner = new DTraderRunner(w.io, c.emit);
+        await runner.run(baseConfig(w.symbol, { tradesPerEntry: 6 }));
+        expect(runner.totals).toMatchObject({ contracts: 6, won: 6, lost: 0 });
+        expect(c.of('trade').filter(e => e.row.state === 'open').length).toBe(6);   // the rows that opened...
+        expect(new Set(c.of('trade').filter(e => e.row.state === 'won').map(e => e.row.id)).size).toBe(6); // ...all closed
+        expect(c.of('journal').some(j => /Asking Deriv directly/.test(j.text))).toBe(true);
+    });
+    it('says what Deriv returned when a contract still does not look finished', async () => {
+        const w = makeWorld({ silentStream: true, pollReadsOpen: true });
+        seed(w, [4, 5, 6, 7]);
+        const c = collect();
+        await new DTraderRunner(w.io, c.emit).run(baseConfig(w.symbol, { tradesPerEntry: 2 }));
+        expect(c.of('journal').some(j => /still reads status "open"/.test(j.text))).toBe(true);
+    });
     it('Ends Between sends both barriers with every trade of the bulk, and refuses a missing offset', async () => {
         const w = makeWorld();
         seed(w, [4, 5, 6, 7]);

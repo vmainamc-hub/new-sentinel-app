@@ -81,6 +81,10 @@ export interface RunnerIO {
 }
 
 const SETTLE_WAIT_MS = 90_000;
+/** If a contract has not reported a result by itself, ask Deriv about it directly at this pace. */
+const POLL_AFTER_MS = 2500;
+const POLL_BATCH = 25;
+const DIAGNOSE_AFTER_MS = 8000;
 const EXIT_LOOKUP_DELAYS_MS = [400, 1200, 2500, 4500];
 const num = (value: unknown, fallback = 0) => { const n = Number(value); return Number.isFinite(n) ? n : fallback; };
 const numOrNull = (value: unknown) => { const n = Number(value); return value !== undefined && value !== null && value !== '' && Number.isFinite(n) ? n : null; };
@@ -299,8 +303,37 @@ export class DTraderRunner {
             if (owned.size === 0) return { kind: 'failed' };
 
             this.state('settling', `Placed ${owned.size}/${plan.total}. Waiting for them to settle…`);
-            const deadline = this.io.now() + SETTLE_WAIT_MS;
-            while (settled.size < owned.size && this.io.now() < deadline) await this.io.sleep(250);
+            const startedAt = this.io.now();
+            const deadline = startedAt + SETTLE_WAIT_MS;
+            let lastPoll = startedAt;
+            let announced = false;
+            const reported = new Set<number>();
+            while (settled.size < owned.size && this.io.now() < deadline) {
+                await this.io.sleep(250);
+                // Safety net: the live settlement stream normally reports each result. If any contract is still silent, ask Deriv
+                // about it directly, and say plainly what Deriv returned if it still does not look finished.
+                if (!this.io.lookupContract || this.io.now() - lastPoll < POLL_AFTER_MS) continue;
+                lastPoll = this.io.now();
+                const pending = [...owned.keys()].filter(id => !settled.has(id)).slice(0, POLL_BATCH);
+                if (!pending.length) continue;
+                if (!announced) {
+                    announced = true;
+                    this.log(`${pending.length} contract(s) have not reported a result yet. Asking Deriv directly…`, 'warn');
+                }
+                await Promise.all(pending.map(async id => {
+                    try {
+                        const update = await this.io.lookupContract!(id);
+                        if (!update) return;
+                        if (this.io.isClosed(update)) finishContract(id, { ...update, contract_id: id });
+                        else if (!reported.has(id) && this.io.now() - startedAt >= DIAGNOSE_AFTER_MS) {
+                            reported.add(id);
+                            this.log(`Contract ${id} still reads status "${text(update.status)}" (is_sold ${text(update.is_sold)}, is_expired ${text(update.is_expired)}, exit tick ${text(update.exit_tick_time ?? update.exit_spot_time) || 'none'}).`, 'warn');
+                        }
+                    } catch (error) {
+                        if (!reported.has(id)) { reported.add(id); this.log(`Could not read contract ${id} from Deriv: ${errorText(error)}`, 'warn'); }
+                    }
+                }));
+            }
             await Promise.allSettled(lookups);
 
             const list = [...fills.values()];
