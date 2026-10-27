@@ -450,7 +450,8 @@ const DTraderPage = () => {
                                 <dl>
                                     <div><dt>Total stake</dt><dd>{money(totals.stake, currency)}</dd></div>
                                     <div><dt>Total payout</dt><dd>{money(totals.payout, currency)}</dd></div>
-                                    <div><dt>Contracts</dt><dd>{totals.contracts}</dd></div>
+                                    <div><dt>Contracts bought</dt><dd>{totals.contracts}</dd></div>
+                                    <div title='Trades the same-tick guard held back. They were never sent to Deriv, so no money was used.'><dt>Not sent (no money used)</dt><dd>{totals.notSent} of {totals.requested} asked</dd></div>
                                     <div><dt>Won / Lost</dt><dd>{totals.won} / {totals.lost}</dd></div>
                                     <div><dt>Failed buys</dt><dd>{totals.failed}</dd></div>
                                     <div><dt>Net profit</dt><dd className={totals.pnl > 0 ? 'up' : totals.pnl < 0 ? 'down' : ''}>{money(totals.pnl, currency)}</dd></div>

@@ -74,6 +74,17 @@ const seed = (w: ReturnType<typeof makeWorld>, digits: number[]) => digits.forEa
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
 describe('DTraderRunner', () => {
+    it('counts the trades the same-tick guard held back as not sent, and buys only what it sent', async () => {
+        const w = makeWorld();
+        seed(w, [4, 5, 6, 7, 8, 9, 1, 2, 3, 4]);   // 1 s ticks
+        const c = collect();
+        const runner = new DTraderRunner(w.io, c.emit);
+        await runner.run(baseConfig(w.symbol, { tradesPerEntry: 10, sameTickGuard: true }));
+        expect(w.buys.length).toBeLessThan(10);
+        expect(runner.totals.contracts).toBe(w.buys.length);
+        expect(runner.totals).toMatchObject({ requested: 10, notSent: 10 - w.buys.length });
+        expect(runner.totals.won + runner.totals.lost).toBe(w.buys.length);   // every bought contract settled, nothing else
+    });
     it('settles every trade by asking Deriv directly when the settlement stream stays silent', async () => {
         const w = makeWorld({ silentStream: true });
         seed(w, [4, 5, 6, 7]);
@@ -83,7 +94,7 @@ describe('DTraderRunner', () => {
         expect(runner.totals).toMatchObject({ contracts: 6, won: 6, lost: 0 });
         expect(c.of('trade').filter(e => e.row.state === 'open').length).toBe(6);   // the rows that opened...
         expect(new Set(c.of('trade').filter(e => e.row.state === 'won').map(e => e.row.id)).size).toBe(6); // ...all closed
-        expect(c.of('journal').some(j => /Asking Deriv directly/.test(j.text))).toBe(true);
+        expect(c.of('journal').some(j => /Confirming with Deriv directly/.test(j.text))).toBe(true);
     });
     it('says what Deriv returned when a contract still does not look finished', async () => {
         const w = makeWorld({ silentStream: true, pollReadsOpen: true });

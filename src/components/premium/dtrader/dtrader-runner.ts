@@ -49,8 +49,9 @@ export type TradeRow = {
     note?: string;
 };
 
-export type Totals = { stake: number; payout: number; contracts: number; won: number; lost: number; failed: number; pnl: number };
-export const emptyTotals = (): Totals => ({ stake: 0, payout: 0, contracts: 0, won: 0, lost: 0, failed: 0, pnl: 0 });
+/** requested = trades asked for, contracts = trades actually bought, notSent = trades never sent (the same-tick guard trimmed them; no money used). */
+export type Totals = { stake: number; payout: number; contracts: number; won: number; lost: number; failed: number; pnl: number; requested: number; notSent: number };
+export const emptyTotals = (): Totals => ({ stake: 0, payout: 0, contracts: 0, won: 0, lost: 0, failed: 0, pnl: 0, requested: 0, notSent: 0 });
 
 export type RunnerEvent =
     | { type: 'state'; state: RunnerState; note: string }
@@ -212,6 +213,9 @@ export class DTraderRunner {
         }
 
         const batch = (this.batchSeq += 1);
+        // Trades the guard trimmed are never sent to Deriv, so they cost nothing and can never settle later.
+        this.totals = { ...this.totals, requested: this.totals.requested + plan.requestedTotal, notSent: this.totals.notSent + (plan.requestedTotal - plan.total) };
+        this.emit({ type: 'totals', totals: { ...this.totals } });
         const owned = new Map<number, { rowId: number; leg: Leg }>();
         const settled = new Set<number>();
         const fills = new Map<number, Fill>();
@@ -318,7 +322,7 @@ export class DTraderRunner {
                 if (!pending.length) continue;
                 if (!announced) {
                     announced = true;
-                    this.log(`${pending.length} contract(s) have not reported a result yet. Asking Deriv directly…`, 'warn');
+                    this.log(`${pending.length} bought contract(s) are waiting for their result. Confirming with Deriv directly…`);
                 }
                 await Promise.all(pending.map(async id => {
                     try {
