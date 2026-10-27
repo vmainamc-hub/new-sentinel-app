@@ -1,0 +1,343 @@
+// The DTrader's run loop. One entry decision -> one burst of trades -> every trade settles on the same tick -> next entry.
+//
+// All outside dependencies (ticks, buying, contract updates, clock) come in through RunnerIO, so the whole loop, including the
+// same-tick checks, is unit-tested without a network. The page wires RunnerIO to the app's Deriv socket and tick feed.
+
+import { entrySlip, slipText, tickMoved } from '../auto-trader';
+import { exitDigitFrom, type Fill,settlementText, syncReport } from '../bulk-run';
+import { DEFAULT_BUY_MS, learnPace, tickIntervalMs } from '../burst-pace';
+import {
+    autoSide, describeEntry, entryError, type EntryRule, exposureError, type Family, type Leg, legsFor, matchEntry, MAX_TRADES_PER_ENTRY, nextStake, offsetError, planBurst, predictionError, round2,
+type SideChoice,
+    stopReason, } from './dtrader-engine';
+
+export type RunMode = 'single' | 'repeat';
+export type RunnerState = 'idle' | 'waiting' | 'placing' | 'settling' | 'stopping';
+
+export type RunConfig = {
+    symbol: string;
+    family: Family;
+    side: SideChoice;
+    prediction: number;
+    /** Barrier distance from the entry spot (Higher/Lower, Ends Between/Outside). */
+    offset: number;
+    duration: number;
+    stake: number;
+    /** Trades per leg in one entry (the bulk size). */
+    tradesPerEntry: number;
+    martingale: number;
+    takeProfit: number;
+    stopLoss: number;
+    mode: RunMode;
+    entry: EntryRule;
+    /** Trim a burst so it all lands before the next tick. */
+    sameTickGuard: boolean;
+    currency: string;
+};
+
+export type TradeRow = {
+    id: number;
+    batch: number;
+    time: string;
+    label: string;
+    stake: number;
+    entrySpot: string;
+    exitSpot: string;
+    exitDigit: number | null;
+    profit: number;
+    state: 'open' | 'won' | 'lost' | 'failed';
+    note?: string;
+};
+
+export type Totals = { stake: number; payout: number; contracts: number; won: number; lost: number; failed: number; pnl: number };
+export const emptyTotals = (): Totals => ({ stake: 0, payout: 0, contracts: 0, won: 0, lost: 0, failed: 0, pnl: 0 });
+
+export type RunnerEvent =
+    | { type: 'state'; state: RunnerState; note: string }
+    | { type: 'journal'; text: string; level: 'info' | 'warn' | 'error' | 'success' }
+    | { type: 'trade'; row: TradeRow }
+    | { type: 'totals'; totals: Totals }
+    | { type: 'sync'; text: string; ok: boolean | null };
+
+export type MarketView = { digits: number[]; times: number[]; decimals: number; lastTickAt: number };
+
+export type BuyParams = {
+    amount: number; basis: 'stake'; contract_type: string; currency: string; underlying_symbol: string;
+    duration: number; duration_unit: 't'; barrier?: string; barrier2?: string;
+};
+
+export interface RunnerIO {
+    now(): number;
+    market(symbol: string): MarketView | undefined;
+    /** Called for every new tick of any market. Returns the unsubscribe function. */
+    onTick(listener: (symbol: string) => void): () => void;
+    buy(params: BuyParams, maxPrice: number): Promise<{ contract_id: number | string; buy_price?: number }>;
+    onContractUpdate(listener: (contract: any) => void): () => void;
+    isClosed(contract: any): boolean;
+    digitAt(symbol: string, epochSeconds: number): number | null;
+    sleep(ms: number): Promise<void>;
+    /** Ask Deriv for a contract again (used when a closing update carried no exit tick). */
+    lookupContract?(contractId: number): Promise<any>;
+}
+
+const SETTLE_WAIT_MS = 90_000;
+const EXIT_LOOKUP_DELAYS_MS = [400, 1200, 2500, 4500];
+const num = (value: unknown, fallback = 0) => { const n = Number(value); return Number.isFinite(n) ? n : fallback; };
+const numOrNull = (value: unknown) => { const n = Number(value); return value !== undefined && value !== null && value !== '' && Number.isFinite(n) ? n : null; };
+const text = (value: unknown) => (value === undefined || value === null ? '' : String(value));
+const errorText = (error: unknown) => (error instanceof Error ? error.message : (error as { message?: string })?.message || String(error));
+
+export const configError = (cfg: RunConfig): string | null => {
+    if (!cfg.symbol) return 'Pick a market first.';
+    const entry = entryError(cfg.entry);
+    if (entry) return entry;
+    const prediction = cfg.side === 'auto' ? predictionError(cfg.family, 'both', cfg.prediction) : predictionError(cfg.family, cfg.side, cfg.prediction);
+    if (prediction) return prediction;
+    const offset = offsetError(cfg.family, cfg.offset);
+    if (offset) return offset;
+    if (!Number.isInteger(cfg.duration) || cfg.duration < 1 || cfg.duration > 10) return 'Ticks must be a whole number from 1 to 10.';
+    if (!(cfg.stake > 0)) return 'Enter a stake.';
+    if (!Number.isInteger(cfg.tradesPerEntry) || cfg.tradesPerEntry < 1 || cfg.tradesPerEntry > MAX_TRADES_PER_ENTRY) return `Trades per entry must be from 1 to ${MAX_TRADES_PER_ENTRY}.`;
+    return null;
+};
+
+export class DTraderRunner {
+    private running = false;
+    private stopped = false;
+    private cancelWait: (() => void) | null = null;
+    private buyMs = DEFAULT_BUY_MS;
+    private rowSeq = 0;
+    private batchSeq = 0;
+    totals: Totals = emptyTotals();
+
+    constructor(private readonly io: RunnerIO, private readonly emit: (event: RunnerEvent) => void) {}
+
+    get busy() { return this.running; }
+
+    resetTotals() {
+        this.totals = emptyTotals();
+        this.emit({ type: 'totals', totals: { ...this.totals } });
+    }
+
+    /** No further purchases. Contracts already bought keep being monitored until they settle. */
+    stop() {
+        if (!this.running) return;
+        this.stopped = true;
+        this.cancelWait?.();
+    }
+
+    private state(state: RunnerState, note: string) { this.emit({ type: 'state', state, note }); }
+    private log(textValue: string, level: 'info' | 'warn' | 'error' | 'success' = 'info') { this.emit({ type: 'journal', text: textValue, level }); }
+    private clock() { return new Date(this.io.now()).toLocaleTimeString(); }
+
+    async run(cfg: RunConfig): Promise<void> {
+        if (this.running) return;
+        const bad = configError(cfg);
+        if (bad) { this.log(bad, 'error'); this.state('idle', bad); return; }
+        this.running = true;
+        this.stopped = false;
+        let stake = cfg.stake;
+        let sessionPnl = 0;
+        let waitNextTick = false;
+        this.log(`Run started on ${cfg.symbol}. ${describeEntry(cfg.entry)}.`);
+        try {
+            while (!this.stopped) {
+                this.state('waiting', cfg.entry.mode === 'instant' ? 'Placing the next entry…' : `Waiting for the entry: ${describeEntry(cfg.entry)}.`);
+                const decidedAt = await this.waitForEntry(cfg, waitNextTick);
+                waitNextTick = false;
+                if (decidedAt === null || this.stopped) break;
+
+                const outcome = await this.burst(cfg, stake, decidedAt);
+                if (outcome.kind === 'missed') { waitNextTick = true; continue; }
+                if (outcome.kind === 'failed') break;
+                sessionPnl = round2(sessionPnl + outcome.profit);
+                stake = nextStake(cfg.stake, stake, outcome.profit, cfg.martingale);
+
+                const reason = stopReason(sessionPnl, cfg.takeProfit, cfg.stopLoss);
+                if (reason) { this.log(reason, 'warn'); break; }
+                if (cfg.mode === 'single') break;
+                if (stake !== cfg.stake) this.log(`Next stake ${stake.toFixed(2)} ${cfg.currency}.`);
+            }
+        } catch (error) {
+            this.log(`Run stopped by an error: ${errorText(error)}`, 'error');
+        } finally {
+            this.running = false;
+            this.cancelWait = null;
+            this.state('idle', this.stopped ? 'Stopped.' : 'Run finished.');
+            this.log(this.stopped ? 'Stopped. No more trades will be placed.' : 'Run finished.');
+        }
+    }
+
+    /** Resolves with the epoch (ms) of the tick that completed the entry, or null when stopped. */
+    private waitForEntry(cfg: RunConfig, forceNextTick: boolean): Promise<number | null> {
+        const latest = () => this.io.market(cfg.symbol);
+        if (cfg.entry.mode === 'instant' && !forceNextTick) {
+            const view = latest();
+            if (view?.times.length) return Promise.resolve(view.times[view.times.length - 1]);
+        }
+        return new Promise<number | null>(resolve => {
+            let off: (() => void) | null = null;
+            const done = (value: number | null) => { off?.(); this.cancelWait = null; resolve(value); };
+            this.cancelWait = () => done(null);
+            off = this.io.onTick(symbol => {
+                if (symbol !== cfg.symbol || this.stopped) return;
+                const view = latest();
+                if (!view || !view.times.length) return;
+                if (matchEntry(view.digits, cfg.entry)) done(view.times[view.times.length - 1]);
+            });
+            if (this.stopped) done(null);
+        });
+    }
+
+    private async burst(cfg: RunConfig, stake: number, decidedAt: number): Promise<{ kind: 'done'; profit: number } | { kind: 'missed' } | { kind: 'failed' }> {
+        const view = this.io.market(cfg.symbol);
+        if (!view) { this.log('No live ticks for this market yet.', 'error'); return { kind: 'failed' }; }
+        const side = cfg.side === 'auto' ? autoSide(cfg.family, view.digits, cfg.prediction) : cfg.side;
+        const legs: Leg[] = legsFor(cfg.family, side, cfg.prediction, cfg.offset);
+        const interval = tickIntervalMs(view.times);
+        const plan = planBurst({
+            legs: legs.length, perLeg: cfg.tradesPerEntry, intervalMs: interval,
+            elapsedMs: view.lastTickAt ? Math.max(0, this.io.now() - view.lastTickAt) : 0, perBuyMs: this.buyMs, guard: cfg.sameTickGuard,
+        });
+        const tooBig = exposureError(stake, plan.total);
+        if (tooBig) { this.log(tooBig, 'error'); return { kind: 'failed' }; }
+        // A newer tick printed since the entry was confirmed: this buy would enter a tick late, on a digit nobody checked.
+        if (tickMoved(view.times, decidedAt)) {
+            this.log('A new tick printed before the buy was sent. Nothing was bought. Checking the entry again.', 'warn');
+            return { kind: 'missed' };
+        }
+
+        const batch = (this.batchSeq += 1);
+        const owned = new Map<number, { rowId: number; leg: Leg }>();
+        const settled = new Set<number>();
+        const fills = new Map<number, Fill>();
+        const lookups: Array<Promise<void>> = [];
+        const rows = new Map<number, TradeRow>();
+        let batchProfit = 0;
+
+        const finishContract = (id: number, update: any) => {
+            const owner = owned.get(id);
+            if (!owner || settled.has(id)) return;
+            settled.add(id);
+            const profit = update.profit !== undefined && update.profit !== null && update.profit !== '' ? num(update.profit) : num(update.sold_for) - stake;
+            const decimals = view.decimals;
+            const exitDigit = exitDigitFrom(update, decimals, epoch => this.io.digitAt(cfg.symbol, epoch));
+            fills.set(id, {
+                contractId: id,
+                entryTime: numOrNull(update.entry_tick_time ?? update.entry_spot_time),
+                exitTime: numOrNull(update.exit_tick_time ?? update.exit_spot_time ?? update.sell_spot_time),
+                exitDigit,
+            });
+            batchProfit = round2(batchProfit + profit);
+            this.totals = {
+                ...this.totals,
+                payout: round2(this.totals.payout + Math.max(0, stake + profit)),
+                pnl: round2(this.totals.pnl + profit),
+                won: this.totals.won + (profit > 0 ? 1 : 0),
+                lost: this.totals.lost + (profit > 0 ? 0 : 1),
+            };
+            const row: TradeRow = {
+                ...(rows.get(id) as TradeRow),
+                entrySpot: text(update.entry_tick_display_value ?? update.entry_spot_display_value ?? update.entry_tick ?? update.entry_spot),
+                exitSpot: text(update.exit_tick_display_value ?? update.exit_spot_display_value ?? update.sell_spot_display_value ?? update.exit_tick ?? update.sell_spot),
+                exitDigit, profit, state: profit > 0 ? 'won' : 'lost',
+            };
+            rows.set(id, row);
+            this.emit({ type: 'trade', row });
+            this.emit({ type: 'totals', totals: { ...this.totals } });
+            if (exitDigit === null) lookups.push(this.resolveExitDigit(cfg, id, rows, fills, view.decimals));
+        };
+
+        const off = this.io.onContractUpdate(update => {
+            const id = Math.trunc(Number(update?.contract_id));
+            if (owned.has(id) && !settled.has(id) && this.io.isClosed(update)) finishContract(id, update);
+        });
+
+        try {
+            this.state('placing', `Placing ${plan.total} trade${plan.total === 1 ? '' : 's'} together…`);
+            if (plan.note) this.log(plan.note, 'warn');
+            this.log(`Entry met on tick ${new Date(decidedAt).toLocaleTimeString()}. Sending ${plan.total} × ${legs.map(l => l.label).join(' + ')} at ${stake.toFixed(2)} ${cfg.currency} each.`);
+
+            const arrivals: number[] = [];
+            const sends: Array<Promise<{ ok: true } | { ok: false; leg: Leg; error: unknown }>> = [];
+            for (const leg of legs) {
+                for (let i = 0; i < plan.perLeg; i += 1) {
+                    const params: BuyParams = {
+                        amount: stake, basis: 'stake', contract_type: leg.contract, currency: cfg.currency, underlying_symbol: cfg.symbol,
+                        duration: cfg.duration, duration_unit: 't', ...(leg.barrier !== undefined ? { barrier: leg.barrier } : {}),
+                        ...(leg.barrier2 !== undefined ? { barrier2: leg.barrier2 } : {}),
+                    };
+                    sends.push(this.io.buy(params, stake).then(bought => {
+                        arrivals.push(this.io.now());
+                        const id = Math.trunc(Number(bought.contract_id));
+                        const rowId = (this.rowSeq += 1);
+                        owned.set(id, { rowId, leg });
+                        this.totals = { ...this.totals, stake: round2(this.totals.stake + stake), contracts: this.totals.contracts + 1 };
+                        const row: TradeRow = { id: rowId, batch, time: this.clock(), label: leg.label, stake, entrySpot: '', exitSpot: '', exitDigit: null, profit: 0, state: 'open' };
+                        rows.set(id, row);
+                        this.emit({ type: 'trade', row });
+                        this.emit({ type: 'totals', totals: { ...this.totals } });
+                        return { ok: true as const };
+                    }, error => ({ ok: false as const, leg, error })));
+                }
+            }
+            const results = await Promise.all(sends);
+            this.buyMs = learnPace(this.buyMs, arrivals);
+
+            const failures = results.filter((r): r is { ok: false; leg: Leg; error: unknown } => !r.ok);
+            failures.forEach(failure => {
+                this.totals = { ...this.totals, failed: this.totals.failed + 1 };
+                this.emit({
+                    type: 'trade',
+                    row: { id: (this.rowSeq += 1), batch, time: this.clock(), label: failure.leg.label, stake, entrySpot: '', exitSpot: '', exitDigit: null, profit: 0, state: 'failed', note: errorText(failure.error) },
+                });
+            });
+            if (failures.length) {
+                this.emit({ type: 'totals', totals: { ...this.totals } });
+                this.log(`${failures.length} of ${plan.total} purchases failed: ${errorText(failures[0].error)}`, 'error');
+            }
+            if (owned.size === 0) return { kind: 'failed' };
+
+            this.state('settling', `Placed ${owned.size}/${plan.total}. Waiting for them to settle…`);
+            const deadline = this.io.now() + SETTLE_WAIT_MS;
+            while (settled.size < owned.size && this.io.now() < deadline) await this.io.sleep(250);
+            await Promise.allSettled(lookups);
+
+            const list = [...fills.values()];
+            const report = syncReport(list);
+            const times = view.times;
+            const note = [settlementText(list), slipText(list.map(fill => entrySlip(times, decidedAt, fill.entryTime)))].filter(Boolean).join(' ');
+            this.emit({ type: 'sync', text: note, ok: list.length ? report.synced : null });
+            const open = owned.size - settled.size;
+            if (open > 0) this.log(`${open} contract(s) are still open. They stay on your Deriv account; check the statement.`, 'warn');
+            else this.log(`Batch ${batch}: ${owned.size} settled · P/L ${batchProfit.toFixed(2)} ${cfg.currency}. ${note}`, report.synced ? 'success' : 'warn');
+            return { kind: 'done', profit: batchProfit };
+        } finally {
+            off();
+        }
+    }
+
+    /** The closing update did not carry the exit tick yet: ask Deriv again and re-read the tick history until it shows. */
+    private async resolveExitDigit(cfg: RunConfig, id: number, rows: Map<number, TradeRow>, fills: Map<number, Fill>, decimals: number) {
+        for (const delay of EXIT_LOOKUP_DELAYS_MS) {
+            await this.io.sleep(delay);
+            let digit: number | null = null;
+            try {
+                const update = await this.io.lookupContract?.(id);
+                if (update) digit = exitDigitFrom(update, decimals, epoch => this.io.digitAt(cfg.symbol, epoch));
+                const fill = fills.get(id);
+                if (digit === null && fill?.exitTime) digit = this.io.digitAt(cfg.symbol, fill.exitTime);
+                if (digit !== null && update) {
+                    const row = rows.get(id);
+                    if (row) {
+                        const next = { ...row, exitDigit: digit, exitSpot: row.exitSpot || text(update.exit_tick_display_value ?? update.exit_spot_display_value ?? '') };
+                        rows.set(id, next);
+                        this.emit({ type: 'trade', row: next });
+                    }
+                    if (fill) fills.set(id, { ...fill, exitDigit: digit, exitTime: fill.exitTime ?? numOrNull(update.exit_tick_time ?? update.exit_spot_time) });
+                    return;
+                }
+            } catch { /* try the next delay */ }
+        }
+    }
+}

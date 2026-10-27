@@ -281,7 +281,6 @@ export const ProAIPage = () => {
 
 export const SourceAnalysisToolsPage = () => <div className='prodb-import-page prodb-iframe-page'><PageHeader eyebrow='IMPORTED · ANALYSISTOOLS' title='Analysis Tools Hub' subtitle='The source Analysis Tool page is preserved inside the new premium shell.' /><iframe src='https://api.binarytool.site' title='Analysis Tools' allow='clipboard-read; clipboard-write' /></div>;
 
-export const DTraderPage = () => <div className='prodb-import-page prodb-iframe-page'><PageHeader eyebrow='IMPORTED · DTRADER' title='DTrader Charts' subtitle='The source DTrader page is preserved with the Deriv chart workspace inside the premium navigation.' /><iframe src='https://charts.deriv.com/deriv' title='Deriv DTrader charts' allow='fullscreen' /></div>;
 
 export const ImportedBestBotsSource = [
     { tag: 'APEX', title: 'grffy v1', file: 'grffy-v1.xml', description: 'Apex Sentinel bundled strategy, ready for direct Bot Builder loading.' },

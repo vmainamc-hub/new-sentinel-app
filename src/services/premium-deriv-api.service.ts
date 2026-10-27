@@ -405,6 +405,7 @@ export class PremiumDerivApiService {
         duration: number;
         duration_unit: 'd' | 'm' | 's' | 'h' | 't';
         barrier?: string;
+        barrier2?: string;
     }, maximumPrice: number) {
         const clean = Object.fromEntries(Object.entries(parameters).filter(([, value]) => value !== '' && value !== undefined && value !== null));
         const result = await this.request({ buy: '1', price: Math.max(0, Number(maximumPrice) || 0), parameters: clean });

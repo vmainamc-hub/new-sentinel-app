@@ -7,7 +7,6 @@ import { DBOT_TABS } from '@/constants/bot-contents';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
 import AutoTradesPage from '@/pages/auto-trades/auto-trades';
-import ManualTradingPage from '@/pages/manual-trading';
 import TradingViewPage from '@/pages/tradingview';
 import { OAuthTokenExchangeService } from '@/services/oauth-token-exchange.service';
 import BottomStatusBar from './BottomStatusBar';
@@ -31,7 +30,6 @@ import {
     AdvancedManualTradingPage,
     AutoTraderPage,
     BotIdeasPage,
-    DTraderPage,
     ProAIPage,
     QuickBotPage,
     SignalAIPage,
@@ -75,6 +73,7 @@ const SentinelAiBridge = lazy(() => import('@/pages/sentinel-ai/sentinel-ai-brid
 const SignalZonePage = lazy(() => import('./signal-zone/SignalZonePage'));
 // Sixfold carries its own simulator and crowd model, so it also loads on demand.
 const SixfoldPage = lazy(() => import('./sixfold/SixfoldPage'));
+const DTraderPage = lazy(() => import('./dtrader/DTraderPage'));
 
 const validSections: PremiumSection[] = [
     'dashboard', 'bot_ideas', 'quick_bot', 'bot_builder', 'free_bots', 'signal_ai', 'auto_trader', 'signal_zone', 'sentinel_ai',
@@ -225,7 +224,8 @@ const PremiumLayout = observer(() => {
             case 'auto_trader': return <AutoTradesPage />;
             case 'signal_zone': return <Suspense fallback={<PremiumLoader />}><SignalZonePage openBotBuilder={openBotBuilder} /></Suspense>;
             case 'sentinel_ai': return <Suspense fallback={<PremiumLoader />}><SentinelAiPage /></Suspense>;
-            case 'manual_trading': return <ManualTradingPage />;
+            // The nav's "DTrader" tab. The previous page (src/pages/manual-trading) is left in the repo, unused, so it can be restored.
+            case 'manual_trading': return <Suspense fallback={<PremiumLoader />}><DTraderPage /></Suspense>;
             case 'bulk_trader': return <BulkTraderPage />;
             case 'batch_trader': return <BatchTraderPage />;
             case 'copy_trading': return <PatCopyTradingPage />;
@@ -236,7 +236,7 @@ const PremiumLayout = observer(() => {
             case 'analysis_hub': return <SourceAnalysisToolsPage />;
             case 'charts': return <ChartsPage />;
             case 'tradingview': return <TradingViewPage />;
-            case 'dtrader': return <DTraderPage />;
+            case 'dtrader': return <Suspense fallback={<PremiumLoader />}><DTraderPage /></Suspense>;
             case 'ai_bots': return <AIBotsPage />;
             case 'digits_analysis': return <DigitsAnalysisPage openBotBuilder={openBotBuilder} />;
             case 'sixfold': return <Suspense fallback={<PremiumLoader />}><SixfoldPage openBotBuilder={openBotBuilder} /></Suspense>;
