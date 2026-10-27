@@ -1,204 +1,494 @@
-import { useEffect, useMemo, useState } from 'react';
-import { type BotConfig, type Contract, contractLabel, DEFAULT_BOT, isValidContract, winProbability } from './bot';
-import { simulateBot } from './bot';
+// SIXFOLD: autonomous digit scanner and trader.
+//
+// Scanner  : press Run and Sixfold scans every market, arms the best eligible contract, buys on its entry digit and
+//            repeats, one trade at a time. Trades appear in the general Transactions panel.
+// Board    : a heat map of every market x contract with false-discovery control.
+// Contract : one contract on one market: charts, the six traders, the ladder and the edge test.
+// Lab      : does anything beyond chance exist? Uniformity, dependence, label calibration and a bankroll simulation.
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { bankrollSim, calibrateLabels, contractRuns, rollingRate, structureTable, transitionTest, uniformityTest } from './analysis';
+import { sentinelAgreement } from './agree';
+import { type BotConfig, type Contract, contractKey, contractLabel, DEFAULT_BOT, equityCurve, isValidContract, winProbability } from './bot';
+import { bestPerMarket, type Cell, eligibility, SCAN_CONTRACTS } from './scanner';
+import { DigitBars, Hexagon, LineChart, Radar, Sparkline, TransitionHeat } from './charts';
 import { ARCHETYPE_TEXT, type CrowdPosition, DEFAULT_CROWD, SENSITIVITY, type Sensitivity } from './crowd';
-import { crowdMap } from './crowd';
-import { buildDossier, ladder } from './dossier';
+import { buildDossier } from './dossier';
 import type { ContractSide } from './engine';
-import { marketName, MARKETS, useFeed } from './feed';
-import {
-    isValidBarrier,
-    loadSignalIntoRecoverBot,
-    prefetchRecoverBots,
-    RECOVER_BOTS,
-    type RecoverContract,
-} from './recover-bots';
-import { assessRun, STATE_TEXT, type ViabilityState } from './viability';
+import { marketName, MARKETS, shortName } from './feed';
+import { DEFAULT_SETTINGS, type EntryRule, type Selectivity, type SixfoldSettings } from './money';
+import type { Phase } from './runner';
+import { sixfoldRunner } from './runner-instance';
+import { STATE_TEXT, type ViabilityState } from './viability';
+import { useFeed } from './use-feed';
+import { useSixfold } from './use-sixfold';
+import { useSentinelAi } from '@/pages/sentinel-ai/use-sentinel-ai';
 import './sixfold.scss';
 
+type Tab = 'scanner' | 'board' | 'contract' | 'lab';
+const TABS: ReadonlyArray<readonly [Tab, string]> = [
+    ['scanner', 'Scanner'],
+    ['board', 'Board'],
+    ['contract', 'Contract'],
+    ['lab', 'Lab'],
+];
 const SIDES: ContractSide[] = ['OVER', 'UNDER', 'EVEN', 'ODD', 'MATCHES', 'DIFFERS'];
-const pct = (x: number | null, d = 0) => (x === null ? '—' : `${(x * 100).toFixed(d)}%`);
-const pill = (s: ViabilityState) => <span className={`vstate vs-${s.toLowerCase()}`}>{STATE_TEXT[s].label}</span>;
 
-const SixfoldPage = ({ openBotBuilder }: { openBotBuilder: () => void }) => {
+const pct = (x: number | null, d = 0) => (x === null ? '—' : `${(x * 100).toFixed(d)}%`);
+const pts = (x: number | null, d = 1) => (x === null ? '—' : `${x >= 0 ? '+' : ''}${x.toFixed(d)}`);
+const money = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(2)}`;
+const pill = (s: ViabilityState) => <span className={`sf-state vs-${s.toLowerCase()}`}>{STATE_TEXT[s].label}</span>;
+const shortContract = (c: Contract) => (c.side === 'OVER' ? `O${c.param}` : c.side === 'UNDER' ? `U${c.param}` : c.side === 'EVEN' ? 'Ev' : 'Od');
+
+const PHASE_TEXT: Record<Phase, { title: string; sub: string; tone: 'idle' | 'scan' | 'armed' | 'trade' | 'warn' }> = {
+    idle: { title: 'READY', sub: 'Press Run', tone: 'idle' },
+    connecting: { title: 'CONNECTING', sub: 'Market feed', tone: 'warn' },
+    scanning: { title: 'SCANNING', sub: 'All markets', tone: 'scan' },
+    armed: { title: 'ARMED', sub: 'Waiting for entry', tone: 'armed' },
+    buying: { title: 'BUYING', sub: 'Placing contract', tone: 'trade' },
+    settling: { title: 'IN TRADE', sub: 'Awaiting result', tone: 'trade' },
+    cooling: { title: 'NEXT', sub: 'Looking again', tone: 'scan' },
+};
+
+// ---------- small controls ----------
+
+function Num({ label, value, onCommit, hint }: { label: string; value: number; onCommit: (n: number) => void; hint?: string }) {
+    const [text, setText] = useState(String(value));
+    useEffect(() => setText(String(value)), [value]);
+    const commit = () => {
+        const n = Number(text);
+        if (text.trim() !== '' && Number.isFinite(n)) onCommit(n);
+        else setText(String(value));
+    };
+    return (
+        <label className='sf-fld'>
+            <span>{label}</span>
+            <input
+                inputMode='decimal'
+                value={text}
+                onChange={e => setText(e.target.value)}
+                onBlur={commit}
+                onKeyDown={e => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            />
+            {hint && <small>{hint}</small>}
+        </label>
+    );
+}
+
+function Switch({ on, onChange, title, sub }: { on: boolean; onChange: (v: boolean) => void; title: string; sub: string }) {
+    return (
+        <button type='button' className={`sf-switch ${on ? 'on' : ''}`} role='switch' aria-checked={on} onClick={() => onChange(!on)}>
+            <span>
+                <b>{title}</b>
+                <small>{sub}</small>
+            </span>
+            <i aria-hidden='true' />
+        </button>
+    );
+}
+
+function Seg<T extends string>({ value, options, onChange, label }: { value: T; options: ReadonlyArray<readonly [T, string]>; onChange: (v: T) => void; label: string }) {
+    return (
+        <div className='sf-seg' role='radiogroup' aria-label={label}>
+            {options.map(([v, text]) => (
+                <button key={v} type='button' role='radio' aria-checked={value === v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>
+                    {text}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+const Panel = ({ eyebrow, title, children, aside }: { eyebrow?: string; title?: string; children: ReactNode; aside?: ReactNode }) => (
+    <section className='sf-panel'>
+        {(eyebrow || title || aside) && (
+            <header>
+                <div>
+                    {eyebrow && <div className='eyebrow'>{eyebrow}</div>}
+                    {title && <h2>{title}</h2>}
+                </div>
+                {aside}
+            </header>
+        )}
+        {children}
+    </section>
+);
+
+const Stat = ({ label, value, tone }: { label: string; value: ReactNode; tone?: 'pos' | 'neg' }) => (
+    <div className={`sf-stat ${tone ?? ''}`}>
+        <small>{label}</small>
+        <b>{value}</b>
+    </div>
+);
+
+// ---------- page ----------
+
+const SixfoldPage = () => {
     const feed = useFeed();
-    useEffect(() => {
-        prefetchRecoverBots();
-    }, []);
-    const [tab, setTab] = useState<'board' | 'desk'>('board');
+    const sx = useSixfold(true);
+    const [tab, setTab] = useState<Tab>('scanner');
     const [market, setMarket] = useState('1HZ10V');
     const [contract, setContract] = useState<Contract>({ side: 'OVER', param: 2 });
-    const [bot, setBot] = useState<BotConfig>(DEFAULT_BOT);
-    const [sens, setSens] = useState<Sensitivity>('standard');
     const [importText, setImportText] = useState('');
-    const crowdCfg = useMemo(() => ({ ...DEFAULT_CROWD, ...SENSITIVITY[sens] }), [sens]);
-    const digits = feed.series[market] ?? [];
 
     const open = (m: string, c?: Contract) => {
         setMarket(m);
         if (c) setContract(c);
-        setTab('desk');
+        setTab('contract');
     };
 
     return (
         <div className='sixfold sf'>
             <header className='sf-top'>
-                <b className='sf-brand'>SIXFOLD</b>
-                <nav>
-                    {(
-                        [
-                            ['board', 'Market board'],
-                            ['desk', 'Contract desk'],
-                        ] as const
-                    ).map(([k, l]) => (
+                <b className='sf-brand'>
+                    SIXFOLD<small>AUTO</small>
+                </b>
+                <nav aria-label='Sixfold sections'>
+                    {TABS.map(([k, l]) => (
                         <button key={k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>
                             {l}
                         </button>
                     ))}
                 </nav>
-                <span className={`sf-feed ${feed.status}`}>
-                    {feed.mode === 'demo'
-                        ? 'DEMO DATA'
-                        : feed.mode === 'import'
-                          ? 'IMPORTED'
-                          : feed.status.toUpperCase()}
+                <span className={`sf-feed ${feed.mode === 'live' ? feed.status : 'warn'}`}>
+                    {feed.mode === 'demo' ? 'DEMO DATA' : feed.mode === 'import' ? 'IMPORTED' : feed.status.toUpperCase()}
                 </span>
             </header>
 
             <section className='sf-feedbar'>
-                <button className='btn primary' onClick={feed.connect}>
+                <button className='sf-btn primary' onClick={feed.connect} disabled={sx.running}>
                     Connect live
                 </button>
-                <button className='btn secondary' onClick={feed.useDemo}>
+                <button className='sf-btn' onClick={feed.useDemo} disabled={sx.running}>
                     Demo data
                 </button>
-                {feed.error && (
-                    <div className='error-banner'>
-                        <span>{feed.error}</span>
-                    </div>
-                )}
+                {feed.error && <span className='sf-msg bad'>{feed.error}</span>}
                 {feed.mode === 'demo' && (
-                    <div className='notice'>
-                        <span>
-                            Demo data is random digits made for testing. Nothing on this screen about it says anything
-                            about a real market.
-                        </span>
-                    </div>
+                    <span className='sf-msg warn'>Demo data is random digits made for testing. Run connects to the live feed first.</span>
                 )}
             </section>
 
-            {tab === 'board' && <Board series={feed.series} bot={bot} cfg={crowdCfg} open={open} />}
-            {tab === 'desk' && (
-                <Desk
-                    digits={digits}
+            {tab === 'scanner' && <ScannerTab sx={sx} openContract={open} />}
+            {tab === 'board' && <BoardTab sx={sx} open={open} />}
+            {tab === 'contract' && (
+                <ContractTab
+                    series={feed.series}
                     market={market}
                     setMarket={setMarket}
                     contract={contract}
                     setContract={setContract}
-                    bot={bot}
-                    setBot={setBot}
-                    sens={sens}
-                    setSens={setSens}
-                    cfg={crowdCfg}
+                    settings={sx.settings}
                     importText={importText}
                     setImportText={setImportText}
                     onImport={() => feed.importDigits(market, importText)}
-                    openBotBuilder={openBotBuilder}
                 />
             )}
+            {tab === 'lab' && <LabTab series={feed.series} market={market} setMarket={setMarket} contract={contract} setContract={setContract} settings={sx.settings} />}
+
             <footer className='sf-foot'>
-                Sixfold reads patterns in past digits. It cannot see other traders, and Deriv digits are generated
-                randomly, so “no edge” is a normal and honest result. Not financial advice.
+                Sixfold reads patterns in past digits. Deriv digits are generated randomly, so “no edge” is a normal and honest result, and every contract
+                carries a payout margin: over many trades the expected result is a loss, whatever the scanner picks. Martingale makes each loss bigger
+                and cannot change that. Test on a demo account first. Not financial advice.
             </footer>
         </div>
     );
 };
 
-function Board({
-    series,
-    bot,
-    cfg,
-    open,
-}: {
-    series: Record<string, number[]>;
-    bot: BotConfig;
-    cfg: typeof DEFAULT_CROWD;
-    open: (m: string, c?: Contract) => void;
-}) {
-    const rows = useMemo(
-        () =>
-            MARKETS.map(([sym, name]) => {
-                const d = series[sym] ?? [];
-                const o2 = assessRun(simulateBot(d, { side: 'OVER', param: 2 }, bot)),
-                    u7 = assessRun(simulateBot(d, { side: 'UNDER', param: 7 }, bot));
-                const lad = d.length
-                    ? ladder(d, 'OVER', bot)
-                          .filter(r => r.score !== null && r.assessment.trades >= 20)
-                          .sort((a, b) => b.score! - a.score!)[0]
-                    : undefined;
-                return { sym, name, n: d.length, last: d.at(-1), o2, u7, best: lad, crowd: crowdMap(d, cfg) };
-            }),
-        [series, bot, cfg]
-    );
+// ---------- scanner ----------
+
+function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; openContract: (m: string, c?: Contract) => void }) {
+    const set = (patch: Partial<SixfoldSettings>) => sixfoldRunner.updateSettings(patch);
+    const s = sx.settings;
+    const phase = PHASE_TEXT[sx.phase];
+    const best = useMemo(() => (sx.scan ? bestPerMarket(sx.scan, s.markets) : {}), [sx.scan, s.markets]);
+    const dial = s.markets.map(symbol => ({
+        symbol,
+        best: best[symbol],
+        eligible: best[symbol] ? eligibility(best[symbol]!, s.selectivity).ok : false,
+        significant: Boolean(best[symbol]?.significant),
+        quarantined: sx.quarantined.includes(symbol),
+    }));
+    const centre = sx.armed ? sx.armed.label : phase.title;
+    const sub = sx.armed ? shortName(sx.armed.symbol) : phase.sub;
+    const toggleMarket = (symbol: string) =>
+        set({ markets: s.markets.includes(symbol) ? s.markets.filter(m => m !== symbol) : [...s.markets, symbol] });
+    const summary = sx.scan?.summary;
+
     return (
-        <main className='sf-board'>
-            <h1>Where is each market right now?</h1>
-            <p className='lede'>
-                Click a market to see its contracts. Each card shows how Over 2 and Under 7 have been doing for a bot
-                that trades them the way DBot does, and where the crowd is.
-            </p>
-            <div className='sf-cards'>
-                {rows.map(r => (
-                    <article key={r.sym} className='mcard'>
-                        <header>
-                            <b>{r.name}</b>
-                            <span className='dg'>{r.last ?? '–'}</span>
-                        </header>
-                        {r.n === 0 ? (
-                            <p className='muted'>No ticks yet.</p>
-                        ) : (
-                            <>
-                                <div className='mrow'>
-                                    <button onClick={() => open(r.sym, { side: 'OVER', param: 2 })}>Over 2</button>
-                                    {pill(r.o2.state)}
-                                    <small>{r.o2.trades} trades</small>
-                                </div>
-                                <div className='mrow'>
-                                    <button onClick={() => open(r.sym, { side: 'UNDER', param: 7 })}>Under 7</button>
-                                    {pill(r.u7.state)}
-                                    <small>{r.u7.trades} trades</small>
-                                </div>
-                                {r.best && (
-                                    <p className='muted'>
-                                        Healthiest Over lately: <b>{r.best.label}</b>
-                                    </p>
-                                )}
-                                <p className='crowdline'>{r.crowd.headline}</p>
-                            </>
-                        )}
-                        <button className='btn subtle' onClick={() => open(r.sym)}>
-                            Open desk →
+        <main className='sf-scanner'>
+            <Panel eyebrow='SCANNER SETTINGS' title='Configure your trade'>
+                <div className='sf-grid3'>
+                    <Num label='Stake' value={s.stake} onCommit={n => set({ stake: n })} />
+                    <Num label='TP' value={s.takeProfit} onCommit={n => set({ takeProfit: n })} hint='0 = off' />
+                    <Num label='SL' value={s.stopLoss} onCommit={n => set({ stopLoss: n })} hint='0 = off' />
+                </div>
+                <Switch on={s.martingale} onChange={v => set({ martingale: v })} title='Martingale' sub='Auto recovery after a loss' />
+                {s.martingale && (
+                    <div className='sf-sub'>
+                        <div className='sf-grid2'>
+                            <Num label='Multiplier' value={s.multiplier} onCommit={n => set({ multiplier: n })} />
+                            <Num label='Max steps' value={s.maxSteps} onCommit={n => set({ maxSteps: n })} hint='0 = no limit' />
+                        </div>
+                        <Num label='Max stake' value={s.maxStake} onCommit={n => set({ maxStake: n })} hint='0 = no cap' />
+                    </div>
+                )}
+                <Switch on={s.recovery} onChange={v => set({ recovery: v })} title='Recovery barrier' sub='After a loss, trade the recovery barrier' />
+                {s.recovery && (
+                    <div className='sf-sub sf-grid2'>
+                        <Num label='Over' value={s.recoveryOver} onCommit={n => set({ recoveryOver: n })} />
+                        <Num label='Under' value={s.recoveryUnder} onCommit={n => set({ recoveryUnder: n })} />
+                    </div>
+                )}
+                <div className='sf-field'>
+                    <span>Selectivity</span>
+                    <Seg<Selectivity>
+                        label='Selectivity'
+                        value={s.selectivity}
+                        onChange={v => set({ selectivity: v })}
+                        options={[
+                            ['strict', 'Strict'],
+                            ['balanced', 'Balanced'],
+                            ['active', 'Active'],
+                        ]}
+                    />
+                    <small>
+                        {s.selectivity === 'strict'
+                            ? 'Only contracts that stay significant after correcting for every cell scanned.'
+                            : s.selectivity === 'balanced'
+                              ? 'Viable contracts with a healthy score.'
+                              : 'Best available contract, as long as it is not clearly under water.'}
+                    </small>
+                </div>
+                <div className='sf-field'>
+                    <span>Entry</span>
+                    <Seg<EntryRule>
+                        label='Entry'
+                        value={s.entry}
+                        onChange={v => set({ entry: v })}
+                        options={[
+                            ['SETUP', 'On a setup digit'],
+                            ['ANY', 'Any tick'],
+                        ]}
+                    />
+                </div>
+                <div className='sf-grid3'>
+                    <Num label='Length (ticks)' value={s.duration} onCommit={n => set({ duration: n })} />
+                    <Num label='Wait (s)' value={s.waitSeconds} onCommit={n => set({ waitSeconds: n })} hint='for entry' />
+                    <Num label='Loss streak stop' value={s.maxConsecutiveLosses} onCommit={n => set({ maxConsecutiveLosses: n })} hint='0 = off' />
+                </div>
+                <div className='sf-field'>
+                    <span>Markets ({s.markets.length})</span>
+                    <div className='sf-chips'>
+                        {MARKETS.map(([sym]) => (
+                            <button
+                                key={sym}
+                                type='button'
+                                className={s.markets.includes(sym) ? 'on' : ''}
+                                aria-pressed={s.markets.includes(sym)}
+                                onClick={() => toggleMarket(sym)}
+                                title={marketName(sym)}
+                            >
+                                {shortName(sym)}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <button type='button' className='sf-btn subtle' onClick={() => set({ ...DEFAULT_SETTINGS })} disabled={sx.running}>
+                    Reset to defaults
+                </button>
+            </Panel>
+
+            <Panel eyebrow='LIVE MARKET SCAN'>
+                <div className='sf-dial'>
+                    <Radar markets={dial} armedSymbol={sx.armed?.symbol ?? null} running={sx.running} center={centre} sub={sub} tone={phase.tone} />
+                    <div className='sf-dial-title'>{sx.armed ? `${marketName(sx.armed.symbol)}` : sx.running ? 'Scanning all markets' : 'All markets, one scanner'}</div>
+                    <div className={`sf-phase t-${phase.tone}`}>
+                        {sx.armed
+                            ? `${sx.armed.label} · score ${sx.armed.score} · ${s.entry === 'ANY' ? 'buying now' : `waiting for digit ${sx.armed.entryDigits.join(' / ')}`}`
+                            : sx.running
+                              ? sx.phase === 'connecting'
+                                  ? 'Connecting to the market feed…'
+                                  : 'Looking for an eligible contract…'
+                              : sx.stopReason ?? `${sx.readyMarkets} of ${s.markets.length} markets ready`}
+                    </div>
+                    {sx.running ? (
+                        <button className='sf-run stop' onClick={() => sixfoldRunner.stop('Stopped by you')}>
+                            Stop
                         </button>
-                    </article>
-                ))}
+                    ) : (
+                        <button className='sf-run' onClick={() => sixfoldRunner.start()}>
+                            Run
+                        </button>
+                    )}
+                    {sx.lastError && <div className='sf-msg bad'>{sx.lastError}</div>}
+                    <div className='sf-stats'>
+                        <Stat label='Trades' value={sx.session.trades} />
+                        <Stat label='Won / lost' value={`${sx.session.wins} / ${sx.session.losses}`} />
+                        <Stat label='Session P/L' value={money(sx.session.pnl)} tone={sx.session.pnl > 0 ? 'pos' : sx.session.pnl < 0 ? 'neg' : undefined} />
+                        <Stat label='Next stake' value={sx.session.currentStake.toFixed(2)} />
+                        <Stat label='Max drawdown' value={sx.session.maxDrawdown.toFixed(2)} />
+                    </div>
+                    <p className='sf-note'>Every contract Sixfold buys appears in the Transactions panel and the Run Panel summary, and Stop there ends the session too.</p>
+                </div>
+            </Panel>
+
+            <div className='sf-stack'>
+                <Panel eyebrow='SCAN HEALTH' title={summary ? `${summary.significant} significant of ${summary.tested} tested` : 'Waiting for data'}>
+                    {summary ? (
+                        <p className='sf-lede'>
+                            {summary.hotAtFivePct} contracts look unusually good at the 5% level, but chance alone is expected to produce about{' '}
+                            <b>{summary.expectedByChance}</b> of those across {summary.tested} tests. After correcting for that, <b>{summary.significant}</b> stay significant.{' '}
+                            {summary.significant === 0 ? 'Nothing here stands out from luck, which is the usual result.' : 'Treat those as leads, not forecasts.'}
+                        </p>
+                    ) : (
+                        <p className='sf-lede'>Connect live (or use demo data) to scan.</p>
+                    )}
+                </Panel>
+                <Panel eyebrow='NEXT IN LINE' title='Top candidates'>
+                    {sx.queue.length === 0 ? (
+                        <p className='sf-muted'>No scanned contracts yet.</p>
+                    ) : (
+                        <div className='sf-queue' role='table' aria-label='Top candidates'>
+                            {sx.queue.map(({ cell, ok, reason }) => (
+                                <button
+                                    key={`${cell.symbol}|${cell.key}`}
+                                    className={`row ${ok ? 'ok' : ''} ${sx.armed?.symbol === cell.symbol && sx.armed.cellKey === cell.key ? 'armed' : ''}`}
+                                    onClick={() => openContract(cell.symbol, cell.contract)}
+                                    title={reason}
+                                >
+                                    <b>
+                                        {shortName(cell.symbol)} · {cell.label}
+                                    </b>
+                                    <span className='bar'>
+                                        <i style={{ width: `${cell.score}%` }} />
+                                    </span>
+                                    <span className='n'>{cell.score}</span>
+                                    <span className='n'>{pts(cell.edgePts)}</span>
+                                    {cell.significant ? <em>sig</em> : ok ? <em className='soft'>ok</em> : <small>{reason}</small>}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </Panel>
             </div>
+
+            <Panel eyebrow='THIS SESSION' title='Trades'>
+                {sx.trades.length === 0 ? (
+                    <p className='sf-muted'>No trades yet.</p>
+                ) : (
+                    <ul className='sf-trades'>
+                        {sx.trades.slice(0, 12).map(t => (
+                            <li key={t.contractId} className={t.status}>
+                                <b>{t.name}</b>
+                                <span>
+                                    {t.label}
+                                    {t.recovery ? ' ↺' : ''}
+                                </span>
+                                <span>stake {t.stake.toFixed(2)}</span>
+                                <em>{t.profit === null ? (t.status === 'open' ? 'open' : '?') : money(t.profit)}</em>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </Panel>
+            <Panel eyebrow='ACTIVITY' title='What Sixfold is doing'>
+                <ul className='sf-log'>
+                    {sx.log.slice(0, 14).map(l => (
+                        <li key={l.id} className={l.kind}>
+                            <time>{new Date(l.at).toLocaleTimeString([], { hour12: false })}</time>
+                            <span>{l.text}</span>
+                        </li>
+                    ))}
+                    {sx.log.length === 0 && <li className='info'>Nothing yet. Press Run.</li>}
+                </ul>
+            </Panel>
         </main>
     );
 }
 
+// ---------- board ----------
+
+function heatTier(c: Cell | undefined): string {
+    if (!c || c.edgePts === null) return 'na';
+    if (c.significant) return 'sig';
+    if (c.edgePts >= 3) return 'hot';
+    if (c.edgePts >= 0) return 'up';
+    if (c.edgePts >= -3) return 'flat';
+    return 'down';
+}
+
+function BoardTab({ sx, open }: { sx: ReturnType<typeof useSixfold>; open: (m: string, c?: Contract) => void }) {
+    const scan = sx.scan;
+    const rows = useMemo(() => {
+        const symbols = MARKETS.map(m => m[0]);
+        return symbols
+            .map(sym => {
+                const cells = scan?.bySymbol[sym] ?? [];
+                const bestCell = cells.filter(c => c.executable).sort((a, b) => b.score - a.score)[0];
+                return { sym, cells, best: bestCell };
+            })
+            .sort((a, b) => (b.best?.score ?? -1) - (a.best?.score ?? -1));
+    }, [scan]);
+    return (
+        <main className='sf-board'>
+            <Panel
+                eyebrow='MARKET BOARD'
+                title='Every market, every contract'
+                aside={
+                    <div className='sf-legend' aria-label='Legend'>
+                        <i className='sig' /> significant <i className='hot' /> ≥ +3 pts <i className='up' /> above break-even <i className='flat' /> slightly under <i className='down' /> well under
+                    </div>
+                }
+            >
+                <p className='sf-lede'>
+                    Colour = recent win rate minus break-even, in points, for a bot that trades the contract the way DBot does. A dot means it is still significant
+                    after correcting for the {scan?.summary.tested ?? 0} contracts scanned. Click a cell to open it.
+                </p>
+                <div className='sf-heat' role='grid' aria-label='Heat map'>
+                    <div className='hrow hhead'>
+                        <span />
+                        {SCAN_CONTRACTS.map(c => (
+                            <span key={contractKey(c)}>{shortContract(c)}</span>
+                        ))}
+                        <span>best</span>
+                    </div>
+                    {rows.map(r => (
+                        <div className='hrow' key={r.sym}>
+                            <button className='name' onClick={() => open(r.sym)}>
+                                {marketName(r.sym)}
+                            </button>
+                            {SCAN_CONTRACTS.map(c => {
+                                const cell = r.cells.find(x => x.key === contractKey(c));
+                                return (
+                                    <button
+                                        key={contractKey(c)}
+                                        className={`cell ${heatTier(cell)}`}
+                                        disabled={!cell}
+                                        onClick={() => open(r.sym, c)}
+                                        title={cell ? `${marketName(r.sym)} · ${cell.label}: ${pts(cell.edgePts)} pts vs break-even, score ${cell.score}, ${cell.windowTrades} trades${cell.qValue !== null ? `, q=${cell.qValue.toFixed(2)}` : ''}` : 'No data yet'}
+                                    >
+                                        {cell?.significant ? '●' : ''}
+                                    </button>
+                                );
+                            })}
+                            <span className='best'>{r.best ? `${r.best.label} · ${r.best.score}` : '–'}</span>
+                        </div>
+                    ))}
+                </div>
+            </Panel>
+        </main>
+    );
+}
+
+// ---------- contract ----------
+
 function ContractPicker({ contract, setContract }: { contract: Contract; setContract: (c: Contract) => void }) {
-    const range =
-        contract.side === 'OVER'
-            ? [0, 1, 2, 3, 4, 5, 6, 7, 8]
-            : contract.side === 'UNDER'
-              ? [1, 2, 3, 4, 5, 6, 7, 8, 9]
-              : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const range = contract.side === 'OVER' ? [0, 1, 2, 3, 4, 5, 6, 7, 8] : contract.side === 'UNDER' ? [1, 2, 3, 4, 5, 6, 7, 8, 9] : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
     const hasParam = contract.side !== 'EVEN' && contract.side !== 'ODD';
     const dual = contract.side === 'MATCHES' || contract.side === 'DIFFERS';
     return (
         <>
-            <label>
-                Contract{' '}
+            <label className='sf-fld'>
+                <span>Contract</span>
                 <select
                     aria-label='Contract type'
                     value={contract.side}
@@ -208,26 +498,20 @@ function ContractPicker({ contract, setContract }: { contract: Contract; setCont
                         if (isValidContract(c)) setContract(c);
                     }}
                 >
-                    {SIDES.map(s => (
-                        <option key={s} value={s}>
-                            {s[0] + s.slice(1).toLowerCase()}
+                    {SIDES.map(x => (
+                        <option key={x} value={x}>
+                            {x[0] + x.slice(1).toLowerCase()}
                         </option>
                     ))}
                 </select>
             </label>
             {hasParam && (
-                <label>
-                    {dual ? 'Digit' : 'Barrier'}{' '}
+                <label className='sf-fld'>
+                    <span>{dual ? 'Digit' : 'Barrier'}</span>
                     <select
                         aria-label='Barrier or digit'
                         value={contract.dynamic ? 'L' : contract.param}
-                        onChange={e =>
-                            setContract(
-                                e.target.value === 'L'
-                                    ? { side: contract.side, param: 0, dynamic: true }
-                                    : { side: contract.side, param: Number(e.target.value) }
-                            )
-                        }
+                        onChange={e => setContract(e.target.value === 'L' ? { side: contract.side, param: 0, dynamic: true } : { side: contract.side, param: Number(e.target.value) })}
                     >
                         {range.map(n => (
                             <option key={n} value={n}>
@@ -242,48 +526,52 @@ function ContractPicker({ contract, setContract }: { contract: Contract; setCont
     );
 }
 
-function Desk(p: {
-    digits: number[];
+function MarketSelect({ market, setMarket }: { market: string; setMarket: (m: string) => void }) {
+    return (
+        <label className='sf-fld'>
+            <span>Market</span>
+            <select aria-label='Market' value={market} onChange={e => setMarket(e.target.value)}>
+                {MARKETS.map(m => (
+                    <option key={m[0]} value={m[0]}>
+                        {m[1]}
+                    </option>
+                ))}
+            </select>
+        </label>
+    );
+}
+
+function ContractTab(p: {
+    series: Record<string, number[]>;
     market: string;
     setMarket: (m: string) => void;
     contract: Contract;
     setContract: (c: Contract) => void;
-    bot: BotConfig;
-    setBot: (b: BotConfig) => void;
-    sens: Sensitivity;
-    setSens: (s: Sensitivity) => void;
-    cfg: typeof DEFAULT_CROWD;
+    settings: SixfoldSettings;
     importText: string;
     setImportText: (s: string) => void;
     onImport: () => void;
-    openBotBuilder: () => void;
 }) {
-    const d = useMemo(
-        () => (p.digits.length ? buildDossier(p.digits, p.contract, p.bot, p.cfg) : null),
-        [p.digits, p.contract, p.bot, p.cfg]
-    );
+    const [sens, setSens] = useState<Sensitivity>('standard');
+    const [bot, setBot] = useState<BotConfig>({ ...DEFAULT_BOT, duration: p.settings.duration, margin: p.settings.margin });
+    const sentinel = useSentinelAi(false).signal;
+    const cfg = useMemo(() => ({ ...DEFAULT_CROWD, ...SENSITIVITY[sens] }), [sens]);
+    const digits = p.series[p.market] ?? [];
+    const d = useMemo(() => (digits.length ? buildDossier(digits, p.contract, bot, cfg) : null), [digits, p.contract, bot, cfg]);
     const a = d?.assessment;
+    const wins = useMemo(() => (d ? d.run.trades.map(t => t.won) : []), [d]);
+    const equity = useMemo(() => (d ? equityCurve(d.run.trades, winProbability(p.contract), bot.margin) : []), [d, p.contract, bot.margin]);
+    const rolling = useMemo(() => rollingRate(wins, 30, 10).map(v => (v === null ? null : v * 100)), [wins]);
+    const agree = sentinelAgreement(sentinel, p.market, p.contract);
+
     return (
-        <main className='sf-desk'>
+        <main className='sf-contract'>
             <div className='sf-controls'>
-                <label>
-                    Market{' '}
-                    <select aria-label='Market' value={p.market} onChange={e => p.setMarket(e.target.value)}>
-                        {MARKETS.map(m => (
-                            <option key={m[0]} value={m[0]}>
-                                {m[1]}
-                            </option>
-                        ))}
-                    </select>
-                </label>
+                <MarketSelect market={p.market} setMarket={p.setMarket} />
                 <ContractPicker contract={p.contract} setContract={p.setContract} />
-                <label>
-                    Contract length{' '}
-                    <select
-                        aria-label='Duration'
-                        value={p.bot.duration}
-                        onChange={e => p.setBot({ ...p.bot, duration: Number(e.target.value) })}
-                    >
+                <label className='sf-fld'>
+                    <span>Length</span>
+                    <select aria-label='Duration' value={bot.duration} onChange={e => setBot({ ...bot, duration: Number(e.target.value) })}>
                         {[1, 2, 3, 4, 5].map(n => (
                             <option key={n} value={n}>
                                 {n} tick{n > 1 ? 's' : ''}
@@ -291,38 +579,26 @@ function Desk(p: {
                         ))}
                     </select>
                 </label>
-                <label>
-                    Bot enters{' '}
-                    <select
-                        aria-label='Entry'
-                        value={p.bot.entry.mode}
-                        onChange={e => p.setBot({ ...p.bot, entry: { mode: e.target.value as 'SETUP' | 'ANY' } })}
-                    >
-                        <option value='SETUP'>on a losing digit (setup)</option>
-                        <option value='ANY'>on any digit</option>
+                <label className='sf-fld'>
+                    <span>Bot enters</span>
+                    <select aria-label='Entry' value={bot.entry.mode} onChange={e => setBot({ ...bot, entry: { mode: e.target.value as 'SETUP' | 'ANY' } })}>
+                        <option value='SETUP'>on a setup digit</option>
+                        <option value='ANY'>on any tick</option>
                     </select>
                 </label>
-                <label>
-                    Payout margin{' '}
-                    <select
-                        aria-label='Margin'
-                        value={p.bot.margin}
-                        onChange={e => p.setBot({ ...p.bot, margin: Number(e.target.value) })}
-                    >
+                <label className='sf-fld'>
+                    <span>Payout margin</span>
+                    <select aria-label='Margin' value={bot.margin} onChange={e => setBot({ ...bot, margin: Number(e.target.value) })}>
                         {[0.03, 0.05, 0.08].map(m => (
                             <option key={m} value={m}>
-                                {m * 100}%
+                                {Math.round(m * 100)}%
                             </option>
                         ))}
                     </select>
                 </label>
-                <label>
-                    Trap sensitivity{' '}
-                    <select
-                        aria-label='Sensitivity'
-                        value={p.sens}
-                        onChange={e => p.setSens(e.target.value as Sensitivity)}
-                    >
+                <label className='sf-fld'>
+                    <span>Trap sensitivity</span>
+                    <select aria-label='Sensitivity' value={sens} onChange={e => setSens(e.target.value as Sensitivity)}>
                         {Object.keys(SENSITIVITY).map(k => (
                             <option key={k}>{k}</option>
                         ))}
@@ -331,53 +607,61 @@ function Desk(p: {
             </div>
 
             {!d || !a ? (
-                <div className='notice'>
-                    <span>
-                        No ticks for {marketName(p.market)} yet. Connect live, use demo data, or paste digits below.
-                    </span>
-                </div>
+                <p className='sf-msg warn'>No ticks for {marketName(p.market)} yet. Connect live, use demo data, or paste digits below.</p>
             ) : (
                 <>
-                    <section className='panel sf-hero'>
-                        <div>
-                            <div className='eyebrow'>
-                                {marketName(p.market).toUpperCase()} · {d.run.n} TICKS
-                            </div>
-                            <h1>
-                                {d.label} {pill(a.state)}
-                            </h1>
-                            <p className='lede'>
-                                {STATE_TEXT[a.state].blurb} {a.reasons.join(' ')}
-                            </p>
-                        </div>
-                        <div className='sf-verdict'>
-                            <b>Reading</b>
-                            <p>{d.verdict}</p>
-                        </div>
-                    </section>
-
-                    <section className='panel'>
-                        <div className='panel-head'>
+                    <Panel>
+                        <div className='sf-hero'>
                             <div>
-                                <div className='eyebrow'>LAST 20 TRADES, AS A BOT WOULD TAKE THEM</div>
-                                <h2>Wins and losses, not digits</h2>
-                                <p>
-                                    The bot waits for an entry digit, buys on the next tick, settles {p.bot.duration}{' '}
-                                    tick(s) later, then waits again. One trade at a time.
+                                <div className='eyebrow'>
+                                    {marketName(p.market).toUpperCase()} · {d.run.n} TICKS
+                                </div>
+                                <h1>
+                                    {d.label} {pill(a.state)}
+                                </h1>
+                                <p className='sf-lede'>
+                                    {STATE_TEXT[a.state].blurb} {a.reasons.join(' ')}
                                 </p>
+                                <p className={`sf-agree ${agree.kind.toLowerCase()}`}>{agree.text}</p>
+                            </div>
+                            <div className='sf-verdict'>
+                                <b>Reading</b>
+                                <p>{d.verdict}</p>
                             </div>
                         </div>
-                        <div className='wl' role='list' aria-label='Last 20 trades'>
+                        <div className='sf-stats'>
+                            <Stat label='Last 20' value={`${a.last20.wins}/${a.last20.n} · ${pct(a.last20.rate)}`} />
+                            <Stat label='Last 50' value={pct(a.last50.rate)} />
+                            <Stat label='Normal / break-even' value={`${pct(a.p0)} / ${pct(a.breakEven, 1)}`} />
+                            <Stat label='Streak · worst loss run' value={`${d.streak.kind ?? '–'}${d.streak.length} · ${d.streak.longestLoss}`} />
+                        </div>
+                    </Panel>
+
+                    <div className='sf-two'>
+                        <Panel eyebrow='FLAT 1-UNIT STAKE' title='Equity curve'>
+                            <LineChart values={equity} area label='Cumulative profit at a flat stake' format={v => v.toFixed(1)} lines={[{ value: 0, label: 'start', tone: 'muted' }]} />
+                            <p className='sf-note'>Uses the estimated payout. Over many trades this drifts down by the margin; a rise here is a stretch of luck until the Lab says otherwise.</p>
+                        </Panel>
+                        <Panel eyebrow='ROLLING 30 TRADES' title='Win rate against break-even'>
+                            <LineChart
+                                values={rolling}
+                                label='Rolling win rate'
+                                format={v => `${v.toFixed(0)}%`}
+                                lines={[
+                                    { value: a.breakEven * 100, label: 'break-even', tone: 'amber' },
+                                    { value: a.p0 * 100, label: 'normal', tone: 'muted' },
+                                ]}
+                            />
+                        </Panel>
+                    </div>
+
+                    <Panel eyebrow='LAST 20 TRADES, AS A BOT WOULD TAKE THEM' title='Wins and losses, not digits'>
+                        <div className='sf-wl' role='list' aria-label='Last 20 trades'>
                             {d.last20.length === 0 ? (
-                                <span className='muted'>No simulated trades yet.</span>
+                                <span className='sf-muted'>No simulated trades yet.</span>
                             ) : (
                                 d.last20.map((t, i) => (
-                                    <span
-                                        key={i}
-                                        role='listitem'
-                                        className={`wlchip ${t.won ? 'w' : 'l'}`}
-                                        title={`entry ${t.entryDigit} → exit ${t.exitDigit}`}
-                                    >
+                                    <span key={i} role='listitem' className={t.won ? 'w' : 'l'} title={`entry ${t.entryDigit} → exit ${t.exitDigit}`}>
                                         {t.won ? 'W' : 'L'}
                                         <small>
                                             {t.entryDigit}→{t.exitDigit}
@@ -386,327 +670,241 @@ function Desk(p: {
                                 ))
                             )}
                         </div>
-                        <div className='mini-stats stats4'>
-                            <div>
-                                <small>Last 20</small>
-                                <b>
-                                    {a.last20.wins}/{a.last20.n} · {pct(a.last20.rate)}
-                                </b>
-                            </div>
-                            <div>
-                                <small>Last 50</small>
-                                <b>{pct(a.last50.rate)}</b>
-                            </div>
-                            <div>
-                                <small>Normal / break-even</small>
-                                <b>
-                                    {pct(a.p0)} / {pct(a.breakEven, 1)}
-                                </b>
-                            </div>
-                            <div>
-                                <small>Streak · worst loss run</small>
-                                <b>
-                                    {d.streak.kind ?? '–'}
-                                    {d.streak.length} · {d.streak.longestLoss}
-                                </b>
-                            </div>
-                        </div>
-                        {d.run.open && (
-                            <p className='muted'>A contract is open and settles in {d.run.open.ticksLeft} tick(s).</p>
-                        )}
-                    </section>
+                        {d.run.open && <p className='sf-muted'>A contract is open and settles in {d.run.open.ticksLeft} tick(s).</p>}
+                    </Panel>
 
-                    <Signals
-                        market={p.market}
-                        contract={p.contract}
-                        trapped={d.crowd.trapped}
-                        openBotBuilder={p.openBotBuilder}
-                    />
-
-                    {d.ladder && (
-                        <section className='panel'>
-                            <div className='panel-head'>
-                                <div>
-                                    <div className='eyebrow'>THE {p.contract.side} LADDER</div>
-                                    <h2>Is a different barrier better right now?</h2>
-                                    <p>
-                                        Score = recent win rate minus break-even, in points. Positive means beating the
-                                        payout lately; it does not predict the next trade.
-                                    </p>
+                    <div className='sf-two'>
+                        <Panel eyebrow='WHERE THE SIX TRADERS ARE' title={d.crowd.headline}>
+                            <div className='sf-crowd'>
+                                <Hexagon positions={d.crowd.positions} />
+                                <div className='sf-crowd-rows'>
+                                    {d.crowd.positions.map(c => (
+                                        <CrowdRow key={c.archetype} c={c} />
+                                    ))}
                                 </div>
                             </div>
-                            <div className='ladder'>
-                                {d.ladder.map(r => (
-                                    <button
-                                        key={r.key}
-                                        className={`lrow ${r.key === `${d.contract.side}:${d.contract.param}` ? 'sel' : ''}`}
-                                        onClick={() => p.setContract(r.contract)}
-                                    >
-                                        <b>{r.label}</b>
-                                        {pill(r.assessment.state)}
-                                        <span className='lbar'>
-                                            <i
-                                                style={{
-                                                    width: `${Math.max(2, Math.min(100, 50 + (r.score ?? -50)))}%`,
-                                                }}
-                                                className={(r.score ?? -1) >= 0 ? 'pos' : 'neg'}
-                                            />
-                                        </span>
-                                        <small>
-                                            {r.score === null
-                                                ? '—'
-                                                : `${r.score >= 0 ? '+' : ''}${r.score.toFixed(1)} pts`}
-                                        </small>
-                                    </button>
-                                ))}
-                            </div>
-                            {d.bestRung ? (
-                                <p className='callout'>
-                                    {d.bestRung.label} has been healthier lately: {d.bestRung.score!.toFixed(1)} pts
-                                    against break-even, versus{' '}
-                                    {(
-                                        d.ladder.find(r => r.key === `${d.contract.side}:${d.contract.param}`)?.score ??
-                                        0
-                                    ).toFixed(1)}{' '}
-                                    pts for {d.label}. On random digits a gap like this often fades.
-                                </p>
-                            ) : (
-                                <p className='muted'>No other barrier is clearly healthier than {d.label} right now.</p>
-                            )}
-                        </section>
-                    )}
+                            <p className='sf-note'>A model, not an observation: each trader type is a rule applied to the digits just printed. “Trapped” = the market showed their side, then delivered the opposite.</p>
+                        </Panel>
 
-                    <section className='panel'>
-                        <div className='panel-head'>
-                            <div>
-                                <div className='eyebrow'>WHERE THE SIX TRADERS ARE</div>
-                                <h2>{d.crowd.headline}</h2>
-                                <p>
-                                    A model, not an observation: each trader type is a rule applied to the digits just
-                                    printed. “Trapped” = the market showed their side, then delivered the opposite.
+                        {d.ladder && (
+                            <Panel eyebrow={`THE ${p.contract.side} LADDER`} title='Is a different barrier better right now?'>
+                                <div className='sf-ladder'>
+                                    {d.ladder.map(r => (
+                                        <button key={r.key} className={r.key === `${d.contract.side}:${d.contract.param}` ? 'sel' : ''} onClick={() => p.setContract(r.contract)}>
+                                            <b>{r.label}</b>
+                                            {pill(r.assessment.state)}
+                                            <span className='bar'>
+                                                <i className={(r.score ?? -1) >= 0 ? 'pos' : 'neg'} style={{ width: `${Math.max(2, Math.min(100, 50 + (r.score ?? -50)))}%` }} />
+                                            </span>
+                                            <small>{r.score === null ? '—' : `${pts(r.score)} pts`}</small>
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className='sf-note'>
+                                    {d.bestRung
+                                        ? `${d.bestRung.label} has been healthier lately (${pts(d.bestRung.score)} pts). On random digits a gap like this often fades.`
+                                        : `No other barrier is clearly healthier than ${d.label} right now.`}
                                 </p>
-                            </div>
-                        </div>
-                        <div className='crowd'>
-                            {d.crowd.positions.map(c => (
-                                <CrowdRow key={c.archetype} c={c} />
-                            ))}
-                        </div>
-                    </section>
+                            </Panel>
+                        )}
+                    </div>
 
-                    <section className='panel'>
-                        <div className='panel-head'>
-                            <div>
-                                <div className='eyebrow'>TRADE THE OPPOSITE: DOES IT HAVE AN EDGE?</div>
-                                <h2>
-                                    {d.edge
-                                        ? `${contractLabel(d.edge.trade)} against the ${d.edgeFor!.toLowerCase()} crowd`
-                                        : 'No trapped crowd right now'}
-                                </h2>
-                            </div>
-                            {d.edge && (
-                                <span className={`vstate ev-${d.edge.verdict.toLowerCase()}`}>
-                                    {d.edge.verdict.replace('_', ' ')}
-                                </span>
-                            )}
-                        </div>
-                        <p className='lede'>
+                    <Panel
+                        eyebrow='TRADE THE OPPOSITE: DOES IT HAVE AN EDGE?'
+                        title={d.edge ? `${contractLabel(d.edge.trade)} against the ${d.edgeFor!.toLowerCase()} crowd` : 'No trapped crowd right now'}
+                        aside={d.edge ? <span className={`sf-state ev-${d.edge.verdict.toLowerCase()}`}>{d.edge.verdict.replace('_', ' ')}</span> : undefined}
+                    >
+                        <p className='sf-lede'>
                             {d.edge
                                 ? d.edge.summary
-                                : 'When a trader type is trapped, Sixfold replays "trade their opposite" over this history and tells you whether it beat break-even or just matched chance.'}
+                                : 'When a trader type is trapped, Sixfold replays “trade their opposite” over this history and says whether it beat break-even or just matched chance.'}
                         </p>
                         {d.edge && d.edge.pValue !== null && (
-                            <div className='mini-stats stats4'>
-                                <div>
-                                    <small>Trades</small>
-                                    <b>{d.edge.trades}</b>
-                                </div>
-                                <div>
-                                    <small>Chance of this by luck</small>
-                                    <b>{(d.edge.pValue * 100).toFixed(0)}%</b>
-                                </div>
-                                <div>
-                                    <small>First / second half</small>
-                                    <b>
-                                        {pct(d.edge.halves[0])} / {pct(d.edge.halves[1])}
-                                    </b>
-                                </div>
-                                <div>
-                                    <small>Break-even</small>
-                                    <b>{pct(d.edge.breakEven, 1)}</b>
-                                </div>
+                            <div className='sf-stats'>
+                                <Stat label='Trades' value={d.edge.trades} />
+                                <Stat label='Chance of this by luck' value={`${(d.edge.pValue * 100).toFixed(0)}%`} />
+                                <Stat label='First / second half' value={`${pct(d.edge.halves[0])} / ${pct(d.edge.halves[1])}`} />
+                                <Stat label='Break-even' value={pct(d.edge.breakEven, 1)} />
                             </div>
                         )}
-                    </section>
+                    </Panel>
 
-                    <section className='panel'>
-                        <div className='panel-head'>
-                            <div>
-                                <div className='eyebrow'>LAST 100 TICKS</div>
-                                <h2>Digit shares</h2>
-                            </div>
-                            <span className='muted'>
-                                {d.contract.dynamic ? '' : `normal win rate ${pct(winProbability(d.contract))}`}
-                            </span>
-                        </div>
-                        <div className='digit-bars'>
-                            {d.digitShare.map((n, i) => (
-                                <div className='digit-bar' key={i}>
-                                    <span className='digit-value'>{n}</span>
-                                    <div className='digit-bar-track'>
-                                        <div
-                                            className='digit-bar-fill'
-                                            style={{ height: `${Math.min(100, n * 6)}%` }}
-                                        />
-                                    </div>
-                                    <b>{i}</b>
-                                </div>
-                            ))}
-                        </div>
-                    </section>
+                    <Panel eyebrow='LAST 100 TICKS' title='Digit shares' aside={<span className='sf-muted'>{d.contract.dynamic ? '' : `normal win rate ${pct(winProbability(d.contract))}`}</span>}>
+                        <DigitBars counts={d.digitShare} expected={Math.min(100, digits.length) / 10} label='Digit counts over the last 100 ticks' />
+                    </Panel>
                 </>
             )}
 
-            <section className='panel'>
-                <div className='panel-head'>
-                    <div>
-                        <div className='eyebrow'>IMPORT</div>
-                        <h2>Paste digits for {marketName(p.market)}</h2>
-                        <p>Digits 0–9 separated by spaces, commas or new lines, oldest first.</p>
-                    </div>
-                </div>
-                <textarea
-                    className='digit-input'
-                    aria-label='Digits to import'
-                    value={p.importText}
-                    onChange={e => p.setImportText(e.target.value)}
-                    placeholder='1 4 7 2 4 …'
-                />
-                <div className='form-foot'>
-                    <span />
-                    <button className='btn secondary' onClick={p.onImport}>
+            <Panel eyebrow='IMPORT' title={`Paste digits for ${marketName(p.market)}`}>
+                <textarea className='sf-input' aria-label='Digits to import' value={p.importText} onChange={e => p.setImportText(e.target.value)} placeholder='1 4 7 2 4 …' />
+                <div className='sf-right'>
+                    <button className='sf-btn' onClick={p.onImport}>
                         Use these digits
                     </button>
                 </div>
-            </section>
+            </Panel>
         </main>
     );
 }
 
 function CrowdRow({ c }: { c: CrowdPosition }) {
     return (
-        <div className={`crow cs-${c.state.toLowerCase()}`}>
-            <div className='cwho'>
+        <div className={`sf-crow cs-${c.state.toLowerCase()}`}>
+            <div className='who'>
                 <b>{c.name}</b>
                 <small>{ARCHETYPE_TEXT[c.archetype].rule}</small>
             </div>
-            <div className='chold'>
-                <small>Holds</small>
-                <b>{contractLabel(c.holds)}</b>
-            </div>
-            <div className='cstate'>
-                <span className='vstate'>{c.state}</span>
-                <span className='cbar'>
-                    <i style={{ width: `${c.conviction}%` }} />
-                </span>
-            </div>
-            <div className='copp'>
-                <small>Opposite</small>
-                <b>{contractLabel(c.opposite)}</b>
-            </div>
-            <p className='cnote'>{c.note}</p>
+            <span className='st'>{c.state}</span>
+            <span className='bar'>
+                <i style={{ width: `${c.conviction}%` }} />
+            </span>
+            <span className='opp'>
+                opposite <b>{contractLabel(c.opposite)}</b>
+            </span>
         </div>
     );
 }
 
-export default SixfoldPage;
+// ---------- lab ----------
 
-const toRecover = (c: Contract): { contract: RecoverContract; barrier: number } | null =>
-    (c.side === 'OVER' || c.side === 'UNDER') && isValidBarrier(c.side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER', c.param)
-        ? { contract: c.side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER', barrier: c.param }
-        : null;
-
-function Signals({
-    market,
-    contract,
-    trapped,
-    openBotBuilder,
-}: {
+function LabTab(p: {
+    series: Record<string, number[]>;
     market: string;
+    setMarket: (m: string) => void;
     contract: Contract;
-    trapped: CrowdPosition[];
-    openBotBuilder: () => void;
+    setContract: (c: Contract) => void;
+    settings: SixfoldSettings;
 }) {
-    const [busy, setBusy] = useState('');
-    const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-    const rows = [
-        { key: 'this', title: 'The contract on this desk', why: 'You chose it.', c: contract },
-        ...trapped.map(t => ({
-            key: t.archetype,
-            title: `Opposite of the trapped ${t.name.toLowerCase()}s`,
-            why: `${contractLabel(t.holds)} buyers look trapped.`,
-            c: t.opposite,
-        })),
-    ];
-    const load = async (key: string, c: Contract) => {
-        const r = toRecover(c);
-        if (!r) return;
-        setBusy(key);
-        setMessage(null);
-        try {
-            const out = await loadSignalIntoRecoverBot({ symbol: market, ...r }, openBotBuilder);
-            setMessage({
-                ok: true,
-                text: `Loaded bot ${out.bot.number} (${out.botName}) in Bot Builder: ${marketName(market)}, ${contractLabel(c)} first. Nothing has been traded. Check stake and take profit, then press Run yourself.`,
-            });
-        } catch (e) {
-            setMessage({ ok: false, text: e instanceof Error ? e.message : String(e) });
-        } finally {
-            setBusy('');
-        }
+    const digits = p.series[p.market] ?? [];
+    const symbols = useMemo(() => MARKETS.map(m => m[0]).filter(s => (p.series[s]?.length ?? 0) >= 100), [p.series]);
+    const uni = useMemo(() => uniformityTest(digits), [digits]);
+    const trans = useMemo(() => transitionTest(digits), [digits]);
+    const runs = useMemo(() => contractRuns(digits, p.contract), [digits, p.contract]);
+    const table = useMemo(() => structureTable(p.series, symbols), [p.series, symbols]);
+    const [sim, setSim] = useState<{ cal: ReturnType<typeof calibrateLabels>; bank: ReturnType<typeof bankrollSim>; for: string } | null>(null);
+    const [busy, setBusy] = useState(false);
+    const key = `${p.market}|${contractKey(p.contract)}|${digits.length}`;
+    const run = () => {
+        setBusy(true);
+        window.setTimeout(() => {
+            const bot: BotConfig = { duration: p.settings.duration, entry: { mode: p.settings.entry }, margin: p.settings.margin };
+            setSim({ cal: calibrateLabels(digits, p.contract, bot), bank: bankrollSim(p.contract, p.settings, 1000), for: key });
+            setBusy(false);
+        }, 30);
     };
+    const fresh = sim && sim.for.startsWith(`${p.market}|${contractKey(p.contract)}|`);
+
     return (
-        <section className='panel'>
-            <div className='panel-head'>
-                <div>
-                    <div className='eyebrow'>SIGNAL → BOT BUILDER</div>
-                    <h2>Load a signal into a bot</h2>
-                    <p>
-                        Sixfold never trades. This sets the market and the first barrier in the matching Recover bot and
-                        opens Bot Builder. The bot keeps its own stake, martingale and take profit.
+        <main className='sf-lab'>
+            <div className='sf-controls'>
+                <MarketSelect market={p.market} setMarket={p.setMarket} />
+                <ContractPicker contract={p.contract} setContract={p.setContract} />
+            </div>
+
+            <div className='sf-two'>
+                <Panel eyebrow='DIGIT UNIFORMITY' title={uni.p === null ? 'Not enough ticks yet' : uni.p < 0.01 ? 'Unevenness is unlikely to be chance' : 'Consistent with fair digits'}>
+                    <DigitBars counts={uni.counts} expected={uni.n / 10} label={`Digit counts over the last ${uni.n} ticks`} />
+                    <p className='sf-note'>
+                        {uni.p === null
+                            ? 'Needs 100+ ticks.'
+                            : `Chi-square ${uni.chi2.toFixed(1)} on 9 degrees of freedom, p = ${uni.p.toFixed(3)} over ${uni.n} ticks.${uni.worst ? ` Furthest from even: digit ${uni.worst.digit} (${uni.worst.z >= 0 ? '+' : ''}${uni.worst.z.toFixed(1)}σ).` : ''}`}
                     </p>
-                </div>
+                </Panel>
+                <Panel eyebrow='DOES THE LAST DIGIT PREDICT THE NEXT?' title={trans.p === null ? 'Not enough ticks yet' : trans.p < 0.01 ? 'Dependence between digits' : 'No dependence found'}>
+                    <TransitionHeat z={trans.z} label='Digit to next-digit residuals' />
+                    <p className='sf-note'>
+                        {trans.p === null
+                            ? 'Needs 300+ ticks.'
+                            : `Independence test: chi-square ${trans.chi2.toFixed(0)} on ${trans.df} degrees of freedom, p = ${trans.p.toFixed(3)}. Bright cells are single-cell outliers; with 100 cells a few always appear.`}
+                    </p>
+                </Panel>
             </div>
-            <div className='sigs'>
-                {rows.map(r => {
-                    const rec = toRecover(r.c);
-                    return (
-                        <div className='sig' key={r.key}>
-                            <div>
-                                <small>{r.title}</small>
-                                <b>
-                                    {marketName(market)} · {contractLabel(r.c)}
-                                </b>
-                                <small>{r.why}</small>
+
+            <Panel eyebrow={`STREAKINESS OF ${contractLabel(p.contract).toUpperCase()}`} title={runs.p === null ? 'Not enough ticks yet' : runs.p < 0.01 ? (runs.z < 0 ? 'Streakier than chance' : 'More alternating than chance') : 'Wins and losses arrive as randomly as chance'}>
+                <p className='sf-lede'>{runs.p === null ? 'Needs 30+ outcomes.' : `${runs.runs} runs over ${runs.n} ticks, z = ${runs.z.toFixed(2)}, p = ${runs.p.toFixed(3)}.`}</p>
+            </Panel>
+
+            <Panel
+                eyebrow='SIMULATIONS'
+                title='Do the labels mean anything, and what does your money plan do?'
+                aside={
+                    <button className='sf-btn primary' onClick={run} disabled={busy || digits.length < 500}>
+                        {busy ? 'Running…' : fresh ? 'Run again' : 'Run simulations'}
+                    </button>
+                }
+            >
+                {!fresh ? (
+                    <p className='sf-muted'>{digits.length < 500 ? 'Needs 500+ ticks on this market.' : 'Runs the label calibration and a 1,000-session bankroll simulation for this market, this contract and your Scanner settings.'}</p>
+                ) : (
+                    <>
+                        <h3 className='sf-h3'>Calibration: what happened after each label</h3>
+                        <div className='sf-table' role='table' aria-label='Label calibration'>
+                            <div className='tr th'>
+                                <span>Label</span>
+                                <span>Checkpoints</span>
+                                <span>Next trades</span>
+                                <span>Win rate</span>
+                                <span>Normal</span>
+                                <span>Lift</span>
                             </div>
-                            {rec ? (
-                                <button className='btn primary' disabled={busy !== ''} onClick={() => load(r.key, r.c)}>
-                                    {busy === r.key
-                                        ? 'Loading…'
-                                        : `Load into Bot Builder (bot ${RECOVER_BOTS[rec.contract].number})`}
-                                </button>
-                            ) : (
-                                <small className='muted'>The Recover bots trade Over/Under only.</small>
-                            )}
+                            {sim.cal.map(r => (
+                                <div className='tr' key={r.state}>
+                                    <span>{pill(r.state)}</span>
+                                    <span>{r.checkpoints}</span>
+                                    <span>{r.trades}</span>
+                                    <span>{pct(r.rate, 1)}</span>
+                                    <span>{pct(r.normal, 1)}</span>
+                                    <span className={(r.liftPts ?? 0) > 2 ? 'pos' : (r.liftPts ?? 0) < -2 ? 'neg' : ''}>{r.liftPts === null ? '—' : `${pts(r.liftPts)} pts`}</span>
+                                </div>
+                            ))}
                         </div>
-                    );
-                })}
-            </div>
-            {message && (
-                <div className={message.ok ? 'notice okmsg' : 'error-banner'}>
-                    <span>{message.text}</span>
+                        <p className='sf-note'>Each label is computed from trades settled so far, then the next 150 ticks are scored. If VIABLE were informative its forward win rate would sit clearly above normal; a lift near zero means the label described the past and said nothing about what came next.</p>
+
+                        <h3 className='sf-h3'>Bankroll: {sim.bank.runs.toLocaleString()} sessions with your settings</h3>
+                        <div className='sf-stats'>
+                            <Stat label='Hit take profit' value={pct(sim.bank.hitTakeProfit)} tone='pos' />
+                            <Stat label='Hit stop loss' value={pct(sim.bank.hitStopLoss)} tone='neg' />
+                            <Stat label='Loss-streak stop' value={pct(sim.bank.hitLossStreak)} />
+                            <Stat label='Median session' value={money(sim.bank.medianPnl)} />
+                            <Stat label='Bad day (5th pct)' value={money(sim.bank.p5Pnl)} tone='neg' />
+                            <Stat label='Good day (95th pct)' value={money(sim.bank.p95Pnl)} tone='pos' />
+                            <Stat label='Mean per session' value={money(sim.bank.meanPnl)} tone={sim.bank.meanPnl < 0 ? 'neg' : 'pos'} />
+                            <Stat label='Largest stake placed' value={sim.bank.worstStake.toFixed(2)} />
+                        </div>
+                        <p className='sf-note'>
+                            Fair random digits, estimated payout. Expected result per unit staked on one trade: {sim.bank.evPerUnit.toFixed(3)}. A high chance of hitting take profit comes with a smaller chance of a much bigger loss; the mean shows the price.
+                        </p>
+                    </>
+                )}
+            </Panel>
+
+            <Panel eyebrow='ACROSS MARKETS' title='Structure by market (false-discovery adjusted)'>
+                <div className='sf-table' role='table' aria-label='Structure by market'>
+                    <div className='tr th'>
+                        <span>Market</span>
+                        <span>Uniformity p</span>
+                        <span>adj. q</span>
+                        <span>Dependence p</span>
+                        <span>adj. q</span>
+                        <span>Trace</span>
+                    </div>
+                    {table.map(r => (
+                        <div className='tr' key={r.symbol}>
+                            <span>{shortName(r.symbol)}</span>
+                            <span>{r.uniformity.p === null ? '—' : r.uniformity.p.toFixed(3)}</span>
+                            <span className={r.uniformityQ !== null && r.uniformityQ < 0.1 ? 'neg' : ''}>{r.uniformityQ === null ? '—' : r.uniformityQ.toFixed(3)}</span>
+                            <span>{r.transition.p === null ? '—' : r.transition.p.toFixed(3)}</span>
+                            <span className={r.transitionQ !== null && r.transitionQ < 0.1 ? 'neg' : ''}>{r.transitionQ === null ? '—' : r.transitionQ.toFixed(3)}</span>
+                            <span>
+                                <Sparkline values={(p.series[r.symbol] ?? []).slice(-60)} />
+                            </span>
+                        </div>
+                    ))}
                 </div>
-            )}
-        </section>
+                <p className='sf-note'>A q below 0.10 would mean a market's digits are unlikely to be fair even after allowing for testing many markets. Expect none on Deriv's synthetic indices.</p>
+            </Panel>
+        </main>
     );
 }
+
+export default SixfoldPage;

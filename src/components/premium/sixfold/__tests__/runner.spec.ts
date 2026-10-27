@@ -1,0 +1,316 @@
+import { TradeRequestError } from '@/utils/trade-errors';
+import { DEFAULT_SETTINGS, type SixfoldSettings } from '../money';
+import { MIN_TICKS, type RunnerIO, SixfoldRunner } from '../runner';
+
+// A market where Over 2 wins on every simulated trade (1 -> 7 -> 1 -> 7 ...), so the scanner finds it at once.
+const planted = Array.from({ length: 600 }, (_, i) => (i % 2 === 0 ? 1 : 7));
+const noise = (seed: number) => {
+    let a = seed;
+    return Array.from({ length: 600 }, () => ((a = (a * 1103515245 + 12345) & 0x7fffffff), (a >> 8) % 10));
+};
+
+function harness(over: Partial<SixfoldSettings> = {}, io: Partial<RunnerIO> = {}) {
+    let t = 1_000_000;
+    const series: Record<string, number[]> = { P: planted.slice(), Q: noise(5) };
+    const lastTick: Record<string, number> = { P: t, Q: t };
+    const calls = { buy: [] as any[], pushed: [] as any[], connect: 0 };
+    let nextId = 100;
+    const stores: any = {
+        client: { currency: 'USD' },
+        run_panel: {
+            run_id: '',
+            is_contract_buying_in_progress: false,
+            running: false,
+            setIsRunning(v: boolean) {
+                this.running = v;
+            },
+            setRunId(id: string) {
+                this.run_id = id;
+            },
+            setContractStage() {},
+            toggleDrawer() {},
+            setHasOpenContract() {},
+            setShowBotStopMessage() {},
+            onBotContractEvent() {},
+        },
+        summary_card: { onBotContractEvent() {} },
+        transactions: { pushTransaction: (d: any) => calls.pushed.push(d) },
+        dashboard: {
+            active_trading_module: null as string | null,
+            handlers: {} as Record<string, () => void>,
+            setActiveTradingModule(id: string | null) {
+                this.active_trading_module = id;
+            },
+            registerTradingStopHandler(id: string, h: () => void) {
+                this.handlers[id] = h;
+            },
+            unregisterTradingStopHandler(id: string) {
+                delete this.handlers[id];
+            },
+            stopActiveTradingModule() {},
+        },
+    };
+    let profitQueue: number[] = [];
+    let watcher: ((running: boolean, mod: string | null) => void) | null = null;
+    const runner = new SixfoldRunner({
+        feed: {
+            getLiveSeries: () => series,
+            getLastTickAt: s => lastTick[s] ?? null,
+            getLastDigit: s => series[s]?.at(-1) ?? null,
+            isLive: () => true,
+            getSnapshot: () => ({ mode: 'live', status: 'live', error: '', series, version: 1 }),
+            connect: () => void calls.connect++,
+        },
+        buy: async ({ parameters, price }) => {
+            calls.buy.push({ parameters, price });
+            return { buy_price: price, contract_id: nextId++, transaction_id: 1 };
+        },
+        settle: async ({ fallback }) => {
+            const profit = profitQueue.length ? profitQueue.shift()! : 0.35;
+            return { ...fallback, is_sold: 1, status: profit < 0 ? 'lost' : 'won', profit };
+        },
+        isAuthorized: () => true,
+        currency: () => 'USD',
+        afterStop: () => {},
+        now: () => t,
+        loadSettings: () => ({ ...DEFAULT_SETTINGS, markets: ['P', 'Q'], selectivity: 'strict', ...over }),
+        saveSettings: () => {},
+        ...io,
+    });
+    runner.attach(stores, cb => {
+        watcher = cb;
+        return () => {
+            watcher = null;
+        };
+    });
+    return {
+        runner,
+        stores,
+        calls,
+        series,
+        advance: (ms: number) => {
+            t += ms;
+            Object.keys(lastTick).forEach(k => (lastTick[k] = t));
+        },
+        stale: (s: string) => (lastTick[s] = t - 60_000),
+        queueProfits: (...p: number[]) => (profitQueue = p),
+        watcher: () => watcher,
+    };
+}
+const flush = () => new Promise(r => setTimeout(r, 0));
+
+describe('SixfoldRunner', () => {
+    it('refuses to start when not logged in', () => {
+        const h = harness({}, { isAuthorized: () => false });
+        h.runner.start();
+        expect(h.runner.isRunning()).toBe(false);
+        expect(h.runner.getSnapshot().lastError).toMatch(/log in/i);
+    });
+
+    it('scans, arms the planted market, waits for the entry digit, buys, settles and records the trade', async () => {
+        const h = harness();
+        h.runner.start();
+        expect(h.runner.isRunning()).toBe(true);
+        let s = h.runner.getSnapshot();
+        expect(s.phase).toBe('armed');
+        expect(s.armed?.symbol).toBe('P');
+        expect(s.armed?.label).toMatch(/^(Over|Under) \d$/); // several contracts win every trade here; any of them will do
+        const [side, barrier] = s.armed!.label.split(' ');
+        // A digit that would not have lost Over 2 does not trigger the buy.
+        h.runner.handleFeedTick('P', 7);
+        expect(h.calls.buy).toHaveLength(0);
+        // Another market printing an entry digit does not trigger it either.
+        h.runner.handleFeedTick('Q', 1);
+        expect(h.calls.buy).toHaveLength(0);
+        // The armed market printing a losing digit does.
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+        expect(h.calls.buy[0].parameters).toMatchObject({
+            contract_type: side === 'Over' ? 'DIGITOVER' : 'DIGITUNDER',
+            barrier,
+            symbol: 'P',
+            duration: 1,
+            duration_unit: 't',
+            amount: 1,
+        });
+        // opened + settled snapshot reach the general transactions area
+        expect(h.calls.pushed.length).toBeGreaterThanOrEqual(1);
+        expect(h.calls.pushed[0].shortcode).toBe(`SIXFOLD_${side === 'Over' ? 'DIGITOVER' : 'DIGITUNDER'}_P`);
+        expect(h.calls.pushed[0].run_id).toMatch(/^run-/);
+        s = h.runner.getSnapshot();
+        expect(s.session.trades).toBe(1);
+        expect(s.session.wins).toBe(1);
+        expect(s.trades[0].status).toBe('won');
+        expect(s.phase).toBe('cooling');
+    });
+
+    it('trades one at a time and goes looking again after the cool-down', async () => {
+        const h = harness({ takeProfit: 0 });
+        h.runner.start();
+        h.runner.handleFeedTick('P', 1);
+        h.runner.handleFeedTick('P', 1); // second entry digit while the first trade is in flight: ignored
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+        h.advance(1500);
+        h.runner.tick();
+        expect(h.runner.getSnapshot().phase).toBe('armed');
+        h.runner.handleFeedTick('P', 0);
+        await flush();
+        expect(h.calls.buy).toHaveLength(2);
+    });
+
+    it('stops at take profit and releases the Run Panel', async () => {
+        const h = harness({ takeProfit: 0.3 });
+        h.runner.start();
+        expect(h.stores.run_panel.running).toBe(true);
+        expect(h.stores.dashboard.active_trading_module).toBe('sixfold');
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        const s = h.runner.getSnapshot();
+        expect(s.running).toBe(false);
+        expect(s.stopReason).toMatch(/Take profit/);
+        expect(h.stores.run_panel.running).toBe(false);
+        expect(h.stores.dashboard.active_trading_module).toBeNull();
+    });
+
+    it('doubles the stake after a loss when martingale is on, and uses the recovery barrier', async () => {
+        const h = harness({ takeProfit: 0, martingale: true, multiplier: 2, recovery: true, recoveryOver: 4, recoveryUnder: 5 });
+        h.queueProfits(-1);
+        h.runner.start();
+        const side = h.runner.getSnapshot().armed!.label.split(' ')[0];
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        h.advance(1500);
+        h.runner.tick();
+        h.runner.handleFeedTick('P', 0);
+        await flush();
+        expect(h.calls.buy[1].parameters.amount).toBe(2);
+        expect(h.calls.buy[1].parameters.barrier).toBe(side === 'Over' ? '4' : '5');
+    });
+
+    it('stops after the consecutive-loss limit', async () => {
+        const h = harness({ takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 2 });
+        h.queueProfits(-1, -1);
+        h.runner.start();
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        h.advance(1500);
+        h.runner.tick();
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.runner.getSnapshot().stopReason).toMatch(/consecutive losses/);
+    });
+
+    it('never trades a market whose last tick is stale', async () => {
+        const h = harness();
+        h.runner.start();
+        h.stale('P');
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(0);
+    });
+
+    it('skips a contract Deriv refuses, keeps the session alive, and quarantines the market after two refusals', async () => {
+        let n = 0;
+        const h = harness(
+            { takeProfit: 0, selectivity: 'active' },
+            {
+                buy: async () => {
+                    n++;
+                    throw new TradeRequestError('Contract not offered', { stage: 'buy', kind: 'rejected', code: 'InvalidContractProposal' });
+                },
+            }
+        );
+        h.runner.start();
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.runner.isRunning()).toBe(true);
+        // Keep poking until P has been refused twice.
+        for (let i = 0; i < 6 && !h.runner.getSnapshot().quarantined.includes('P'); i++) {
+            h.advance(1500);
+            h.runner.tick();
+            const a = h.runner.getSnapshot().armed;
+            if (a?.symbol === 'P') h.runner.handleFeedTick('P', a.entryDigits[0] ?? 1);
+            await flush();
+        }
+        expect(n).toBeGreaterThanOrEqual(2);
+        expect(h.runner.getSnapshot().quarantined).toContain('P');
+    });
+
+    it('stops (never retries) when a purchase may exist but its result is unknown', async () => {
+        const h = harness(
+            {},
+            {
+                buy: async () => {
+                    throw new TradeRequestError('Purchase request timed out.', { stage: 'buy', kind: 'timeout', outcomeUnknown: true });
+                },
+            }
+        );
+        h.runner.start();
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        const s = h.runner.getSnapshot();
+        expect(s.running).toBe(false);
+        expect(s.stopReason).toMatch(/Stopped/);
+    });
+
+    it('stops when the Run Panel is stopped or another module takes over', () => {
+        const h = harness();
+        h.runner.start();
+        h.watcher()!(false, null);
+        expect(h.runner.isRunning()).toBe(false);
+        h.runner.start();
+        h.watcher()!(true, 'auto_trades');
+        expect(h.runner.isRunning()).toBe(false);
+    });
+
+    it('stops when the Run Panel Stop handler is called', () => {
+        const h = harness();
+        h.runner.start();
+        h.stores.dashboard.handlers.sixfold();
+        expect(h.runner.isRunning()).toBe(false);
+    });
+
+    it('does not trade markets without enough history', () => {
+        const h = harness();
+        h.series.P = planted.slice(0, MIN_TICKS - 1);
+        h.runner.start();
+        expect(h.runner.getSnapshot().armed).toBeNull();
+        expect(h.runner.getSnapshot().readyMarkets).toBe(1);
+    });
+
+    it('ANY entry mode buys as soon as a contract is armed', async () => {
+        const h = harness({ entry: 'ANY' });
+        h.runner.start();
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+    });
+
+    it('asks the feed to connect when it is not live and gives up after waiting', () => {
+        let live = false;
+        const h = harness({}, {
+            feed: {
+                getLiveSeries: () => ({}),
+                getLastTickAt: () => null,
+                getLastDigit: () => null,
+                isLive: () => live,
+                getSnapshot: () => ({ mode: 'demo', status: 'offline', error: 'No route', series: {}, version: 1 }),
+                connect: () => void (live = false),
+            },
+        });
+        h.runner.start();
+        expect(h.runner.getSnapshot().phase).toBe('connecting');
+        h.advance(30_000);
+        h.runner.tick();
+        expect(h.runner.isRunning()).toBe(false);
+        expect(h.runner.getSnapshot().stopReason).toMatch(/No route/);
+    });
+
+    it('persists edited settings and re-clamps the base stake while idle', () => {
+        const h = harness();
+        h.runner.updateSettings({ stake: 2.5 });
+        expect(h.runner.getSnapshot().settings.stake).toBe(2.5);
+        expect(h.runner.getSnapshot().session.currentStake).toBe(2.5);
+    });
+});

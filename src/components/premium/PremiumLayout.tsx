@@ -73,6 +73,8 @@ const SentinelAiBridge = lazy(() => import('@/pages/sentinel-ai/sentinel-ai-brid
 const SignalZonePage = lazy(() => import('./signal-zone/SignalZonePage'));
 // Sixfold carries its own simulator and crowd model, so it also loads on demand.
 const SixfoldPage = lazy(() => import('./sixfold/SixfoldPage'));
+// Its runner trades on its own, so the bridge stays mounted on every tab (Run Panel hand-off, Stop sync, session-drop stop).
+const SixfoldBridge = lazy(() => import('./sixfold/sixfold-bridge'));
 const DTraderPage = lazy(() => import('./dtrader/DTraderPage'));
 
 const validSections: PremiumSection[] = [
@@ -239,7 +241,7 @@ const PremiumLayout = observer(() => {
             case 'dtrader': return <Suspense fallback={<PremiumLoader />}><DTraderPage /></Suspense>;
             case 'ai_bots': return <AIBotsPage />;
             case 'digits_analysis': return <DigitsAnalysisPage openBotBuilder={openBotBuilder} />;
-            case 'sixfold': return <Suspense fallback={<PremiumLoader />}><SixfoldPage openBotBuilder={openBotBuilder} /></Suspense>;
+            case 'sixfold': return <Suspense fallback={<PremiumLoader />}><SixfoldPage /></Suspense>;
             default: return null;
         }
     };
@@ -260,6 +262,7 @@ const PremiumLayout = observer(() => {
     >
         <GlobalContractBridge />
         <Suspense fallback={null}><SentinelAiBridge openBotBuilder={openBotBuilder} /></Suspense>
+        <Suspense fallback={null}><SixfoldBridge /></Suspense>
         <SignalZoneBridge />
         <PremiumHeader active={section} navigation={customization.navigation} onChange={changeSection} />
         <main className='prodb-premium-content'>

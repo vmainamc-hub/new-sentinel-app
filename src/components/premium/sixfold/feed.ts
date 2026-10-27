@@ -1,6 +1,6 @@
 // Sixfold feed: reads the last ticks of the markets over Deriv's public WebSocket (read-only, no login, no trading),
-// or serves demo digits / pasted digits. It never places a trade.
-import { useCallback, useEffect, useRef, useState } from 'react';
+// or serves demo digits / pasted digits. It never places a trade. One app-wide instance (`sixfoldFeed`) feeds both the
+// page and the Auto runner, so scanning continues on any tab.
 import { DERIV_WS_URL } from '@/lib/deriv-ws';
 import { digitFromQuote, parseDigitsText } from './engine';
 import { mulberry32 } from './stats';
@@ -44,6 +44,7 @@ export function inferDecimals(quotes: number[]): number {
 export type FeedMode = 'live' | 'demo' | 'import';
 export type FeedStatus = 'offline' | 'connecting' | 'live' | 'error';
 export type Series = Record<string, number[]>;
+export type FeedSnapshot = { mode: FeedMode; status: FeedStatus; error: string; series: Series; version: number };
 
 export function demoSeries(markets: readonly string[], n = 1500, seed = 11): Series {
     const out: Series = {};
@@ -54,136 +55,284 @@ export function demoSeries(markets: readonly string[], n = 1500, seed = 11): Ser
     return out;
 }
 
-const SYMBOLS = MARKETS.map(m => m[0]);
+export const SYMBOLS = MARKETS.map(m => m[0]);
 
-export function useFeed() {
-    const [mode, setMode] = useState<FeedMode>('demo');
-    const [status, setStatus] = useState<FeedStatus>('offline');
-    const [error, setError] = useState('');
-    const [series, setSeries] = useState<Series>(() => demoSeries(SYMBOLS));
-    const socket = useRef<WebSocket | null>(null);
-    const decimals = useRef<Record<string, number>>({});
-    const generation = useRef(0);
+/** Short label for the radar and the heat grid: "V10", "V25 1s" ... */
+export const shortName = (symbol: string): string => {
+    const m = /^(?:1HZ|R_)?(\d+)V?$/.exec(symbol);
+    const n = m?.[1] ?? symbol;
+    return symbol.startsWith('1HZ') ? `V${n}·1s` : `V${n}`;
+};
 
-    const stop = useCallback(() => {
-        generation.current += 1;
-        if (socket.current) {
-            try {
-                socket.current.close();
-            } catch {
-                /* already closed */
-            }
-            socket.current = null;
-        }
-        setStatus('offline');
-    }, []);
+const PUBLISH_MS = 400;
+const STALE_MS = 15_000;
+const WATCHDOG_MS = 5_000;
 
-    const connect = useCallback(() => {
-        stop();
-        const mine = ++generation.current;
-        setMode('live');
-        setStatus('connecting');
-        setError('');
-        setSeries({});
-        const urls = [DERIV_WS_URL, LEGACY_ENDPOINT];
-        const attempt = (index: number) => {
-            if (mine !== generation.current) return;
-            if (index >= urls.length) {
-                setStatus('error');
-                setError('Could not reach Deriv. Check your connection, or use demo data.');
-                return;
-            }
-            let opened = false;
-            const ws = new WebSocket(urls[index]);
-            socket.current = ws;
-            ws.onopen = () => {
-                opened = true;
-                setStatus('live');
-                SYMBOLS.forEach((symbol, i) =>
-                    ws.send(
-                        JSON.stringify({
-                            ticks_history: symbol,
-                            end: 'latest',
-                            count: MAX_TICKS,
-                            style: 'ticks',
-                            subscribe: 1,
-                            req_id: i + 1,
-                        })
-                    )
-                );
-            };
-            ws.onmessage = event => {
-                let msg: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-                try {
-                    msg = JSON.parse(event.data);
-                } catch {
-                    return;
-                }
-                if (msg.error) {
-                    setError(msg.error.message ?? 'Deriv returned an error.');
-                    return;
-                }
-                if (msg.msg_type === 'history' && msg.history?.prices) {
-                    const symbol: string | undefined = msg.echo_req?.ticks_history;
-                    if (!symbol) return;
-                    const prices: number[] = msg.history.prices.map(Number);
-                    const places = pipDecimals(msg.pip_size) ?? inferDecimals(prices);
-                    decimals.current[symbol] = places;
-                    setSeries(s => ({ ...s, [symbol]: prices.map(q => digitFromQuote(q, places)).slice(-MAX_TICKS) }));
-                }
-                if (msg.msg_type === 'tick' && msg.tick?.symbol) {
-                    const symbol: string = msg.tick.symbol;
-                    const places = pipDecimals(msg.tick.pip_size) ?? decimals.current[symbol] ?? 2;
-                    decimals.current[symbol] = places;
-                    const digit = digitFromQuote(Number(msg.tick.quote), places);
-                    setSeries(s => ({ ...s, [symbol]: [...(s[symbol] ?? []), digit].slice(-MAX_TICKS) }));
-                }
-            };
-            ws.onerror = () => {
-                if (!opened && mine === generation.current) {
-                    try {
-                        ws.close();
-                    } catch {
-                        /* ignore */
-                    }
-                    attempt(index + 1);
-                }
-            };
-            ws.onclose = () => {
-                if (mine === generation.current && opened) setStatus('offline');
-            };
+type SocketLike = {
+    send: (data: string) => void;
+    close: () => void;
+    onopen: ((ev?: unknown) => void) | null;
+    onmessage: ((ev: { data: string }) => void) | null;
+    onerror: ((ev?: unknown) => void) | null;
+    onclose: ((ev?: unknown) => void) | null;
+};
+
+export class SixfoldFeed {
+    private mode: FeedMode = 'demo';
+    private status: FeedStatus = 'offline';
+    private error = '';
+    private buf: Series = demoSeries(SYMBOLS);
+    private dirty = new Set<string>();
+    private decimals: Record<string, number> = {};
+    private lastTick: Record<string, number> = {};
+    private socket: SocketLike | null = null;
+    private generation = 0;
+    private attempts = 0;
+    private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    private watchdog: ReturnType<typeof setInterval> | null = null;
+    private flushTimer: ReturnType<typeof setTimeout> | null = null;
+    private listeners = new Set<() => void>();
+    private tickListeners = new Set<(symbol: string, digit: number) => void>();
+    private snap: FeedSnapshot;
+
+    constructor(
+        private makeSocket: (url: string) => SocketLike = url => new WebSocket(url) as unknown as SocketLike,
+        private now: () => number = () => Date.now()
+    ) {
+        this.snap = { mode: this.mode, status: this.status, error: '', series: this.copyAll(), version: 0 };
+    }
+
+    // ---- reading ----
+    getSnapshot = (): FeedSnapshot => this.snap;
+    subscribe = (listener: () => void) => {
+        this.listeners.add(listener);
+        return () => {
+            this.listeners.delete(listener);
         };
-        attempt(0);
-    }, [stop]);
+    };
+    /** The live arrays, for synchronous read-only use (scans). Never keep or mutate them. */
+    getLiveSeries = (): Series => this.buf;
+    getLastDigit = (symbol: string): number | null => this.buf[symbol]?.at(-1) ?? null;
+    getLastTickAt = (symbol: string): number | null => this.lastTick[symbol] ?? null;
+    isLive = () => this.mode === 'live' && this.status === 'live';
+    getMode = () => this.mode;
+    getStatus = () => this.status;
+    onTick = (cb: (symbol: string, digit: number) => void) => {
+        this.tickListeners.add(cb);
+        return () => {
+            this.tickListeners.delete(cb);
+        };
+    };
 
-    const useDemo = useCallback(() => {
-        stop();
-        setMode('demo');
-        setError('');
-        setSeries(demoSeries(SYMBOLS));
-    }, [stop]);
+    // ---- controls ----
+    stop = () => {
+        this.generation += 1;
+        this.clearTimers();
+        this.closeSocket();
+        this.setStatus('offline');
+    };
 
-    const importDigits = useCallback(
-        (market: string, text: string) => {
-            try {
-                const digits = parseDigitsText(text);
-                stop();
-                setError('');
-                setSeries(s => ({ ...(mode === 'import' ? s : {}), [market]: digits.slice(-MAX_TICKS) }));
-                setMode('import');
-            } catch (e) {
-                setError((e as Error).message);
+    connect = () => {
+        this.stop();
+        const mine = this.generation;
+        this.mode = 'live';
+        this.error = '';
+        this.replaceAll({});
+        this.attempts = 0;
+        this.setStatus('connecting');
+        this.publish();
+        this.watchdog = setInterval(() => this.checkStale(mine), WATCHDOG_MS);
+        this.attempt(mine, 0);
+    };
+
+    useDemo = () => {
+        this.stop();
+        this.mode = 'demo';
+        this.error = '';
+        this.replaceAll(demoSeries(SYMBOLS));
+        this.publish();
+    };
+
+    importDigits = (market: string, text: string) => {
+        try {
+            const digits = parseDigitsText(text);
+            const keep = this.mode === 'import' ? this.buf : {};
+            this.stop();
+            this.error = '';
+            this.replaceAll({ ...keep, [market]: digits.slice(-MAX_TICKS) });
+            this.mode = 'import';
+            this.publish();
+        } catch (e) {
+            this.error = (e as Error).message;
+            this.publish();
+        }
+    };
+
+    // ---- internals ----
+    private copyAll(): Series {
+        const out: Series = {};
+        for (const k of Object.keys(this.buf)) out[k] = this.buf[k].slice();
+        return out;
+    }
+
+    private publish() {
+        if (this.flushTimer) {
+            clearTimeout(this.flushTimer);
+            this.flushTimer = null;
+        }
+        // Reuse the previously published array for any market that did not change, so React memo checks stay cheap.
+        const series: Series = {};
+        for (const k of Object.keys(this.buf)) {
+            const before = this.snap.series[k];
+            series[k] = this.dirty.has(k) || !before ? this.buf[k].slice() : before;
+        }
+        this.dirty.clear();
+        this.snap = { mode: this.mode, status: this.status, error: this.error, series, version: this.snap.version + 1 };
+        this.listeners.forEach(l => l());
+    }
+
+    private replaceAll(next: Series) {
+        this.buf = next;
+        this.dirty = new Set(Object.keys(next));
+    }
+
+    private schedulePublish() {
+        if (this.flushTimer) return;
+        this.flushTimer = setTimeout(() => {
+            this.flushTimer = null;
+            this.publish();
+        }, PUBLISH_MS);
+    }
+
+    private setStatus(status: FeedStatus) {
+        this.status = status;
+        this.publish();
+    }
+
+    private clearTimers() {
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+        if (this.watchdog) clearInterval(this.watchdog);
+        this.reconnectTimer = null;
+        this.watchdog = null;
+    }
+
+    private closeSocket() {
+        const ws = this.socket;
+        this.socket = null;
+        if (!ws) return;
+        ws.onclose = ws.onerror = ws.onmessage = ws.onopen = null;
+        try {
+            ws.close();
+        } catch {
+            /* already closed */
+        }
+    }
+
+    /** No tick on any market for a long time: the stream is dead even though the socket looks open. Reconnect. */
+    private checkStale(mine: number) {
+        if (mine !== this.generation || this.mode !== 'live' || this.status !== 'live') return;
+        const newest = Math.max(0, ...Object.values(this.lastTick));
+        if (newest && this.now() - newest > STALE_MS) this.reconnect(mine, 'Market feed went quiet. Reconnecting.');
+    }
+
+    private reconnect(mine: number, why: string) {
+        if (mine !== this.generation || this.mode !== 'live') return;
+        this.closeSocket();
+        this.error = why;
+        this.attempts += 1;
+        this.setStatus('connecting');
+        const delay = Math.min(15_000, 1_000 * 2 ** Math.min(4, this.attempts));
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+        this.reconnectTimer = setTimeout(() => this.attempt(mine, 0), delay);
+    }
+
+    private attempt(mine: number, index: number) {
+        if (mine !== this.generation) return;
+        const urls = [DERIV_WS_URL, LEGACY_ENDPOINT];
+        if (index >= urls.length) {
+            if (Object.keys(this.buf).length) return this.reconnect(mine, 'Lost the market feed. Reconnecting.');
+            this.error = 'Could not reach Deriv. Check your connection, or use demo data.';
+            this.setStatus('error');
+            return;
+        }
+        let opened = false;
+        const ws = this.makeSocket(urls[index]);
+        this.socket = ws;
+        ws.onopen = () => {
+            opened = true;
+            this.attempts = 0;
+            this.error = '';
+            this.setStatus('live');
+            SYMBOLS.forEach((symbol, i) =>
+                ws.send(
+                    JSON.stringify({
+                        ticks_history: symbol,
+                        end: 'latest',
+                        count: MAX_TICKS,
+                        style: 'ticks',
+                        subscribe: 1,
+                        req_id: i + 1,
+                    })
+                )
+            );
+        };
+        ws.onmessage = event => this.onMessage(mine, event.data);
+        ws.onerror = () => {
+            if (!opened && mine === this.generation) {
+                this.closeSocket();
+                this.attempt(mine, index + 1);
             }
-        },
-        [stop, mode]
-    );
+        };
+        ws.onclose = () => {
+            if (mine === this.generation && opened) this.reconnect(mine, 'Market feed closed. Reconnecting.');
+        };
+    }
 
-    useEffect(
-        () => () => {
-            generation.current += 1;
-            socket.current?.close();
-        },
-        []
-    );
-    return { mode, status, error, series, connect, stop, useDemo, importDigits };
+    private onMessage(mine: number, raw: string) {
+        if (mine !== this.generation) return;
+        let msg: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+        try {
+            msg = JSON.parse(raw);
+        } catch {
+            return;
+        }
+        if (msg.error) {
+            this.error = msg.error.message ?? 'Deriv returned an error.';
+            this.publish();
+            return;
+        }
+        if (msg.msg_type === 'history' && msg.history?.prices) {
+            const symbol: string | undefined = msg.echo_req?.ticks_history;
+            if (!symbol) return;
+            const prices: number[] = msg.history.prices.map(Number);
+            const places = pipDecimals(msg.pip_size) ?? inferDecimals(prices);
+            this.decimals[symbol] = places;
+            this.buf[symbol] = prices.map(q => digitFromQuote(q, places)).slice(-MAX_TICKS);
+            this.lastTick[symbol] = this.now();
+            this.dirty.add(symbol);
+            this.schedulePublish();
+        }
+        if (msg.msg_type === 'tick' && msg.tick?.symbol) {
+            const symbol: string = msg.tick.symbol;
+            const places = pipDecimals(msg.tick.pip_size) ?? this.decimals[symbol] ?? 2;
+            this.decimals[symbol] = places;
+            const digit = digitFromQuote(Number(msg.tick.quote), places);
+            const arr = (this.buf[symbol] ??= []);
+            arr.push(digit);
+            if (arr.length > MAX_TICKS + 100) arr.splice(0, arr.length - MAX_TICKS);
+            this.lastTick[symbol] = this.now();
+            this.dirty.add(symbol);
+            this.schedulePublish();
+            this.tickListeners.forEach(cb => {
+                try {
+                    cb(symbol, digit);
+                } catch {
+                    /* a failing listener must not break the feed */
+                }
+            });
+        }
+    }
 }
+
+/** The one app-wide feed. */
+export const sixfoldFeed = new SixfoldFeed();
