@@ -10,6 +10,7 @@
 import { contract_stages } from '@/constants/contract-stage';
 import type { RunnerStores, StoreWatcher } from '@/pages/sentinel-ai/sentinel-ai-runner';
 import { describeTradeFailure } from '@/utils/trade-errors';
+import { smartEntryDigits } from './entry';
 import { type FeedMode, type FeedSnapshot, marketName } from './feed';
 import {
     applyResult,
@@ -37,6 +38,11 @@ const EXPIRED_BLOCK_MS = 20_000;
 const MAX_SKIPS_IN_A_ROW = 6;
 const MAX_MARKET_REFUSALS = 2;
 const RETRY_COOLDOWN_MS = 3_000;
+/** A rested market comes back after this long even if too few other trades happened. */
+const REST_MAX_MS = 5 * 60_000;
+/** Extra score asked for right after a loss, and how fast it fades while nothing qualifies. */
+const PICKY_BUMP = 10;
+const PICKY_FADE_MS = 15_000;
 /** The armed market must have printed a tick this recently, or it is not traded. */
 const FRESH_TICK_MS = 5_000;
 /** Give up waiting for the feed to come up after this long. */
@@ -96,6 +102,10 @@ export type SixfoldSnapshot = {
     /** Markets that have enough ticks to be scanned. */
     readyMarkets: number;
     quarantined: string[];
+    /** Markets resting after a loss, with the trades left before they return. */
+    resting: Array<{ symbol: string; name: string; tradesLeft: number }>;
+    /** Extra score currently asked for because of the latest loss. */
+    pickyBump: number;
 };
 
 export type RunnerIO = {
@@ -155,6 +165,11 @@ export class SixfoldRunner {
     private blocked = new Map<string, number>();
     private refusals = new Map<string, number>();
     private quarantined = new Set<string>();
+    /** Loss shield: per market, when it may be traded again and its current run of losses. */
+    private rest = new Map<string, { untilTrades: number; untilAt: number; streak: number }>();
+    /** Entry digit of the last losing trade on a market, left out the next time it is armed. */
+    private lastLossEntry = new Map<string, number>();
+    private lastResultAt = 0;
     private aborts = new Set<AbortController>();
     private listeners = new Set<() => void>();
     private emitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -241,6 +256,9 @@ export class SixfoldRunner {
         this.blocked.clear();
         this.refusals.clear();
         this.quarantined.clear();
+        this.rest.clear();
+        this.lastLossEntry.clear();
+        this.lastResultAt = 0;
         this.armed = null;
         this.session = freshSession(this.settings);
         this.runToken += 1;
@@ -339,12 +357,18 @@ export class SixfoldRunner {
         // Keep the armed contract while it stays eligible; otherwise look again.
         if (this.armed) {
             const cell = this.scan.cells.find(c => c.symbol === this.armed!.symbol && c.key === this.armed!.cellKey);
-            const verdict = cell ? eligibility(cell, this.settings.selectivity) : null;
+            const verdict = cell ? eligibility(cell, this.settings.selectivity, this.pickyBump(now)) : null;
             if (!cell || !verdict?.ok) {
                 this.addLog('info', `${this.armed.label} on ${this.armed.name} dropped: ${verdict?.reason ?? 'no longer scanned'}.`);
                 this.armed = null;
             } else {
-                this.armed = { ...this.armed, score: cell.score, edgePts: cell.edgePts, significant: cell.significant };
+                this.armed = {
+                    ...this.armed,
+                    score: cell.score,
+                    edgePts: cell.edgePts,
+                    significant: cell.significant,
+                    entryDigits: this.entryDigitsFor(this.armed.symbol, cell, this.armed.entryDigits),
+                };
             }
         }
         if (!this.armed) this.armBest(now);
@@ -355,7 +379,7 @@ export class SixfoldRunner {
     handleFeedTick(symbol: string, digit: number) {
         if (!this.running || this.tradeInFlight || !this.armed || this.armed.symbol !== symbol) return;
         if (this.io.now() < this.cooldownUntil) return;
-        if (this.settings.entry === 'SETUP' && !this.armed.entryDigits.includes(digit)) return;
+        if (this.settings.entry !== 'ANY' && !this.armed.entryDigits.includes(digit)) return;
         void this.execute(digit);
     }
 
@@ -366,10 +390,14 @@ export class SixfoldRunner {
             if (until > now) skipKeys.add(key);
             else this.blocked.delete(key);
         });
-        const pick = pickBest(this.scan, this.settings.selectivity, { mode: this.settings.entry }, {
-            symbols: this.quarantined,
-            keys: skipKeys,
-        });
+        const skipSymbols = new Set<string>([...this.quarantined, ...this.restedSymbols(now)]);
+        const pick = pickBest(
+            this.scan,
+            this.settings.selectivity,
+            { mode: this.settings.entry === 'ANY' ? 'ANY' : 'SETUP' },
+            { symbols: skipSymbols, keys: skipKeys },
+            this.pickyBump(now)
+        );
         if (!pick) return;
         const { cell } = pick;
         this.armed = {
@@ -379,14 +407,16 @@ export class SixfoldRunner {
             score: cell.score,
             edgePts: cell.edgePts,
             significant: cell.significant,
-            entryDigits: pick.entryDigits,
+            entryDigits: this.settings.entry === 'ANY' ? [] : this.entryDigitsFor(cell.symbol, cell, pick.entryDigits),
             why: pick.why,
             since: now,
             expiresAt: now + this.settings.waitSeconds * 1000,
             cellKey: cell.key,
         };
         const entry =
-            this.settings.entry === 'ANY' ? 'buying on the next tick' : `waiting for digit ${pick.entryDigits.join(' / ')}`;
+            this.settings.entry === 'ANY'
+                ? 'buying on the next tick'
+                : `waiting for digit ${this.armed.entryDigits.join(' / ')}${this.settings.entry === 'SMART' ? ' (learned from this market)' : ''}`;
         this.addLog(
             'pick',
             `Armed ${cell.label} on ${marketName(cell.symbol)} (score ${cell.score}, ${fmtPts(cell.edgePts)} vs break-even${cell.significant ? ', significant' : ''}): ${entry}.`
@@ -397,6 +427,33 @@ export class SixfoldRunner {
         }
     }
 
+    /** Entry digits for a market: learned from its recent ticks when SMART, otherwise the fixed setup digits. */
+    private entryDigitsFor(symbol: string, cell: Cell, fixed: number[]): number[] {
+        if (this.settings.entry !== 'SMART') return fixed;
+        const series = this.io.feed.getLiveSeries()[symbol] ?? [];
+        const traded = tradeContract(cell.contract, this.session.consecutiveLosses, this.settings).contract;
+        const avoid = new Set<number>();
+        const last = this.lastLossEntry.get(symbol);
+        if (last !== undefined) avoid.add(last);
+        const next = smartEntryDigits(series, traded, this.settings.duration, avoid).digits;
+        return next.length === fixed.length && next.every((d, i) => d === fixed[i]) ? fixed : next;
+    }
+
+    private restedSymbols(now: number): Set<string> {
+        const out = new Set<string>();
+        if (!this.settings.lossShield) return out;
+        this.rest.forEach((r, symbol) => {
+            if (this.session.trades < r.untilTrades && now < r.untilAt) out.add(symbol);
+        });
+        return out;
+    }
+
+    /** Extra score asked for right after a loss. It fades, so a quiet market can never freeze the session. */
+    private pickyBump(now: number): number {
+        if (!this.settings.pickyAfterLoss || this.session.consecutiveLosses === 0) return 0;
+        return Math.max(0, PICKY_BUMP - Math.floor(Math.max(0, now - this.lastResultAt) / PICKY_FADE_MS));
+    }
+
     private refreshScan(force = false) {
         const now = this.io.now();
         if (!force && this.scan && now - this.scanAt < SCAN_MS) return;
@@ -405,16 +462,21 @@ export class SixfoldRunner {
         this.scan = scanMarkets(
             series,
             symbols,
-            { duration: this.settings.duration, entry: { mode: this.settings.entry }, margin: this.settings.margin },
+            { duration: this.settings.duration, entry: { mode: this.settings.entry === 'ANY' ? 'ANY' : 'SETUP' }, margin: this.settings.margin },
             now,
             primaryContracts(this.settings)
         );
         this.scanAt = now;
+        const rested = this.restedSymbols(now);
+        const bump = this.pickyBump(now);
         this.queue = this.scan.cells
             .filter(c => c.executable && !this.quarantined.has(c.symbol))
             .sort((a, b) => b.score - a.score)
             .slice(0, 8)
-            .map(cell => ({ cell, ...eligibility(cell, this.settings.selectivity) }));
+            .map(cell => {
+                if (rested.has(cell.symbol)) return { cell, ok: false, reason: 'Resting after a loss on this market' };
+                return { cell, ...eligibility(cell, this.settings.selectivity, bump) };
+            });
         this.scheduleEmit();
     }
 
@@ -574,6 +636,25 @@ export class SixfoldRunner {
         this.emit();
     }
 
+    /** Loss shield bookkeeping after a settled trade on `symbol`. */
+    private updateShield(symbol: string, name: string, entryDigit: number | null, lost: boolean) {
+        if (!lost) {
+            this.rest.delete(symbol);
+            this.lastLossEntry.delete(symbol);
+            return;
+        }
+        if (entryDigit !== null) this.lastLossEntry.set(symbol, entryDigit);
+        const streak = (this.rest.get(symbol)?.streak ?? 0) + 1;
+        const wait = this.settings.restTrades * (streak >= 2 ? 2 : 1);
+        this.rest.set(symbol, { untilTrades: this.session.trades + wait, untilAt: this.io.now() + REST_MAX_MS, streak });
+        if (this.settings.lossShield) {
+            this.addLog(
+                'warn',
+                `Resting ${name} for the next ${wait} trades${streak >= 2 ? ` (${streak} losses in a row there)` : ''}.`
+            );
+        }
+    }
+
     /** `profit === null` means the result could not be confirmed: counted as a trade, never as a win or loss. */
     private finishTrade(contractId: number, profit: number | null) {
         this.tradeInFlight = false;
@@ -586,6 +667,8 @@ export class SixfoldRunner {
             if (trade) trade.status = 'unconfirmed';
         } else {
             this.session = applyResult(this.session, profit, this.settings);
+            this.lastResultAt = this.io.now();
+            if (trade) this.updateShield(trade.symbol, trade.name, trade.entryDigit, profit < 0);
             if (trade) {
                 trade.profit = profit;
                 trade.status = profit < 0 ? 'lost' : 'won';
@@ -631,6 +714,12 @@ export class SixfoldRunner {
             feed: { mode: f.mode, status: f.status, error: f.error },
             readyMarkets: this.settings.markets.filter(s => (series[s]?.length ?? 0) >= MIN_TICKS).length,
             quarantined: [...this.quarantined],
+            resting: [...this.restedSymbols(this.io.now())].map(symbol => ({
+                symbol,
+                name: marketName(symbol),
+                tradesLeft: Math.max(0, (this.rest.get(symbol)?.untilTrades ?? 0) - this.session.trades),
+            })),
+            pickyBump: this.pickyBump(this.io.now()),
         };
     }
 

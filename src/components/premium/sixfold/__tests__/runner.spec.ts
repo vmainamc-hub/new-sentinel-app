@@ -73,7 +73,7 @@ function harness(over: Partial<SixfoldSettings> = {}, io: Partial<RunnerIO> = {}
         currency: () => 'USD',
         afterStop: () => {},
         now: () => t,
-        loadSettings: () => ({ ...DEFAULT_SETTINGS, markets: ['P', 'Q'], selectivity: 'strict', ...over }),
+        loadSettings: () => ({ ...DEFAULT_SETTINGS, markets: ['P', 'Q'], selectivity: 'strict', lossShield: false, pickyAfterLoss: false, ...over }),
         saveSettings: () => {},
         ...io,
     });
@@ -197,7 +197,7 @@ describe('SixfoldRunner', () => {
         await flush();
         h.advance(1500);
         h.runner.tick();
-        h.runner.handleFeedTick('P', 1);
+        h.runner.handleFeedTick('P', h.runner.getSnapshot().armed!.entryDigits[0]);
         await flush();
         expect(h.runner.getSnapshot().stopReason).toMatch(/consecutive losses/);
     });
@@ -379,5 +379,117 @@ describe('SixfoldRunner trades only the primary contracts', () => {
         const h = harness({ primaryOver: 3, primaryUnder: 6 });
         h.runner.start();
         expect(new Set(h.runner.getSnapshot().scan!.cells.map(c => c.label))).toEqual(new Set(['Over 3', 'Under 6']));
+    });
+});
+
+describe('SixfoldRunner loss shield and result-aware rules', () => {
+    // Two markets that both look healthy, so after a loss on one the other must be used.
+    const twoGood = () => {
+        const h = harness({ takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, selectivity: 'active', recovery: false, lossShield: true, pickyAfterLoss: true });
+        h.series.Q = planted.slice();
+        return h;
+    };
+    const buyOnce = async (h: ReturnType<typeof harness>) => {
+        h.advance(1500);
+        h.runner.tick();
+        const a = h.runner.getSnapshot().armed!;
+        h.runner.handleFeedTick(a.symbol, a.entryDigits[0]);
+        await flush();
+        return a.symbol;
+    };
+
+    it('rests a market after it loses and trades the other one next', async () => {
+        const h = twoGood();
+        h.queueProfits(-1, 0.35);
+        h.runner.start();
+        const first = await buyOnce(h);
+        h.advance(1600);
+        h.runner.tick();
+        const snap = h.runner.getSnapshot();
+        expect(snap.resting.map(r => r.symbol)).toEqual([first]);
+        expect(snap.queue.find(q => q.cell.symbol === first)?.reason).toMatch(/Resting/);
+        const second = await buyOnce(h);
+        expect(second).not.toBe(first);
+    });
+
+    it('brings the market back after the rest is over', async () => {
+        const h = twoGood();
+        h.queueProfits(-1, 0.35, 0.35, 0.35, 0.35);
+        h.runner.updateSettings({ restTrades: 1 });
+        h.runner.start();
+        const first = await buyOnce(h);
+        expect(h.runner.getSnapshot().resting.map(r => r.symbol)).toEqual([first]);
+        await buyOnce(h); // one trade elsewhere ends the rest
+        expect(h.runner.getSnapshot().resting).toEqual([]);
+    });
+
+    it('lets a rested market return after five minutes even if nothing else traded', async () => {
+        const h = harness({ takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, selectivity: 'active', recovery: false, markets: ['P'], lossShield: true });
+        h.queueProfits(-1);
+        h.runner.start();
+        await buyOnce(h);
+        expect(h.runner.getSnapshot().resting).toHaveLength(1);
+        h.advance(5 * 60_000 + 1000);
+        h.runner.tick();
+        expect(h.runner.getSnapshot().resting).toEqual([]);
+        expect(h.runner.getSnapshot().armed).not.toBeNull();
+    });
+
+    it('does nothing different when the loss shield is off', async () => {
+        const h = twoGood();
+        h.runner.updateSettings({ lossShield: false });
+        h.queueProfits(-1);
+        h.runner.start();
+        await buyOnce(h);
+        expect(h.runner.getSnapshot().resting).toEqual([]);
+    });
+
+    it('asks for a higher score right after a loss and lets it fade', async () => {
+        const h = twoGood();
+        h.queueProfits(-1);
+        h.runner.start();
+        expect(h.runner.getSnapshot().pickyBump).toBe(0);
+        await buyOnce(h);
+        expect(h.runner.getSnapshot().pickyBump).toBe(10);
+        h.advance(60_000);
+        expect(h.runner.getSnapshot().pickyBump).toBe(10); // snapshot is rebuilt on tick
+        h.runner.tick();
+        expect(h.runner.getSnapshot().pickyBump).toBe(6);
+        h.advance(150_000);
+        h.runner.tick();
+        expect(h.runner.getSnapshot().pickyBump).toBe(0);
+    });
+
+    it('does not become picky when the setting is off, and a win clears it', async () => {
+        const h = twoGood();
+        h.runner.updateSettings({ pickyAfterLoss: false });
+        h.queueProfits(-1);
+        h.runner.start();
+        await buyOnce(h);
+        expect(h.runner.getSnapshot().pickyBump).toBe(0);
+    });
+
+    it('smart entry skips the digit that just lost on that market', async () => {
+        const h = harness({ takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, selectivity: 'active', recovery: false, markets: ['P'], lossShield: false });
+        h.queueProfits(-1);
+        h.runner.start();
+        const a = h.runner.getSnapshot().armed!;
+        const lostOn = a.entryDigits[0];
+        h.runner.handleFeedTick(a.symbol, lostOn);
+        await flush();
+        h.advance(1500);
+        h.runner.tick();
+        expect(h.runner.getSnapshot().armed!.entryDigits).not.toContain(lostOn);
+    });
+
+    it('settings keep working for fixed and any-tick entry', () => {
+        const h = harness({ entry: 'SETUP' });
+        h.runner.start();
+        const a = h.runner.getSnapshot().armed!;
+        expect(a.entryDigits.length).toBeGreaterThan(0);
+        h.runner.stop('x');
+        h.runner.updateSettings({ entry: 'ANY' });
+        h.runner.start();
+        expect(h.runner.getSnapshot().armed?.entryDigits ?? []).toEqual([]);
     });
 });

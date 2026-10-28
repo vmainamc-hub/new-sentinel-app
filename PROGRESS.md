@@ -111,6 +111,7 @@ Done (src/components/premium/sixfold, 64 unit tests pass, strict `tsc` clean, dr
 - [x] UI: scanner dial + Run/Stop, settings panel, candidate queue, activity log, market x contract heat map, equity and rolling win-rate charts, six-trader hexagon, digit and transition heat maps. Light and dark themes; phone layout.
 - [x] The market feed is now one app-wide singleton (`feed.ts`) with reconnect and a stale-stream watchdog, so scanning continues on any tab. `sixfold-bridge.tsx` is mounted in `PremiumLayout`.
 - [x] Primary-contract restriction: Sixfold never trades Over 7 / Under 1-3 etc. Recovery after a loss is Over 3 / Under 6 (on by default). New Contracts control in Scanner; Board shows just the two contracts. Tests assert every buy is Over 2 / Under 7 (or recovery 3 / 6).
+- [x] Loss shield (a market that loses is rested for N other trades, doubling after 2 losses there, max 5 min), adaptive entry (`entry.ts`: entry digits learned from the armed market's own ticks, recomputed while waiting, the digit that just lost is skipped next time), and pickier-after-a-loss (+10 score that fades over 150 s). Controls in Scanner; resting markets shown on the dial.
 
 Not done / unverified:
 - [ ] `npm ci`, `npm run build`, repo `jest` / `eslint` / `prettier`, and the SCSS compile were not run (registry blocked in the session). Run `npm ci && npm run type-check && npm test && npm run build` first.

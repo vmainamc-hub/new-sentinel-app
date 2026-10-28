@@ -158,7 +158,8 @@ const emptyRun = (contract: Contract, config: BotConfig): BotRun => ({
 export type Eligibility = { ok: boolean; reason: string };
 
 /** Which cells the runner may trade at each selectivity. Everything also has to be executable on Deriv. */
-export function eligibility(cell: Cell, selectivity: Selectivity): Eligibility {
+export function eligibility(cell: Cell, selectivity: Selectivity, bump = 0): Eligibility {
+    const need = (base: number) => Math.min(95, base + Math.max(0, bump));
     const a = cell.assessment;
     if (!cell.executable) return { ok: false, reason: 'Sixfold cannot execute this contract type' };
     if (a.state === 'WARMING') return { ok: false, reason: 'Too few simulated trades yet' };
@@ -166,14 +167,20 @@ export function eligibility(cell: Cell, selectivity: Selectivity): Eligibility {
     if (a.state === 'HOSTILE') return { ok: false, reason: 'Hostile: running well below its normal rate' };
     if (selectivity === 'strict') {
         if (!cell.significant) return { ok: false, reason: 'Not significant after adjusting for scanned cells' };
-        return cell.score >= 70 ? { ok: true, reason: 'Significant and healthy' } : { ok: false, reason: 'Score below 70' };
+        return cell.score >= need(70)
+            ? { ok: true, reason: 'Significant and healthy' }
+            : { ok: false, reason: `Score below ${need(70)}${bump > 0 ? ' (stricter after a loss)' : ''}` };
     }
     if (selectivity === 'balanced') {
         if (a.state !== 'VIABLE') return { ok: false, reason: `State is ${a.state.toLowerCase()}, not viable` };
-        return cell.score >= 62 ? { ok: true, reason: 'Viable and healthy' } : { ok: false, reason: 'Score below 62' };
+        return cell.score >= need(62)
+            ? { ok: true, reason: 'Viable and healthy' }
+            : { ok: false, reason: `Score below ${need(62)}${bump > 0 ? ' (stricter after a loss)' : ''}` };
     }
     if ((cell.edgePts ?? -99) < -1) return { ok: false, reason: 'More than a point under break-even' };
-    return cell.score >= 50 ? { ok: true, reason: 'Best available' } : { ok: false, reason: 'Score below 50' };
+    return cell.score >= need(50)
+        ? { ok: true, reason: 'Best available' }
+        : { ok: false, reason: `Score below ${need(50)}${bump > 0 ? ' (stricter after a loss)' : ''}` };
 }
 
 export type Pick = { cell: Cell; why: string; entryDigits: number[] };
@@ -183,12 +190,13 @@ export function pickBest(
     scan: ScanResult,
     selectivity: Selectivity,
     entry: { mode: 'SETUP' | 'ANY' },
-    skip: { symbols?: ReadonlySet<string>; keys?: ReadonlySet<string> } = {}
+    skip: { symbols?: ReadonlySet<string>; keys?: ReadonlySet<string> } = {},
+    bump = 0
 ): Pick | null {
     let best: Pick | null = null;
     for (const cell of scan.cells) {
         if (skip.symbols?.has(cell.symbol) || skip.keys?.has(`${cell.symbol}|${cell.key}`)) continue;
-        const e = eligibility(cell, selectivity);
+        const e = eligibility(cell, selectivity, bump);
         if (!e.ok) continue;
         const better =
             !best ||

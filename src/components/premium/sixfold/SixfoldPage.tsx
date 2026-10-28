@@ -288,11 +288,26 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                         value={s.entry}
                         onChange={v => set({ entry: v })}
                         options={[
-                            ['SETUP', 'On a setup digit'],
+                            ['SMART', 'Adaptive'],
+                            ['SETUP', 'Fixed digit'],
                             ['ANY', 'Any tick'],
                         ]}
                     />
+                    <small>
+                        {s.entry === 'SMART'
+                            ? 'Learns the entry digits from each market’s recent ticks and changes them as the market moves. The digit that just lost is skipped next time.'
+                            : s.entry === 'SETUP'
+                              ? 'Always waits for the same losing digits of the contract.'
+                              : 'Buys on the next tick after arming.'}
+                    </small>
                 </div>
+                <Switch on={s.lossShield} onChange={v => set({ lossShield: v })} title='Loss shield' sub='Rest a market after it loses' />
+                {s.lossShield && (
+                    <div className='sf-sub'>
+                        <Num label='Rest for (trades)' value={s.restTrades} onCommit={n => set({ restTrades: n })} hint='doubles after 2 losses there' />
+                    </div>
+                )}
+                <Switch on={s.pickyAfterLoss} onChange={v => set({ pickyAfterLoss: v })} title='Pickier after a loss' sub='Ask for a higher score next' />
                 <div className='sf-grid3'>
                     <Num label='Length (ticks)' value={s.duration} onCommit={n => set({ duration: n })} />
                     <Num label='Wait (s)' value={s.waitSeconds} onCommit={n => set({ waitSeconds: n })} hint='for entry' />
@@ -324,6 +339,16 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                 <div className='sf-dial'>
                     <Radar markets={dial} armedSymbol={sx.armed?.symbol ?? null} running={sx.running} center={centre} sub={sub} tone={phase.tone} />
                     <div className='sf-dial-title'>{sx.armed ? `${marketName(sx.armed.symbol)}` : sx.running ? 'Scanning all markets' : 'All markets, one scanner'}</div>
+                    {sx.running && (sx.resting.length > 0 || sx.pickyBump > 0) && (
+                        <div className='sf-rest' role='status'>
+                            {sx.resting.length > 0 && (
+                                <span>
+                                    Resting: {sx.resting.map(r => `${shortName(r.symbol)} (${r.tradesLeft})`).join(', ')}
+                                </span>
+                            )}
+                            {sx.pickyBump > 0 && <span>Pickier: +{sx.pickyBump} score</span>}
+                        </div>
+                    )}
                     <div className={`sf-phase t-${phase.tone}`}>
                         {sx.armed
                             ? `${sx.armed.label} · score ${sx.armed.score} · ${s.entry === 'ANY' ? 'buying now' : `waiting for digit ${sx.armed.entryDigits.join(' / ')}`}`
@@ -821,7 +846,7 @@ function LabTab(p: {
     const run = () => {
         setBusy(true);
         window.setTimeout(() => {
-            const bot: BotConfig = { duration: p.settings.duration, entry: { mode: p.settings.entry }, margin: p.settings.margin };
+            const bot: BotConfig = { duration: p.settings.duration, entry: { mode: p.settings.entry === 'ANY' ? 'ANY' : 'SETUP' }, margin: p.settings.margin };
             setSim({ cal: calibrateLabels(digits, p.contract, bot), bank: bankrollSim(p.contract, p.settings, 1000), for: key });
             setBusy(false);
         }, 30);

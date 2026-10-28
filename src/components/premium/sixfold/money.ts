@@ -2,7 +2,7 @@
 import { type Contract, contractLabel, isValidContract } from './bot';
 
 export type Selectivity = 'strict' | 'balanced' | 'active';
-export type EntryRule = 'SETUP' | 'ANY';
+export type EntryRule = 'SMART' | 'SETUP' | 'ANY';
 
 export type SixfoldSettings = {
     /** The two contracts Sixfold trades. Over <primaryOver> and Under <primaryUnder>; either can be switched off. */
@@ -29,8 +29,16 @@ export type SixfoldSettings = {
     /** Contract length in ticks (1-5). */
     duration: number;
     selectivity: Selectivity;
-    /** SETUP waits for a digit that would have lost the contract (as the simulator does); ANY buys as soon as armed. */
+    /**
+     * SMART learns the entry digits from the armed market's own recent ticks and changes them as the market changes;
+     * SETUP waits for a digit that would have lost the contract (as the simulator does); ANY buys as soon as armed.
+     */
     entry: EntryRule;
+    /** After a loss, rest that market: it is not traded again until `restTrades` other trades have happened. */
+    lossShield: boolean;
+    restTrades: number;
+    /** After a loss, ask for a higher score on the next trade (fades if nothing qualifies). */
+    pickyAfterLoss: boolean;
     /** How long an armed contract waits for its entry digit before it is dropped. */
     waitSeconds: number;
     /** Estimated platform margin, used for break-even and scoring. The real payout comes from Deriv. */
@@ -60,7 +68,10 @@ export const DEFAULT_SETTINGS: SixfoldSettings = {
     recoveryUnder: 6,
     duration: 1,
     selectivity: 'balanced',
-    entry: 'SETUP',
+    entry: 'SMART',
+    lossShield: true,
+    restTrades: 3,
+    pickyAfterLoss: true,
     waitSeconds: 45,
     margin: 0.05,
     markets: ['1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
@@ -95,7 +106,10 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         recoveryUnder: Math.trunc(num(s.recoveryUnder, d.recoveryUnder, 1, 9)),
         duration: Math.trunc(num(s.duration, d.duration, 1, 5)),
         selectivity: s.selectivity === 'strict' || s.selectivity === 'active' ? s.selectivity : 'balanced',
-        entry: s.entry === 'ANY' ? 'ANY' : 'SETUP',
+        entry: s.entry === 'ANY' || s.entry === 'SETUP' ? s.entry : 'SMART',
+        lossShield: typeof s.lossShield === 'boolean' ? s.lossShield : d.lossShield,
+        restTrades: Math.trunc(num(s.restTrades, d.restTrades, 1, 10)),
+        pickyAfterLoss: typeof s.pickyAfterLoss === 'boolean' ? s.pickyAfterLoss : d.pickyAfterLoss,
         waitSeconds: Math.trunc(num(s.waitSeconds, d.waitSeconds, 5, 600)),
         margin: num(s.margin, d.margin, 0.01, 0.2),
         markets: Array.isArray(s.markets) && s.markets.length ? s.markets.filter(m => typeof m === 'string') : d.markets,

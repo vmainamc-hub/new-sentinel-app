@@ -1404,3 +1404,18 @@
         }
     }
 }
+
+.sixfold .sf-rest {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    justify-content: center;
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: var(--muted);
+    span {
+        padding: 2px 8px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+    }
+}
