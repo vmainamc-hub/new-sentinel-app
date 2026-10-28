@@ -1,7 +1,7 @@
 import {
     autoSide, describeEntry, digitStats, digitWins, entryError, type EntryRule,
-exposureError, legsFor, matchEntry, nextStake, offsetError, parseSequence, planBurst,
-    predictionError, stopReason, toCandles, } from '../dtrader-engine';
+exposureError, FAMILIES,legsFor, matchEntry, nextStake, offsetError, parseSequence, planBurst,
+    predictionError, stopReason, tickPickError, toCandles,  } from '../dtrader-engine';
 
 describe('parseSequence', () => {
     it('reads spaced, comma and compact digits', () => {
@@ -161,5 +161,25 @@ describe('chart helpers', () => {
         const candles = toCandles(prices, times, 3);
         expect(candles.map(c => [c.open, c.close])).toEqual([[1, 1], [2, 4], [5, 7]]);
         expect(candles[2]).toMatchObject({ high: 7, low: 5 });
+    });
+});
+
+describe('High Tick / Low Tick', () => {
+    it('buys TICKHIGH / TICKLOW with the picked tick and no barrier', () => {
+        const legs = legsFor('tickhighlow', 'both', 4);
+        expect(legs.map(l => l.contract)).toEqual(['TICKHIGH', 'TICKLOW']);
+        expect(legs.every(l => l.selectedTick === 4 && l.barrier === undefined && l.barrier2 === undefined)).toBe(true);
+        expect(legs[0].label).toBe('High Tick #4');
+        expect(legsFor('tickhighlow', 'second', 5)[0]).toMatchObject({ contract: 'TICKLOW', selectedTick: 5 });
+    });
+    it('always runs 5 ticks and accepts only ticks 1 to 5', () => {
+        expect(FAMILIES.tickhighlow.fixedTicks).toBe(5);
+        expect([1, 5].map(n => tickPickError('tickhighlow', n))).toEqual([null, null]);
+        [0, 6, 2.5, NaN].forEach(n => expect(tickPickError('tickhighlow', n)).toMatch(/1 to 5/));
+        expect(tickPickError('overunder', 9)).toBeNull();
+    });
+    it('does not touch the other contracts', () => {
+        expect(legsFor('overunder', 'first', 4)[0].selectedTick).toBeUndefined();
+        expect(legsFor('risefall', 'first', 0)[0]).not.toHaveProperty('selectedTick');
     });
 });

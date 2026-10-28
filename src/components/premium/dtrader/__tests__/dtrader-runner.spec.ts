@@ -316,3 +316,49 @@ describe('DTraderRunner', () => {
         expect(runner.busy).toBe(false);
     });
 });
+
+describe('DTraderRunner · High Tick / Low Tick', () => {
+    it('sends every trade with the picked tick over 5 ticks, all in one burst', async () => {
+        const w = makeWorld();
+        seed(w, [4, 5, 6, 7]);
+        const c = collect();
+        await new DTraderRunner(w.io, c.emit).run(baseConfig(w.symbol, { family: 'tickhighlow', side: 'first', prediction: 3, duration: 5, tradesPerEntry: 4 }));
+        expect(w.buys).toHaveLength(4);
+        expect(w.buys.every(b => b.params.contract_type === 'TICKHIGH' && b.params.selected_tick === 3 && b.params.duration === 5 && b.params.duration_unit === 't')).toBe(true);
+        expect(w.buys.every(b => b.params.barrier === undefined)).toBe(true);
+        expect(new Set(w.buys.map(b => b.atTick)).size).toBe(1);   // one entry tick for the whole burst
+        expect(c.of('sync')[0].ok).toBe(true);                     // and one exit tick
+    });
+    it('Both buys a High Tick and a Low Tick on the same picked tick', async () => {
+        const w = makeWorld();
+        seed(w, [4, 5, 6, 7]);
+        await new DTraderRunner(w.io, collect().emit).run(baseConfig(w.symbol, { family: 'tickhighlow', side: 'both', prediction: 5, duration: 5, tradesPerEntry: 2 }));
+        expect(w.buys).toHaveLength(4);
+        expect(w.buys.filter(b => b.params.contract_type === 'TICKHIGH')).toHaveLength(2);
+        expect(w.buys.filter(b => b.params.contract_type === 'TICKLOW')).toHaveLength(2);
+        expect(w.buys.every(b => b.params.selected_tick === 5)).toBe(true);
+    });
+    it('refuses a length other than 5 ticks and a pick outside 1 to 5, before buying', async () => {
+        const w = makeWorld();
+        seed(w, [4, 5]);
+        expect(configError(baseConfig(w.symbol, { family: 'tickhighlow', prediction: 3, duration: 3 }))).toMatch(/5 ticks/);
+        expect(configError(baseConfig(w.symbol, { family: 'tickhighlow', prediction: 6, duration: 5 }))).toMatch(/1 to 5/);
+        expect(configError(baseConfig(w.symbol, { family: 'tickhighlow', prediction: 5, duration: 5 }))).toBeNull();
+        expect(w.buys).toHaveLength(0);
+    });
+    it('Auto with trend confluence waits, then buys the side its signal gave', async () => {
+        const w = makeWorld();
+        // Choppy sideways prices first: no signal.
+        Array.from({ length: 80 }, (_, i) => 1000 + (i % 2 ? 0.1 : -0.1)).forEach((p, i) => w.pushTick(i % 10, p));
+        const c = collect();
+        const done = new DTraderRunner(w.io, c.emit).run(baseConfig(w.symbol, { family: 'tickhighlow', side: 'auto', prediction: 5, duration: 5, tradesPerEntry: 2, strategy: { id: 'trend-confluence', params: { rsiCap: 90 } } }));
+        await tick();
+        expect(w.buys).toHaveLength(0);
+        let price = 1000;
+        for (let i = 0; i < 60; i += 1) { price += i % 3 === 2 ? -0.1 : 0.2; w.pushTick(i % 10, price); await tick(); }
+        for (let i = 0; i < 3 && !w.buys.length; i += 1) { price += 0.2; w.pushTick(i, price); await tick(); }
+        await done;
+        expect(w.buys.length).toBeGreaterThan(0);
+        expect(w.buys.every(b => b.params.contract_type === 'TICKHIGH' && b.params.selected_tick === 5)).toBe(true);
+    });
+});

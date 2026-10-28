@@ -17,8 +17,8 @@ export const round2 = (value: number) => Math.round(value * 100) / 100;
 // Contract families
 // ---------------------------------------------------------------------------------------------------------------------
 
-export type Family = 'overunder' | 'matchesdiffers' | 'evenodd' | 'risefall' | 'highlow' | 'range';
-/** first = Over / Matches / Even / Rise / Higher / Ends Between, second = Under / Differs / Odd / Fall / Lower / Ends Outside. */
+export type Family = 'overunder' | 'matchesdiffers' | 'evenodd' | 'risefall' | 'highlow' | 'range' | 'tickhighlow';
+/** first = Over / Matches / Even / Rise / Higher / Ends Between / High Tick, second = Under / Differs / Odd / Fall / Lower / Ends Outside / Low Tick. */
 export type SideChoice = 'first' | 'second' | 'both' | 'auto';
 export type SideIndex = 0 | 1;
 
@@ -30,6 +30,10 @@ export type FamilyDef = {
     needsDigit: boolean;
     /** Needs a price offset from the entry spot (Higher/Lower, Ends Between/Outside). */
     needsOffset?: boolean;
+    /** Needs a tick number to pick (High Tick / Low Tick). The panel's prediction field carries it. */
+    needsTick?: boolean;
+    /** Contract length in ticks when Deriv offers only one (High Tick / Low Tick are always 5). */
+    fixedTicks?: number;
     /** Digit family: the result is decided by the last digit of the exit tick. */
     digits: boolean;
     /** Probability that a fair random digit wins, per side, for a given prediction. Used for the break-even note only. */
@@ -61,8 +65,22 @@ export const FAMILIES: Record<Family, FamilyDef> = {
         title: 'Ends Between/Outside', sides: ['Ends Between', 'Ends Outside'], contracts: ['EXPIRYRANGE', 'EXPIRYMISS'], needsDigit: false, needsOffset: true, digits: false,
         hitProbability: () => 0.5,
     },
+    tickhighlow: {
+        // You pick one of the 5 ticks after entry. High Tick wins if it is the highest of the five, Low Tick if it is the lowest.
+        // With one winner among five equally likely ticks, chance alone gives 1 in 5 (ties are rare on these markets).
+        title: 'High Tick/Low Tick', sides: ['High Tick', 'Low Tick'], contracts: ['TICKHIGH', 'TICKLOW'], needsDigit: false, needsTick: true, fixedTicks: 5, digits: false,
+        hitProbability: () => 0.2,
+    },
 };
-export const FAMILY_ORDER: Family[] = ['overunder', 'matchesdiffers', 'evenodd', 'risefall', 'highlow', 'range'];
+export const FAMILY_ORDER: Family[] = ['overunder', 'matchesdiffers', 'evenodd', 'risefall', 'highlow', 'range', 'tickhighlow'];
+
+/** Which of the 5 ticks is picked: a whole number from 1 to 5. */
+export const tickPickError = (family: Family, pick: number): string | null => {
+    const def = FAMILIES[family];
+    if (!def.needsTick) return null;
+    const last = def.fixedTicks ?? 5;
+    return Number.isInteger(pick) && pick >= 1 && pick <= last ? null : `Pick a tick from 1 to ${last}.`;
+};
 
 /** The barrier offset must be a positive price distance, for example 0.5. */
 export const offsetError = (family: Family, offset: number): string | null => {
@@ -80,7 +98,7 @@ export const predictionError = (family: Family, side: SideChoice, prediction: nu
     return null;
 };
 
-export type Leg = { contract: string; barrier?: string; barrier2?: string; label: string; sideIndex: SideIndex };
+export type Leg = { contract: string; barrier?: string; barrier2?: string; /** High Tick / Low Tick: which of the 5 ticks is picked. */ selectedTick?: number; label: string; sideIndex: SideIndex };
 
 /** The contract(s) one entry buys. 'both' buys the two opposite sides together. 'auto' must be resolved first. */
 export const legsFor = (family: Family, side: Exclude<SideChoice, 'auto'>, prediction: number, offset = 0, decimals?: number): Leg[] => {
@@ -98,7 +116,8 @@ export const legsFor = (family: Family, side: Exclude<SideChoice, 'auto'>, predi
         contract: def.contracts[index],
         ...(def.needsDigit ? { barrier: String(prediction) } : {}),
         ...priceBarriers(index),
-        label: def.needsDigit ? `${def.sides[index]} ${prediction}` : def.needsOffset ? `${def.sides[index]} ±${offset}` : def.sides[index],
+        ...(def.needsTick ? { selectedTick: prediction } : {}),
+        label: def.needsDigit ? `${def.sides[index]} ${prediction}` : def.needsTick ? `${def.sides[index]} #${prediction}` : def.needsOffset ? `${def.sides[index]} ±${offset}` : def.sides[index],
         sideIndex: index,
     });
     if (side === 'both') return [make(0), make(1)];

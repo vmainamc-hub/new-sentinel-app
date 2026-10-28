@@ -142,7 +142,7 @@ const bestBet = (family: Family, bets: Bet[], sample: readonly number[], minZ: n
 };
 
 const DIGIT_FAMILIES: Family[] = ['overunder', 'matchesdiffers', 'evenodd'];
-const PRICE_FAMILIES: Family[] = ['risefall', 'highlow'];
+const PRICE_FAMILIES: Family[] = ['risefall', 'highlow', 'tickhighlow'];
 
 const decisionFor = (bet: Bet, ctx: StrategyContext, reason: string): Decision => ({
     side: bet.side, reason,
@@ -378,12 +378,51 @@ const sigmaBand: Strategy = {
     },
 };
 
-export const STRATEGIES: Strategy[] = [recentStats, edgeScanner, markov, streak, overdue, lastDigitDiffers, momentum, emaTrend, rsiFade, sigmaBand];
+/**
+ * High Tick / Low Tick: the trend-confluence rule many hand-built bots use, written for ticks. It trades High Tick only when a
+ * fast average is above a slow one, price is above the fast average, the RSI is rising but not yet stretched, and the last few
+ * ticks each rose; Low Tick is the mirror image. Every condition must agree, so it waits most of the time.
+ */
+const trendConfluence: Strategy = {
+    id: 'trend-confluence',
+    title: 'Trend confluence',
+    families: ['tickhighlow'],
+    summary: 'High Tick when the fast average is above the slow one, price is above the fast average, the RSI is 50 to 70 and the last ticks rose; Low Tick is the mirror. Waits otherwise.',
+    params: [
+        { key: 'fast', label: 'Fast average (ticks)', min: 2, max: 50, step: 1, default: 9, hint: 'Short EMA.' },
+        { key: 'slow', label: 'Slow average (ticks)', min: 5, max: 200, step: 1, default: 21, hint: 'Long EMA.' },
+        { key: 'period', label: 'RSI period', min: 3, max: 50, step: 1, default: 14, hint: 'Ticks in the RSI.' },
+        { key: 'rsiCap', label: 'RSI cap', min: 55, max: 90, step: 1, default: 70, hint: 'High Tick needs the RSI between 50 and this; Low Tick between (100 minus this) and 50.' },
+        { key: 'run', label: 'Ticks in a row', min: 1, max: 6, step: 1, default: 3, hint: 'The last ticks must all move the same way.' },
+    ],
+    decide: ctx => {
+        const slow = Math.max(3, Math.trunc(ctx.params.slow));
+        const fast = Math.min(slow - 1, Math.max(2, Math.trunc(ctx.params.fast)));
+        const window = ctx.prices.slice(-slow * 4);
+        if (window.length < slow * 2) return null;
+        const value = rsi(ctx.prices, Math.max(3, Math.trunc(ctx.params.period)));
+        if (value === null) return null;
+        const last = window[window.length - 1];
+        const fastEma = ema(window, fast);
+        const slowEma = ema(window, slow);
+        const run = Math.max(1, Math.trunc(ctx.params.run));
+        const diffs = changes(ctx.prices, run);
+        if (diffs.length < run) return null;
+        const cap = ctx.params.rsiCap;
+        const rising = fastEma > slowEma && last > fastEma && value > 50 && value < cap && diffs.every(d => d > 0);
+        const falling = fastEma < slowEma && last < fastEma && value < 50 && value > 100 - cap && diffs.every(d => d < 0);
+        if (rising) return { side: 0, reason: `Trend confluence: fast ${fast} above slow ${slow}, price above fast, RSI ${value.toFixed(0)}, ${run} rising tick${run === 1 ? '' : 's'}: High Tick.` };
+        if (falling) return { side: 1, reason: `Trend confluence: fast ${fast} below slow ${slow}, price below fast, RSI ${value.toFixed(0)}, ${run} falling tick${run === 1 ? '' : 's'}: Low Tick.` };
+        return null;
+    },
+};
+
+export const STRATEGIES: Strategy[] = [recentStats, edgeScanner, markov, streak, overdue, lastDigitDiffers, momentum, emaTrend, rsiFade, sigmaBand, trendConfluence];
 
 export const strategiesFor = (family: Family): Strategy[] => STRATEGIES.filter(s => s.families.includes(family));
 export const getStrategy = (id: string): Strategy | undefined => STRATEGIES.find(s => s.id === id);
 /** The strategy Auto uses when none is chosen: the original recent-hit-rate rule for digits, tick momentum for prices. */
-export const defaultStrategyId = (family: Family): string => (FAMILIES[family].digits ? 'recent-stats' : family === 'range' ? 'sigma-band' : 'tick-momentum');
+export const defaultStrategyId = (family: Family): string => (FAMILIES[family].digits ? 'recent-stats' : family === 'range' ? 'sigma-band' : family === 'tickhighlow' ? 'trend-confluence' : 'tick-momentum');
 
 export const paramDefaults = (strategy: Strategy): StrategyParams => Object.fromEntries(strategy.params.map(p => [p.key, p.default]));
 /** Saved values over the defaults, each clamped to its allowed range. Unknown keys are dropped. */
@@ -432,6 +471,7 @@ export const backtest = (
     const from = Math.max(options.warmup ?? 60, total - limit);
     const ticks = Math.max(1, Math.trunc(base.ticks));
     const isDigit = FAMILIES[base.family].digits;
+    const isTickPick = Boolean(FAMILIES[base.family].needsTick);
     const lookahead = isDigit ? ticks : ticks + 1;
     let signals = 0;
     let wins = 0;
@@ -448,6 +488,17 @@ export const backtest = (
             const side = d.side === 'both' ? 0 : d.side;
             if (digitWins(base.family, side, prediction, digits[i + ticks])) wins += 1;
             chance += chanceOf(base.family, side, prediction);
+        } else if (isTickPick) {
+            // The 5 ticks after the entry tick (i + 1); the picked one must be strictly the highest (or lowest) of them.
+            const pick = Math.min(ticks, Math.max(1, Math.trunc(prediction)));
+            const span = prices.slice(i + 2, i + 2 + ticks);
+            const chosen = span[pick - 1];
+            const others = span.filter((_, index) => index !== pick - 1);
+            const high = others.every(x => chosen > x);
+            const low = others.every(x => chosen < x);
+            if (d.side === 'both') wins += high || low ? 1 : 0;
+            else wins += (d.side === 0 ? high : low) ? 1 : 0;
+            chance += d.side === 'both' ? 0.4 : chanceOf(base.family, d.side, prediction);
         } else {
             const entry = prices[i + 1];
             const exit = prices[i + 1 + ticks];
@@ -458,7 +509,7 @@ export const backtest = (
         }
     }
     const hitRate = signals ? wins / signals : 0;
-    const chanceRate = isDigit && signals ? chance / signals : null;
+    const chanceRate = (isDigit || isTickPick) && signals ? chance / signals : null;
     return {
         ticksScanned: tested, signals, wins, hitRate, chanceRate,
         z: chanceRate !== null && signals ? zScore(wins, signals, chanceRate) : null,

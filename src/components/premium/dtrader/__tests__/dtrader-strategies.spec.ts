@@ -184,3 +184,34 @@ describe('backtest', () => {
         expect(backtestText(r)).toMatch(/no signals/);
     });
 });
+
+describe('High Tick / Low Tick strategies', () => {
+    /** Mostly up with small pullbacks (so the RSI stays under 70), ending in three rising ticks. */
+    const uptrend = (() => { let p = 1000; const out: number[] = []; for (let i = 0; i < 120; i += 1) { p += i % 3 === 2 ? -0.1 : 0.2; out.push(p); } [0.2, 0.2, 0.2].forEach(d => out.push((p += d))); return out; })();
+    const downtrend = uptrend.map(p => 2000 - p);
+    it('is offered for High Tick / Low Tick and is its default', () => {
+        expect(strategiesFor('tickhighlow').map(s => s.id)).toEqual(expect.arrayContaining(['trend-confluence', 'tick-momentum', 'ema-trend', 'rsi-extreme']));
+        expect(defaultStrategyId('tickhighlow')).toBe('trend-confluence');
+        expect(strategiesFor('risefall').some(s => s.id === 'trend-confluence')).toBe(false);
+    });
+    it('trend-confluence picks High Tick in an uptrend, Low Tick in a downtrend, and waits in a flat market', () => {
+        const params = { ...paramDefaults(getStrategy('trend-confluence')!), rsiCap: 90 };
+        expect(ctx({ id: 'trend-confluence', family: 'tickhighlow', prices: uptrend, ticks: 5, params }).run()?.side).toBe(0);
+        expect(ctx({ id: 'trend-confluence', family: 'tickhighlow', prices: downtrend, ticks: 5, params }).run()?.side).toBe(1);
+        expect(ctx({ id: 'trend-confluence', family: 'tickhighlow', prices: Array.from({ length: 120 }, (_, i) => 1000 + (i % 2 ? 0.1 : -0.1)), ticks: 5, params }).run()).toBeNull();
+    });
+    it('needs every condition: an overstretched RSI keeps it out', () => {
+        const straight = Array.from({ length: 120 }, (_, i) => 1000 + i * 0.2);   // RSI 100
+        expect(ctx({ id: 'trend-confluence', family: 'tickhighlow', prices: straight, ticks: 5 }).run()).toBeNull();
+    });
+    it('scores on the 5 ticks after entry against a 20% chance rate', () => {
+        const prices = walk(900, 0.3, 11);
+        const digits = prices.map((_, i) => i % 10);
+        const strategy = getStrategy('tick-momentum')!;
+        const result = backtest(strategy, { family: 'tickhighlow', prediction: 5, offset: 0, ticks: 5, decimals: 2 }, digits, prices, { ...paramDefaults(strategy), run: 2 }, { limit: 800 });
+        expect(result.signals).toBeGreaterThan(50);
+        expect(result.chanceRate).toBeCloseTo(0.2, 5);
+        expect(result.hitRate).toBeGreaterThan(0.05);
+        expect(result.hitRate).toBeLessThan(0.45);
+    });
+});

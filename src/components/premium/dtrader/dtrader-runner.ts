@@ -10,7 +10,7 @@ import { type Duration } from './dtrader-catalog';
 import {
     describeEntry, entryError, type EntryRule, exposureError, FAMILIES, type Family, type Leg, legsFor, matchEntry, MAX_TRADES_PER_ENTRY, nextStake, offsetError, planBurst, predictionError, round2,
 type SideChoice,
-    stopReason, } from './dtrader-engine';
+    stopReason, tickPickError, } from './dtrader-engine';
 import { type Preflight, type PreflightInput } from './dtrader-preflight';
 import { type Decision, defaultStrategyId, getStrategy, resolveParams, sigmaOffset, type StrategyParams } from './dtrader-strategies';
 
@@ -69,7 +69,7 @@ export type MarketView = { digits: number[]; times: number[]; decimals: number; 
 
 export type BuyParams = {
     amount: number; basis: 'stake'; contract_type: string; currency: string; underlying_symbol: string;
-    duration: number; duration_unit: Duration['unit']; barrier?: string; barrier2?: string;
+    duration: number; duration_unit: Duration['unit']; barrier?: string; barrier2?: string; selected_tick?: number;
 };
 
 export interface RunnerIO {
@@ -107,7 +107,11 @@ export const configError = (cfg: RunConfig): string | null => {
     if (prediction) return prediction;
     const offset = offsetError(cfg.family, cfg.offset);
     if (offset) return offset;
-    if (!Number.isInteger(cfg.duration) || cfg.duration < 1 || cfg.duration > 10) return 'Ticks must be a whole number from 1 to 10.';
+    const pick = tickPickError(cfg.family, cfg.prediction);
+    if (pick) return pick;
+    const fixed = FAMILIES[cfg.family].fixedTicks;
+    if (fixed !== undefined) { if (cfg.duration !== fixed) return `${FAMILIES[cfg.family].title} always runs ${fixed} ticks.`; }
+    else if (!Number.isInteger(cfg.duration) || cfg.duration < 1 || cfg.duration > 10) return 'Ticks must be a whole number from 1 to 10.';
     if (!(cfg.stake > 0)) return 'Enter a stake.';
     if (!Number.isInteger(cfg.tradesPerEntry) || cfg.tradesPerEntry < 1 || cfg.tradesPerEntry > MAX_TRADES_PER_ENTRY) return `Trades per entry must be from 1 to ${MAX_TRADES_PER_ENTRY}.`;
     return null;
@@ -253,7 +257,7 @@ export class DTraderRunner {
         const prediction = decision.prediction ?? cfg.prediction;
         // The barrier distance is never smaller than the one Deriv was found to accept at the start of the run.
         const offset = Math.max(this.resolved?.offsetFloor ?? 0, decision.offset ?? cfg.offset);
-        const invalid = predictionError(cfg.family, side, prediction);
+        const invalid = predictionError(cfg.family, side, prediction) ?? tickPickError(cfg.family, prediction);
         if (invalid) { this.log(`${invalid} Skipping this entry.`, 'warn'); return { kind: 'missed' }; }
         const legs: Leg[] = legsFor(cfg.family, side, prediction, offset, view.decimals);
         const duration = this.resolved?.duration ?? { value: cfg.duration, unit: 't' as const };
@@ -332,6 +336,7 @@ export class DTraderRunner {
                         amount: stake, basis: 'stake', contract_type: leg.contract, currency: cfg.currency, underlying_symbol: cfg.symbol,
                         duration: duration.value, duration_unit: duration.unit, ...(leg.barrier !== undefined ? { barrier: leg.barrier } : {}),
                         ...(leg.barrier2 !== undefined ? { barrier2: leg.barrier2 } : {}),
+                        ...(leg.selectedTick !== undefined ? { selected_tick: leg.selectedTick } : {}),
                     };
                     sends.push(this.io.buy(params, stake).then(bought => {
                         arrivals.push(this.io.now());

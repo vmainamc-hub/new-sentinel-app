@@ -8,7 +8,7 @@ import { pairOutcome } from './dtrader-catalog';
 import {
 decimalsText, describeEntry,     DIGIT_OPS, type DigitOp, digitStats, type EntryRule, FAMILIES, type Family, FAMILY_ORDER, legsFor, offsetError, opNeedsDigit, parseSequence, predictionError,
 type SideChoice,
-    toCandles, } from './dtrader-engine';
+    tickPickError, toCandles, } from './dtrader-engine';
 import { preflightContract, type PreflightDeps } from './dtrader-preflight';
 import {
 configError,     DTraderRunner, emptyTotals, type RunConfig, type RunnerEvent, type RunnerIO, type RunnerState, type Totals, type TradeRow,
@@ -51,6 +51,8 @@ const saveForm = (form: Form) => {
     try { if (typeof localStorage !== 'undefined') localStorage.setItem(STORAGE_KEY, JSON.stringify(form)); } catch { /* storage unavailable: settings last for this visit */ }
 };
 
+/** Contract length in ticks: fixed for the contracts Deriv offers at one length only (High Tick / Low Tick), else what was typed. */
+const ticksFor = (form: Pick<Form, 'family' | 'duration'>) => FAMILIES[form.family].fixedTicks ?? toNumber(form.duration, 1);
 const toNumber = (value: string, fallback = NaN) => { const n = Number(value); return value.trim() !== '' && Number.isFinite(n) ? n : fallback; };
 const money = (value: number, currency: string) => `${value.toFixed(2)} ${currency}`;
 const errorText = (error: unknown) => (error instanceof Error ? error.message : (error as { message?: string })?.message || String(error));
@@ -79,7 +81,7 @@ export const buildRun = (form: Form, currency: string): { config: RunConfig } | 
         entry = { mode: 'pattern', pattern: { kind: 'sequence', digits, fireAfter: toNumber(form.fireAfter, digits.length) } };
     }
     const config: RunConfig = {
-        symbol: form.symbol, family: form.family, side: form.side, prediction: toNumber(form.prediction, 0), offset: toNumber(form.offset, 0), duration: toNumber(form.duration, 1),
+        symbol: form.symbol, family: form.family, side: form.side, prediction: toNumber(form.prediction, 0), offset: toNumber(form.offset, 0), duration: ticksFor(form),
         stake: toNumber(form.stake, 0), tradesPerEntry: toNumber(form.trades, 1), martingale: toNumber(form.martingale, 1),
         takeProfit: Math.max(0, toNumber(form.takeProfit, 0)), stopLoss: Math.max(0, toNumber(form.stopLoss, 0)),
         mode: form.mode, entry, sameTickGuard: form.guard, currency,
@@ -272,7 +274,7 @@ const DTraderPage = () => {
     const running = runState !== 'idle';
     const family = FAMILIES[form.family];
     const prepared = useMemo(() => buildRun(form, currency), [form, currency]);
-    const predictionIssue = predictionError(form.family, form.side === 'auto' ? 'both' : form.side, toNumber(form.prediction, 0));
+    const predictionIssue = predictionError(form.family, form.side === 'auto' ? 'both' : form.side, toNumber(form.prediction, 0)) ?? tickPickError(form.family, toNumber(form.prediction, 0));
     const offsetIssue = offsetError(form.family, toNumber(form.offset, 0));
 
     // Real payout from Deriv for the chosen contract(s), refreshed when the contract setup changes.
@@ -281,7 +283,7 @@ const DTraderPage = () => {
     const [preflightNotes, setPreflightNotes] = useState<string[]>([]);
     useEffect(() => {
         const stake = toNumber(form.stake, 0);
-        const duration = toNumber(form.duration, 1);
+        const duration = ticksFor(form);
         const side = form.side === 'auto' ? 'first' : form.side;
         if (!(stake > 0) || !Number.isInteger(duration) || duration < 1) { setPayouts([]); return undefined; }
         let alive = true;
@@ -306,7 +308,7 @@ const DTraderPage = () => {
                 const legs = legsFor(form.family, side, toNumber(form.prediction, 0), toNumber(form.offset, 0)).filter(() => !predictionIssue && !offsetIssue);
                 const quotes = await Promise.all(legs.map(async leg => {
                     const proposal = await PremiumDerivApiService.proposal({
-                        amount: stake, basis: 'stake', contract_type: leg.contract, currency, underlying_symbol: form.symbol, duration, duration_unit: 't', ...(leg.barrier !== undefined ? { barrier: leg.barrier } : {}), ...(leg.barrier2 !== undefined ? { barrier2: leg.barrier2 } : {}),
+                        amount: stake, basis: 'stake', contract_type: leg.contract, currency, underlying_symbol: form.symbol, duration, duration_unit: 't', ...(leg.barrier !== undefined ? { barrier: leg.barrier } : {}), ...(leg.barrier2 !== undefined ? { barrier2: leg.barrier2 } : {}), ...(leg.selectedTick !== undefined ? { selected_tick: leg.selectedTick } : {}),
                     });
                     return { label: leg.label, payout: Number(proposal.payout).toFixed(2) };
                 }));
@@ -328,7 +330,7 @@ const DTraderPage = () => {
         const timer = window.setTimeout(() => {
             const result = backtest(
                 activeStrategy,
-                { family: form.family, prediction: toNumber(form.prediction, 0), offset: toNumber(form.offset, 0.5), ticks: Math.max(1, toNumber(form.duration, 1)), decimals },
+                { family: form.family, prediction: toNumber(form.prediction, 0), offset: toNumber(form.offset, 0.5), ticks: Math.max(1, ticksFor(form)), decimals },
                 market.digits, market.prices, strategyValues, { limit: 600 },
             );
             setScore(backtestText(result));
@@ -396,13 +398,16 @@ const DTraderPage = () => {
                 {/* ------------------------------ trade panel ------------------------------ */}
                 <section className='dt-panel' aria-label='Trade setup'>
                     <label className='dt-field dt-field--wide'>Contract
-                        <select value={form.family} disabled={running} onChange={e => { const f = e.target.value as Family; set('family', f); }}>
+                        <select value={form.family} disabled={running} onChange={e => {
+                            const f = e.target.value as Family;
+                            setForm(current => ({ ...current, family: f, ...(FAMILIES[f].needsTick && tickPickError(f, Number(current.prediction)) ? { prediction: String(FAMILIES[f].fixedTicks ?? 5) } : {}) }));
+                        }}>
                             {FAMILY_ORDER.map(f => <option key={f} value={f}>{FAMILIES[f].title}</option>)}
                         </select>
                     </label>
 
                     <div className='dt-row'>
-                        <label className='dt-field'>Ticks<input inputMode='numeric' value={form.duration} disabled={running} onChange={e => set('duration', e.target.value)} /></label>
+                        <label className='dt-field'>Ticks<input inputMode='numeric' value={family.fixedTicks ?? form.duration} disabled={running || family.fixedTicks !== undefined} title={family.fixedTicks !== undefined ? `${family.title} always runs ${family.fixedTicks} ticks.` : undefined} onChange={e => set('duration', e.target.value)} /></label>
                         <label className='dt-field'>Entry
                             <select value={form.entryMode} disabled={running} onChange={e => set('entryMode', e.target.value as EntryMode)}>
                                 <option value='instant'>Instant</option><option value='digit'>Digit</option><option value='pattern'>Pattern</option>
@@ -463,7 +468,7 @@ const DTraderPage = () => {
                             <p className='dt-hint'>{activeStrategy.summary}</p>
                             {activeStrategy.params.length > 0 && (
                                 <div className='dt-row dt-row--params'>
-                                    {activeStrategy.params.map(param => (
+                                    {activeStrategy.params.filter(param => param.key !== 'sigmaK' || form.family === 'highlow').map(param => (
                                         <label key={param.key} className='dt-field' title={param.hint}>{param.label}
                                             <input
                                                 inputMode='decimal' disabled={running} aria-label={param.label}
@@ -482,6 +487,13 @@ const DTraderPage = () => {
                     {family.needsDigit && (
                         <label className='dt-field dt-field--wide'>Prediction digit
                             <input inputMode='numeric' value={form.prediction} disabled={running} onChange={e => set('prediction', e.target.value)} aria-invalid={Boolean(predictionIssue)} />
+                        </label>
+                    )}
+
+                    {family.needsTick && (
+                        <label className='dt-field dt-field--wide'>Tick to pick (1 to {family.fixedTicks})
+                            <input inputMode='numeric' value={form.prediction} disabled={running} onChange={e => set('prediction', e.target.value)} aria-invalid={Boolean(predictionIssue)} />
+                            <small className='dt-hint'>{family.sides[0]} wins if that tick is the highest of the next {family.fixedTicks}; {family.sides[1]} wins if it is the lowest. There is no barrier.</small>
                         </label>
                     )}
 
