@@ -1,23 +1,23 @@
 {
-  "brand_name": "Vantage Traders",
-  "brand_domain": "vantagetraders.netlify.app",
+  "brand_name": "MainAFX",
+  "brand_domain": "mainafx.netlify.app",
   "brand_hostname": {
-    "staging": "vantagetraders.netlify.app",
-    "production": "vantagetraders.netlify.app"
+    "staging": "mainafx.netlify.app",
+    "production": "mainafx.netlify.app"
   },
-  "domain_name": "vantagetraders.netlify.app",
+  "domain_name": "mainafx.netlify.app",
   "sites": {
     "default_site": "apex-sentinel",
     "entries": [
       {
         "id": "apex-sentinel",
         "hosts": [
-          "vantagetraders.netlify.app",
+          "mainafx.netlify.app",
           "localhost"
         ],
-        "display_domain": "Vantage Traders",
-        "website_url": "https://vantagetraders.netlify.app",
-        "redirect_uri": "https://vantagetraders.netlify.app/callback",
+        "display_domain": "MainAFX",
+        "website_url": "https://mainafx.netlify.app",
+        "redirect_uri": "https://mainafx.netlify.app/callback",
         "client_id": "34BIr72thLXMJHaL9PQxN",
         "scopes": [
           "trade",
@@ -145,14 +145,14 @@
     "css_variable_prefix": "--brand"
   },
   "platform": {
-    "name": "Vantage Traders",
+    "name": "MainAFX",
     "logo": {
       "type": "component",
       "component_name": "BrandLogo",
-      "alt_text": "Vantage Traders",
+      "alt_text": "MainAFX",
       "link_url": "/",
       "show_text": true,
-      "text": "Vantage Traders"
+      "text": "MainAFX"
     },
     "footer": {
       "enable_language_settings": false,
@@ -160,10 +160,10 @@
     },
     "hostname": {
       "production": {
-        "com": "vantagetraders.netlify.app"
+        "com": "mainafx.netlify.app"
       },
       "staging": {
-        "com": "vantagetraders.netlify.app"
+        "com": "mainafx.netlify.app"
       }
     },
     "auth2_url": {
