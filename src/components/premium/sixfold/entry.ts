@@ -59,3 +59,28 @@ export function smartEntryDigits(
     }
     return { digits: good.map(r => r.d).sort((a, b) => a - b), source: 'learned' };
 }
+
+// ---------- form gate: wait for a run of wins or losses before a recovery entry ----------
+
+export type RecoveryEntry = 'OFF' | 'MOMENTUM' | 'REVERSION';
+
+/** Length of the winning run and of the losing run that ends at the latest tick, for `contract`. */
+export function trailingRun(series: readonly number[], contract: Contract): { wins: number; losses: number } {
+    const win = new Set(winningDigits(contract));
+    let wins = 0;
+    let losses = 0;
+    for (let i = series.length - 1; i >= 0; i--) {
+        const w = win.has(series[i]);
+        if (w && losses === 0) wins += 1;
+        else if (!w && wins === 0) losses += 1;
+        else break;
+    }
+    return { wins, losses };
+}
+
+/** MOMENTUM: the last `k` ticks all would have won. REVERSION: the last `k` all would have lost. OFF always passes. */
+export function formGateOk(mode: RecoveryEntry, k: number, series: readonly number[], contract: Contract): boolean {
+    if (mode === 'OFF') return true;
+    const run = trailingRun(series, contract);
+    return mode === 'MOMENTUM' ? run.wins >= k : run.losses >= k;
+}

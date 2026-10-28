@@ -39,3 +39,36 @@ describe('smartEntryDigits', () => {
         expect(smartEntryDigits(s, over2, 1, all).digits.length).toBeGreaterThan(0);
     });
 });
+
+import { formGateOk, trailingRun } from '../entry';
+import { entryTest } from '../analysis';
+
+describe('form gate and entry test', () => {
+    const o2 = { side: 'OVER' as const, param: 2 };
+    it('measures the winning and losing run that ends at the latest tick', () => {
+        expect(trailingRun([0, 5, 6, 7], o2)).toEqual({ wins: 3, losses: 0 });
+        expect(trailingRun([9, 9, 1, 0], o2)).toEqual({ wins: 0, losses: 2 });
+        expect(trailingRun([], o2)).toEqual({ wins: 0, losses: 0 });
+    });
+    it('passes OFF always, MOMENTUM after k wins, REVERSION after k losses', () => {
+        expect(formGateOk('OFF', 3, [0], o2)).toBe(true);
+        expect(formGateOk('MOMENTUM', 3, [1, 5, 6, 7], o2)).toBe(true);
+        expect(formGateOk('MOMENTUM', 3, [1, 1, 6, 7], o2)).toBe(false);
+        expect(formGateOk('REVERSION', 2, [9, 1, 0], o2)).toBe(true);
+        expect(formGateOk('REVERSION', 2, [9, 9, 0], o2)).toBe(false);
+    });
+    it('finds no lead in random digits, and finds a planted one', () => {
+        let a = 12345;
+        const rnd = () => ((a = (a * 1103515245 + 12345) & 0x7fffffff), (a >> 8) % 10);
+        const random = Array.from({ length: 20000 }, rnd);
+        const r = entryTest({ A: random }, o2, 3);
+        expect(r.baseline.rate!).toBeGreaterThan(0.65);
+        expect(Math.abs(r.afterWins.edgePts!)).toBeLessThan(3);
+        // Planted: after three losing digits the next one always wins.
+        const planted: number[] = [];
+        for (let i = 0; i < 4000; i++) planted.push(0, 1, 0, 9, 5);
+        const t = entryTest({ A: planted }, o2, 3);
+        expect(t.afterLosses.rate!).toBe(1);
+        expect(t.afterLosses.p!).toBeLessThan(0.001);
+    });
+});

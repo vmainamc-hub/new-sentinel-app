@@ -525,3 +525,44 @@ describe('SixfoldRunner streak budget', () => {
         expect(h.runner.getSnapshot().log.some(l => /Streak budget reached/.test(l.text))).toBe(true);
     });
 });
+
+describe('SixfoldRunner recovery entry gate', () => {
+    const lossThenArm = async (over: Partial<SixfoldSettings>) => {
+        const h = harness({ takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, selectivity: 'active', recovery: false, lossShield: false, markets: ['P'], ...over });
+        h.queueProfits(-1, 0.35);
+        h.runner.start();
+        const a = h.runner.getSnapshot().armed!;
+        h.runner.handleFeedTick(a.symbol, a.entryDigits[0]);
+        await flush();
+        h.advance(1500);
+        h.runner.tick();
+        return h;
+    };
+    it('does not buy a recovery trade until the market shows the run, then buys', async () => {
+        const h = await lossThenArm({ recoveryEntry: 'MOMENTUM', recoveryForm: 3 });
+        const a = h.runner.getSnapshot().armed!;
+        h.series.P.push(0, 1, 0); // last ticks lose Over 2
+        h.runner.handleFeedTick('P', a.entryDigits[0]);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+        h.series.P.push(5, 6, 7); // three winning ticks
+        h.runner.handleFeedTick('P', a.entryDigits[0]);
+        await flush();
+        expect(h.calls.buy).toHaveLength(2);
+    });
+    it('does not gate the first trade of a session, and OFF never gates', async () => {
+        const h = harness({ recoveryEntry: 'MOMENTUM', recoveryForm: 8, selectivity: 'active', markets: ['P'] });
+        h.runner.start();
+        h.series.P.push(0, 0, 0, 0, 0, 0, 0, 0);
+        const a = h.runner.getSnapshot().armed!;
+        h.runner.handleFeedTick('P', a.entryDigits[0]);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+        const g = await lossThenArm({ recoveryEntry: 'OFF' });
+        const b = g.runner.getSnapshot().armed!;
+        g.series.P.push(0, 0, 0);
+        g.runner.handleFeedTick('P', b.entryDigits[0]);
+        await flush();
+        expect(g.calls.buy).toHaveLength(2);
+    });
+});

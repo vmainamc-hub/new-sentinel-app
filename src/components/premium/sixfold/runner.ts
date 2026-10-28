@@ -10,7 +10,7 @@
 import { contract_stages } from '@/constants/contract-stage';
 import type { RunnerStores, StoreWatcher } from '@/pages/sentinel-ai/sentinel-ai-runner';
 import { describeTradeFailure } from '@/utils/trade-errors';
-import { smartEntryDigits } from './entry';
+import { formGateOk, smartEntryDigits } from './entry';
 import { type FeedMode, type FeedSnapshot, marketName } from './feed';
 import {
     applyResult,
@@ -382,6 +382,7 @@ export class SixfoldRunner {
         if (!this.running || this.tradeInFlight || !this.armed || this.armed.symbol !== symbol) return;
         if (this.io.now() < this.cooldownUntil) return;
         if (this.settings.entry !== 'ANY' && !this.armed.entryDigits.includes(digit)) return;
+        if (!this.recoveryFormOk(symbol)) return;
         void this.execute(digit);
     }
 
@@ -419,13 +420,17 @@ export class SixfoldRunner {
             this.settings.entry === 'ANY'
                 ? 'buying on the next tick'
                 : `waiting for digit ${this.armed.entryDigits.join(' / ')}${this.settings.entry === 'SMART' ? ' (learned from this market)' : ''}`;
+        const gate =
+            this.settings.recoveryEntry !== 'OFF' && this.isRecovering()
+                ? ` Recovery entry: also needs ${this.settings.recoveryForm} ${this.settings.recoveryEntry === 'MOMENTUM' ? 'winning' : 'losing'} ticks in a row.`
+                : '';
         this.addLog(
             'pick',
-            `Armed ${cell.label} on ${marketName(cell.symbol)} (score ${cell.score}, ${fmtPts(cell.edgePts)} vs break-even${cell.significant ? ', significant' : ''}): ${entry}.`
+            `Armed ${cell.label} on ${marketName(cell.symbol)} (score ${cell.score}, ${fmtPts(cell.edgePts)} vs break-even${cell.significant ? ', significant' : ''}): ${entry}.${gate}`
         );
         if (this.settings.entry === 'ANY') {
             const digit = this.io.feed.getLastDigit(cell.symbol);
-            if (digit !== null) void this.execute(digit);
+            if (digit !== null && this.recoveryFormOk(cell.symbol)) void this.execute(digit);
         }
     }
 
@@ -439,6 +444,20 @@ export class SixfoldRunner {
         if (last !== undefined) avoid.add(last);
         const next = smartEntryDigits(series, traded, this.settings.duration, avoid).digits;
         return next.length === fixed.length && next.every((d, i) => d === fixed[i]) ? fixed : next;
+    }
+
+    private isRecovering(): boolean {
+        return this.session.consecutiveLosses > 0 || (this.settings.martingale && this.session.openLoss > 0);
+    }
+
+    /** Recovery entry condition: while recovering, the market's recent ticks must show the chosen run for the contract. */
+    private recoveryFormOk(symbol: string): boolean {
+        if (this.settings.recoveryEntry === 'OFF' || !this.isRecovering() || !this.armed || !this.scan) return true;
+        const cell = this.scan.cells.find(c => c.symbol === symbol && c.key === this.armed!.cellKey);
+        if (!cell) return true;
+        const traded = tradeContract(cell.contract, this.session.consecutiveLosses, this.settings).contract;
+        const series = this.io.feed.getLiveSeries()[symbol] ?? [];
+        return formGateOk(this.settings.recoveryEntry, this.settings.recoveryForm, series, traded);
     }
 
     private restedSymbols(now: number): Set<string> {

@@ -6,8 +6,9 @@
 // Contract : one contract on one market: charts, the six traders, the ladder and the edge test.
 // Lab      : does anything beyond chance exist? Uniformity, dependence, label calibration and a bankroll simulation.
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from 'react';
-import { bankrollSim, calibrateLabels, contractRuns, rollingRate, structureTable, transitionTest, uniformityTest } from './analysis';
+import { bankrollSim, calibrateLabels, contractRuns, entryTest, rollingRate, structureTable, transitionTest, uniformityTest } from './analysis';
 import { sentinelAgreement } from './agree';
+import type { RecoveryEntry } from './entry';
 import { type BotConfig, type Contract, contractKey, contractLabel, DEFAULT_BOT, equityCurve, isValidContract, winProbability } from './bot';
 import { bestPerMarket, type Cell, eligibility } from './scanner';
 import { DigitBars, Hexagon, LineChart, Radar, Sparkline, TransitionHeat } from './charts';
@@ -356,6 +357,27 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                             : s.entry === 'SETUP'
                               ? 'Always waits for the same losing digits of the contract.'
                               : 'Buys on the next tick after arming.'}
+                    </small>
+                </div>
+                <div className='sf-field'>
+                    <span>Recovery entry</span>
+                    <Seg<RecoveryEntry>
+                        label='Recovery entry'
+                        value={s.recoveryEntry}
+                        onChange={v => set({ recoveryEntry: v })}
+                        options={[
+                            ['OFF', 'Same'],
+                            ['MOMENTUM', 'After wins'],
+                            ['REVERSION', 'After losses'],
+                        ]}
+                    />
+                    {s.recoveryEntry !== 'OFF' && (
+                        <Num label='Ticks in a row' value={s.recoveryForm} onCommit={n => set({ recoveryForm: n })} hint='2–8' />
+                    )}
+                    <small>
+                        {s.recoveryEntry === 'OFF'
+                            ? 'Recovery trades enter exactly like normal ones. The Lab’s Entry test shows whether a run-based entry has ever helped on your live ticks.'
+                            : `While recovering, also wait until the market’s last ${s.recoveryForm} ticks would all have ${s.recoveryEntry === 'MOMENTUM' ? 'won' : 'lost'} for the contract being bought.`}
                     </small>
                 </div>
                 <Switch on={s.lossShield} onChange={v => set({ lossShield: v })} title='Loss shield' sub='Rest a market after it loses' />
@@ -883,6 +905,47 @@ function CrowdRow({ c }: { c: CrowdPosition }) {
 
 // ---------- lab ----------
 
+function EntryTestPanel({ series, contract, settings }: { series: Record<string, number[]>; contract: Contract; settings: SixfoldSettings }) {
+    const k = settings.recoveryForm;
+    const res = useMemo(() => entryTest(series, contract, k, settings.duration), [series, contract, k, settings.duration]);
+    const rows: Array<[string, typeof res.baseline]> = [
+        ['Any tick (baseline)', res.baseline],
+        [`After ${k} wins in a row`, res.afterWins],
+        [`After ${k} losses in a row`, res.afterLosses],
+    ];
+    const hit = [res.afterWins, res.afterLosses].filter(r => r.p !== null && r.p < 0.025 && (r.edgePts ?? 0) > 0);
+    return (
+        <Panel
+            eyebrow='ENTRY TEST'
+            title={res.baseline.n < 500 ? 'Not enough ticks yet' : hit.length ? 'A run-based entry shows a lead' : 'Waiting for a run does not change the next result'}
+        >
+            <div className='sf-table' role='table' aria-label='Entry test'>
+                <div className='tr th'>
+                    <span>When {contractLabel(contract)} is bought</span>
+                    <span>Trades</span>
+                    <span>Win rate</span>
+                    <span>vs baseline</span>
+                    <span>p</span>
+                </div>
+                {rows.map(([name, r]) => (
+                    <div className='tr' key={name}>
+                        <span>{name}</span>
+                        <span>{r.n.toLocaleString()}</span>
+                        <span>{r.rate === null ? '—' : pct(r.rate, 1)}</span>
+                        <span className={(r.edgePts ?? 0) > 1 && r.p !== null && r.p < 0.05 ? 'pos' : ''}>{r.edgePts === null ? '—' : `${pts(r.edgePts)} pts`}</span>
+                        <span>{r.p === null ? '—' : r.p.toFixed(3)}</span>
+                    </div>
+                ))}
+            </div>
+            <p className='sf-note'>
+                Every tick of all {res.markets} markets with enough history, judged as if a contract had been bought on it. If waiting for a run of wins or losses
+                helped, its win rate would sit clearly away from the baseline with a small p. Two rows are tested, so only p below about 0.025 is worth a look, and one lead
+                on a short history is usually noise: check it again later. Deriv generates its digits randomly, so a gap near zero is the expected answer.
+            </p>
+        </Panel>
+    );
+}
+
 function LabTab(p: {
     series: Record<string, number[]>;
     market: string;
@@ -939,6 +1002,8 @@ function LabTab(p: {
             <Panel eyebrow={`STREAKINESS OF ${contractLabel(p.contract).toUpperCase()}`} title={runs.p === null ? 'Not enough ticks yet' : runs.p < 0.01 ? (runs.z < 0 ? 'Streakier than chance' : 'More alternating than chance') : 'Wins and losses arrive as randomly as chance'}>
                 <p className='sf-lede'>{runs.p === null ? 'Needs 30+ outcomes.' : `${runs.runs} runs over ${runs.n} ticks, z = ${runs.z.toFixed(2)}, p = ${runs.p.toFixed(3)}.`}</p>
             </Panel>
+
+            <EntryTestPanel series={p.series} contract={p.contract} settings={p.settings} />
 
             <Panel
                 eyebrow='SIMULATIONS'

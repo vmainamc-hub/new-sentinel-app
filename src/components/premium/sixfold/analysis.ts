@@ -1,6 +1,6 @@
 // Sixfold Lab: the deeper analysis. Every function here tests whether anything beyond chance is present, and is built
 // so that "nothing found" is a normal, clearly stated answer on Deriv's randomly generated digits.
-import { type BotConfig, type BotRun, type Contract, DEFAULT_BOT, simulateBot, winProbability } from './bot';
+import { type BotConfig, type BotRun, type Contract, DEFAULT_BOT, simulateBot, winningDigits, winProbability } from './bot';
 import { outcome } from './engine';
 import { applyResult, applyWriteOff, freshSession, type SixfoldSettings, stakeFor, stopReason, tradeContract } from './money';
 import { bhAdjust, breakEvenRate, chiSquareSf, mulberry32, normalCdf, profitMultiple, quantile } from './stats';
@@ -280,4 +280,59 @@ export function rollingRate(wins: readonly boolean[], window = 30, min = 10): Ar
         out.push(n >= min ? sum / n : null);
     }
     return out;
+}
+
+// ---------- does waiting for a run of wins / losses change the next result? ----------
+
+export type EntryTestRow = { n: number; wins: number; rate: number | null; edgePts: number | null; p: number | null };
+export type EntryTestResult = {
+    k: number;
+    markets: number;
+    baseline: EntryTestRow;
+    afterWins: EntryTestRow;
+    afterLosses: EntryTestRow;
+};
+
+/**
+ * Pools every market's ticks and compares the win rate of `contract` on the next trade with the win rate after `k` wins
+ * in a row and after `k` losses in a row (each tick judged as if a contract had been bought on it). Two-sided z-test of
+ * each against the baseline. If a run-based entry mattered, one of the rows would sit clearly away from the baseline.
+ */
+export function entryTest(series: Record<string, readonly number[]>, contract: Contract, k: number, duration = 1): EntryTestResult {
+    const win = new Set(winningDigits(contract));
+    const len = Math.max(1, Math.min(10, Math.trunc(duration) || 1));
+    const acc = { all: [0, 0], w: [0, 0], l: [0, 0] };
+    let markets = 0;
+    for (const digits of Object.values(series)) {
+        if (digits.length < 100) continue;
+        markets += 1;
+        let runW = 0;
+        let runL = 0;
+        for (let i = 0; i + len < digits.length; i++) {
+            const here = win.has(digits[i]);
+            runW = here ? runW + 1 : 0;
+            runL = here ? 0 : runL + 1;
+            const next = win.has(digits[i + len]) ? 1 : 0;
+            acc.all[0] += 1;
+            acc.all[1] += next;
+            if (runW >= k) {
+                acc.w[0] += 1;
+                acc.w[1] += next;
+            }
+            if (runL >= k) {
+                acc.l[0] += 1;
+                acc.l[1] += next;
+            }
+        }
+    }
+    const p0 = acc.all[0] ? acc.all[1] / acc.all[0] : winProbability(contract);
+    const row = (a: number[]): EntryTestRow => {
+        const [n, wins] = a;
+        if (!n) return { n: 0, wins: 0, rate: null, edgePts: null, p: null };
+        const rate = wins / n;
+        const se = Math.sqrt((p0 * (1 - p0)) / n);
+        const z = se > 0 ? (rate - p0) / se : 0;
+        return { n, wins, rate, edgePts: (rate - p0) * 100, p: n >= 30 ? 2 * (1 - normalCdf(Math.abs(z))) : null };
+    };
+    return { k, markets, baseline: row(acc.all), afterWins: row(acc.w), afterLosses: row(acc.l) };
 }

@@ -1,4 +1,5 @@
 // Sixfold Auto: settings, stake / martingale / recovery rules and stop conditions. Pure functions, no I/O.
+import type { RecoveryEntry } from './entry';
 import { type Contract, contractLabel, isValidContract, profitMultiple, winProbability } from './bot';
 
 export type Selectivity = 'strict' | 'balanced' | 'active';
@@ -44,6 +45,12 @@ export type SixfoldSettings = {
      */
     entry: EntryRule;
     /** After a loss, rest that market: it is not traded again until `restTrades` other trades have happened. */
+    /**
+     * Extra entry condition for recovery trades only: wait until the armed market's last `recoveryForm` ticks would all
+     * have won (MOMENTUM) or all have lost (REVERSION) for the contract being bought. OFF = no extra condition.
+     */
+    recoveryEntry: RecoveryEntry;
+    recoveryForm: number;
     lossShield: boolean;
     restTrades: number;
     /** After a loss, ask for a higher score on the next trade (fades if nothing qualifies). */
@@ -81,6 +88,8 @@ export const DEFAULT_SETTINGS: SixfoldSettings = {
     duration: 1,
     selectivity: 'balanced',
     entry: 'SMART',
+    recoveryEntry: 'OFF',
+    recoveryForm: 3,
     lossShield: true,
     restTrades: 3,
     pickyAfterLoss: true,
@@ -122,6 +131,8 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         duration: Math.trunc(num(s.duration, d.duration, 1, 5)),
         selectivity: s.selectivity === 'strict' || s.selectivity === 'active' ? s.selectivity : 'balanced',
         entry: s.entry === 'ANY' || s.entry === 'SETUP' ? s.entry : 'SMART',
+        recoveryEntry: s.recoveryEntry === 'MOMENTUM' || s.recoveryEntry === 'REVERSION' ? s.recoveryEntry : 'OFF',
+        recoveryForm: Math.trunc(num(s.recoveryForm, d.recoveryForm, 2, 8)),
         lossShield: typeof s.lossShield === 'boolean' ? s.lossShield : d.lossShield,
         restTrades: Math.trunc(num(s.restTrades, d.restTrades, 1, 10)),
         pickyAfterLoss: typeof s.pickyAfterLoss === 'boolean' ? s.pickyAfterLoss : d.pickyAfterLoss,
