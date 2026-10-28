@@ -5,7 +5,6 @@ import { type FeedSnapshot, sixfoldFeed } from './feed';
 export function useFeed(): FeedSnapshot & {
     connect: () => void;
     stop: () => void;
-    useDemo: () => void;
     importDigits: (market: string, text: string) => void;
 } {
     const snap = useSyncExternalStore(sixfoldFeed.subscribe, sixfoldFeed.getSnapshot, sixfoldFeed.getSnapshot);
@@ -13,7 +12,6 @@ export function useFeed(): FeedSnapshot & {
         ...snap,
         connect: sixfoldFeed.connect,
         stop: sixfoldFeed.stop,
-        useDemo: sixfoldFeed.useDemo,
         importDigits: sixfoldFeed.importDigits,
     };
 }

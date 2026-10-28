@@ -59,11 +59,22 @@ describe('SixfoldFeed', () => {
         ws.onopen?.();
         const before = feed.getSnapshot();
         ws.emit(history('R_10', [1.01, 1.02]));
-        feed.useDemo();
+        feed.importDigits('R_10', '1 2 3');
         const after = feed.getSnapshot();
         expect(after).not.toBe(before);
-        expect(after.mode).toBe('demo');
-        expect(after.series.R_10.length).toBe(1500);
+        expect(after.mode).toBe('import');
+        expect(after.series.R_10).toEqual([1, 2, 3]);
+    });
+
+    it('starts empty and live-only: no demo or simulated digits before Deriv sends anything', () => {
+        const feed = new SixfoldFeed(url => new FakeSocket(url));
+        const snap = feed.getSnapshot();
+        expect(snap.mode).toBe('live');
+        expect(snap.status).toBe('offline');
+        expect(snap.series).toEqual({});
+        expect(feed.getLiveSeries()).toEqual({});
+        expect(feed.isLive()).toBe(false);
+        expect('useDemo' in feed).toBe(false);
     });
 
     it('falls back to the second endpoint when the first cannot open', () => {

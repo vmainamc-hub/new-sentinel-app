@@ -14,7 +14,7 @@ import { DigitBars, Hexagon, LineChart, Radar, Sparkline, TransitionHeat } from 
 import { ARCHETYPE_TEXT, type CrowdPosition, DEFAULT_CROWD, SENSITIVITY, type Sensitivity } from './crowd';
 import { buildDossier } from './dossier';
 import type { ContractSide } from './engine';
-import { marketName, MARKETS, shortName } from './feed';
+import { marketName, MARKETS, shortName, sixfoldFeed } from './feed';
 import { DEFAULT_SETTINGS, type EntryRule, type Selectivity, type SixfoldSettings } from './money';
 import type { Phase } from './runner';
 import { sixfoldRunner } from './runner-instance';
@@ -130,6 +130,11 @@ const SixfoldPage = () => {
     const [contract, setContract] = useState<Contract>({ side: 'OVER', param: 2 });
     const [importText, setImportText] = useState('');
 
+    // Always start on the live Deriv feed; reconnecting after a manual stop is the button's job.
+    useEffect(() => {
+        if (sixfoldFeed.getMode() === 'live' && sixfoldFeed.getStatus() === 'offline') sixfoldFeed.connect();
+    }, []);
+
     const open = (m: string, c?: Contract) => {
         setMarket(m);
         if (c) setContract(c);
@@ -150,7 +155,7 @@ const SixfoldPage = () => {
                     ))}
                 </nav>
                 <span className={`sf-feed ${feed.mode === 'live' ? feed.status : 'warn'}`}>
-                    {feed.mode === 'demo' ? 'DEMO DATA' : feed.mode === 'import' ? 'IMPORTED' : feed.status.toUpperCase()}
+                    {feed.mode === 'import' ? 'IMPORTED' : feed.status.toUpperCase()}
                 </span>
             </header>
 
@@ -158,13 +163,7 @@ const SixfoldPage = () => {
                 <button className='sf-btn primary' onClick={feed.connect} disabled={sx.running}>
                     Connect live
                 </button>
-                <button className='sf-btn' onClick={feed.useDemo} disabled={sx.running}>
-                    Demo data
-                </button>
                 {feed.error && <span className='sf-msg bad'>{feed.error}</span>}
-                {feed.mode === 'demo' && (
-                    <span className='sf-msg warn'>Demo data is random digits made for testing. Run connects to the live feed first.</span>
-                )}
             </section>
 
             {tab === 'scanner' && <ScannerTab sx={sx} openContract={open} />}
@@ -340,7 +339,7 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                             {summary.significant === 0 ? 'Nothing here stands out from luck, which is the usual result.' : 'Treat those as leads, not forecasts.'}
                         </p>
                     ) : (
-                        <p className='sf-lede'>Connect live (or use demo data) to scan.</p>
+                        <p className='sf-lede'>Waiting for the live Deriv feed to start scanning.</p>
                     )}
                 </Panel>
                 <Panel eyebrow='NEXT IN LINE' title='Top candidates'>
@@ -607,7 +606,7 @@ function ContractTab(p: {
             </div>
 
             {!d || !a ? (
-                <p className='sf-msg warn'>No ticks for {marketName(p.market)} yet. Connect live, use demo data, or paste digits below.</p>
+                <p className='sf-msg warn'>No ticks for {marketName(p.market)} yet. Waiting for the live Deriv feed, or paste digits below.</p>
             ) : (
                 <>
                     <Panel>

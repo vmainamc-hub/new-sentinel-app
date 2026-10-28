@@ -2,7 +2,7 @@ import { complementOf, DEFAULT_BOT, simulateBot, streaks, winningDigits } from '
 import { crowdMap, DEFAULT_CROWD, trapSeries } from '../crowd';
 import { buildDossier } from '../dossier';
 import { edgeTest } from '../edge';
-import { demoSeries, inferDecimals, pipDecimals } from '../feed';
+import { inferDecimals, pipDecimals } from '../feed';
 import { breakEvenRate, mulberry32 } from '../stats';
 import { assessRun } from '../viability';
 
@@ -83,11 +83,10 @@ describe('feed helpers', () => {
         expect(pipDecimals(undefined)).toBeNull();
         expect(inferDecimals([100.1, 100.25])).toBe(2);
     });
-    it('demo data is reproducible', () => {
-        expect(demoSeries(['a'], 20)).toEqual(demoSeries(['a'], 20));
-    });
     it('builds a dossier for a contract', () => {
-        const d = buildDossier(demoSeries(['a'], 800).a, { side: 'OVER', param: 2 });
+        const rand = mulberry32(11);
+        const digits = Array.from({ length: 800 }, () => Math.floor(rand() * 10));
+        const d = buildDossier(digits, { side: 'OVER', param: 2 });
         expect(d.last20.length).toBeLessThanOrEqual(20);
         expect(d.ladder?.length).toBe(9);
     });

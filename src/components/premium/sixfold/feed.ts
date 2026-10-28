@@ -1,9 +1,8 @@
 // Sixfold feed: reads the last ticks of the markets over Deriv's public WebSocket (read-only, no login, no trading),
-// or serves demo digits / pasted digits. It never places a trade. One app-wide instance (`sixfoldFeed`) feeds both the
+// or serves digits you paste in. There is no demo or simulated data. It never places a trade. One app-wide instance (`sixfoldFeed`) feeds both the
 // page and the Auto runner, so scanning continues on any tab.
 import { DERIV_WS_URL } from '@/lib/deriv-ws';
 import { digitFromQuote, parseDigitsText } from './engine';
-import { mulberry32 } from './stats';
 
 export const MARKETS: ReadonlyArray<readonly [string, string]> = [
     ['1HZ10V', 'Volatility 10 (1s)'],
@@ -41,19 +40,10 @@ export function inferDecimals(quotes: number[]): number {
     return Math.min(10, most);
 }
 
-export type FeedMode = 'live' | 'demo' | 'import';
+export type FeedMode = 'live' | 'import';
 export type FeedStatus = 'offline' | 'connecting' | 'live' | 'error';
 export type Series = Record<string, number[]>;
 export type FeedSnapshot = { mode: FeedMode; status: FeedStatus; error: string; series: Series; version: number };
-
-export function demoSeries(markets: readonly string[], n = 1500, seed = 11): Series {
-    const out: Series = {};
-    markets.forEach((market, k) => {
-        const rand = mulberry32(seed + k * 101);
-        out[market] = Array.from({ length: n }, () => Math.floor(rand() * 10));
-    });
-    return out;
-}
 
 export const SYMBOLS = MARKETS.map(m => m[0]);
 
@@ -78,10 +68,10 @@ type SocketLike = {
 };
 
 export class SixfoldFeed {
-    private mode: FeedMode = 'demo';
+    private mode: FeedMode = 'live';
     private status: FeedStatus = 'offline';
     private error = '';
-    private buf: Series = demoSeries(SYMBOLS);
+    private buf: Series = {};
     private dirty = new Set<string>();
     private decimals: Record<string, number> = {};
     private lastTick: Record<string, number> = {};
@@ -143,14 +133,6 @@ export class SixfoldFeed {
         this.publish();
         this.watchdog = setInterval(() => this.checkStale(mine), WATCHDOG_MS);
         this.attempt(mine, 0);
-    };
-
-    useDemo = () => {
-        this.stop();
-        this.mode = 'demo';
-        this.error = '';
-        this.replaceAll(demoSeries(SYMBOLS));
-        this.publish();
     };
 
     importDigits = (market: string, text: string) => {
@@ -251,7 +233,7 @@ export class SixfoldFeed {
         const urls = [DERIV_WS_URL, LEGACY_ENDPOINT];
         if (index >= urls.length) {
             if (Object.keys(this.buf).length) return this.reconnect(mine, 'Lost the market feed. Reconnecting.');
-            this.error = 'Could not reach Deriv. Check your connection, or use demo data.';
+            this.error = 'Could not reach Deriv. Check your connection and try again.';
             this.setStatus('error');
             return;
         }

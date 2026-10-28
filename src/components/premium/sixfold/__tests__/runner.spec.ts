@@ -295,7 +295,7 @@ describe('SixfoldRunner', () => {
                 getLastTickAt: () => null,
                 getLastDigit: () => null,
                 isLive: () => live,
-                getSnapshot: () => ({ mode: 'demo', status: 'offline', error: 'No route', series: {}, version: 1 }),
+                getSnapshot: () => ({ mode: 'live', status: 'offline', error: 'No route', series: {}, version: 1 }),
                 connect: () => void (live = false),
             },
         });
