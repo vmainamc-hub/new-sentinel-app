@@ -422,7 +422,11 @@ export class SixfoldRunner {
                 : `waiting for digit ${this.armed.entryDigits.join(' / ')}${this.settings.entry === 'SMART' ? ' (learned from this market)' : ''}`;
         const gate =
             this.settings.recoveryEntry !== 'OFF' && this.isRecovering()
-                ? ` Recovery entry: also needs ${this.settings.recoveryForm} ${this.settings.recoveryEntry === 'MOMENTUM' ? 'winning' : 'losing'} ticks in a row.`
+                ? ` Recovery entry: also needs ${
+                      this.settings.recoveryEntry === 'BOUNCE'
+                          ? `${this.settings.recoveryForm} losing ticks in a row and then a winning one.`
+                          : `${this.settings.recoveryForm} ${this.settings.recoveryEntry === 'MOMENTUM' ? 'winning' : 'losing'} ticks in a row.`
+                  }`
                 : '';
         this.addLog(
             'pick',

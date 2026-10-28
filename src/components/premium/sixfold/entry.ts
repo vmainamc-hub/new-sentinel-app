@@ -62,7 +62,7 @@ export function smartEntryDigits(
 
 // ---------- form gate: wait for a run of wins or losses before a recovery entry ----------
 
-export type RecoveryEntry = 'OFF' | 'MOMENTUM' | 'REVERSION';
+export type RecoveryEntry = 'OFF' | 'MOMENTUM' | 'REVERSION' | 'BOUNCE';
 
 /** Length of the winning run and of the losing run that ends at the latest tick, for `contract`. */
 export function trailingRun(series: readonly number[], contract: Contract): { wins: number; losses: number } {
@@ -78,9 +78,23 @@ export function trailingRun(series: readonly number[], contract: Contract): { wi
     return { wins, losses };
 }
 
-/** MOMENTUM: the last `k` ticks all would have won. REVERSION: the last `k` all would have lost. OFF always passes. */
+/** Losses in a row that came right before the latest tick, when the latest tick would have won. 0 if it would not. */
+export function lossesBeforeWin(series: readonly number[], contract: Contract): number {
+    const win = new Set(winningDigits(contract));
+    const n = series.length;
+    if (n < 2 || !win.has(series[n - 1])) return 0;
+    let losses = 0;
+    for (let i = n - 2; i >= 0 && !win.has(series[i]); i--) losses += 1;
+    return losses;
+}
+
+/**
+ * MOMENTUM: the last `k` ticks all would have won. REVERSION: the last `k` all would have lost.
+ * BOUNCE: `k` or more losses in a row, then a win on the latest tick. OFF always passes.
+ */
 export function formGateOk(mode: RecoveryEntry, k: number, series: readonly number[], contract: Contract): boolean {
     if (mode === 'OFF') return true;
+    if (mode === 'BOUNCE') return lossesBeforeWin(series, contract) >= k;
     const run = trailingRun(series, contract);
     return mode === 'MOMENTUM' ? run.wins >= k : run.losses >= k;
 }

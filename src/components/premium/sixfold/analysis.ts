@@ -291,17 +291,19 @@ export type EntryTestResult = {
     baseline: EntryTestRow;
     afterWins: EntryTestRow;
     afterLosses: EntryTestRow;
+    /** k or more losses in a row, then a win: the entry is the tick after that win. */
+    afterBounce: EntryTestRow;
 };
 
 /**
  * Pools every market's ticks and compares the win rate of `contract` on the next trade with the win rate after `k` wins
- * in a row and after `k` losses in a row (each tick judged as if a contract had been bought on it). Two-sided z-test of
+ * in a row, after `k` losses in a row, and after `k` losses then a win (each tick judged as if a contract had been bought on it). Two-sided z-test of
  * each against the baseline. If a run-based entry mattered, one of the rows would sit clearly away from the baseline.
  */
 export function entryTest(series: Record<string, readonly number[]>, contract: Contract, k: number, duration = 1): EntryTestResult {
     const win = new Set(winningDigits(contract));
     const len = Math.max(1, Math.min(10, Math.trunc(duration) || 1));
-    const acc = { all: [0, 0], w: [0, 0], l: [0, 0] };
+    const acc = { all: [0, 0], w: [0, 0], l: [0, 0], b: [0, 0] };
     let markets = 0;
     for (const digits of Object.values(series)) {
         if (digits.length < 100) continue;
@@ -310,6 +312,7 @@ export function entryTest(series: Record<string, readonly number[]>, contract: C
         let runL = 0;
         for (let i = 0; i + len < digits.length; i++) {
             const here = win.has(digits[i]);
+            const lossesBefore = runL; // losses in a row just before this tick
             runW = here ? runW + 1 : 0;
             runL = here ? 0 : runL + 1;
             const next = win.has(digits[i + len]) ? 1 : 0;
@@ -323,6 +326,10 @@ export function entryTest(series: Record<string, readonly number[]>, contract: C
                 acc.l[0] += 1;
                 acc.l[1] += next;
             }
+            if (here && lossesBefore >= k) {
+                acc.b[0] += 1;
+                acc.b[1] += next;
+            }
         }
     }
     const p0 = acc.all[0] ? acc.all[1] / acc.all[0] : winProbability(contract);
@@ -334,5 +341,5 @@ export function entryTest(series: Record<string, readonly number[]>, contract: C
         const z = se > 0 ? (rate - p0) / se : 0;
         return { n, wins, rate, edgePts: (rate - p0) * 100, p: n >= 30 ? 2 * (1 - normalCdf(Math.abs(z))) : null };
     };
-    return { k, markets, baseline: row(acc.all), afterWins: row(acc.w), afterLosses: row(acc.l) };
+    return { k, markets, baseline: row(acc.all), afterWins: row(acc.w), afterLosses: row(acc.l), afterBounce: row(acc.b) };
 }

@@ -47,7 +47,8 @@ export type SixfoldSettings = {
     /** After a loss, rest that market: it is not traded again until `restTrades` other trades have happened. */
     /**
      * Extra entry condition for recovery trades only: wait until the armed market's last `recoveryForm` ticks would all
-     * have won (MOMENTUM) or all have lost (REVERSION) for the contract being bought. OFF = no extra condition.
+     * have won (MOMENTUM), all have lost (REVERSION), or lost `recoveryForm` times and then won once (BOUNCE) for the
+     * contract being bought. OFF = no extra condition.
      */
     recoveryEntry: RecoveryEntry;
     recoveryForm: number;
@@ -131,7 +132,7 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         duration: Math.trunc(num(s.duration, d.duration, 1, 5)),
         selectivity: s.selectivity === 'strict' || s.selectivity === 'active' ? s.selectivity : 'balanced',
         entry: s.entry === 'ANY' || s.entry === 'SETUP' ? s.entry : 'SMART',
-        recoveryEntry: s.recoveryEntry === 'MOMENTUM' || s.recoveryEntry === 'REVERSION' ? s.recoveryEntry : 'OFF',
+        recoveryEntry: s.recoveryEntry === 'MOMENTUM' || s.recoveryEntry === 'REVERSION' || s.recoveryEntry === 'BOUNCE' ? s.recoveryEntry : 'OFF',
         recoveryForm: Math.trunc(num(s.recoveryForm, d.recoveryForm, 2, 8)),
         lossShield: typeof s.lossShield === 'boolean' ? s.lossShield : d.lossShield,
         restTrades: Math.trunc(num(s.restTrades, d.restTrades, 1, 10)),

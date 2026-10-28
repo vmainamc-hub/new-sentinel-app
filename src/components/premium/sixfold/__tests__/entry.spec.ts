@@ -40,7 +40,7 @@ describe('smartEntryDigits', () => {
     });
 });
 
-import { formGateOk, trailingRun } from '../entry';
+import { formGateOk, lossesBeforeWin, trailingRun } from '../entry';
 import { entryTest } from '../analysis';
 
 describe('form gate and entry test', () => {
@@ -70,5 +70,34 @@ describe('form gate and entry test', () => {
         const t = entryTest({ A: planted }, o2, 3);
         expect(t.afterLosses.rate!).toBe(1);
         expect(t.afterLosses.p!).toBeLessThan(0.001);
+    });
+});
+
+describe('loss run then win (BOUNCE)', () => {
+    const o2 = { side: 'OVER' as const, param: 2 };
+    it('counts the losses right before a winning latest tick', () => {
+        expect(lossesBeforeWin([5, 0, 1, 0, 7], o2)).toBe(3);
+        expect(lossesBeforeWin([5, 0, 1, 0], o2)).toBe(0); // latest tick lost
+        expect(lossesBeforeWin([0, 0, 6, 7], o2)).toBe(0); // a second win in a row: the bounce has passed
+        expect(lossesBeforeWin([7], o2)).toBe(0);
+    });
+    it('gates on k or more losses then a win', () => {
+        expect(formGateOk('BOUNCE', 3, [9, 0, 1, 2, 5], o2)).toBe(true);
+        expect(formGateOk('BOUNCE', 4, [9, 0, 1, 2, 5], o2)).toBe(false);
+        expect(formGateOk('BOUNCE', 2, [9, 9, 0, 5], o2)).toBe(false);
+    });
+    it('is measured in the entry test, with a planted lead and no lead in random digits', () => {
+        let a = 99;
+        const rnd = () => ((a = (a * 1103515245 + 12345) & 0x7fffffff), (a >> 8) % 10);
+        const random = Array.from({ length: 30000 }, rnd);
+        const r = entryTest({ A: random }, o2, 2);
+        expect(r.afterBounce.n).toBeGreaterThan(100);
+        expect(Math.abs(r.afterBounce.edgePts!)).toBeLessThan(6);
+        // Planted: 0,1,5 = two losses then a win, and the next tick always wins (9); then 0 again.
+        const planted: number[] = [];
+        for (let i = 0; i < 3000; i++) planted.push(0, 1, 5, 9, 4);
+        const t = entryTest({ A: planted }, o2, 2);
+        expect(t.afterBounce.rate!).toBe(1);
+        expect(t.afterBounce.p!).toBeLessThan(0.001);
     });
 });

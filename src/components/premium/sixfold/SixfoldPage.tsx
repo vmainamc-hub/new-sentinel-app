@@ -369,6 +369,7 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                             ['OFF', 'Same'],
                             ['MOMENTUM', 'After wins'],
                             ['REVERSION', 'After losses'],
+                            ['BOUNCE', 'Loss → win'],
                         ]}
                     />
                     {s.recoveryEntry !== 'OFF' && (
@@ -377,7 +378,9 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                     <small>
                         {s.recoveryEntry === 'OFF'
                             ? 'Recovery trades enter exactly like normal ones. The Lab’s Entry test shows whether a run-based entry has ever helped on your live ticks.'
-                            : `While recovering, also wait until the market’s last ${s.recoveryForm} ticks would all have ${s.recoveryEntry === 'MOMENTUM' ? 'won' : 'lost'} for the contract being bought.`}
+                            : s.recoveryEntry === 'BOUNCE'
+                              ? `While recovering, also wait for ${s.recoveryForm} or more losing ticks in a row followed by a winning tick, for the contract being bought.`
+                              : `While recovering, also wait until the market’s last ${s.recoveryForm} ticks would all have ${s.recoveryEntry === 'MOMENTUM' ? 'won' : 'lost'} for the contract being bought.`}
                     </small>
                 </div>
                 <Switch on={s.lossShield} onChange={v => set({ lossShield: v })} title='Loss shield' sub='Rest a market after it loses' />
@@ -912,8 +915,9 @@ function EntryTestPanel({ series, contract, settings }: { series: Record<string,
         ['Any tick (baseline)', res.baseline],
         [`After ${k} wins in a row`, res.afterWins],
         [`After ${k} losses in a row`, res.afterLosses],
+        [`After ${k} losses, then a win`, res.afterBounce],
     ];
-    const hit = [res.afterWins, res.afterLosses].filter(r => r.p !== null && r.p < 0.025 && (r.edgePts ?? 0) > 0);
+    const hit = [res.afterWins, res.afterLosses, res.afterBounce].filter(r => r.p !== null && r.p < 0.017 && (r.edgePts ?? 0) > 0);
     return (
         <Panel
             eyebrow='ENTRY TEST'
@@ -939,7 +943,7 @@ function EntryTestPanel({ series, contract, settings }: { series: Record<string,
             </div>
             <p className='sf-note'>
                 Every tick of all {res.markets} markets with enough history, judged as if a contract had been bought on it. If waiting for a run of wins or losses
-                helped, its win rate would sit clearly away from the baseline with a small p. Two rows are tested, so only p below about 0.025 is worth a look, and one lead
+                helped, its win rate would sit clearly away from the baseline with a small p. Three rows are tested, so only p below about 0.017 is worth a look, and one lead
                 on a short history is usually noise: check it again later. Deriv generates its digits randomly, so a gap near zero is the expected answer.
             </p>
         </Panel>
