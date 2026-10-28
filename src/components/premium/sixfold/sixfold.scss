@@ -1419,3 +1419,32 @@
         border-radius: 999px;
     }
 }
+
+.sixfold .sf-streak {
+    display: grid;
+    gap: 4px;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel-2);
+    font-size: 12px;
+    color: var(--muted);
+    b {
+        color: var(--text-strong);
+        font-weight: 600;
+    }
+    .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: var(--text);
+        overflow-wrap: anywhere;
+    }
+}
+.sixfold .sf-wide {
+    grid-column: 1 / -1;
+}
+.sixfold .sf-wide {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--muted);
+}

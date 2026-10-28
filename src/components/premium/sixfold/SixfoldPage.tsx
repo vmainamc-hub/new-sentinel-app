@@ -15,7 +15,17 @@ import { ARCHETYPE_TEXT, type CrowdPosition, DEFAULT_CROWD, SENSITIVITY, type Se
 import { buildDossier } from './dossier';
 import type { ContractSide } from './engine';
 import { marketName, MARKETS, shortName, sixfoldFeed } from './feed';
-import { DEFAULT_SETTINGS, type EntryRule, primaryContracts, type Selectivity, type SixfoldSettings } from './money';
+import {
+    DEFAULT_SETTINGS,
+    type EntryRule,
+    ladderPreview,
+    previewContract,
+    primaryContracts,
+    type RecoverySizing,
+    type Selectivity,
+    type SixfoldSettings,
+    streakChance,
+} from './money';
 import type { Phase } from './runner';
 import { sixfoldRunner } from './runner-instance';
 import { STATE_TEXT, type ViabilityState } from './viability';
@@ -96,6 +106,25 @@ function Seg<T extends string>({ value, options, onChange, label }: { value: T; 
         </div>
     );
 }
+
+const StreakCost = ({ s }: { s: SixfoldSettings }) => {
+    const rows = ladderPreview(s, 5);
+    const p = winProbability(previewContract(s));
+    const last = rows[rows.length - 1];
+    return (
+        <div className='sf-streak' role='note'>
+            <b>If you lose 5 in a row</b>
+            <span className='mono'>{rows.map(r => (r.writeOff ? `↺${r.stake.toFixed(2)}` : r.stake.toFixed(2))).join(' → ')}</span>
+            <span>
+                {s.streakBudget > 0 ? 'Most owed at once' : 'Total staked'}: {last.total.toFixed(2)}.
+                {s.recovery
+                    ? ` Recovery trades win ${Math.round(p * 100)}% of the time, so 4 losses in a row happen ${(streakChance(p, 4) * 100).toFixed(1)}% of the time they start.`
+                    : ''}
+                {s.streakBudget > 0 ? ' ↺ = loss accepted, back to base stake.' : ''}
+            </span>
+        </div>
+    );
+};
 
 function ContractCard({ side, on, barrier, onToggle, onBarrier }: { side: 'Over' | 'Under'; on: boolean; barrier: number; onToggle: () => void; onBarrier: (n: number) => void }) {
     return (
@@ -247,11 +276,36 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                 <Switch on={s.martingale} onChange={v => set({ martingale: v })} title='Martingale' sub='Auto recovery after a loss' />
                 {s.martingale && (
                     <div className='sf-sub'>
+                        <div className='sf-field'>
+                            <span>Recovery sizing</span>
+                            <Seg<RecoverySizing>
+                                label='Recovery sizing'
+                                value={s.recoverySizing}
+                                onChange={v => set({ recoverySizing: v })}
+                                options={[
+                                    ['PAYOUT', 'Payout-sized'],
+                                    ['MULTIPLIER', 'Multiplier'],
+                                ]}
+                            />
+                            <small>
+                                {s.recoverySizing === 'PAYOUT'
+                                    ? 'Each stake is sized so one win on the contract being bought pays back the share of the open loss you choose. Wins that only part-recover keep the rest owed.'
+                                    : 'Each stake is the last stake times the multiplier.'}
+                            </small>
+                        </div>
                         <div className='sf-grid2'>
-                            <Num label='Multiplier' value={s.multiplier} onCommit={n => set({ multiplier: n })} />
+                            {s.recoverySizing === 'PAYOUT' ? (
+                                <Num label='Win back (%)' value={s.recoverShare} onCommit={n => set({ recoverShare: n })} hint='of what is owed' />
+                            ) : (
+                                <Num label='Multiplier' value={s.multiplier} onCommit={n => set({ multiplier: n })} />
+                            )}
                             <Num label='Max steps' value={s.maxSteps} onCommit={n => set({ maxSteps: n })} hint='0 = no limit' />
                         </div>
-                        <Num label='Max stake' value={s.maxStake} onCommit={n => set({ maxStake: n })} hint='0 = no cap' />
+                        <div className='sf-grid2'>
+                            <Num label='Streak budget (× stake)' value={s.streakBudget} onCommit={n => set({ streakBudget: n })} hint='0 = off' />
+                            <Num label='Max stake' value={s.maxStake} onCommit={n => set({ maxStake: n })} hint='0 = no cap' />
+                        </div>
+                        <StreakCost s={s} />
                     </div>
                 )}
                 <Switch on={s.recovery} onChange={v => set({ recovery: v })} title='Recovery barrier' sub='After a loss, trade the recovery barrier' />
@@ -259,6 +313,9 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                     <div className='sf-sub sf-grid2'>
                         <Num label='Over' value={s.recoveryOver} onCommit={n => set({ recoveryOver: n })} />
                         <Num label='Under' value={s.recoveryUnder} onCommit={n => set({ recoveryUnder: n })} />
+                        <small className='sf-wide'>
+                            Over {s.recoveryOver} wins {(9 - s.recoveryOver) * 10}% of the time, Under {s.recoveryUnder} wins {s.recoveryUnder * 10}%. A higher win rate means fewer streaks but a smaller payout.
+                        </small>
                     </div>
                 )}
                 <div className='sf-field'>

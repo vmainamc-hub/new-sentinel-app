@@ -1,7 +1,8 @@
 // Sixfold Auto: settings, stake / martingale / recovery rules and stop conditions. Pure functions, no I/O.
-import { type Contract, contractLabel, isValidContract } from './bot';
+import { type Contract, contractLabel, isValidContract, profitMultiple, winProbability } from './bot';
 
 export type Selectivity = 'strict' | 'balanced' | 'active';
+export type RecoverySizing = 'PAYOUT' | 'MULTIPLIER';
 export type EntryRule = 'SMART' | 'SETUP' | 'ANY';
 
 export type SixfoldSettings = {
@@ -18,6 +19,14 @@ export type SixfoldSettings = {
     maxConsecutiveLosses: number;
     martingale: boolean;
     multiplier: number;
+    /**
+     * How the stake grows while there is an open loss. PAYOUT sizes each stake so one win on the contract being bought
+     * pays back `recoverShare` % of what is still owed; MULTIPLIER multiplies the last stake.
+     */
+    recoverySizing: RecoverySizing;
+    recoverShare: number;
+    /** Most the open loss may grow to, in multiples of the base stake. When the next stake would pass it, the loss is accepted and the stake restarts at base. 0 = off. */
+    streakBudget: number;
     /** Steps of the ladder before falling back to the base stake. 0 = no limit. */
     maxSteps: number;
     /** Hard cap on any single stake. 0 = no cap. */
@@ -61,6 +70,9 @@ export const DEFAULT_SETTINGS: SixfoldSettings = {
     maxConsecutiveLosses: 6,
     martingale: false,
     multiplier: 2,
+    recoverySizing: 'PAYOUT',
+    recoverShare: 50,
+    streakBudget: 10,
     maxSteps: 3,
     maxStake: 0,
     recovery: true,
@@ -99,6 +111,9 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         maxConsecutiveLosses: Math.trunc(num(s.maxConsecutiveLosses, d.maxConsecutiveLosses, 0, 100)),
         martingale: typeof s.martingale === 'boolean' ? s.martingale : d.martingale,
         multiplier: round2(num(s.multiplier, d.multiplier, 1, 10)),
+        recoverySizing: s.recoverySizing === 'MULTIPLIER' ? 'MULTIPLIER' : 'PAYOUT',
+        recoverShare: Math.trunc(num(s.recoverShare, d.recoverShare, 10, 100)),
+        streakBudget: round2(num(s.streakBudget, d.streakBudget, 0, 1000)),
         maxSteps: Math.trunc(num(s.maxSteps, d.maxSteps, 0, 20)),
         maxStake: round2(num(s.maxStake, d.maxStake, 0, 100_000)),
         recovery: typeof s.recovery === 'boolean' ? s.recovery : d.recovery,
@@ -153,6 +168,10 @@ export type SessionStats = {
     currentStake: number;
     consecutiveLosses: number;
     martingaleStep: number;
+    /** What is still owed from losses since the last time the books were clear (a win that pays it all back, or a write-off). */
+    openLoss: number;
+    /** Times the streak budget was reached and the loss accepted. */
+    writeOffs: number;
     /** Largest drop from the session's best P/L. */
     maxDrawdown: number;
     peak: number;
@@ -172,6 +191,8 @@ export const freshSession = (settings: SixfoldSettings): SessionStats => ({
     currentStake: clampStake(settings.stake, settings),
     consecutiveLosses: 0,
     martingaleStep: 0,
+    openLoss: 0,
+    writeOffs: 0,
     maxDrawdown: 0,
     peak: 0,
 });
@@ -201,9 +222,16 @@ export function nextStake(
 export function applyResult(session: SessionStats, profit: number, settings: SixfoldSettings): SessionStats {
     const pnl = round2(session.pnl + profit);
     const peak = Math.max(session.peak, pnl);
+    const openLoss = round2(Math.max(0, session.openLoss - profit));
+    const next = nextStake(session, profit, settings);
+    const owing = { ...session, ...next, openLoss };
     return {
-        ...session,
-        ...nextStake(session, profit, settings),
+        ...owing,
+        // With payout sizing the displayed next stake is an estimate; the real one is sized for the contract bought.
+        currentStake:
+            settings.martingale && settings.recoverySizing === 'PAYOUT'
+                ? stakeFor(owing, previewContract(settings), settings).stake
+                : next.currentStake,
         trades: session.trades + 1,
         wins: session.wins + (profit < 0 ? 0 : 1),
         losses: session.losses + (profit < 0 ? 1 : 0),
@@ -252,3 +280,69 @@ export const DERIV_CONTRACT_TYPE: Partial<Record<Contract['side'], string>> = {
 };
 
 export const isExecutable = (c: Contract) => !c.dynamic && DERIV_CONTRACT_TYPE[c.side] !== undefined;
+
+// ---------- stake sizing while recovering ----------
+
+/** A representative contract for estimates: the recovery barrier when it is on, otherwise the first primary. */
+export function previewContract(settings: SixfoldSettings): Contract {
+    if (settings.recovery) return { side: 'OVER', param: settings.recoveryOver };
+    return primaryContracts(settings)[0] ?? { side: 'OVER', param: settings.primaryOver };
+}
+
+/**
+ * The stake for the next trade of `contract`, and whether the streak budget says to accept the loss first (writeOff).
+ * Pure: the caller applies the write-off with `applyWriteOff`.
+ */
+export function stakeFor(
+    session: Pick<SessionStats, 'currentStake' | 'consecutiveLosses' | 'openLoss'>,
+    contract: Contract,
+    settings: SixfoldSettings
+): { stake: number; writeOff: boolean } {
+    const base = clampStake(settings.stake, settings);
+    if (!settings.martingale) return { stake: base, writeOff: false };
+    let stake: number;
+    if (settings.recoverySizing === 'PAYOUT') {
+        if (session.openLoss <= 0) return { stake: base, writeOff: false };
+        const ratio = profitMultiple(winProbability(contract), settings.margin);
+        stake = ratio > 0 ? clampStake(Math.max(base, (session.openLoss * (settings.recoverShare / 100)) / ratio), settings) : base;
+        // The ladder of consecutive losses ends at maxSteps, as with the multiplier.
+        if (settings.maxSteps > 0 && session.consecutiveLosses > settings.maxSteps) return { stake: base, writeOff: session.openLoss > 0 };
+    } else {
+        stake = session.currentStake;
+    }
+    const budget = settings.streakBudget * base;
+    if (budget > 0 && stake > base && session.openLoss + stake > budget) return { stake: base, writeOff: true };
+    return { stake, writeOff: false };
+}
+
+/** Accepts the open loss: the books are cleared and the stake restarts at base. The loss streak itself is kept. */
+export function applyWriteOff(session: SessionStats, settings: SixfoldSettings): SessionStats {
+    return {
+        ...session,
+        openLoss: 0,
+        martingaleStep: 0,
+        currentStake: clampStake(settings.stake, settings),
+        writeOffs: session.writeOffs + 1,
+    };
+}
+
+/** Chance of losing `n` trades in a row on a contract that wins with probability `p`. */
+export const streakChance = (p: number, n: number) => Math.pow(1 - p, n);
+
+/** The stakes you would place if every trade lost, with the running total at risk. Shows the real cost of a streak. */
+export function ladderPreview(settings: SixfoldSettings, steps = 5): Array<{ stake: number; total: number; writeOff: boolean }> {
+    const out: Array<{ stake: number; total: number; writeOff: boolean }> = [];
+    let s = freshSession(settings);
+    const primary = primaryContracts(settings)[0] ?? { side: 'OVER' as const, param: settings.primaryOver };
+    let total = 0;
+    for (let i = 0; i < steps; i++) {
+        const c = tradeContract(primary, s.consecutiveLosses, settings).contract;
+        const sized = stakeFor(s, c, settings);
+        if (sized.writeOff) s = applyWriteOff(s, settings);
+        const stake = sized.writeOff ? clampStake(settings.stake, settings) : sized.stake;
+        total += stake;
+        out.push({ stake, total: round2(total), writeOff: sized.writeOff });
+        s = applyResult(s, -stake, settings);
+    }
+    return out;
+}

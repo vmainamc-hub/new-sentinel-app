@@ -14,12 +14,14 @@ import { smartEntryDigits } from './entry';
 import { type FeedMode, type FeedSnapshot, marketName } from './feed';
 import {
     applyResult,
+    applyWriteOff,
     DERIV_CONTRACT_TYPE,
     freshSession,
     normalizeSettings,
     primaryContracts,
     type SessionStats,
     type SixfoldSettings,
+    stakeFor,
     stopReason,
     tradeContract,
 } from './money';
@@ -502,8 +504,16 @@ export class SixfoldRunner {
         if (!cell) return;
 
         const token = this.runToken;
-        const stake = this.session.currentStake;
         const bought = tradeContract(cell.contract, this.session.consecutiveLosses, this.settings);
+        const sized = stakeFor(this.session, bought.contract, this.settings);
+        const stake = sized.stake;
+        if (sized.writeOff) {
+            this.addLog(
+                'warn',
+                `Streak budget reached (${this.session.openLoss.toFixed(2)} owed): accepting the loss and restarting at stake ${stake.toFixed(2)}.`
+            );
+            this.session = applyWriteOff(this.session, this.settings);
+        }
         const contractType = DERIV_CONTRACT_TYPE[bought.contract.side];
         if (!contractType) return;
         const currency = this.stores?.client?.currency || this.io.currency() || 'USD';

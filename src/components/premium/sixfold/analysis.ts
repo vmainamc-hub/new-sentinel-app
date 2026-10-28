@@ -2,7 +2,7 @@
 // so that "nothing found" is a normal, clearly stated answer on Deriv's randomly generated digits.
 import { type BotConfig, type BotRun, type Contract, DEFAULT_BOT, simulateBot, winProbability } from './bot';
 import { outcome } from './engine';
-import { applyResult, freshSession, type SixfoldSettings, stopReason, tradeContract } from './money';
+import { applyResult, applyWriteOff, freshSession, type SixfoldSettings, stakeFor, stopReason, tradeContract } from './money';
 import { bhAdjust, breakEvenRate, chiSquareSf, mulberry32, normalCdf, profitMultiple, quantile } from './stats';
 import { assessRun, type ViabilityState } from './viability';
 
@@ -230,7 +230,9 @@ export function bankrollSim(
         for (let i = 0; i < maxTicks && !ended; i++) {
             const t = tradeContract(contract, s.consecutiveLosses, settings);
             const p = winProbability(t.contract);
-            const stake = s.currentStake;
+            const sized = stakeFor(s, t.contract, settings);
+            if (sized.writeOff) s = applyWriteOff(s, settings);
+            const stake = sized.stake;
             worstStake = Math.max(worstStake, stake);
             const won = rand() < p;
             const profit = won ? stake * profitMultiple(p, settings.margin) : -stake;

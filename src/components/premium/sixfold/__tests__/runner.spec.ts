@@ -175,7 +175,7 @@ describe('SixfoldRunner', () => {
     });
 
     it('doubles the stake after a loss when martingale is on, and uses the recovery barrier', async () => {
-        const h = harness({ takeProfit: 0, martingale: true, multiplier: 2, recovery: true, recoveryOver: 4, recoveryUnder: 5 });
+        const h = harness({ takeProfit: 0, martingale: true, multiplier: 2, recoverySizing: 'MULTIPLIER', streakBudget: 0, recovery: true, recoveryOver: 4, recoveryUnder: 5 });
         h.queueProfits(-1);
         h.runner.start();
         const side = h.runner.getSnapshot().armed!.label.split(' ')[0];
@@ -491,5 +491,37 @@ describe('SixfoldRunner loss shield and result-aware rules', () => {
         h.runner.updateSettings({ entry: 'ANY' });
         h.runner.start();
         expect(h.runner.getSnapshot().armed?.entryDigits ?? []).toEqual([]);
+    });
+});
+
+describe('SixfoldRunner streak budget', () => {
+    it('accepts the loss and goes back to the base stake instead of climbing past the budget', async () => {
+        const h = harness({
+            takeProfit: 0,
+            stopLoss: 0,
+            maxConsecutiveLosses: 0,
+            selectivity: 'active',
+            martingale: true,
+            multiplier: 2,
+            recoverySizing: 'MULTIPLIER',
+            streakBudget: 5,
+            maxSteps: 0,
+            recovery: false,
+            lossShield: false,
+            markets: ['P'],
+        });
+        h.queueProfits(-1, -2, -4, 0.35);
+        h.runner.start();
+        for (let i = 0; i < 4; i++) {
+            h.advance(1500);
+            h.runner.tick();
+            const a = h.runner.getSnapshot().armed!;
+            h.runner.handleFeedTick(a.symbol, a.entryDigits[0]);
+            await flush();
+        }
+        const stakes = h.calls.buy.map((b: any) => b.parameters.amount);
+        expect(stakes.slice(0, 3)).toEqual([1, 2, 1]); // 1 + 4 would pass 5, so the third trade restarts at base
+        expect(h.runner.getSnapshot().session.writeOffs).toBeGreaterThanOrEqual(1);
+        expect(h.runner.getSnapshot().log.some(l => /Streak budget reached/.test(l.text))).toBe(true);
     });
 });
