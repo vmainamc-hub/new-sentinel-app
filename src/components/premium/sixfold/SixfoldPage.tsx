@@ -5,17 +5,17 @@
 // Board    : a heat map of every market x contract with false-discovery control.
 // Contract : one contract on one market: charts, the six traders, the ladder and the edge test.
 // Lab      : does anything beyond chance exist? Uniformity, dependence, label calibration and a bankroll simulation.
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { bankrollSim, calibrateLabels, contractRuns, rollingRate, structureTable, transitionTest, uniformityTest } from './analysis';
 import { sentinelAgreement } from './agree';
 import { type BotConfig, type Contract, contractKey, contractLabel, DEFAULT_BOT, equityCurve, isValidContract, winProbability } from './bot';
-import { bestPerMarket, type Cell, eligibility, SCAN_CONTRACTS } from './scanner';
+import { bestPerMarket, type Cell, eligibility } from './scanner';
 import { DigitBars, Hexagon, LineChart, Radar, Sparkline, TransitionHeat } from './charts';
 import { ARCHETYPE_TEXT, type CrowdPosition, DEFAULT_CROWD, SENSITIVITY, type Sensitivity } from './crowd';
 import { buildDossier } from './dossier';
 import type { ContractSide } from './engine';
 import { marketName, MARKETS, shortName, sixfoldFeed } from './feed';
-import { DEFAULT_SETTINGS, type EntryRule, type Selectivity, type SixfoldSettings } from './money';
+import { DEFAULT_SETTINGS, type EntryRule, primaryContracts, type Selectivity, type SixfoldSettings } from './money';
 import type { Phase } from './runner';
 import { sixfoldRunner } from './runner-instance';
 import { STATE_TEXT, type ViabilityState } from './viability';
@@ -37,7 +37,6 @@ const pct = (x: number | null, d = 0) => (x === null ? '—' : `${(x * 100).toFi
 const pts = (x: number | null, d = 1) => (x === null ? '—' : `${x >= 0 ? '+' : ''}${x.toFixed(d)}`);
 const money = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(2)}`;
 const pill = (s: ViabilityState) => <span className={`sf-state vs-${s.toLowerCase()}`}>{STATE_TEXT[s].label}</span>;
-const shortContract = (c: Contract) => (c.side === 'OVER' ? `O${c.param}` : c.side === 'UNDER' ? `U${c.param}` : c.side === 'EVEN' ? 'Ev' : 'Od');
 
 const PHASE_TEXT: Record<Phase, { title: string; sub: string; tone: 'idle' | 'scan' | 'armed' | 'trade' | 'warn' }> = {
     idle: { title: 'READY', sub: 'Press Run', tone: 'idle' },
@@ -94,6 +93,20 @@ function Seg<T extends string>({ value, options, onChange, label }: { value: T; 
                     {text}
                 </button>
             ))}
+        </div>
+    );
+}
+
+function ContractCard({ side, on, barrier, onToggle, onBarrier }: { side: 'Over' | 'Under'; on: boolean; barrier: number; onToggle: () => void; onBarrier: (n: number) => void }) {
+    return (
+        <div className={`sf-ccard ${on ? 'on' : ''}`}>
+            <button type='button' role='switch' aria-checked={on} onClick={onToggle} aria-label={`Trade ${side}`}>
+                <b>
+                    {side} {barrier}
+                </b>
+                <small>{on ? 'Trading' : 'Off'}</small>
+            </button>
+            <Num label='Barrier' value={barrier} onCommit={onBarrier} />
         </div>
     );
 }
@@ -215,6 +228,17 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
     return (
         <main className='sf-scanner'>
             <Panel eyebrow='SCANNER SETTINGS' title='Configure your trade'>
+                <div className='sf-field sf-first'>
+                    <span>Contracts</span>
+                    <div className='sf-grid2'>
+                        <ContractCard side='Over' on={s.useOver} barrier={s.primaryOver} onToggle={() => set({ useOver: !s.useOver })} onBarrier={n => set({ primaryOver: n })} />
+                        <ContractCard side='Under' on={s.useUnder} barrier={s.primaryUnder} onToggle={() => set({ useUnder: !s.useUnder })} onBarrier={n => set({ primaryUnder: n })} />
+                    </div>
+                    <small>
+                        Sixfold only trades these two, on the market it finds best.{' '}
+                        {s.recovery ? `After a loss it switches to Over ${s.recoveryOver} / Under ${s.recoveryUnder}.` : 'Recovery barrier is off.'}
+                    </small>
+                </div>
                 <div className='sf-grid3'>
                     <Num label='Stake' value={s.stake} onCommit={n => set({ stake: n })} />
                     <Num label='TP' value={s.takeProfit} onCommit={n => set({ takeProfit: n })} hint='0 = off' />
@@ -417,6 +441,7 @@ function heatTier(c: Cell | undefined): string {
 
 function BoardTab({ sx, open }: { sx: ReturnType<typeof useSixfold>; open: (m: string, c?: Contract) => void }) {
     const scan = sx.scan;
+    const contracts = primaryContracts(sx.settings);
     const rows = useMemo(() => {
         const symbols = MARKETS.map(m => m[0]);
         return symbols
@@ -431,7 +456,7 @@ function BoardTab({ sx, open }: { sx: ReturnType<typeof useSixfold>; open: (m: s
         <main className='sf-board'>
             <Panel
                 eyebrow='MARKET BOARD'
-                title='Every market, every contract'
+                title={`Every market, ${contracts.map(contractLabel).join(' and ') || 'no contract switched on'}`}
                 aside={
                     <div className='sf-legend' aria-label='Legend'>
                         <i className='sig' /> significant <i className='hot' /> ≥ +3 pts <i className='up' /> above break-even <i className='flat' /> slightly under <i className='down' /> well under
@@ -440,13 +465,13 @@ function BoardTab({ sx, open }: { sx: ReturnType<typeof useSixfold>; open: (m: s
             >
                 <p className='sf-lede'>
                     Colour = recent win rate minus break-even, in points, for a bot that trades the contract the way DBot does. A dot means it is still significant
-                    after correcting for the {scan?.summary.tested ?? 0} contracts scanned. Click a cell to open it.
+                    after correcting for the {scan?.summary.tested ?? 0} contracts scanned. Click a tile to open it.
                 </p>
-                <div className='sf-heat' role='grid' aria-label='Heat map'>
+                <div className='sf-heat' role='grid' aria-label='Heat map' style={{ '--n': contracts.length } as CSSProperties}>
                     <div className='hrow hhead'>
                         <span />
-                        {SCAN_CONTRACTS.map(c => (
-                            <span key={contractKey(c)}>{shortContract(c)}</span>
+                        {contracts.map(c => (
+                            <span key={contractKey(c)}>{contractLabel(c)}</span>
                         ))}
                         <span>best</span>
                     </div>
@@ -455,7 +480,7 @@ function BoardTab({ sx, open }: { sx: ReturnType<typeof useSixfold>; open: (m: s
                             <button className='name' onClick={() => open(r.sym)}>
                                 {marketName(r.sym)}
                             </button>
-                            {SCAN_CONTRACTS.map(c => {
+                            {contracts.map(c => {
                                 const cell = r.cells.find(x => x.key === contractKey(c));
                                 return (
                                     <button
@@ -465,7 +490,17 @@ function BoardTab({ sx, open }: { sx: ReturnType<typeof useSixfold>; open: (m: s
                                         onClick={() => open(r.sym, c)}
                                         title={cell ? `${marketName(r.sym)} · ${cell.label}: ${pts(cell.edgePts)} pts vs break-even, score ${cell.score}, ${cell.windowTrades} trades${cell.qValue !== null ? `, q=${cell.qValue.toFixed(2)}` : ''}` : 'No data yet'}
                                     >
-                                        {cell?.significant ? '●' : ''}
+                                        {cell ? (
+                                            <>
+                                                <b>
+                                                    {cell.significant ? '● ' : ''}
+                                                    {pts(cell.edgePts)} pts
+                                                </b>
+                                                <small>score {cell.score}</small>
+                                            </>
+                                        ) : (
+                                            '–'
+                                        )}
                                     </button>
                                 );
                             })}
@@ -700,7 +735,7 @@ function ContractTab(p: {
                                     ))}
                                 </div>
                                 <p className='sf-note'>
-                                    {d.bestRung
+                                    Information only: Sixfold trades just the contracts you switch on in the Scanner. {d.bestRung
                                         ? `${d.bestRung.label} has been healthier lately (${pts(d.bestRung.score)} pts). On random digits a gap like this often fades.`
                                         : `No other barrier is clearly healthier than ${d.label} right now.`}
                                 </p>

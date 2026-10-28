@@ -16,6 +16,7 @@ import {
     DERIV_CONTRACT_TYPE,
     freshSession,
     normalizeSettings,
+    primaryContracts,
     type SessionStats,
     type SixfoldSettings,
     stopReason,
@@ -220,6 +221,10 @@ export class SixfoldRunner {
             this.lastError = 'Pick at least one market to scan.';
             return this.emit();
         }
+        if (primaryContracts(this.settings).length === 0) {
+            this.lastError = 'Switch on Over or Under: Sixfold needs at least one contract to trade.';
+            return this.emit();
+        }
         const { run_panel, dashboard } = this.stores;
         try {
             const other = dashboard.active_trading_module;
@@ -401,7 +406,8 @@ export class SixfoldRunner {
             series,
             symbols,
             { duration: this.settings.duration, entry: { mode: this.settings.entry }, margin: this.settings.margin },
-            now
+            now,
+            primaryContracts(this.settings)
         );
         this.scanAt = now;
         this.queue = this.scan.cells

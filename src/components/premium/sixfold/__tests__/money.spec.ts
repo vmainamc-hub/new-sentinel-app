@@ -1,4 +1,4 @@
-import { applyResult, DEFAULT_SETTINGS, freshSession, nextStake, normalizeSettings, stopReason, tradeContract } from '../money';
+import { applyResult, DEFAULT_SETTINGS, freshSession, nextStake, normalizeSettings, primaryContracts, stopReason, tradeContract } from '../money';
 
 const base = { ...DEFAULT_SETTINGS, stake: 1, martingale: true, multiplier: 2, maxSteps: 3 };
 
@@ -54,5 +54,25 @@ describe('Sixfold stake rules', () => {
         expect(n.duration).toBe(5);
         expect(n.selectivity).toBe('balanced');
         expect(n.markets.length).toBeGreaterThan(0);
+    });
+});
+
+describe('primary contracts', () => {
+    it('defaults to Over 2 and Under 7 with Over 3 / Under 6 recovery switched on', () => {
+        expect(primaryContracts(DEFAULT_SETTINGS)).toEqual([{ side: 'OVER', param: 2 }, { side: 'UNDER', param: 7 }]);
+        expect(DEFAULT_SETTINGS.recovery).toBe(true);
+        expect(DEFAULT_SETTINGS.recoveryOver).toBe(3);
+        expect(DEFAULT_SETTINGS.recoveryUnder).toBe(6);
+    });
+    it('respects the on/off switches and clamps barriers to ones Deriv offers', () => {
+        expect(primaryContracts({ ...DEFAULT_SETTINGS, useOver: false })).toEqual([{ side: 'UNDER', param: 7 }]);
+        expect(primaryContracts({ ...DEFAULT_SETTINGS, useOver: false, useUnder: false })).toEqual([]);
+        const n = normalizeSettings({ primaryOver: 99, primaryUnder: 0 });
+        expect(n.primaryOver).toBe(8);
+        expect(n.primaryUnder).toBe(1);
+    });
+    it('settings saved before this existed fall back to the defaults', () => {
+        const n = normalizeSettings({ stake: 2, markets: ['R_10'] } as never);
+        expect(primaryContracts(n)).toEqual([{ side: 'OVER', param: 2 }, { side: 'UNDER', param: 7 }]);
     });
 });

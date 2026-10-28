@@ -827,18 +827,17 @@
     --c-flat: #3a4658;
     --c-down: #7a3a49;
     display: grid;
-    gap: 3px;
+    gap: 6px;
     overflow-x: auto;
     padding-bottom: 6px;
     .hrow {
         display: grid;
-        grid-template-columns: 150px repeat(20, minmax(26px, 1fr)) 110px;
-        gap: 3px;
+        grid-template-columns: minmax(130px, 170px) repeat(var(--n, 2), minmax(92px, 1fr)) minmax(90px, 120px);
+        gap: 6px;
         align-items: center;
-        min-width: 840px;
     }
     .hhead span {
-        font: 600 9.5px 'DM Mono', monospace;
+        font: 600 11px 'DM Mono', monospace;
         color: var(--muted);
         text-align: center;
     }
@@ -846,7 +845,7 @@
         text-align: left;
         background: none;
         border: 0;
-        font-size: 12px;
+        font-size: 12.5px;
         font-weight: 650;
         padding: 6px 0;
         color: var(--text);
@@ -857,15 +856,25 @@
         padding-left: 6px;
     }
     .cell {
-        height: 28px;
-        border-radius: 5px;
+        min-height: 46px;
+        border-radius: 8px;
         border: 1px solid transparent;
         color: #fff;
-        font-size: 11px;
-        line-height: 1;
-        padding: 0;
+        padding: 4px 6px;
+        display: grid;
+        align-content: center;
+        justify-items: center;
+        gap: 1px;
+        b {
+            font: 700 12.5px Manrope, sans-serif;
+        }
+        small {
+            font: 500 9.5px 'DM Mono', monospace;
+            opacity: 0.85;
+        }
         &.na {
             background: var(--panel-2);
+            color: var(--muted);
         }
         &.sig {
             background: var(--c-sig);
@@ -887,6 +896,43 @@
             border-color: var(--text-strong);
         }
     }
+}
+.sixfold .sf-ccard {
+    display: grid;
+    gap: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px;
+    > button {
+        display: grid;
+        justify-items: start;
+        gap: 1px;
+        text-align: left;
+        background: transparent;
+        border: 0;
+        padding: 2px;
+        b {
+            font: 800 15px Manrope, sans-serif;
+            color: var(--muted);
+        }
+        small {
+            font: 600 10px 'DM Mono', monospace;
+            color: var(--muted);
+        }
+    }
+    &.on {
+        border-color: var(--teal);
+        > button b {
+            color: var(--text-strong);
+        }
+        > button small {
+            color: var(--teal);
+        }
+    }
+}
+.sixfold .sf-field.sf-first {
+    margin-top: 0;
 }
 .sixfold .sf-legend i {
     &.sig {

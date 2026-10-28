@@ -114,7 +114,7 @@ describe('SixfoldRunner', () => {
         let s = h.runner.getSnapshot();
         expect(s.phase).toBe('armed');
         expect(s.armed?.symbol).toBe('P');
-        expect(s.armed?.label).toMatch(/^(Over|Under) \d$/); // several contracts win every trade here; any of them will do
+        expect(s.armed?.label).toMatch(/^(Over 2|Under 7)$/); // only the two primary contracts are ever armed
         const [side, barrier] = s.armed!.label.split(' ');
         // A digit that would not have lost Over 2 does not trigger the buy.
         h.runner.handleFeedTick('P', 7);
@@ -312,5 +312,72 @@ describe('SixfoldRunner', () => {
         h.runner.updateSettings({ stake: 2.5 });
         expect(h.runner.getSnapshot().settings.stake).toBe(2.5);
         expect(h.runner.getSnapshot().session.currentStake).toBe(2.5);
+    });
+});
+
+describe('SixfoldRunner trades only the primary contracts', () => {
+    it('scans exactly Over 2 and Under 7 on every market by default', () => {
+        const h = harness();
+        h.runner.start();
+        const scan = h.runner.getSnapshot().scan!;
+        expect(scan.cells).toHaveLength(2 * 2); // 2 markets x 2 contracts
+        expect(new Set(scan.cells.map(c => c.label))).toEqual(new Set(['Over 2', 'Under 7']));
+    });
+
+    it('never buys any other contract across a long session, even when others look healthier', async () => {
+        const h = harness({ takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, selectivity: 'active' });
+        h.runner.start();
+        for (let i = 0; i < 25; i++) {
+            h.advance(1500);
+            h.runner.tick();
+            const a = h.runner.getSnapshot().armed;
+            if (a) h.runner.handleFeedTick(a.symbol, a.entryDigits[0] ?? 1);
+            await flush();
+        }
+        expect(h.calls.buy.length).toBeGreaterThan(3);
+        for (const b of h.calls.buy) {
+            const ok = (b.parameters.contract_type === 'DIGITOVER' && b.parameters.barrier === '2') || (b.parameters.contract_type === 'DIGITUNDER' && b.parameters.barrier === '7');
+            expect(ok).toBe(true);
+        }
+    });
+
+    it('after a loss it uses only the Over 3 / Under 6 recovery barriers, then returns to Over 2 / Under 7', async () => {
+        const h = harness({ takeProfit: 0, recovery: true });
+        h.queueProfits(-1, 0.35);
+        h.runner.start();
+        const side = h.runner.getSnapshot().armed!.label.split(' ')[0];
+        const entry = h.runner.getSnapshot().armed!.entryDigits[0];
+        h.runner.handleFeedTick(h.runner.getSnapshot().armed!.symbol, entry);
+        await flush();
+        h.advance(1500);
+        h.runner.tick();
+        const a2 = h.runner.getSnapshot().armed!;
+        h.runner.handleFeedTick(a2.symbol, a2.entryDigits[0]);
+        await flush();
+        expect(h.calls.buy[1].parameters.barrier).toBe(h.calls.buy[1].parameters.contract_type === 'DIGITOVER' ? '3' : '6');
+        h.advance(1500);
+        h.runner.tick();
+        const a3 = h.runner.getSnapshot().armed!;
+        h.runner.handleFeedTick(a3.symbol, a3.entryDigits[0]);
+        await flush();
+        expect(['2', '7']).toContain(h.calls.buy[2].parameters.barrier);
+        expect(side === 'Over' || side === 'Under').toBe(true);
+    });
+
+    it('switching Over off leaves only Under 7, and switching both off refuses to run', () => {
+        const h = harness({ useOver: false });
+        h.runner.start();
+        expect(new Set(h.runner.getSnapshot().scan!.cells.map(c => c.label))).toEqual(new Set(['Under 7']));
+        h.runner.stop('x');
+        h.runner.updateSettings({ useUnder: false });
+        h.runner.start();
+        expect(h.runner.isRunning()).toBe(false);
+        expect(h.runner.getSnapshot().lastError).toMatch(/Over or Under/);
+    });
+
+    it('lets you move the primary barriers (for example Over 3 / Under 6) and scans only those', () => {
+        const h = harness({ primaryOver: 3, primaryUnder: 6 });
+        h.runner.start();
+        expect(new Set(h.runner.getSnapshot().scan!.cells.map(c => c.label))).toEqual(new Set(['Over 3', 'Under 6']));
     });
 });

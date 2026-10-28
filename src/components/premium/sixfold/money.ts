@@ -5,6 +5,11 @@ export type Selectivity = 'strict' | 'balanced' | 'active';
 export type EntryRule = 'SETUP' | 'ANY';
 
 export type SixfoldSettings = {
+    /** The two contracts Sixfold trades. Over <primaryOver> and Under <primaryUnder>; either can be switched off. */
+    useOver: boolean;
+    primaryOver: number;
+    useUnder: boolean;
+    primaryUnder: number;
     stake: number;
     takeProfit: number;
     stopLoss: number;
@@ -37,6 +42,10 @@ export type SixfoldSettings = {
 export const MIN_STAKE = 0.35;
 
 export const DEFAULT_SETTINGS: SixfoldSettings = {
+    useOver: true,
+    primaryOver: 2,
+    useUnder: true,
+    primaryUnder: 7,
     stake: 1,
     takeProfit: 10,
     stopLoss: 30,
@@ -46,7 +55,7 @@ export const DEFAULT_SETTINGS: SixfoldSettings = {
     multiplier: 2,
     maxSteps: 3,
     maxStake: 0,
-    recovery: false,
+    recovery: true,
     recoveryOver: 3,
     recoveryUnder: 6,
     duration: 1,
@@ -68,6 +77,10 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
     const d = DEFAULT_SETTINGS;
     const s = input ?? {};
     return {
+        useOver: typeof s.useOver === 'boolean' ? s.useOver : d.useOver,
+        primaryOver: Math.trunc(num(s.primaryOver, d.primaryOver, 0, 8)),
+        useUnder: typeof s.useUnder === 'boolean' ? s.useUnder : d.useUnder,
+        primaryUnder: Math.trunc(num(s.primaryUnder, d.primaryUnder, 1, 9)),
         stake: round2(num(s.stake, d.stake, MIN_STAKE, 10_000)),
         takeProfit: round2(num(s.takeProfit, d.takeProfit, 0, 1_000_000)),
         stopLoss: round2(num(s.stopLoss, d.stopLoss, 0, 1_000_000)),
@@ -87,6 +100,14 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         margin: num(s.margin, d.margin, 0.01, 0.2),
         markets: Array.isArray(s.markets) && s.markets.length ? s.markets.filter(m => typeof m === 'string') : d.markets,
     };
+}
+
+/** The contracts the scanner looks at and the runner may buy: only the ones switched on, nothing else. */
+export function primaryContracts(settings: Pick<SixfoldSettings, 'useOver' | 'primaryOver' | 'useUnder' | 'primaryUnder'>): Contract[] {
+    const out: Contract[] = [];
+    if (settings.useOver) out.push({ side: 'OVER', param: settings.primaryOver });
+    if (settings.useUnder) out.push({ side: 'UNDER', param: settings.primaryUnder });
+    return out;
 }
 
 const STORAGE_KEY = 'sixfold.auto.settings.v1';

@@ -103,13 +103,14 @@ Not done / unverified:
 
 ## Sixfold Auto (autonomous scanner + trader)
 Done (src/components/premium/sixfold, 64 unit tests pass, strict `tsc` clean, driven end-to-end in headless Chromium with a fake Deriv socket):
-- [x] Press **Run** on the Sixfold page: it scans every market x contract (Over 0-8, Under 1-9, Even, Odd), arms the best eligible one, waits for its entry digit, buys, waits for the result, then looks again. One trade at a time, across all markets. It no longer loads or drives a bot.
+- [x] Press **Run** on the Sixfold page: it scans every market for the two primary contracts only (Over 2 and Under 7 by default, switchable, barriers editable), arms the best eligible one, waits for its entry digit, buys, waits for the result, then looks again. One trade at a time, across all markets. It no longer loads or drives a bot.
 - [x] Trades go through `buyContractForUi` / `streamContractUntilSettled` and are pushed to the transactions / Run Panel / summary stores (same hand-off as Sentinel AI), so they show in the general Transactions area. The Run Panel's Stop ends the session.
 - [x] Money rules: stake, TP, SL, martingale (multiplier, max steps, max stake), recovery barrier (Over 3 / Under 6 by default), loss-streak stop, max trades. Pure functions in `money.ts`.
 - [x] Safety: never trades a market whose last tick is stale; a Deriv-refused contract is skipped and a market refused twice is taken out for the session; a purchase with an unknown outcome stops the session (never retried); a dropped Deriv session stops it.
 - [x] Analysis: Benjamini-Hochberg false-discovery control across all scanned cells (`scanner.ts`), digit uniformity (chi-square), digit-to-next-digit dependence (chi-square 9x9), runs test, calibration of Sixfold's own labels against what happened next, 1,000-session bankroll Monte Carlo using the runner's own money rules (`analysis.ts`), Sentinel AI agreement badge (`agree.ts`).
 - [x] UI: scanner dial + Run/Stop, settings panel, candidate queue, activity log, market x contract heat map, equity and rolling win-rate charts, six-trader hexagon, digit and transition heat maps. Light and dark themes; phone layout.
 - [x] The market feed is now one app-wide singleton (`feed.ts`) with reconnect and a stale-stream watchdog, so scanning continues on any tab. `sixfold-bridge.tsx` is mounted in `PremiumLayout`.
+- [x] Primary-contract restriction: Sixfold never trades Over 7 / Under 1-3 etc. Recovery after a loss is Over 3 / Under 6 (on by default). New Contracts control in Scanner; Board shows just the two contracts. Tests assert every buy is Over 2 / Under 7 (or recovery 3 / 6).
 
 Not done / unverified:
 - [ ] `npm ci`, `npm run build`, repo `jest` / `eslint` / `prettier`, and the SCSS compile were not run (registry blocked in the session). Run `npm ci && npm run type-check && npm test && npm run build` first.
