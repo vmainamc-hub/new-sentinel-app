@@ -3,9 +3,9 @@ import { configError, DTraderRunner, type MarketView, type RunConfig, type Runne
 type Listener = (symbol: string) => void;
 
 /** A fake market + Deriv. Ticks are pushed by the test; every buy confirms, then settles on the exit tick the test chooses. */
-const makeWorld = (opts: { settleProfit?: (n: number) => number; failBuys?: boolean; exitOffsetTicks?: number; silentStream?: boolean; pollReadsOpen?: boolean } = {}) => {
+const makeWorld = (opts: { settleProfit?: (n: number) => number; failBuys?: boolean; exitOffsetTicks?: number; silentStream?: boolean; pollReadsOpen?: boolean; preflight?: RunnerIO['preflight'] } = {}) => {
     const symbol = '1HZ100V';
-    const view: MarketView = { digits: [], times: [], decimals: 2, lastTickAt: 0 };
+    const view: MarketView = { digits: [], times: [], decimals: 2, lastTickAt: 0, prices: [] };
     const tickListeners = new Set<Listener>();
     const contractListeners = new Set<(c: any) => void>();
     const buys: any[] = [];
@@ -14,10 +14,9 @@ const makeWorld = (opts: { settleProfit?: (n: number) => number; failBuys?: bool
     let clock = 1_000_000;
     const epochOfIndex = (i: number) => Math.round(view.times[i] / 1000);
 
-    const pushTick = (digit: number) => {
+    const pushTick = (digit: number, price = 1100 + digit / 100) => {
         clock += 1000;
-        const price = 1100 + digit / 100;
-        void price;
+        view.prices!.push(price);
         view.digits.push(digit);
         view.times.push(clock);
         view.lastTickAt = clock;
@@ -55,6 +54,7 @@ const makeWorld = (opts: { settleProfit?: (n: number) => number; failBuys?: bool
         digitAt: (_s, epoch) => { const i = view.times.findIndex(t => Math.round(t / 1000) === epoch); return i >= 0 ? view.digits[i] : null; },
         // With a silent stream, time must pass for the runner's fallback polling to start.
         sleep: ms => new Promise(resolve => setTimeout(() => { if (opts.silentStream) clock += ms; resolve(undefined); }, Math.min(ms, 5))),
+        preflight: opts.preflight,
         lookupContract: async id => (opts.pollReadsOpen ? { contract_id: id, status: 'open', is_sold: 0 } : known.get(Number(id))),
     };
     return { symbol, view, io, pushTick, buys, epochOfIndex, advance: (ms: number) => { clock += ms; } };
@@ -72,6 +72,53 @@ const collect = () => {
 
 const seed = (w: ReturnType<typeof makeWorld>, digits: number[]) => digits.forEach(d => w.pushTick(d));
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+
+describe('DTraderRunner · Higher/Lower preflight and strategies', () => {
+    it('buys nothing when the preflight says Deriv would not take the contract, and shows the reason', async () => {
+        const w = makeWorld({ preflight: async () => ({ ok: false, error: 'Higher/Lower: Invalid barrier. (distances tried: 0.5, 1)' }) });
+        seed(w, [4, 5, 6, 7]);
+        const c = collect();
+        await new DTraderRunner(w.io, c.emit).run(baseConfig(w.symbol, { family: 'highlow', side: 'both', tradesPerEntry: 3 }));
+        expect(w.buys).toHaveLength(0);
+        expect(c.of('journal').some(j => j.level === 'error' && /Invalid barrier/.test(j.text))).toBe(true);
+        expect(c.of('journal').some(j => /Nothing was bought/.test(j.text))).toBe(true);
+    });
+
+    it('trades with the duration unit and barrier distance the preflight found', async () => {
+        const w = makeWorld({ preflight: async () => ({ ok: true, duration: { value: 15, unit: 's' }, offset: 2, timed: true, quotes: [], notes: ['Higher/Lower is not offered in ticks on this market.'] }) });
+        seed(w, [4, 5, 6, 7]);
+        const c = collect();
+        await new DTraderRunner(w.io, c.emit).run(baseConfig(w.symbol, { family: 'highlow', side: 'both', offset: 0.5, tradesPerEntry: 2 }));
+        expect(w.buys).toHaveLength(4);   // a Higher + a Lower pair, twice
+        expect(w.buys.every(b => b.params.duration === 15 && b.params.duration_unit === 's')).toBe(true);
+        expect(new Set(w.buys.map(b => b.params.contract_type))).toEqual(new Set(['CALL', 'PUT']));
+        expect(w.buys.filter(b => b.params.contract_type === 'CALL').every(b => b.params.barrier === '+2.00')).toBe(true);
+        expect(w.buys.filter(b => b.params.contract_type === 'PUT').every(b => b.params.barrier === '-2.00')).toBe(true);
+    });
+
+    it('Auto waits until the strategy has a signal, then trades the side and digit it chose', async () => {
+        const w = makeWorld();
+        seed(w, [3, 4, 5, 6, 7, 8, 1, 2, 3, 4]);
+        const c = collect();
+        const runner = new DTraderRunner(w.io, c.emit);
+        // Differs-from-last always has an answer, so use the streak strategy: it waits for 4 high digits in a row.
+        const done = runner.run(baseConfig(w.symbol, { side: 'auto', prediction: 4, tradesPerEntry: 2, strategy: { id: 'streak', params: { run: 4, follow: 0 } } }));
+        await tick();
+        expect(w.buys).toHaveLength(0);                       // last digits 1 2 3 4: no run of 4 on one side of 4
+        [9, 9, 8, 7].forEach(d => w.pushTick(d));             // four digits above 4 in a row (fade -> Under)
+        await done;
+        expect(w.buys).toHaveLength(2);
+        expect(w.buys.every(b => b.params.contract_type === 'DIGITUNDER' && b.params.barrier === '4')).toBe(true);
+        expect(c.of('journal').some(j => /Streak: 4 ticks in a row/.test(j.text))).toBe(true);
+    });
+
+    it('a strategy that moves the digit (Differs from the last digit) is honoured', async () => {
+        const w = makeWorld();
+        seed(w, [4, 5, 6, 7]);
+        await new DTraderRunner(w.io, collect().emit).run(baseConfig(w.symbol, { family: 'matchesdiffers', side: 'auto', prediction: 2, tradesPerEntry: 1, strategy: { id: 'differs-last' } }));
+        expect(w.buys[0].params).toMatchObject({ contract_type: 'DIGITDIFF', barrier: '7' });
+    });
+});
 
 describe('DTraderRunner', () => {
     it('counts the trades the same-tick guard held back as not sent, and buys only what it sent', async () => {
@@ -109,7 +156,7 @@ describe('DTraderRunner', () => {
         const runner = new DTraderRunner(w.io, collect().emit);
         await runner.run(baseConfig(w.symbol, { family: 'range', side: 'first', tradesPerEntry: 5, duration: 5 }));
         expect(w.buys).toHaveLength(5);
-        expect(w.buys.every(b => b.params.contract_type === 'EXPIRYRANGE' && b.params.barrier === '+0.5' && b.params.barrier2 === '-0.5')).toBe(true);
+        expect(w.buys.every(b => b.params.contract_type === 'EXPIRYRANGE' && b.params.barrier === '+0.50' && b.params.barrier2 === '-0.50')).toBe(true);
         const bad = collect();
         await new DTraderRunner(makeWorld().io, bad.emit).run(baseConfig('1HZ100V', { family: 'highlow', offset: 0 }));
         expect(bad.of('journal').some(j => /barrier offset/i.test(j.text))).toBe(true);

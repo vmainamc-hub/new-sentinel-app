@@ -6,10 +6,13 @@
 import { entrySlip, slipText, tickMoved } from '../auto-trader';
 import { exitDigitFrom, type Fill,settlementText, syncReport } from '../bulk-run';
 import { DEFAULT_BUY_MS, learnPace, tickIntervalMs } from '../burst-pace';
+import { type Duration } from './dtrader-catalog';
 import {
-    autoSide, describeEntry, entryError, type EntryRule, exposureError, type Family, type Leg, legsFor, matchEntry, MAX_TRADES_PER_ENTRY, nextStake, offsetError, planBurst, predictionError, round2,
+    describeEntry, entryError, type EntryRule, exposureError, FAMILIES, type Family, type Leg, legsFor, matchEntry, MAX_TRADES_PER_ENTRY, nextStake, offsetError, planBurst, predictionError, round2,
 type SideChoice,
     stopReason, } from './dtrader-engine';
+import { type Preflight, type PreflightInput } from './dtrader-preflight';
+import { type Decision, defaultStrategyId, getStrategy, resolveParams, sigmaOffset, type StrategyParams } from './dtrader-strategies';
 
 export type RunMode = 'single' | 'repeat';
 export type RunnerState = 'idle' | 'waiting' | 'placing' | 'settling' | 'stopping';
@@ -30,6 +33,8 @@ export type RunConfig = {
     stopLoss: number;
     mode: RunMode;
     entry: EntryRule;
+    /** The Auto side's strategy (id from dtrader-strategies) and its settings. Defaults to the family's standard one. */
+    strategy?: { id: string; params?: StrategyParams };
     /** Trim a burst so it all lands before the next tick. */
     sameTickGuard: boolean;
     currency: string;
@@ -60,11 +65,11 @@ export type RunnerEvent =
     | { type: 'totals'; totals: Totals }
     | { type: 'sync'; text: string; ok: boolean | null };
 
-export type MarketView = { digits: number[]; times: number[]; decimals: number; lastTickAt: number };
+export type MarketView = { digits: number[]; times: number[]; decimals: number; lastTickAt: number; prices?: number[] };
 
 export type BuyParams = {
     amount: number; basis: 'stake'; contract_type: string; currency: string; underlying_symbol: string;
-    duration: number; duration_unit: 't'; barrier?: string; barrier2?: string;
+    duration: number; duration_unit: Duration['unit']; barrier?: string; barrier2?: string;
 };
 
 export interface RunnerIO {
@@ -79,6 +84,8 @@ export interface RunnerIO {
     sleep(ms: number): Promise<void>;
     /** Ask Deriv for a contract again (used when a closing update carried no exit tick). */
     lookupContract?(contractId: number): Promise<any>;
+    /** Checks the contract against Deriv's rules and quotes before anything is bought (Higher/Lower, Ends Between/Outside). */
+    preflight?(input: PreflightInput): Promise<Preflight>;
 }
 
 const SETTLE_WAIT_MS = 90_000;
@@ -111,6 +118,8 @@ export class DTraderRunner {
     private stopped = false;
     private cancelWait: (() => void) | null = null;
     private buyMs = DEFAULT_BUY_MS;
+    /** What the preflight settled on for this run: the duration Deriv offers and the smallest barrier distance it accepts. */
+    private resolved: { duration: Duration; offsetFloor: number } | null = null;
     private rowSeq = 0;
     private batchSeq = 0;
     totals: Totals = emptyTotals();
@@ -144,15 +153,19 @@ export class DTraderRunner {
         let stake = cfg.stake;
         let sessionPnl = 0;
         let waitNextTick = false;
+        this.resolved = null;
         this.log(`Run started on ${cfg.symbol}. ${describeEntry(cfg.entry)}.`);
         try {
+            if (!(await this.checkContract(cfg, stake))) return;
             while (!this.stopped) {
-                this.state('waiting', cfg.entry.mode === 'instant' ? 'Placing the next entry…' : `Waiting for the entry: ${describeEntry(cfg.entry)}.`);
-                const decidedAt = await this.waitForEntry(cfg, waitNextTick);
+                const auto = cfg.side === 'auto';
+                this.state('waiting', auto ? `Waiting for the ${this.strategyFor(cfg).title} signal…` : cfg.entry.mode === 'instant' ? 'Placing the next entry…' : `Waiting for the entry: ${describeEntry(cfg.entry)}.`);
+                const entry = await this.waitForEntry(cfg, waitNextTick);
                 waitNextTick = false;
-                if (decidedAt === null || this.stopped) break;
+                if (entry === null || this.stopped) break;
+                if (auto && entry.decision.reason) this.log(entry.decision.reason);
 
-                const outcome = await this.burst(cfg, stake, decidedAt);
+                const outcome = await this.burst(cfg, stake, entry.at, entry.decision);
                 if (outcome.kind === 'missed') { waitNextTick = true; continue; }
                 if (outcome.kind === 'failed') break;
                 sessionPnl = round2(sessionPnl + outcome.profit);
@@ -173,32 +186,77 @@ export class DTraderRunner {
         }
     }
 
-    /** Resolves with the epoch (ms) of the tick that completed the entry, or null when stopped. */
-    private waitForEntry(cfg: RunConfig, forceNextTick: boolean): Promise<number | null> {
-        const latest = () => this.io.market(cfg.symbol);
+    private strategyFor(cfg: RunConfig) {
+        const wanted = getStrategy(cfg.strategy?.id ?? '');
+        return wanted && wanted.families.includes(cfg.family) ? wanted : getStrategy(defaultStrategyId(cfg.family))!;
+    }
+
+    /** The side (and digit / barrier distance) for the entry that just completed, or null when the strategy says wait. */
+    private decide(cfg: RunConfig, view: MarketView): Decision | null {
+        if (cfg.side !== 'auto') return { side: cfg.side === 'first' ? 0 : cfg.side === 'second' ? 1 : 'both', reason: '' };
+        const strategy = this.strategyFor(cfg);
+        return strategy.decide({
+            family: cfg.family, digits: view.digits, prices: view.prices ?? [], prediction: cfg.prediction, offset: cfg.offset, ticks: cfg.duration,
+            decimals: view.decimals, params: resolveParams(strategy, cfg.strategy?.id === strategy.id ? cfg.strategy.params : {}),
+        });
+    }
+
+    /** Resolves with the epoch (ms) of the tick that completed the entry and what to trade, or null when stopped. */
+    private waitForEntry(cfg: RunConfig, forceNextTick: boolean): Promise<{ at: number; decision: Decision } | null> {
+        const attempt = (): { at: number; decision: Decision } | null => {
+            const view = this.io.market(cfg.symbol);
+            if (!view || !view.times.length || !matchEntry(view.digits, cfg.entry)) return null;
+            const decision = this.decide(cfg, view);
+            return decision ? { at: view.times[view.times.length - 1], decision } : null;
+        };
         if (cfg.entry.mode === 'instant' && !forceNextTick) {
-            const view = latest();
-            if (view?.times.length) return Promise.resolve(view.times[view.times.length - 1]);
+            const hit = attempt();
+            if (hit) return Promise.resolve(hit);
         }
-        return new Promise<number | null>(resolve => {
+        return new Promise<{ at: number; decision: Decision } | null>(resolve => {
             let off: (() => void) | null = null;
-            const done = (value: number | null) => { off?.(); this.cancelWait = null; resolve(value); };
+            const done = (value: { at: number; decision: Decision } | null) => { off?.(); this.cancelWait = null; resolve(value); };
             this.cancelWait = () => done(null);
             off = this.io.onTick(symbol => {
                 if (symbol !== cfg.symbol || this.stopped) return;
-                const view = latest();
-                if (!view || !view.times.length) return;
-                if (matchEntry(view.digits, cfg.entry)) done(view.times[view.times.length - 1]);
+                const hit = attempt();
+                if (hit) done(hit);
             });
             if (this.stopped) done(null);
         });
     }
 
-    private async burst(cfg: RunConfig, stake: number, decidedAt: number): Promise<{ kind: 'done'; profit: number } | { kind: 'missed' } | { kind: 'failed' }> {
+    /**
+     * Before the first trade of a run: for the contracts that carry a price barrier, ask Deriv what it offers on this market and
+     * quote the setup. Refuses to start (nothing bought) when Deriv would not take it, and says why.
+     */
+    private async checkContract(cfg: RunConfig, stake: number): Promise<boolean> {
+        if (!FAMILIES[cfg.family].needsOffset || !this.io.preflight) return true;
+        const view = this.io.market(cfg.symbol);
+        if (!view) { this.log('No live ticks for this market yet.', 'error'); return false; }
+        const interval = tickIntervalMs(view.times);
+        const checked = await this.io.preflight({
+            symbol: cfg.symbol, family: cfg.family, side: cfg.side, prediction: cfg.prediction, offset: cfg.offset, ticks: cfg.duration, stake,
+            currency: cfg.currency, decimals: view.decimals, tickSeconds: interval ? interval / 1000 : 1,
+            volatilityOffset: view.prices?.length ? sigmaOffset(view.prices, cfg.duration, 1, view.decimals) : undefined,
+        });
+        if (!checked.ok) { this.log(checked.error, 'error'); this.log('Nothing was bought.'); return false; }
+        checked.notes.forEach(note => this.log(note, 'warn'));
+        this.resolved = { duration: checked.duration, offsetFloor: checked.offset };
+        return true;
+    }
+
+    private async burst(cfg: RunConfig, stake: number, decidedAt: number, decision: Decision): Promise<{ kind: 'done'; profit: number } | { kind: 'missed' } | { kind: 'failed' }> {
         const view = this.io.market(cfg.symbol);
         if (!view) { this.log('No live ticks for this market yet.', 'error'); return { kind: 'failed' }; }
-        const side = cfg.side === 'auto' ? autoSide(cfg.family, view.digits, cfg.prediction) : cfg.side;
-        const legs: Leg[] = legsFor(cfg.family, side, cfg.prediction, cfg.offset);
+        const side = decision.side === 'both' ? 'both' : decision.side === 0 ? 'first' : 'second';
+        const prediction = decision.prediction ?? cfg.prediction;
+        // The barrier distance is never smaller than the one Deriv was found to accept at the start of the run.
+        const offset = Math.max(this.resolved?.offsetFloor ?? 0, decision.offset ?? cfg.offset);
+        const invalid = predictionError(cfg.family, side, prediction);
+        if (invalid) { this.log(`${invalid} Skipping this entry.`, 'warn'); return { kind: 'missed' }; }
+        const legs: Leg[] = legsFor(cfg.family, side, prediction, offset, view.decimals);
+        const duration = this.resolved?.duration ?? { value: cfg.duration, unit: 't' as const };
         const interval = tickIntervalMs(view.times);
         const plan = planBurst({
             legs: legs.length, perLeg: cfg.tradesPerEntry, intervalMs: interval,
@@ -272,7 +330,7 @@ export class DTraderRunner {
                 for (let i = 0; i < plan.perLeg; i += 1) {
                     const params: BuyParams = {
                         amount: stake, basis: 'stake', contract_type: leg.contract, currency: cfg.currency, underlying_symbol: cfg.symbol,
-                        duration: cfg.duration, duration_unit: 't', ...(leg.barrier !== undefined ? { barrier: leg.barrier } : {}),
+                        duration: duration.value, duration_unit: duration.unit, ...(leg.barrier !== undefined ? { barrier: leg.barrier } : {}),
                         ...(leg.barrier2 !== undefined ? { barrier2: leg.barrier2 } : {}),
                     };
                     sends.push(this.io.buy(params, stake).then(bought => {

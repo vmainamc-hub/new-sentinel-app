@@ -8,6 +8,7 @@
 
 import { MAX_EXPOSURE, MAX_STAKE, MIN_STAKE } from '../bulk-run';
 import { fitOnOneTick } from '../burst-pace';
+import { barrierText } from './dtrader-catalog';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 export const round2 = (value: number) => Math.round(value * 100) / 100;
@@ -82,15 +83,16 @@ export const predictionError = (family: Family, side: SideChoice, prediction: nu
 export type Leg = { contract: string; barrier?: string; barrier2?: string; label: string; sideIndex: SideIndex };
 
 /** The contract(s) one entry buys. 'both' buys the two opposite sides together. 'auto' must be resolved first. */
-export const legsFor = (family: Family, side: Exclude<SideChoice, 'auto'>, prediction: number, offset = 0): Leg[] => {
+export const legsFor = (family: Family, side: Exclude<SideChoice, 'auto'>, prediction: number, offset = 0, decimals?: number): Leg[] => {
     const def = FAMILIES[family];
-    // Offsets are relative to the entry spot, the way Deriv reads "+0.5" / "-0.5". Higher is above the spot, Lower is below;
-    // the two range contracts use a band of +offset and -offset around the spot.
+    // Offsets are relative to the entry spot, the way Deriv reads "+0.50" / "-0.50". Higher is above the spot, Lower is below;
+    // the two range contracts use a band of +offset and -offset around the spot. With the market's number of decimals known the
+    // barrier is written with exactly that many, which is how Deriv expects it.
+    const text = (sign: '+' | '-') => (decimals === undefined ? `${sign}${offset}` : barrierText(sign, offset, decimals));
     const priceBarriers = (index: SideIndex): Pick<Leg, 'barrier' | 'barrier2'> => {
         if (!def.needsOffset) return {};
-        const text = String(offset);
-        if (family === 'range') return { barrier: `+${text}`, barrier2: `-${text}` };
-        return { barrier: index === 0 ? `+${text}` : `-${text}` };
+        if (family === 'range') return { barrier: text('+'), barrier2: text('-') };
+        return { barrier: index === 0 ? text('+') : text('-') };
     };
     const make = (index: SideIndex): Leg => ({
         contract: def.contracts[index],

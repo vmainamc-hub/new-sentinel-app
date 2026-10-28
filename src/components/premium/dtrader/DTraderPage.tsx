@@ -2,14 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApiBase } from '@/hooks/useApiBase';
 import { PremiumDerivApiService } from '@/services/premium-deriv-api.service';
 import { bulkFeed } from '../bulk-feed';
+import { tickIntervalMs } from '../burst-pace';
 import { BULK_MARKETS } from '../over-under-engine';
+import { pairOutcome } from './dtrader-catalog';
 import {
 decimalsText, describeEntry,     DIGIT_OPS, type DigitOp, digitStats, type EntryRule, FAMILIES, type Family, FAMILY_ORDER, legsFor, offsetError, opNeedsDigit, parseSequence, predictionError,
 type SideChoice,
     toCandles, } from './dtrader-engine';
+import { preflightContract, type PreflightDeps } from './dtrader-preflight';
 import {
 configError,     DTraderRunner, emptyTotals, type RunConfig, type RunnerEvent, type RunnerIO, type RunnerState, type Totals, type TradeRow,
 } from './dtrader-runner';
+import { backtest, backtestText, defaultStrategyId, getStrategy, paramDefaults, resolveParams, sigmaOffset, strategiesFor, type StrategyParams } from './dtrader-strategies';
 import './dtrader.scss';
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -23,13 +27,15 @@ type Form = {
     digitOp: DigitOp; digitValue: string;
     patternKind: 'last' | 'sequence'; lastCount: string; lastOp: DigitOp; lastDigit: string; seqText: string; fireAfter: string;
     guard: boolean; chart: 'line' | 'candles'; digitsView: 'default' | 'digits'; candleSize: string; window: string;
+    /** Strategy id for the Auto side ('' = the family's standard one) and its settings, kept per strategy. */
+    strategy: string; strategyParams: Record<string, Record<string, string>>;
 };
 
 const DEFAULT_FORM: Form = {
     symbol: '1HZ100V', family: 'overunder', side: 'second', prediction: '8', offset: '0.5', duration: '1', stake: '1', trades: '1', martingale: '1',
     takeProfit: '', stopLoss: '', mode: 'repeat', entryMode: 'instant', digitOp: '=', digitValue: '2',
     patternKind: 'sequence', lastCount: '2', lastOp: '>=', lastDigit: '9', seqText: '1 2 5', fireAfter: '',
-    guard: true, chart: 'line', digitsView: 'default', candleSize: '5', window: '1000',
+    guard: true, chart: 'line', digitsView: 'default', candleSize: '5', window: '1000', strategy: '', strategyParams: {},
 };
 const STORAGE_KEY = 'dtrader_form_v1';
 
@@ -49,6 +55,18 @@ const toNumber = (value: string, fallback = NaN) => { const n = Number(value); r
 const money = (value: number, currency: string) => `${value.toFixed(2)} ${currency}`;
 const errorText = (error: unknown) => (error instanceof Error ? error.message : (error as { message?: string })?.message || String(error));
 
+/** The strategy Auto will use: the chosen one if it suits the contract, else the contract's standard one. */
+const activeStrategyId = (form: Pick<Form, 'family' | 'strategy'>): string => {
+    const chosen = getStrategy(form.strategy);
+    return chosen && chosen.families.includes(form.family) ? chosen.id : defaultStrategyId(form.family);
+};
+/** Typed settings of the active strategy, clamped to their allowed ranges. */
+const numericParams = (form: Pick<Form, 'family' | 'strategy' | 'strategyParams'>): StrategyParams => {
+    const strategy = getStrategy(activeStrategyId(form))!;
+    const saved = form.strategyParams[strategy.id] ?? {};
+    return resolveParams(strategy, Object.fromEntries(Object.entries(saved).map(([key, value]) => [key, Number(value)])));
+};
+
 /** The form -> a run configuration, or the reason it is not ready. */
 export const buildRun = (form: Form, currency: string): { config: RunConfig } | { error: string } => {
     let entry: EntryRule;
@@ -65,6 +83,7 @@ export const buildRun = (form: Form, currency: string): { config: RunConfig } | 
         stake: toNumber(form.stake, 0), tradesPerEntry: toNumber(form.trades, 1), martingale: toNumber(form.martingale, 1),
         takeProfit: Math.max(0, toNumber(form.takeProfit, 0)), stopLoss: Math.max(0, toNumber(form.stopLoss, 0)),
         mode: form.mode, entry, sameTickGuard: form.guard, currency,
+        ...(form.side === 'auto' ? { strategy: { id: activeStrategyId(form), params: numericParams(form) } } : {}),
     };
     const error = configError(config);
     return error ? { error } : { config };
@@ -89,6 +108,11 @@ const useLiveMarket = (symbol: string) => {
     return bulkFeed.store[symbol];
 };
 
+const preflightDeps: PreflightDeps = {
+    contractsFor: symbol => PremiumDerivApiService.contractsFor(symbol),
+    proposal: parameters => PremiumDerivApiService.proposal(parameters),
+};
+
 const makeIO = (): RunnerIO => ({
     now: () => Date.now(),
     market: symbol => bulkFeed.store[symbol],
@@ -98,6 +122,7 @@ const makeIO = (): RunnerIO => ({
     isClosed: contract => PremiumDerivApiService.isContractClosed(contract),
     digitAt: (symbol, epoch) => bulkFeed.digitAt(symbol, epoch),
     sleep: ms => new Promise(resolve => window.setTimeout(resolve, ms)),
+    preflight: input => preflightContract(preflightDeps, input),
     lookupContract: async id => (await PremiumDerivApiService.request({ proposal_open_contract: 1, contract_id: id })).proposal_open_contract,
 });
 
@@ -253,6 +278,7 @@ const DTraderPage = () => {
     // Real payout from Deriv for the chosen contract(s), refreshed when the contract setup changes.
     const [payouts, setPayouts] = useState<Array<{ label: string; payout: string }>>([]);
     const [quoteError, setQuoteError] = useState('');
+    const [preflightNotes, setPreflightNotes] = useState<string[]>([]);
     useEffect(() => {
         const stake = toNumber(form.stake, 0);
         const duration = toNumber(form.duration, 1);
@@ -261,6 +287,22 @@ const DTraderPage = () => {
         let alive = true;
         const timer = window.setTimeout(async () => {
             try {
+                if (FAMILIES[form.family].needsOffset) {
+                    // Higher/Lower and Ends Between/Outside only accept the durations and barriers Deriv lists for the market, so the
+                    // panel asks Deriv (quotes only, nothing is bought) and shows what it will really use.
+                    const feed = bulkFeed.store[form.symbol];
+                    const interval = tickIntervalMs(feed?.times ?? []);
+                    const checked = await preflightContract(preflightDeps, {
+                        symbol: form.symbol, family: form.family, side: form.side, prediction: toNumber(form.prediction, 0), offset: toNumber(form.offset, 0),
+                        ticks: duration, stake, currency, decimals, tickSeconds: interval ? interval / 1000 : 1,
+                        volatilityOffset: feed && feed.prices.length > 20 ? sigmaOffset(feed.prices, duration, 1, decimals) : undefined,
+                    });
+                    if (!alive) return;
+                    if (checked.ok) { setPreflightNotes(checked.notes); setPayouts(checked.quotes.map(q => ({ label: q.label, payout: q.payout.toFixed(2) }))); setQuoteError(''); }
+                    else { setPreflightNotes([]); setPayouts([]); setQuoteError(checked.error); }
+                    return;
+                }
+                setPreflightNotes([]);
                 const legs = legsFor(form.family, side, toNumber(form.prediction, 0), toNumber(form.offset, 0)).filter(() => !predictionIssue && !offsetIssue);
                 const quotes = await Promise.all(legs.map(async leg => {
                     const proposal = await PremiumDerivApiService.proposal({
@@ -270,9 +312,33 @@ const DTraderPage = () => {
                 }));
                 if (alive) { setPayouts(quotes); setQuoteError(''); }
             } catch (err) { if (alive) { setPayouts([]); setQuoteError(errorText(err)); } }
-        }, 600);
+        }, 800);
         return () => { alive = false; window.clearTimeout(timer); };
     }, [form.family, form.side, form.prediction, form.offset, form.stake, form.duration, form.symbol, currency, predictionIssue, offsetIssue]);
+
+    // Auto: the strategy in use, its settings, and how it would have scored on the recent past.
+    const strategyList = strategiesFor(form.family);
+    const activeStrategy = getStrategy(activeStrategyId(form))!;
+    const strategyValues = numericParams(form);
+    const strategyKey = JSON.stringify(strategyValues);
+    const [score, setScore] = useState('');
+    const feedBucket = Math.floor((market?.digits.length ?? 0) / 25);
+    useEffect(() => {
+        if (form.side !== 'auto' || !market || market.digits.length < 80) { setScore(''); return undefined; }
+        const timer = window.setTimeout(() => {
+            const result = backtest(
+                activeStrategy,
+                { family: form.family, prediction: toNumber(form.prediction, 0), offset: toNumber(form.offset, 0.5), ticks: Math.max(1, toNumber(form.duration, 1)), decimals },
+                market.digits, market.prices, strategyValues, { limit: 600 },
+            );
+            setScore(backtestText(result));
+        }, 400);
+        return () => window.clearTimeout(timer);
+    }, [form.side, form.family, form.prediction, form.offset, form.duration, form.symbol, activeStrategy.id, strategyKey, feedBucket, decimals]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+    const pair = form.side === 'both' && payouts.length === 2
+        ? pairOutcome(toNumber(form.stake, 0), Number(payouts[0].payout), Number(payouts[1].payout), !['matchesdiffers', 'evenodd'].includes(form.family))
+        : null;
 
     const start = (override?: Partial<Form>) => {
         setError('');
@@ -330,7 +396,7 @@ const DTraderPage = () => {
                 {/* ------------------------------ trade panel ------------------------------ */}
                 <section className='dt-panel' aria-label='Trade setup'>
                     <label className='dt-field dt-field--wide'>Contract
-                        <select value={form.family} disabled={running} onChange={e => { const f = e.target.value as Family; set('family', f); if (f === 'risefall' && form.side === 'auto') set('side', 'first'); }}>
+                        <select value={form.family} disabled={running} onChange={e => { const f = e.target.value as Family; set('family', f); }}>
                             {FAMILY_ORDER.map(f => <option key={f} value={f}>{FAMILIES[f].title}</option>)}
                         </select>
                     </label>
@@ -381,14 +447,37 @@ const DTraderPage = () => {
 
                     <div className='dt-sides' role='group' aria-label='Side'>
                         {([['first', family.sides[0]], ['second', family.sides[1]], ['both', 'Both'], ['auto', 'Auto']] as Array<[SideChoice, string]>)
-                            .filter(([value]) => !(value === 'auto' && !family.digits))
                             .map(([value, label]) => (
                                 <button key={value} type='button' disabled={running} className={`dt-side dt-side--${value} ${form.side === value ? 'on' : ''}`} onClick={() => set('side', value)}>
-                                    {label}{value === 'both' && <small>{family.sides[0]} + {family.sides[1]}</small>}{value === 'auto' && <small>Recent stats</small>}
+                                    {label}{value === 'both' && <small>{family.sides[0]} + {family.sides[1]}</small>}{value === 'auto' && <small>Strategy</small>}
                                 </button>
                             ))}
                     </div>
-                    {form.side === 'auto' && <p className='dt-hint'>Auto picks the side that has hit more often over the last 200 ticks. That describes the past; it does not predict the next tick.</p>}
+                    {form.side === 'auto' && (
+                        <div className='dt-strategy'>
+                            <label className='dt-field dt-field--wide'>Strategy
+                                <select value={activeStrategy.id} disabled={running} onChange={e => set('strategy', e.target.value)}>
+                                    {strategyList.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
+                                </select>
+                            </label>
+                            <p className='dt-hint'>{activeStrategy.summary}</p>
+                            {activeStrategy.params.length > 0 && (
+                                <div className='dt-row dt-row--params'>
+                                    {activeStrategy.params.map(param => (
+                                        <label key={param.key} className='dt-field' title={param.hint}>{param.label}
+                                            <input
+                                                inputMode='decimal' disabled={running} aria-label={param.label}
+                                                value={form.strategyParams[activeStrategy.id]?.[param.key] ?? String(paramDefaults(activeStrategy)[param.key])}
+                                                onChange={e => set('strategyParams', { ...form.strategyParams, [activeStrategy.id]: { ...form.strategyParams[activeStrategy.id], [param.key]: e.target.value } })}
+                                            />
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
+                            {score && <p className='dt-hint'>{score}</p>}
+                            <p className='dt-hint'>Last digits and tick moves on these markets are random, so no strategy can promise a win. A strategy chooses when and what to trade and keeps you out when its conditions are not met.</p>
+                        </div>
+                    )}
 
                     {family.needsDigit && (
                         <label className='dt-field dt-field--wide'>Prediction digit
@@ -428,6 +517,13 @@ const DTraderPage = () => {
                         {payouts.length ? payouts.map(p => <div key={p.label}><span>Payout · {p.label}</span><b>{p.payout} {currency}</b></div>) : <div><span>Payout</span><b>—</b></div>}
                         <div><span>Stake per entry</span><b>{(toNumber(form.stake, 0) * (totalPerEntry || 1)).toFixed(2)} {currency}</b></div>
                     </div>
+                    {preflightNotes.map(note => <p key={note} className='dt-hint dt-hint--note'>{note}</p>)}
+                    {pair && (
+                        <p className={`dt-hint ${pair.locked ? 'dt-hint--bad' : ''}`}>
+                            Pair per entry ({payouts[0].label} + {payouts[1].label}, {pair.total.toFixed(2)} {currency} staked): if {payouts[0].label} wins {pair.ifFirstWins >= 0 ? '+' : ''}{pair.ifFirstWins.toFixed(2)},
+                            if {payouts[1].label} wins {pair.ifSecondWins >= 0 ? '+' : ''}{pair.ifSecondWins.toFixed(2)}{pair.note ? `, if neither ${pair.ifNeither.toFixed(2)}. ${pair.note}` : '.'}
+                        </p>
+                    )}
                     {(predictionIssue || offsetIssue || quoteError) && <p className='dt-error'>{predictionIssue || offsetIssue || quoteError}</p>}
                     {error && <p className='dt-error' role='alert'>{error}</p>}
                     {!isAuthorized && <p className='dt-hint'>Log in to a Deriv account to place trades. Demo first is a good idea.</p>}

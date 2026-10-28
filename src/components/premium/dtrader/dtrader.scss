@@ -295,6 +295,20 @@
         &--auto { background: #0b1b30; }
     }
 
+    &-strategy {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px;
+        border: 1px solid var(--dt-border);
+        border-radius: 10px;
+        background: var(--dt-card-2);
+    }
+
+    &-hint--note { color: var(--dt-accent); }
+    &-hint--bad { color: var(--dt-down); font-weight: 600; }
+    &-row--params { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
     &-bulk {
         display: flex;
         flex-direction: column;
