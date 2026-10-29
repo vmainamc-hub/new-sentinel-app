@@ -25,14 +25,17 @@ import {
     stopReason,
     tradeContract,
 } from './money';
-import { bestValidatedRule, entryLabReport, type LabReport, type LabRuleId, ruleFiresNow } from './entry-lab';
 import { type Contract, contractKey } from './bot';
+import { type ArmId, type BrainReport, brainReport, choosePlan, fallbackPlan, findCell, type Plan, planFires } from './entry-brain';
 import { computeRegime, type RegimeSummary } from './regime';
 import { type Cell, eligibility, pickBest, type ScanResult, scanMarkets } from './scanner';
+import { mulberry32 } from './stats';
 
 export const MODULE_ID = 'sixfold';
 
-const LAB_REFRESH_MS = 8000;
+const BRAIN_REFRESH_MS = 8000;
+/** An armed contract tries a different entry plan this many times before its wait window ends. */
+const PLAN_ROTATIONS = 3;
 const SCAN_MS = 1500;
 const LOG_LIMIT = 60;
 const TRADE_LIMIT = 40;
@@ -72,6 +75,10 @@ export type Armed = {
     since: number;
     expiresAt: number;
     cellKey: string;
+    /** The Entry Brain's plan for this trade, when the Brain is in charge of the entry. */
+    plan: Plan | null;
+    planTried: ArmId[];
+    planAt: number;
 };
 
 export type TradeRecord = {
@@ -81,6 +88,9 @@ export type TradeRecord = {
     label: string;
     recovery: boolean;
     entryDigit: number | null;
+    /** Entry Brain plan this trade was bought on, and the win rate a blind entry had on that market and contract. */
+    plan: ArmId | null;
+    baseRate: number | null;
     /** The last digit of the settlement tick, when Deriv reported it. */
     exitDigit: number | null;
     stake: number;
@@ -116,6 +126,8 @@ export type SixfoldSnapshot = {
     pickyBump: number;
     /** The Meter: the regime each market and contract is in, and the overall verdict. */
     regime: RegimeSummary | null;
+    /** The Entry Brain's latest replay of every market, or null when it has not been needed yet. */
+    brain: BrainReport | null;
 };
 
 export type RunnerIO = {
@@ -159,8 +171,9 @@ export class SixfoldRunner {
     private session: SessionStats;
     private armed: Armed | null = null;
     private scan: ScanResult | null = null;
-    private labReport: LabReport | null = null;
-    private labAt = 0;
+    private brain: BrainReport | null = null;
+    private brainAt = 0;
+    private rng: () => number;
     private scanAt = 0;
     private queue: SixfoldSnapshot['queue'] = [];
     private tradeInFlight = false;
@@ -192,6 +205,7 @@ export class SixfoldRunner {
     constructor(private io: RunnerIO) {
         this.settings = normalizeSettings(io.loadSettings());
         this.session = freshSession(this.settings);
+        this.rng = mulberry32(Math.floor(io.now()) ^ 0x9e3779b9);
         this.snap = this.build();
     }
 
@@ -385,6 +399,7 @@ export class SixfoldRunner {
                     significant: cell.significant,
                     entryDigits: this.entryDigitsFor(this.armed.symbol, cell, this.armed.entryDigits),
                 };
+                this.maybeRotatePlan(now);
             }
         }
         if (!this.armed) this.armBest(now);
@@ -395,9 +410,9 @@ export class SixfoldRunner {
     handleFeedTick(symbol: string, digit: number) {
         if (!this.running || this.tradeInFlight || !this.armed || this.armed.symbol !== symbol) return;
         if (this.io.now() < this.cooldownUntil) return;
-        if (this.settings.entry !== 'ANY' && this.settings.entry !== 'LAB' && !this.armed.entryDigits.includes(digit)) return;
+        if (this.settings.entry !== 'ANY' && !this.brainGoverns() && !this.armed.entryDigits.includes(digit)) return;
         if (!this.recoveryFormOk(symbol)) return;
-        if (!this.labOk(symbol)) return;
+        if (!this.brainOk(symbol)) return;
         void this.execute(digit);
     }
 
@@ -413,7 +428,7 @@ export class SixfoldRunner {
         const pick = pickBest(
             this.scan,
             this.settings.selectivity,
-            { mode: this.immediate() ? 'ANY' : 'SETUP' },
+            { mode: this.scanMode() },
             { symbols: skipSymbols, keys: skipKeys },
             this.pickyBump(now)
         );
@@ -426,23 +441,27 @@ export class SixfoldRunner {
             score: cell.score,
             edgePts: cell.edgePts,
             significant: cell.significant,
-            entryDigits: this.immediate() ? [] : this.entryDigitsFor(cell.symbol, cell, pick.entryDigits),
+            entryDigits: this.scanMode() === 'ANY' ? [] : this.entryDigitsFor(cell.symbol, cell, pick.entryDigits),
             why: pick.why,
             since: now,
             expiresAt: now + this.settings.waitSeconds * 1000,
             cellKey: cell.key,
+            plan: null,
+            planTried: [],
+            planAt: now,
         };
-        const entry =
-            this.settings.entry === 'LAB'
-                ? 'entering by the Entry Lab (a rule only if it has beaten immediate entry here, otherwise the next tick)'
-                : this.settings.entry === 'ANY'
-                ? 'buying on the next tick'
-                : `waiting for digit ${this.armed.entryDigits.join(' / ')}${this.settings.entry === 'SMART' ? ' (learned from this market)' : ''}`;
+        if (this.brainGoverns()) this.assignPlan(now);
+        const planned = this.armed?.plan ?? null;
+        const entry = planned
+            ? `entry plan: ${planned.label}. ${planned.why}`
+            : this.settings.entry === 'ANY'
+              ? 'buying on the next tick'
+              : `waiting for digit ${this.armed.entryDigits.join(' / ')}${this.settings.entry === 'SMART' ? ' (learned from this market)' : ''}`;
         const gate =
             this.settings.recoveryEntry !== 'OFF' && this.isRecovering()
                 ? ` Recovery entry: also needs ${
-                      this.settings.recoveryEntry === 'LAB'
-                          ? 'the Entry Lab rule for this market, if one has beaten immediate entry.'
+                      this.settings.recoveryEntry === 'BRAIN'
+                          ? 'the most proven Entry Brain plan, with the AI model agreeing.'
                           : this.settings.recoveryEntry === 'BOUNCE'
                           ? `${this.settings.recoveryForm} losing ticks in a row and then a winning one.`
                           : `${this.settings.recoveryForm} ${this.settings.recoveryEntry === 'MOMENTUM' ? 'winning' : 'losing'} ticks in a row.`
@@ -452,9 +471,9 @@ export class SixfoldRunner {
             'pick',
             `Armed ${cell.label} on ${marketName(cell.symbol)} (score ${cell.score}, ${fmtPts(cell.edgePts)} vs break-even${cell.significant ? ', significant' : ''}): ${entry}.${gate}`
         );
-        if (this.immediate()) {
+        if (this.settings.entry === 'ANY' || this.brainGoverns()) {
             const digit = this.io.feed.getLastDigit(cell.symbol);
-            if (digit !== null && this.recoveryFormOk(cell.symbol) && this.labOk(cell.symbol)) void this.execute(digit);
+            if (digit !== null && this.recoveryFormOk(cell.symbol) && this.brainOk(cell.symbol)) void this.execute(digit);
         }
     }
 
@@ -470,8 +489,9 @@ export class SixfoldRunner {
         return next.length === fixed.length && next.every((d, i) => d === fixed[i]) ? fixed : next;
     }
 
-    private immediate(): boolean {
-        return this.settings.entry === 'ANY' || this.settings.entry === 'LAB';
+    /** How the scanner scores contracts: the Brain and "any tick" judge a contract on its own, without a setup digit. */
+    private scanMode(): 'ANY' | 'SETUP' {
+        return this.settings.entry === 'ANY' || this.settings.entry === 'BRAIN' ? 'ANY' : 'SETUP';
     }
 
     /** The contract that would actually be bought on this market right now (recovery barrier after a loss). */
@@ -480,23 +500,53 @@ export class SixfoldRunner {
         return cell ? tradeContract(cell.contract, this.session.consecutiveLosses, this.settings).contract : null;
     }
 
-    private labActive(): boolean {
-        return this.isRecovering() ? this.settings.recoveryEntry === 'LAB' : this.settings.entry === 'LAB';
+    /** Is the Entry Brain choosing this trade's entry? Always for BRAIN, and for recovery trades when recovery entry is BRAIN. */
+    private brainGoverns(): boolean {
+        return this.settings.entry === 'BRAIN' || (this.isRecovering() && this.settings.recoveryEntry === 'BRAIN');
     }
 
-    /** Entry Lab gate: a validated rule must fire now; with none validated for this market and contract, enter immediately. */
-    private labOk(symbol: string): boolean {
-        if (!this.labActive() || !this.labReport) return true;
+    /** Recovery with the Brain: the most proven plan, and the AI model must agree. */
+    private brainStrict(): boolean {
+        return this.isRecovering() && this.settings.recoveryEntry === 'BRAIN';
+    }
+
+    /** Pick (or re-pick) the entry plan for the armed contract. Never leaves it without one. */
+    private assignPlan(now: number) {
+        const armed = this.armed;
+        if (!armed) return;
+        const traded = this.tradedFor(armed.symbol);
+        const cell = traded ? findCell(this.brain, armed.symbol, traded) : null;
+        const strict = this.brainStrict();
+        const plan = cell
+            ? choosePlan(cell, {
+                  rng: this.rng,
+                  exclude: armed.planTried.length >= 10 ? [] : armed.planTried,
+                  maxWaitTicks: Math.max(12, Math.round(this.settings.waitSeconds / 4)),
+                  strict,
+              })
+            : fallbackPlan(strict);
+        this.armed = { ...armed, plan, planAt: now, planTried: [...armed.planTried, plan.arm] };
+    }
+
+    /** A plan that has not fired for a third of the wait window gives way to the next best, up to PLAN_ROTATIONS times. */
+    private maybeRotatePlan(now: number) {
+        const armed = this.armed;
+        if (!armed || !armed.plan || !this.brainGoverns()) return;
+        if (armed.planTried.length > PLAN_ROTATIONS) return;
+        if (now - armed.planAt < (this.settings.waitSeconds * 1000) / 3) return;
+        const old = armed.plan;
+        this.assignPlan(now);
+        const next = this.armed?.plan;
+        if (next && next.arm !== old.arm) this.addLog('info', `Entry plan "${old.label}" did not fire on ${armed.name}; trying "${next.label}".`);
+    }
+
+    /** The Brain's gate: the chosen plan must fire on the latest tick (and, in recovery, the AI model must agree). */
+    private brainOk(symbol: string): boolean {
+        if (!this.brainGoverns()) return true;
         const traded = this.tradedFor(symbol);
-        if (!traded) return true;
-        const rule = bestValidatedRule(this.labReport, symbol, traded);
-        if (!rule) return true;
-        return ruleFiresNow(rule, this.io.feed.getLiveSeries()[symbol] ?? [], traded);
-    }
-
-    /** The rule the Entry Lab is applying for a market right now, or null when it enters immediately. */
-    labRuleFor(symbol: string, contract: Parameters<typeof bestValidatedRule>[2]): LabRuleId | null {
-        return this.labReport ? bestValidatedRule(this.labReport, symbol, contract) : null;
+        if (!traded) return false;
+        const plan = this.armed?.plan ?? fallbackPlan(this.brainStrict());
+        return planFires(plan, findCell(this.brain, symbol, traded), this.io.feed.getLiveSeries()[symbol] ?? [], traded);
     }
 
     private isRecovering(): boolean {
@@ -544,21 +594,21 @@ export class SixfoldRunner {
         this.scan = scanMarkets(
             series,
             symbols,
-            { duration: this.settings.duration, entry: { mode: this.immediate() ? 'ANY' : 'SETUP' }, margin: this.settings.margin },
+            { duration: this.settings.duration, entry: { mode: this.scanMode() }, margin: this.settings.margin },
             now,
             primaryContracts(this.settings)
         );
         this.scanAt = now;
-        if (this.settings.entry === 'LAB' || this.settings.recoveryEntry === 'LAB') {
-            if (!this.labReport || now - this.labAt >= LAB_REFRESH_MS) {
+        if (this.settings.entry === 'BRAIN' || this.settings.recoveryEntry === 'BRAIN' || this.retainCount > 0) {
+            if (!this.brain || now - this.brainAt >= BRAIN_REFRESH_MS) {
                 const contracts: Contract[] = [...primaryContracts(this.settings)];
                 if (this.settings.recovery) {
                     if (this.settings.useOver) contracts.push({ side: 'OVER', param: this.settings.recoveryOver });
                     if (this.settings.useUnder) contracts.push({ side: 'UNDER', param: this.settings.recoveryUnder });
                 }
                 const uniq = [...new Map(contracts.map(c => [contractKey(c), c])).values()];
-                this.labReport = entryLabReport(series, symbols, uniq, this.settings.duration);
-                this.labAt = now;
+                this.brain = brainReport(series, symbols, uniq, this.settings.duration, now);
+                this.brainAt = now;
             }
         }
         this.regime = computeRegime(series, symbols, primaryContracts(this.settings), now);
@@ -660,6 +710,8 @@ export class SixfoldRunner {
                 label: bought.label,
                 recovery: bought.recovery,
                 entryDigit,
+                plan: this.brainGoverns() ? (armed.plan?.arm ?? null) : null,
+                baseRate: this.brainGoverns() ? (findCell(this.brain, armed.symbol, bought.contract)?.immediateRate ?? null) : null,
                 exitDigit: null,
                 stake,
                 profit: null,
@@ -670,7 +722,7 @@ export class SixfoldRunner {
             this.trades = [record, ...this.trades].slice(0, TRADE_LIMIT);
             this.addLog(
                 'trade',
-                `Bought ${bought.label}${bought.recovery ? ' (recovery)' : ''} on ${armed.name}, stake ${stake.toFixed(2)}${entryDigit === null ? '' : `, entry digit ${entryDigit}`}.`
+                `Bought ${bought.label}${bought.recovery ? ' (recovery)' : ''} on ${armed.name}, stake ${stake.toFixed(2)}${entryDigit === null ? '' : `, entry digit ${entryDigit}`}${this.brainGoverns() && armed.plan ? `, plan: ${armed.plan.label}` : ''}.`
             );
             if (token !== this.runToken) {
                 this.tradeInFlight = false;
@@ -828,6 +880,7 @@ export class SixfoldRunner {
             })),
             pickyBump: this.pickyBump(this.io.now()),
             regime: this.regime,
+            brain: this.brain,
         };
     }
 

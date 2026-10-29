@@ -130,3 +130,22 @@ Not done / unverified:
 - Lab tab: Entry Lab panel with test count, chance expectation, and leading rules.
 - Fix: trade-row exit digit now reads the settled contract's display-value fields in order (exit_tick_display_value, exit_spot_display_value, exit_spot, sell_spot_display_value, …).
 - Tests: entry-lab.spec.ts (random digits validate ~nothing; planted edge validates), runner LAB tests.
+
+## Entry Brain (replaces the Entry Lab as an entry mode)
+Why: the Entry Lab was a referee. It only allowed a rule that had already beaten "enter immediately", and on random digits that almost never happens, so trades fell back to entering on the next tick: no entry at all.
+
+Done (src/components/premium/sixfold; 139 sixfold tests pass under bun; strict tsc clean on entry-brain / runner / money / entry; page typechecked against React stubs):
+- [x] `entry-brain.ts` (pure, causal): 14 entry methods (setup digit, last tick won, learned digit set, learned two-digit pattern, 8 run/form rules, an online logistic AI model). Every method is replayed as a shadow trade on each market and contract; tables and the model learn an outcome only after it has printed.
+- [x] Plan choice: recency-weighted Beta posteriors starting at the theoretical rate; Thompson sampling picks the plan per trade (rotates when evidence is flat). Recovery uses the lower confidence bound (most proven plan) AND the AI model must agree ("double lock"). A plan that does not fire in a third of the wait window gives way to the next (up to 3 times). A fallback plan exists before any history, so no trade is ever entered blind.
+- [x] Ledger: every plan-timed trade is compared with the win rate a blind entry had on that market and contract (z-score, honest verdict). Per-trade `plan` and `baseRate` recorded.
+- [x] Settings: new default entry `BRAIN` (saved `SMART` migrates once; the retired `LAB` modes map to `BRAIN`). Recovery entry option "Brain · AI lock".
+- [x] UI: plan pill on the armed card, compact Brain card in Scanner, full Brain panel in Lab (plan per market, pooled method table, AI skill, ledger). The old lab stays as "Entry audit" (false-discovery referee).
+- Measured on synthetic data: random digits -> 0.4% false "leads" and AI skill about -1% (it cannot beat a coin, and says so); planted structure -> the learned-digit and AI methods are flagged and AI skill about +4%.
+
+Not done / unverified:
+- [ ] `npm ci`, full `tsc`, repo jest/eslint/prettier, SCSS build (registry blocked here). Run `npm ci && npm run type-check && npm test && npm run build` first.
+- [ ] Not rendered in a browser; no live or demo run. Test on a DEMO account.
+- [ ] Deriv digits are random: no plan can be promised to raise the win rate. Watch the ledger line (plan-timed vs random-tick) over 100+ trades before trusting it.
+- [ ] A full Brain refresh costs ~150 ms for 10 markets x 4 contracts every 8 s on the main thread; move to a worker if the page feels janky.
+
+Next: demo run, read the ledger after 100+ trades, then prune methods that read "Worse than not entering".

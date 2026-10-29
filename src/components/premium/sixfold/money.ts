@@ -4,7 +4,7 @@ import { type Contract, contractLabel, isValidContract, profitMultiple, winProba
 
 export type Selectivity = 'strict' | 'balanced' | 'active';
 export type RecoverySizing = 'PAYOUT' | 'MULTIPLIER';
-export type EntryRule = 'SMART' | 'SETUP' | 'ANY' | 'LAB';
+export type EntryRule = 'BRAIN' | 'SMART' | 'SETUP' | 'ANY';
 
 export type SixfoldSettings = {
     /** The two contracts Sixfold trades. Over <primaryOver> and Under <primaryUnder>; either can be switched off. */
@@ -40,6 +40,7 @@ export type SixfoldSettings = {
     duration: number;
     selectivity: Selectivity;
     /**
+     * BRAIN gives every trade an entry plan chosen by learning (digit sets, patterns, forms, an AI model: see entry-brain.ts);
      * SMART learns the entry digits from the armed market's own recent ticks and changes them as the market changes;
      * SETUP waits for a digit that would have lost the contract (as the simulator does); ANY buys as soon as armed.
      */
@@ -90,7 +91,7 @@ export const DEFAULT_SETTINGS: SixfoldSettings = {
     recoveryUnder: 6,
     duration: 1,
     selectivity: 'balanced',
-    entry: 'SMART',
+    entry: 'BRAIN',
     recoveryEntry: 'OFF',
     recoveryForm: 3,
     lossShield: true,
@@ -134,8 +135,13 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         recoveryUnder: Math.trunc(num(s.recoveryUnder, d.recoveryUnder, 1, 9)),
         duration: Math.trunc(num(s.duration, d.duration, 1, 5)),
         selectivity: s.selectivity === 'strict' || s.selectivity === 'active' ? s.selectivity : 'balanced',
-        entry: s.entry === 'ANY' || s.entry === 'SETUP' || s.entry === 'LAB' ? s.entry : 'SMART',
-        recoveryEntry: s.recoveryEntry === 'MOMENTUM' || s.recoveryEntry === 'REVERSION' || s.recoveryEntry === 'BOUNCE' || s.recoveryEntry === 'LAB' ? s.recoveryEntry : 'OFF',
+        entry: s.entry === 'ANY' || s.entry === 'SETUP' || s.entry === 'SMART' ? s.entry : 'BRAIN', // the retired 'LAB' mode becomes BRAIN
+        recoveryEntry:
+            s.recoveryEntry === 'BRAIN' || (s.recoveryEntry as string) === 'LAB'
+                ? 'BRAIN'
+                : s.recoveryEntry === 'MOMENTUM' || s.recoveryEntry === 'REVERSION' || s.recoveryEntry === 'BOUNCE'
+                  ? s.recoveryEntry
+                  : 'OFF',
         recoveryForm: Math.trunc(num(s.recoveryForm, d.recoveryForm, 2, 8)),
         meterGate: typeof s.meterGate === 'boolean' ? s.meterGate : d.meterGate,
         lossShield: typeof s.lossShield === 'boolean' ? s.lossShield : d.lossShield,
@@ -156,11 +162,18 @@ export function primaryContracts(settings: Pick<SixfoldSettings, 'useOver' | 'pr
 }
 
 const STORAGE_KEY = 'sixfold.auto.settings.v1';
+const BRAIN_MIGRATION_KEY = 'sixfold.auto.entry-brain.v1';
 
 export function loadSettings(): SixfoldSettings {
     try {
         const raw = window.localStorage.getItem(STORAGE_KEY);
-        return normalizeSettings(raw ? JSON.parse(raw) : null);
+        const parsed = raw ? JSON.parse(raw) : null;
+        // One time only: the old Adaptive entry moves to the Entry Brain. Choosing Adaptive again afterwards is respected.
+        if (!window.localStorage.getItem(BRAIN_MIGRATION_KEY)) {
+            if (parsed && parsed.entry === 'SMART') parsed.entry = 'BRAIN';
+            window.localStorage.setItem(BRAIN_MIGRATION_KEY, '1');
+        }
+        return normalizeSettings(parsed);
     } catch {
         return { ...DEFAULT_SETTINGS };
     }

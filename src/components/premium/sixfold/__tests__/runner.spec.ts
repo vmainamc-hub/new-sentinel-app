@@ -73,7 +73,7 @@ function harness(over: Partial<SixfoldSettings> = {}, io: Partial<RunnerIO> = {}
         currency: () => 'USD',
         afterStop: () => {},
         now: () => t,
-        loadSettings: () => ({ ...DEFAULT_SETTINGS, markets: ['P', 'Q'], selectivity: 'strict', lossShield: false, pickyAfterLoss: false, ...over }),
+        loadSettings: () => ({ ...DEFAULT_SETTINGS, entry: 'SMART', markets: ['P', 'Q'], selectivity: 'strict', lossShield: false, pickyAfterLoss: false, ...over }),
         saveSettings: () => {},
         ...io,
     });
@@ -287,20 +287,77 @@ describe('SixfoldRunner', () => {
         expect(h.calls.buy).toHaveLength(1);
     });
 
-    it('Entry Lab mode holds back while a validated rule is not firing', async () => {
-        // The planted market makes "latest digit would have lost" a validated rule; its latest digit (7) would have won.
-        const h = harness({ entry: 'LAB', markets: ['P'] });
+    it('Entry Brain gives every armed trade an entry plan and never buys without it firing', async () => {
+        const h = harness({ entry: 'BRAIN', markets: ['P'] });
         h.runner.start();
+        const armed = h.runner.getSnapshot().armed;
+        expect(armed).not.toBeNull();
+        expect(armed!.plan).not.toBeNull();
+        expect(armed!.plan!.label.length).toBeGreaterThan(0);
+        expect(armed!.entryDigits).toEqual([]); // no fixed digit: the plan is the entry
         await flush();
-        expect(h.calls.buy).toHaveLength(0);
+        // Whatever it bought was bought on a plan, with the blind-entry win rate recorded for the ledger.
+        h.runner.getSnapshot().trades.forEach(t => {
+            expect(t.plan).not.toBeNull();
+            expect(t.baseRate).not.toBeNull();
+        });
     });
 
-    it('Entry Lab mode enters immediately when no rule has been validated', async () => {
-        const h = harness({ entry: 'LAB', markets: ['Q'] });
+    it('Entry Brain buys on its plan and records it on the trade', async () => {
+        const h = harness({ entry: 'BRAIN', markets: ['P'] });
         h.runner.start();
+        const plan = h.runner.getSnapshot().armed!.plan!;
+        expect(plan).toBeTruthy();
+        expect(plan.why).not.toMatch(/still collecting/); // planned from a real fitted market, not the warm-up fallback
+        // Feed alternating ticks: every arm that can fire on this market fires on one of them within a few ticks.
+        for (let k = 0; k < 8 && h.calls.buy.length === 0; k++) {
+            const next = h.series.P.at(-1) === 7 ? 1 : 7;
+            h.series.P.push(next);
+            h.runner.handleFeedTick('P', next);
+            await flush();
+        }
+        if (h.calls.buy.length > 0) {
+            const t = h.runner.getSnapshot().trades[0];
+            expect(t.plan).toBe(plan.arm);
+            expect(t.baseRate!).toBeGreaterThan(0.45); // a blind entry on 1,7,1,7... wins every other tick
+            expect(t.baseRate!).toBeLessThan(0.55);
+        }
+        expect(h.runner.getSnapshot().brain).not.toBeNull();
+    });
+
+    it('Entry Brain tries another plan when the first one has not fired for a third of the wait window', () => {
+        const h = harness({ entry: 'BRAIN', markets: ['P'], waitSeconds: 45 });
+        h.runner.start();
+        const first = h.runner.getSnapshot().armed!.plan!.arm;
+        h.advance(16_000);
+        h.runner.tick();
+        const after = h.runner.getSnapshot().armed!;
+        expect(after.planTried).toHaveLength(2);
+        expect(after.planTried[0]).toBe(first);
+        expect(after.plan!.arm).not.toBe(first);
+        expect(h.runner.getSnapshot().log.some(l => /did not fire/.test(l.text))).toBe(true);
+    });
+
+    it('recovery with the Brain uses the strict plan with the AI lock', async () => {
+        const h = harness({ entry: 'SMART', recoveryEntry: 'BRAIN', markets: ['P'], martingale: true });
+        h.queueProfits(-1);
+        h.runner.start();
+        h.runner.handleFeedTick('P', 1);
         await flush();
-        expect(h.calls.buy.length).toBeLessThanOrEqual(1);
-        expect(h.runner.getSnapshot().armed?.entryDigits ?? []).toEqual([]);
+        h.advance(1500);
+        h.runner.tick();
+        const armed = h.runner.getSnapshot().armed;
+        if (armed) {
+            expect(armed.plan).not.toBeNull();
+            expect(armed.plan!.aiLock).toBe(true);
+        }
+    });
+
+    it('the retired Entry Lab modes in saved settings become the Brain', () => {
+        const h = harness({ entry: 'LAB' as never, recoveryEntry: 'LAB' as never, markets: ['Q'] });
+        const s = h.runner.getSnapshot().settings;
+        expect(s.entry).toBe('BRAIN');
+        expect(s.recoveryEntry).toBe('BRAIN');
     });
 
     it('asks the feed to connect when it is not live and gives up after waiting', () => {
