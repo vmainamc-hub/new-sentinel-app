@@ -309,6 +309,38 @@
     &-hint--bad { color: var(--dt-down); font-weight: 600; }
     &-row--params { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
+    &-hedge {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+    }
+    &-link {
+        align-self: flex-start;
+        padding: 6px 10px;
+        border: 1px solid var(--dt-border);
+        border-radius: 8px;
+        background: var(--dt-card-2);
+        color: var(--dt-accent);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+
+        &:disabled { opacity: 0.6; cursor: default; }
+    }
+    &-hedge-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11.5px;
+        font-variant-numeric: tabular-nums;
+
+        th, td { padding: 4px 3px; text-align: right; border-bottom: 1px solid var(--dt-border); }
+        th:first-child, td:first-child { text-align: left; }
+        th { color: var(--dt-muted); font-weight: 600; }
+    }
+    &-neg { color: var(--dt-down); font-weight: 700; }
+    &-pos { color: var(--dt-up); font-weight: 700; }
+
     &-bulk {
         display: flex;
         flex-direction: column;

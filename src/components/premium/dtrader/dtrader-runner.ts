@@ -22,6 +22,8 @@ export type RunConfig = {
     family: Family;
     side: SideChoice;
     prediction: number;
+    /** High Tick / Low Tick hedge: the tick the Low Tick trade picks when it differs from `prediction` (the High Tick's). */
+    prediction2?: number;
     /** Barrier distance from the entry spot (Higher/Lower, Ends Between/Outside). */
     offset: number;
     duration: number;
@@ -107,7 +109,7 @@ export const configError = (cfg: RunConfig): string | null => {
     if (prediction) return prediction;
     const offset = offsetError(cfg.family, cfg.offset);
     if (offset) return offset;
-    const pick = tickPickError(cfg.family, cfg.prediction);
+    const pick = tickPickError(cfg.family, cfg.prediction) ?? (cfg.prediction2 !== undefined ? tickPickError(cfg.family, cfg.prediction2) : null);
     if (pick) return pick;
     const fixed = FAMILIES[cfg.family].fixedTicks;
     if (fixed !== undefined) { if (cfg.duration !== fixed) return `${FAMILIES[cfg.family].title} always runs ${fixed} ticks.`; }
@@ -259,7 +261,7 @@ export class DTraderRunner {
         const offset = Math.max(this.resolved?.offsetFloor ?? 0, decision.offset ?? cfg.offset);
         const invalid = predictionError(cfg.family, side, prediction) ?? tickPickError(cfg.family, prediction);
         if (invalid) { this.log(`${invalid} Skipping this entry.`, 'warn'); return { kind: 'missed' }; }
-        const legs: Leg[] = legsFor(cfg.family, side, prediction, offset, view.decimals);
+        const legs: Leg[] = legsFor(cfg.family, side, prediction, offset, view.decimals, decision.prediction === undefined ? cfg.prediction2 : undefined);
         const duration = this.resolved?.duration ?? { value: cfg.duration, unit: 't' as const };
         const interval = tickIntervalMs(view.times);
         const plan = planBurst({

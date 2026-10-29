@@ -101,7 +101,7 @@ export const predictionError = (family: Family, side: SideChoice, prediction: nu
 export type Leg = { contract: string; barrier?: string; barrier2?: string; /** High Tick / Low Tick: which of the 5 ticks is picked. */ selectedTick?: number; label: string; sideIndex: SideIndex };
 
 /** The contract(s) one entry buys. 'both' buys the two opposite sides together. 'auto' must be resolved first. */
-export const legsFor = (family: Family, side: Exclude<SideChoice, 'auto'>, prediction: number, offset = 0, decimals?: number): Leg[] => {
+export const legsFor = (family: Family, side: Exclude<SideChoice, 'auto'>, prediction: number, offset = 0, decimals?: number, secondPrediction?: number): Leg[] => {
     const def = FAMILIES[family];
     // Offsets are relative to the entry spot, the way Deriv reads "+0.50" / "-0.50". Higher is above the spot, Lower is below;
     // the two range contracts use a band of +offset and -offset around the spot. With the market's number of decimals known the
@@ -112,12 +112,14 @@ export const legsFor = (family: Family, side: Exclude<SideChoice, 'auto'>, predi
         if (family === 'range') return { barrier: text('+'), barrier2: text('-') };
         return { barrier: index === 0 ? text('+') : text('-') };
     };
+    // High Tick / Low Tick: the second side (Low Tick) may pick its own tick; by default it uses the same one.
+    const pickFor = (index: SideIndex) => (index === 1 && def.needsTick && secondPrediction !== undefined ? secondPrediction : prediction);
     const make = (index: SideIndex): Leg => ({
         contract: def.contracts[index],
         ...(def.needsDigit ? { barrier: String(prediction) } : {}),
         ...priceBarriers(index),
-        ...(def.needsTick ? { selectedTick: prediction } : {}),
-        label: def.needsDigit ? `${def.sides[index]} ${prediction}` : def.needsTick ? `${def.sides[index]} #${prediction}` : def.needsOffset ? `${def.sides[index]} ±${offset}` : def.sides[index],
+        ...(def.needsTick ? { selectedTick: pickFor(index) } : {}),
+        label: def.needsDigit ? `${def.sides[index]} ${prediction}` : def.needsTick ? `${def.sides[index]} #${pickFor(index)}` : def.needsOffset ? `${def.sides[index]} ±${offset}` : def.sides[index],
         sideIndex: index,
     });
     if (side === 'both') return [make(0), make(1)];

@@ -338,6 +338,14 @@ describe('DTraderRunner · High Tick / Low Tick', () => {
         expect(w.buys.filter(b => b.params.contract_type === 'TICKLOW')).toHaveLength(2);
         expect(w.buys.every(b => b.params.selected_tick === 5)).toBe(true);
     });
+    it('a hedge pair can pick a different tick for each side', async () => {
+        const w = makeWorld();
+        seed(w, [4, 5, 6, 7]);
+        await new DTraderRunner(w.io, collect().emit).run(baseConfig(w.symbol, { family: 'tickhighlow', side: 'both', prediction: 1, prediction2: 5, duration: 5, tradesPerEntry: 2 }));
+        expect(w.buys.filter(b => b.params.contract_type === 'TICKHIGH').every(b => b.params.selected_tick === 1)).toBe(true);
+        expect(w.buys.filter(b => b.params.contract_type === 'TICKLOW').every(b => b.params.selected_tick === 5)).toBe(true);
+        expect(configError(baseConfig(w.symbol, { family: 'tickhighlow', side: 'both', prediction: 1, prediction2: 7, duration: 5 }))).toMatch(/1 to 5/);
+    });
     it('refuses a length other than 5 ticks and a pick outside 1 to 5, before buying', async () => {
         const w = makeWorld();
         seed(w, [4, 5]);

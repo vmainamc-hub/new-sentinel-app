@@ -178,6 +178,12 @@ describe('High Tick / Low Tick', () => {
         [0, 6, 2.5, NaN].forEach(n => expect(tickPickError('tickhighlow', n)).toMatch(/1 to 5/));
         expect(tickPickError('overunder', 9)).toBeNull();
     });
+    it('Low Tick can pick its own tick', () => {
+        const legs = legsFor('tickhighlow', 'both', 1, 0, undefined, 5);
+        expect(legs.map(l => [l.contract, l.selectedTick])).toEqual([['TICKHIGH', 1], ['TICKLOW', 5]]);
+        expect(legs[1].label).toBe('Low Tick #5');
+        expect(legsFor('tickhighlow', 'first', 2, 0, undefined, 5)[0].selectedTick).toBe(2);
+    });
     it('does not touch the other contracts', () => {
         expect(legsFor('overunder', 'first', 4)[0].selectedTick).toBeUndefined();
         expect(legsFor('risefall', 'first', 0)[0]).not.toHaveProperty('selectedTick');

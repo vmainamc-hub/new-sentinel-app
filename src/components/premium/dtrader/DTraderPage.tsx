@@ -5,6 +5,7 @@ import { bulkFeed } from '../bulk-feed';
 import { tickIntervalMs } from '../burst-pace';
 import { BULK_MARKETS } from '../over-under-engine';
 import { pairOutcome } from './dtrader-catalog';
+import { hedgeStats, type PickRow, pickTable, recentPickOdds } from './dtrader-hedge';
 import {
 decimalsText, describeEntry,     DIGIT_OPS, type DigitOp, digitStats, type EntryRule, FAMILIES, type Family, FAMILY_ORDER, legsFor, offsetError, opNeedsDigit, parseSequence, predictionError,
 type SideChoice,
@@ -22,7 +23,7 @@ import './dtrader.scss';
 
 type EntryMode = 'instant' | 'digit' | 'pattern';
 type Form = {
-    symbol: string; family: Family; side: SideChoice; prediction: string; offset: string; duration: string; stake: string; trades: string; martingale: string;
+    symbol: string; family: Family; side: SideChoice; prediction: string; /** Low Tick's own tick for the High/Low Tick hedge ('' = same as High Tick's). */ pick2: string; offset: string; duration: string; stake: string; trades: string; martingale: string;
     takeProfit: string; stopLoss: string; mode: 'single' | 'repeat'; entryMode: EntryMode;
     digitOp: DigitOp; digitValue: string;
     patternKind: 'last' | 'sequence'; lastCount: string; lastOp: DigitOp; lastDigit: string; seqText: string; fireAfter: string;
@@ -32,7 +33,7 @@ type Form = {
 };
 
 const DEFAULT_FORM: Form = {
-    symbol: '1HZ100V', family: 'overunder', side: 'second', prediction: '8', offset: '0.5', duration: '1', stake: '1', trades: '1', martingale: '1',
+    symbol: '1HZ100V', family: 'overunder', side: 'second', prediction: '8', pick2: '', offset: '0.5', duration: '1', stake: '1', trades: '1', martingale: '1',
     takeProfit: '', stopLoss: '', mode: 'repeat', entryMode: 'instant', digitOp: '=', digitValue: '2',
     patternKind: 'sequence', lastCount: '2', lastOp: '>=', lastDigit: '9', seqText: '1 2 5', fireAfter: '',
     guard: true, chart: 'line', digitsView: 'default', candleSize: '5', window: '1000', strategy: '', strategyParams: {},
@@ -53,6 +54,9 @@ const saveForm = (form: Form) => {
 
 /** Contract length in ticks: fixed for the contracts Deriv offers at one length only (High Tick / Low Tick), else what was typed. */
 const ticksFor = (form: Pick<Form, 'family' | 'duration'>) => FAMILIES[form.family].fixedTicks ?? toNumber(form.duration, 1);
+/** The Low Tick trade's own tick, only when it is a High + Low Tick pair and a different tick was typed. */
+const hedgePick2 = (form: Pick<Form, 'family' | 'side' | 'pick2'>): number | undefined =>
+    FAMILIES[form.family].needsTick && form.side === 'both' && form.pick2.trim() !== '' ? toNumber(form.pick2, NaN) : undefined;
 const toNumber = (value: string, fallback = NaN) => { const n = Number(value); return value.trim() !== '' && Number.isFinite(n) ? n : fallback; };
 const money = (value: number, currency: string) => `${value.toFixed(2)} ${currency}`;
 const errorText = (error: unknown) => (error instanceof Error ? error.message : (error as { message?: string })?.message || String(error));
@@ -81,7 +85,7 @@ export const buildRun = (form: Form, currency: string): { config: RunConfig } | 
         entry = { mode: 'pattern', pattern: { kind: 'sequence', digits, fireAfter: toNumber(form.fireAfter, digits.length) } };
     }
     const config: RunConfig = {
-        symbol: form.symbol, family: form.family, side: form.side, prediction: toNumber(form.prediction, 0), offset: toNumber(form.offset, 0), duration: ticksFor(form),
+        symbol: form.symbol, family: form.family, side: form.side, prediction: toNumber(form.prediction, 0), ...(hedgePick2(form) !== undefined ? { prediction2: hedgePick2(form) } : {}), offset: toNumber(form.offset, 0), duration: ticksFor(form),
         stake: toNumber(form.stake, 0), tradesPerEntry: toNumber(form.trades, 1), martingale: toNumber(form.martingale, 1),
         takeProfit: Math.max(0, toNumber(form.takeProfit, 0)), stopLoss: Math.max(0, toNumber(form.stopLoss, 0)),
         mode: form.mode, entry, sameTickGuard: form.guard, currency,
@@ -274,7 +278,7 @@ const DTraderPage = () => {
     const running = runState !== 'idle';
     const family = FAMILIES[form.family];
     const prepared = useMemo(() => buildRun(form, currency), [form, currency]);
-    const predictionIssue = predictionError(form.family, form.side === 'auto' ? 'both' : form.side, toNumber(form.prediction, 0)) ?? tickPickError(form.family, toNumber(form.prediction, 0));
+    const predictionIssue = predictionError(form.family, form.side === 'auto' ? 'both' : form.side, toNumber(form.prediction, 0)) ?? tickPickError(form.family, toNumber(form.prediction, 0)) ?? (hedgePick2(form) !== undefined ? tickPickError(form.family, hedgePick2(form)!) : null);
     const offsetIssue = offsetError(form.family, toNumber(form.offset, 0));
 
     // Real payout from Deriv for the chosen contract(s), refreshed when the contract setup changes.
@@ -305,7 +309,7 @@ const DTraderPage = () => {
                     return;
                 }
                 setPreflightNotes([]);
-                const legs = legsFor(form.family, side, toNumber(form.prediction, 0), toNumber(form.offset, 0)).filter(() => !predictionIssue && !offsetIssue);
+                const legs = legsFor(form.family, side, toNumber(form.prediction, 0), toNumber(form.offset, 0), undefined, hedgePick2(form)).filter(() => !predictionIssue && !offsetIssue);
                 const quotes = await Promise.all(legs.map(async leg => {
                     const proposal = await PremiumDerivApiService.proposal({
                         amount: stake, basis: 'stake', contract_type: leg.contract, currency, underlying_symbol: form.symbol, duration, duration_unit: 't', ...(leg.barrier !== undefined ? { barrier: leg.barrier } : {}), ...(leg.barrier2 !== undefined ? { barrier2: leg.barrier2 } : {}), ...(leg.selectedTick !== undefined ? { selected_tick: leg.selectedTick } : {}),
@@ -316,7 +320,7 @@ const DTraderPage = () => {
             } catch (err) { if (alive) { setPayouts([]); setQuoteError(errorText(err)); } }
         }, 800);
         return () => { alive = false; window.clearTimeout(timer); };
-    }, [form.family, form.side, form.prediction, form.offset, form.stake, form.duration, form.symbol, currency, predictionIssue, offsetIssue]);
+    }, [form.family, form.side, form.prediction, form.pick2, form.offset, form.stake, form.duration, form.symbol, currency, predictionIssue, offsetIssue]);
 
     // Auto: the strategy in use, its settings, and how it would have scored on the recent past.
     const strategyList = strategiesFor(form.family);
@@ -338,7 +342,35 @@ const DTraderPage = () => {
         return () => window.clearTimeout(timer);
     }, [form.side, form.family, form.prediction, form.offset, form.duration, form.symbol, activeStrategy.id, strategyKey, feedBucket, decimals]);  // eslint-disable-line react-hooks/exhaustive-deps
 
-    const pair = form.side === 'both' && payouts.length === 2
+    // High Tick / Low Tick hedge: what the pair really does at the quoted payouts, and a per-tick table on request.
+    const hedge = form.family === 'tickhighlow' && form.side === 'both' && payouts.length === 2 && !predictionIssue
+        ? hedgeStats({
+            stake: toNumber(form.stake, 0), highPick: toNumber(form.prediction, 0), lowPick: hedgePick2(form) ?? toNumber(form.prediction, 0),
+            highPayout: Number(payouts[0].payout), lowPayout: Number(payouts[1].payout),
+        })
+        : null;
+    const [tickRows, setTickRows] = useState<PickRow[] | null>(null);
+    const [tickRowsBusy, setTickRowsBusy] = useState(false);
+    const [tickRowsError, setTickRowsError] = useState('');
+    const quoteAllTicks = async () => {
+        const stake = toNumber(form.stake, 0);
+        if (!(stake > 0)) { setTickRowsError('Enter a stake first.'); return; }
+        setTickRowsBusy(true); setTickRowsError('');
+        try {
+            const ask = async (contract: string, pick: number) => {
+                try {
+                    const q = await PremiumDerivApiService.proposal({ amount: stake, basis: 'stake', contract_type: contract, currency, underlying_symbol: form.symbol, duration: 5, duration_unit: 't', selected_tick: pick });
+                    const payout = Number(q.payout);
+                    return Number.isFinite(payout) ? payout : null;
+                } catch { return null; }
+            };
+            const quotes = await Promise.all([1, 2, 3, 4, 5].map(async pick => ({ high: await ask('TICKHIGH', pick), low: await ask('TICKLOW', pick) })));
+            if (quotes.every(q => q.high === null && q.low === null)) setTickRowsError('Deriv did not return a quote for any tick. Check you are logged in and the market is open.');
+            setTickRows(pickTable(stake, quotes, recentPickOdds(bulkFeed.store[form.symbol]?.prices ?? [])));
+        } finally { setTickRowsBusy(false); }
+    };
+
+    const pair = form.side === 'both' && form.family !== 'tickhighlow' && payouts.length === 2
         ? pairOutcome(toNumber(form.stake, 0), Number(payouts[0].payout), Number(payouts[1].payout), !['matchesdiffers', 'evenodd'].includes(form.family))
         : null;
 
@@ -497,6 +529,12 @@ const DTraderPage = () => {
                         </label>
                     )}
 
+                    {family.needsTick && form.side === 'both' && (
+                        <label className='dt-field dt-field--wide'>Low Tick pick (blank = same tick as High Tick)
+                            <input inputMode='numeric' value={form.pick2} placeholder={form.prediction} disabled={running} onChange={e => set('pick2', e.target.value)} />
+                        </label>
+                    )}
+
                     {family.needsOffset && (
                         <label className='dt-field dt-field--wide'>Barrier offset (price distance from the entry spot)
                             <input inputMode='decimal' value={form.offset} disabled={running} onChange={e => set('offset', e.target.value)} aria-invalid={Boolean(offsetIssue)} />
@@ -530,6 +568,48 @@ const DTraderPage = () => {
                         <div><span>Stake per entry</span><b>{(toNumber(form.stake, 0) * (totalPerEntry || 1)).toFixed(2)} {currency}</b></div>
                     </div>
                     {preflightNotes.map(note => <p key={note} className='dt-hint dt-hint--note'>{note}</p>)}
+                    {family.needsTick && (
+                        <div className='dt-hedge'>
+                            {hedge && (
+                                <>
+                                    <p className={`dt-hint ${hedge.oneWinCoversBoth ? '' : 'dt-hint--bad'}`}>
+                                        Hedge pair per entry ({hedge.cost.toFixed(2)} {currency} staked): if only High Tick wins {hedge.netHighOnly >= 0 ? '+' : ''}{hedge.netHighOnly.toFixed(2)},
+                                        if only Low Tick wins {hedge.netLowOnly >= 0 ? '+' : ''}{hedge.netLowOnly.toFixed(2)}, if neither wins {hedge.netNeither.toFixed(2)}
+                                        {hedge.pBothWin > 0 ? `, if both win +${hedge.netBoth.toFixed(2)}` : ''}.
+                                    </p>
+                                    <p className='dt-hint dt-hint--note'>
+                                        {hedge.note} At these quotes the average result is {hedge.expected >= 0 ? '+' : ''}{hedge.expected.toFixed(2)} {currency} per entry ({(hedge.expectedPerStake * 100).toFixed(1)}% of the money staked),
+                                        by the chance model below. {hedge.oneWinCoversBoth ? 'One winning trade pays back both stakes.' : 'One winning trade does NOT pay back both stakes.'}
+                                    </p>
+                                </>
+                            )}
+                            <button type='button' className='dt-link' disabled={tickRowsBusy} onClick={() => void quoteAllTicks()}>{tickRowsBusy ? 'Asking Deriv…' : 'Quote all 5 ticks'}</button>
+                            {tickRowsError && <p className='dt-error'>{tickRowsError}</p>}
+                            {tickRows && (
+                                <table className='dt-hedge-table'>
+                                    <thead><tr><th>Tick</th><th>Chance</th><th>Recent</th><th>High pays</th><th>High avg</th><th>Low pays</th><th>Low avg</th></tr></thead>
+                                    <tbody>
+                                        {tickRows.map(row => (
+                                            <tr key={row.pick}>
+                                                <td>{row.pick}</td>
+                                                <td>{(row.modelOdds * 100).toFixed(1)}%</td>
+                                                <td>{row.recentOdds === null ? '—' : `${(row.recentOdds * 100).toFixed(1)}%`}</td>
+                                                <td>{row.highPayout === null ? '—' : row.highPayout.toFixed(2)}</td>
+                                                <td className={row.highEdge !== null && row.highEdge < 0 ? 'dt-neg' : 'dt-pos'}>{row.highEdge === null ? '—' : `${(row.highEdge * 100).toFixed(1)}%`}</td>
+                                                <td>{row.lowPayout === null ? '—' : row.lowPayout.toFixed(2)}</td>
+                                                <td className={row.lowEdge !== null && row.lowEdge < 0 ? 'dt-neg' : 'dt-pos'}>{row.lowEdge === null ? '—' : `${(row.lowEdge * 100).toFixed(1)}%`}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                            <p className='dt-hint'>
+                                The highest (or lowest) of 5 ticks is the first or last tick about 27% of the time and a middle tick about 14 to 16%. "Avg" is the average result per 1 staked from the payout Deriv quotes and that chance
+                                (negative = you lose on average). It assumes each tick moves independently, so check it against "Recent" and try a demo account first. Two opposite trades never change the average, only how often you win.
+                            </p>
+                        </div>
+                    )}
+
                     {pair && (
                         <p className={`dt-hint ${pair.locked ? 'dt-hint--bad' : ''}`}>
                             Pair per entry ({payouts[0].label} + {payouts[1].label}, {pair.total.toFixed(2)} {currency} staked): if {payouts[0].label} wins {pair.ifFirstWins >= 0 ? '+' : ''}{pair.ifFirstWins.toFixed(2)},
