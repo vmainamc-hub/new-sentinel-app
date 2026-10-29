@@ -40,7 +40,7 @@ export type SixfoldSettings = {
     duration: number;
     selectivity: Selectivity;
     /**
-     * BRAIN gives every trade an entry plan chosen by learning (digit sets, patterns, forms, an AI model: see entry-brain.ts);
+     * BRAIN enters every market on its own trigger digits, studied across windows of the last 1000 ticks (see entry-brain.ts);
      * SMART learns the entry digits from the armed market's own recent ticks and changes them as the market changes;
      * SETUP waits for a digit that would have lost the contract (as the simulator does); ANY buys as soon as armed.
      */

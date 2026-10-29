@@ -325,20 +325,19 @@ describe('SixfoldRunner', () => {
         expect(h.runner.getSnapshot().brain).not.toBeNull();
     });
 
-    it('Entry Brain tries another plan when the first one has not fired for a third of the wait window', () => {
-        const h = harness({ entry: 'BRAIN', markets: ['P'], waitSeconds: 45 });
+    it('Entry Brain enters only on the market\'s trigger digits and never on any other digit', async () => {
+        const h = harness({ entry: 'BRAIN', markets: ['P'] });
         h.runner.start();
-        const first = h.runner.getSnapshot().armed!.plan!.arm;
-        h.advance(16_000);
-        h.runner.tick();
-        const after = h.runner.getSnapshot().armed!;
-        expect(after.planTried).toHaveLength(2);
-        expect(after.planTried[0]).toBe(first);
-        expect(after.plan!.arm).not.toBe(first);
-        expect(h.runner.getSnapshot().log.some(l => /did not fire/.test(l.text))).toBe(true);
+        const plan = h.runner.getSnapshot().armed!.plan!;
+        expect(plan.digits.length).toBeGreaterThan(0);
+        const other = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].find(x => !plan.digits.includes(x))!;
+        h.series.P.push(other);
+        h.runner.handleFeedTick('P', other);
+        await flush();
+        expect(h.calls.buy).toHaveLength(0);
     });
 
-    it('recovery with the Brain uses the strict plan with the AI lock', async () => {
+    it('recovery with the Brain uses the strict plan (proven digits only)', async () => {
         const h = harness({ entry: 'SMART', recoveryEntry: 'BRAIN', markets: ['P'], martingale: true });
         h.queueProfits(-1);
         h.runner.start();
@@ -349,7 +348,7 @@ describe('SixfoldRunner', () => {
         const armed = h.runner.getSnapshot().armed;
         if (armed) {
             expect(armed.plan).not.toBeNull();
-            expect(armed.plan!.aiLock).toBe(true);
+            expect(armed.plan!.strict).toBe(true);
         }
     });
 

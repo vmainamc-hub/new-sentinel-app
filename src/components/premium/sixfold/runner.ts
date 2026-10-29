@@ -461,7 +461,7 @@ export class SixfoldRunner {
             this.settings.recoveryEntry !== 'OFF' && this.isRecovering()
                 ? ` Recovery entry: also needs ${
                       this.settings.recoveryEntry === 'BRAIN'
-                          ? 'the most proven Entry Brain plan, with the AI model agreeing.'
+                          ? 'the market’s proven trigger digits only (best available if none are proven).'
                           : this.settings.recoveryEntry === 'BOUNCE'
                           ? `${this.settings.recoveryForm} losing ticks in a row and then a winning one.`
                           : `${this.settings.recoveryForm} ${this.settings.recoveryEntry === 'MOMENTUM' ? 'winning' : 'losing'} ticks in a row.`

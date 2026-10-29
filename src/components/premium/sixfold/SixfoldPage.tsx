@@ -8,8 +8,7 @@
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { bankrollSim, calibrateLabels, contractRuns, entryTest, rollingRate, structureTable, transitionTest, uniformityTest } from './analysis';
 import { sentinelAgreement } from './agree';
-import { ARM_BY_ID, type BrainReport, type Evidence, planLedger } from './entry-brain';
-import { LAB_RULE_BY_ID, entryLabReport } from './entry-lab';
+import { ARM_BY_ID, type BrainReport, type Evidence, planLedger, WINDOWS } from './entry-brain';
 import { MeterStrip, MeterTab } from './meter-ui';
 import { computeRegimeFromSnapshot } from './regime';
 import type { RecoveryEntry } from './entry';
@@ -366,7 +365,7 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                     />
                     <small>
                         {s.entry === 'BRAIN'
-                            ? 'Every trade is bought on a named entry plan chosen by learning: digit sets, learned two-digit patterns, run and form conditions, or an AI model. Plans are replayed on each market’s own ticks, rotated when the evidence is flat, and every trade is scored against entering on a random tick.'
+                            ? 'Every market has its own entry digits and is never entered blindly. The last 1000 ticks of each market are studied in windows, oldest to newest, for the digits that were followed by wins on the contract; when the market prints one of them, the bot buys. The study is refreshed as new ticks arrive.'
                             : s.entry === 'SMART'
                             ? 'Learns the entry digits from each market’s recent ticks and changes them as the market moves. The digit that just lost is skipped next time.'
                             : s.entry === 'SETUP'
@@ -385,7 +384,7 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                             ['MOMENTUM', 'After wins'],
                             ['REVERSION', 'After losses'],
                             ['BOUNCE', 'Loss → win'],
-                            ['BRAIN', 'Brain · AI lock'],
+                            ['BRAIN', 'Brain · proven digits'],
                         ]}
                     />
                     {s.recoveryEntry !== 'OFF' && s.recoveryEntry !== 'BRAIN' && (
@@ -395,7 +394,7 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                         {s.recoveryEntry === 'OFF'
                             ? 'Recovery trades enter exactly like normal ones. The Lab’s Entry test shows whether a run-based entry has ever helped on your live ticks.'
                             : s.recoveryEntry === 'BRAIN'
-                              ? 'While recovering, use the most proven entry plan for the recovery contract on that market, and also wait for the AI model to agree. The plan is picked by its lower confidence bound rather than sampled, so a recovery trade never rides on a lucky guess.'
+                              ? 'While recovering, enter only on the market’s proven trigger digits for the recovery contract (digits that won in all but one window, including the two newest). If none are proven yet, the best-ranked digits are used.'
                               : s.recoveryEntry === 'BOUNCE'
                               ? `While recovering, also wait for ${s.recoveryForm} or more losing ticks in a row followed by a winning tick, for the contract being bought.`
                               : `While recovering, also wait until the market’s last ${s.recoveryForm} ticks would all have ${s.recoveryEntry === 'MOMENTUM' ? 'won' : 'lost'} for the contract being bought.`}
@@ -452,7 +451,7 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                     {sx.running && sx.armed?.plan && (
                         <div className='sf-rest' role='status' title={sx.armed.plan.why}>
                             <span>Entry plan: {sx.armed.plan.label}</span>
-                            {sx.armed.plan.aiLock && <span>AI must agree</span>}
+                            {sx.armed.plan.strict && <span>Proven digits only</span>}
                             <span>{EVIDENCE_TEXT[sx.armed.plan.evidence]}</span>
                         </div>
                     )}
@@ -981,147 +980,60 @@ function EntryTestPanel({ series, contract, settings }: { series: Record<string,
 
 const EVIDENCE_TEXT: Record<Evidence, string> = {
     LEARNING: 'Learning',
-    FLAT: 'No edge yet',
-    LEAD: 'Lead, re-check',
-    AGAINST: 'Worse than not entering',
+    PROVEN: 'Proven in recent windows',
+    BEST: 'Best available',
 };
 
 function EntryBrainPanel({ brain, trades, settings, compact }: { brain: BrainReport | null; trades: TradeRecord[]; settings: SixfoldSettings; compact?: boolean }) {
     const ledger = useMemo(() => planLedger(trades), [trades]);
     const on = settings.entry === 'BRAIN' || settings.recoveryEntry === 'BRAIN';
-    const front = useMemo(
-        () =>
-            (brain?.cells ?? [])
-                .map(c => ({ c, best: c.arms.filter(a => a.fireRate > 0 && a.waitTicks <= 40).sort((a, b) => b.post - a.post)[0] ?? null }))
-                .filter(x => x.best !== null)
-                .sort((a, b) => b.best!.post - b.c.theoretical - (a.best!.post - a.c.theoretical))
-                .slice(0, 10),
-        [brain]
-    );
-    const ai = brain?.aiSkill ?? null;
     const ready = !!brain && brain.cells.length > 0;
     return (
-        <Panel eyebrow='ENTRY BRAIN' title={!ready ? 'Collecting ticks' : on ? 'Every trade is entered on a plan' : 'Entry Brain is off in Scanner settings'}>
+        <Panel eyebrow='ENTRY LAB' title={!ready ? 'Collecting ticks' : on ? 'Every market enters on its own digits' : 'Entry Brain is off in Scanner settings'}>
             <p className='sf-lede'>
-                {ai === null
-                    ? 'AI model: still learning (it needs about 150 settled ticks on a market). '
-                    : `AI model: ${ai >= 0 ? '+' : ''}${(ai * 100).toFixed(1)}% against just guessing the base rate. ${ai > 0.01 ? 'It is picking up structure on these ticks.' : ai > -0.005 ? 'No better than chance on these ticks.' : 'Worse than chance on these ticks.'} `}
+                {!ready
+                    ? 'A market is studied once it has about 200 ticks. Until then it has no entry digit and no trade is placed on it. '
+                    : `${brain!.proven} of ${brain!.total} entry digits held up in every recent window; the rest are the best-ranked digits available. `}
                 {ledger.n === 0
-                    ? 'No plan-timed trades yet.'
-                    : `Plan-timed trades: ${ledger.wins} won of ${ledger.n}. Entering on a random tick of the same markets would be expected to win ${ledger.expected.toFixed(1)} (±${ledger.sd.toFixed(1)}). ${ledger.verdict}`}
+                    ? 'No trigger-digit trades yet.'
+                    : `Trigger-digit trades: ${ledger.wins} won of ${ledger.n}. A random tick on the same markets would be expected to win ${ledger.expected.toFixed(1)} (±${ledger.sd.toFixed(1)}). ${ledger.verdict}`}
             </p>
             {!compact && ready && (
                 <>
-                    <h3 className='sf-h3'>The plan each market and contract would get right now</h3>
-                    <div className='sf-table' role='table' aria-label='Entry plans by market'>
+                    <h3 className='sf-h3'>Entry digits for each market and contract</h3>
+                    <div className='sf-table' role='table' aria-label='Entry digits by market'>
                         <div className='tr th'>
                             <span>Market · contract</span>
-                            <span>Front-runner plan</span>
-                            <span>Believed win rate</span>
-                            <span>Fires</span>
-                            <span>Evidence</span>
+                            <span>Entry digits</span>
+                            <span>Win rate when touched</span>
+                            <span>Win rate by window (old → new)</span>
+                            <span>Status</span>
                         </div>
-                        {front.map(({ c, best }) => (
-                            <div className='tr' key={`${c.symbol}${c.key}`}>
-                                <span>
-                                    {marketName(c.symbol)} · {c.label}
-                                </span>
-                                <span title={ARM_BY_ID[best!.arm].blurb}>
-                                    {ARM_BY_ID[best!.arm].label}
-                                    {best!.arm === 'LEARNED_DIGITS' ? ` (${c.learnedDigits.join(', ')})` : ''}
-                                    {best!.arm === 'PAIR_PATTERN' && c.topPairs[0] ? ` (${c.topPairs[0].pair.split('').join('→')})` : ''}
-                                </span>
-                                <span>
-                                    {pct(best!.post, 1)} <small className='sf-muted'>base {pct(c.theoretical)}</small>
-                                </span>
-                                <span>about every {Math.max(1, Math.round(best!.waitTicks))} ticks</span>
-                                <span className={best!.evidence === 'LEAD' ? 'pos' : best!.evidence === 'AGAINST' ? 'neg' : ''}>{EVIDENCE_TEXT[best!.evidence]}</span>
-                            </div>
-                        ))}
+                        {brain!.cells.flatMap(c =>
+                            c.triggers.map(t => (
+                                <div className='tr' key={`${c.symbol}${c.key}${t.digit}`}>
+                                    <span>
+                                        {marketName(c.symbol)} · {c.label}
+                                    </span>
+                                    <span title={ARM_BY_ID.TRIGGER_DIGITS.blurb}>Digit {t.digit}</span>
+                                    <span>
+                                        {pct(t.rate, 1)} <small className='sf-muted'>base {pct(c.theoretical)} · {t.touches} touches</small>
+                                    </span>
+                                    <span>{t.windows.map(w => (w.rate === null ? '—' : `${Math.round(w.rate * 100)}%`)).join(' · ')}</span>
+                                    <span className={t.evidence === 'PROVEN' ? 'pos' : ''}>
+                                        {t.passed}/{t.windows.length} windows · {EVIDENCE_TEXT[t.evidence]}
+                                    </span>
+                                </div>
+                            ))
+                        )}
                     </div>
-                    <h3 className='sf-h3'>Every entry method, pooled over all markets</h3>
-                    <div className='sf-table' role='table' aria-label='Entry methods'>
-                        <div className='tr th'>
-                            <span>Method</span>
-                            <span>Shadow trades</span>
-                            <span>Win rate</span>
-                            <span>Against not firing</span>
-                            <span>Evidence</span>
-                        </div>
-                        {brain!.leaderboard.map(r => (
-                            <div className='tr' key={r.arm} title={ARM_BY_ID[r.arm].blurb}>
-                                <span>{ARM_BY_ID[r.arm].label}</span>
-                                <span>{r.n}</span>
-                                <span>{pct(r.rate, 1)}</span>
-                                <span>{r.edgePts === null ? '—' : `${pts(r.edgePts)} pts`}</span>
-                                <span className={r.evidence === 'LEAD' ? 'pos' : r.evidence === 'AGAINST' ? 'neg' : ''}>{EVIDENCE_TEXT[r.evidence]}</span>
-                            </div>
-                        ))}
-                    </div>
-                    {ledger.byArm.length > 0 && (
-                        <p className='sf-note'>Plans used so far: {ledger.byArm.map(a => `${a.label} ${a.wins}/${a.n}`).join(', ')}.</p>
-                    )}
+                    {ledger.byArm.length > 0 && <p className='sf-note'>Trades placed on entry digits so far: {ledger.byArm.map(a => `${a.wins}/${a.n}`).join(', ')}.</p>}
                 </>
             )}
             <p className='sf-note'>
-                The Brain replays 14 entry methods on each market’s last {brain?.cells[0]?.ticks ?? 1200} ticks and learns only from outcomes that have already printed. Each trade samples its plan from what it believes, so flat evidence rotates the
-                entry instead of repeating one that has been losing, and a plan that does not fire in a third of the wait window gives way to the next. After a loss it takes the most proven plan and the AI model must agree. Deriv digits are
-                random, so expect most methods to read “No edge yet”: the ledger above is the honest test of whether plan-timed entries beat a random tick.
-            </p>
-        </Panel>
-    );
-}
-
-function EntryLabPanel({ series, settings }: { series: Record<string, number[]>; settings: SixfoldSettings }) {
-    const contracts = useMemo(() => {
-        const list: Contract[] = [...primaryContracts(settings)];
-        if (settings.recovery) {
-            if (settings.useOver) list.push({ side: 'OVER', param: settings.recoveryOver });
-            if (settings.useUnder) list.push({ side: 'UNDER', param: settings.recoveryUnder });
-        }
-        return [...new Map(list.map(c => [contractKey(c), c])).values()];
-    }, [settings]);
-    const symbols = useMemo(() => settings.markets.filter(s => (series[s]?.length ?? 0) >= 200), [series, settings.markets]);
-    const rep = useMemo(() => entryLabReport(series, symbols, contracts, settings.duration), [series, symbols, contracts, settings.duration]);
-    const leads = rep.cells
-        .flatMap(c => c.rules.filter(r => r.rule !== 'IMMEDIATE' && (r.state === 'VALIDATED' || r.state === 'PROMISING')).map(r => ({ c, r })))
-        .sort((a, b) => (b.r.edgePts ?? 0) - (a.r.edgePts ?? 0))
-        .slice(0, 8);
-    return (
-        <Panel
-            eyebrow='ENTRY AUDIT'
-            title={!rep.cells.length ? 'Not enough ticks yet' : rep.validated ? `${rep.validated} entry rule${rep.validated > 1 ? 's' : ''} proved itself` : 'No entry rule has proved itself yet'}
-        >
-            <p className='sf-lede'>
-                {rep.tests} rule tests across {rep.cells.length} market and contract pairs. About {rep.expectedByChance} would look good by chance alone at p &lt; 0.05; {rep.promising} did, and{' '}
-                {rep.validated} also survived the false-discovery correction, held in both the earlier and later part of the history and had 100+ trades.
-            </p>
-            {leads.length > 0 && (
-                <div className='sf-table' role='table' aria-label='Entry audit leads'>
-                    <div className='tr th'>
-                        <span>Market · contract · rule</span>
-                        <span>Trades</span>
-                        <span>Win rate</span>
-                        <span>Edge</span>
-                        <span>Status</span>
-                    </div>
-                    {leads.map(({ c, r }) => (
-                        <div className='tr' key={`${c.symbol}${c.key}${r.rule}`}>
-                            <span>
-                                {marketName(c.symbol)} · {c.label} · {LAB_RULE_BY_ID[r.rule].label}
-                            </span>
-                            <span>{r.n}</span>
-                            <span>{r.rate === null ? '—' : pct(r.rate, 1)}</span>
-                            <span>{r.edgePts === null ? '—' : `${pts(r.edgePts)} pts`}</span>
-                            <span className={r.state === 'VALIDATED' ? 'pos' : ''}>{r.state === 'VALIDATED' ? 'Validated' : 'Promising'}</span>
-                        </div>
-                    ))}
-                </div>
-            )}
-            <p className='sf-note'>
-                The audit is the strict referee. Each rule is replayed on every market as a shadow trade that only sees ticks up to the entry, then compared with the ticks where it did not fire, and it only counts as proved when it
-                survives a false-discovery correction, holds in both the earlier and later history and has 100+ trades. The Entry Brain does not wait for this: every trade has a plan. The audit tells you whether any plan has truly proved
-                itself. Deriv digits are random, so an empty list is the expected result.
+                Each market’s last {brain?.cells[0]?.ticks ?? 1000} ticks are cut into {WINDOWS} windows, oldest to newest. For every digit, each time it printed the Lab checks whether the contract won, and a digit only counts as proven when it beat the contract’s base
+                rate in all but one window, including the two newest. The three best digits per market are its entry digits and the study is refreshed every few seconds. The trade record above compares them with entering on a random tick, so you
+                can see whether a digit that won before keeps winning on new ticks.
             </p>
         </Panel>
     );
@@ -1188,7 +1100,6 @@ function LabTab(p: {
 
             <EntryTestPanel series={p.series} contract={p.contract} settings={p.settings} />
             <EntryBrainPanel brain={p.brain} trades={p.trades} settings={p.settings} />
-            <EntryLabPanel series={p.series} settings={p.settings} />
 
             <Panel
                 eyebrow='SIMULATIONS'
