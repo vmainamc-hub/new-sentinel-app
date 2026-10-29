@@ -169,21 +169,28 @@ export function eligibility(cell: Cell, selectivity: Selectivity, bump = 0): Eli
         if (!cell.significant) return { ok: false, reason: 'Not significant after adjusting for scanned cells' };
         return cell.score >= need(70)
             ? { ok: true, reason: 'Significant and healthy' }
-            : { ok: false, reason: `Score below ${need(70)}${bump > 0 ? ' (stricter after a loss)' : ''}` };
+            : { ok: false, reason: `Score below ${need(70)}${bump > 0 ? ' (raised by a recent loss or the Meter)' : ''}` };
     }
     if (selectivity === 'balanced') {
         if (a.state !== 'VIABLE') return { ok: false, reason: `State is ${a.state.toLowerCase()}, not viable` };
         return cell.score >= need(62)
             ? { ok: true, reason: 'Viable and healthy' }
-            : { ok: false, reason: `Score below ${need(62)}${bump > 0 ? ' (stricter after a loss)' : ''}` };
+            : { ok: false, reason: `Score below ${need(62)}${bump > 0 ? ' (raised by a recent loss or the Meter)' : ''}` };
     }
     if ((cell.edgePts ?? -99) < -1) return { ok: false, reason: 'More than a point under break-even' };
     return cell.score >= need(50)
         ? { ok: true, reason: 'Best available' }
-        : { ok: false, reason: `Score below ${need(50)}${bump > 0 ? ' (stricter after a loss)' : ''}` };
+        : { ok: false, reason: `Score below ${need(50)}${bump > 0 ? ' (raised by a recent loss or the Meter)' : ''}` };
 }
 
 export type Pick = { cell: Cell; why: string; entryDigits: number[] };
+
+/** Per-cell adjustments from outside the scanner (the Meter guide): extra score bar, ordering bonus, and a veto. */
+export type PickAdjust = {
+    bump?: (cell: Cell) => number;
+    rank?: (cell: Cell) => number;
+    veto?: (cell: Cell) => boolean;
+};
 
 /** Highest-scoring eligible cell, skipping markets / contracts the caller has taken out. */
 export function pickBest(
@@ -191,18 +198,23 @@ export function pickBest(
     selectivity: Selectivity,
     entry: { mode: 'SETUP' | 'ANY' },
     skip: { symbols?: ReadonlySet<string>; keys?: ReadonlySet<string> } = {},
-    bump = 0
+    bump = 0,
+    adjust?: PickAdjust
 ): Pick | null {
     let best: Pick | null = null;
+    let bestRank = -Infinity;
     for (const cell of scan.cells) {
         if (skip.symbols?.has(cell.symbol) || skip.keys?.has(`${cell.symbol}|${cell.key}`)) continue;
-        const e = eligibility(cell, selectivity, bump);
+        if (adjust?.veto?.(cell)) continue;
+        const e = eligibility(cell, selectivity, bump + (adjust?.bump?.(cell) ?? 0));
         if (!e.ok) continue;
+        const rank = cell.score + (adjust?.rank?.(cell) ?? 0);
         const better =
             !best ||
-            cell.score > best.cell.score ||
-            (cell.score === best.cell.score && (cell.edgePts ?? -99) > (best.cell.edgePts ?? -99));
+            rank > bestRank ||
+            (rank === bestRank && (cell.edgePts ?? -99) > (best.cell.edgePts ?? -99));
         if (better) {
+            bestRank = rank;
             best = {
                 cell,
                 why: e.reason,

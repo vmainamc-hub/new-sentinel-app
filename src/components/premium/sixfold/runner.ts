@@ -27,7 +27,8 @@ import {
 } from './money';
 import { type Contract, contractKey } from './bot';
 import { type ArmId, type BrainReport, brainReport, choosePlan, fallbackPlan, findCell, type Plan, planFires } from './entry-brain';
-import { computeRegime, type RegimeSummary } from './regime';
+import { climateOf, IDLE_STATUS, meterCall, type MeterCall, type MeterStatus } from './meter-guide';
+import { computeRegime, regimeCell, type RegimeSummary } from './regime';
 import { type Cell, eligibility, pickBest, type ScanResult, scanMarkets } from './scanner';
 import { mulberry32 } from './stats';
 
@@ -52,6 +53,10 @@ const REST_MAX_MS = 5 * 60_000;
 /** Extra score asked for right after a loss, and how fast it fades while nothing qualifies. */
 const PICKY_BUMP = 10;
 const PICKY_FADE_MS = 15_000;
+/** An armed contract is only dropped for score when it falls this far under the bar it was armed at, so it does not flap. */
+const ARMED_HYSTERESIS = 4;
+/** A contract found cold at the moment of purchase is left alone for this long. */
+const COLD_AT_BUY_BLOCK_MS = 10_000;
 /** The armed market must have printed a tick this recently, or it is not traded. */
 const FRESH_TICK_MS = 5_000;
 /** Give up waiting for the feed to come up after this long. */
@@ -126,6 +131,8 @@ export type SixfoldSnapshot = {
     pickyBump: number;
     /** The Meter: the regime each market and contract is in, and the overall verdict. */
     regime: RegimeSummary | null;
+    /** The Meter guide: the climate and the extra score bar it currently asks for. */
+    meterGuide: MeterStatus;
     /** The Entry Brain's latest replay of every market, or null when it has not been needed yet. */
     brain: BrainReport | null;
 };
@@ -196,6 +203,10 @@ export class SixfoldRunner {
     private lastLossEntry = new Map<string, number>();
     private lastResultAt = 0;
     private regime: RegimeSummary | null = null;
+    /** The Meter's read of the contracts that will actually be bought next (the recovery barriers after a loss). */
+    private tradeRegime: RegimeSummary | null = null;
+    /** Start of the wait the Meter's extra bar fades over: Run, or the last result. */
+    private meterSince = 0;
     private aborts = new Set<AbortController>();
     private listeners = new Set<() => void>();
     private emitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -286,6 +297,7 @@ export class SixfoldRunner {
         this.rest.clear();
         this.lastLossEntry.clear();
         this.lastResultAt = 0;
+        this.meterSince = this.io.now();
         this.armed = null;
         this.session = freshSession(this.settings);
         this.runToken += 1;
@@ -384,8 +396,12 @@ export class SixfoldRunner {
         // Keep the armed contract while it stays eligible; otherwise look again.
         if (this.armed) {
             const cell = this.scan.cells.find(c => c.symbol === this.armed!.symbol && c.key === this.armed!.cellKey);
-            const verdict = cell ? eligibility(cell, this.settings.selectivity, this.pickyBump(now)) : null;
-            if (cell && this.coldKeys().has(`${cell.symbol}|${cell.key}`)) {
+            const call = cell ? this.meterFor(cell, now) : null;
+            // Hysteresis: it was armed at the full bar, so it is only dropped once it falls clearly below it.
+            const verdict = cell
+                ? eligibility(cell, this.settings.selectivity, Math.max(0, this.pickyBump(now) + (call?.bump ?? 0) - ARMED_HYSTERESIS))
+                : null;
+            if (cell && call && !call.allow) {
                 this.addLog('info', `${this.armed.label} on ${this.armed.name} dropped: the Meter reads a loss cluster there.`);
                 this.armed = null;
             } else if (!cell || !verdict?.ok) {
@@ -413,6 +429,7 @@ export class SixfoldRunner {
         if (this.settings.entry !== 'ANY' && !this.brainGoverns() && !this.armed.entryDigits.includes(digit)) return;
         if (!this.recoveryFormOk(symbol)) return;
         if (!this.brainOk(symbol)) return;
+        if (!this.meterFresh(symbol)) return;
         void this.execute(digit);
     }
 
@@ -423,14 +440,20 @@ export class SixfoldRunner {
             if (until > now) skipKeys.add(key);
             else this.blocked.delete(key);
         });
-        this.coldKeys().forEach(k => skipKeys.add(k));
         const skipSymbols = new Set<string>([...this.quarantined, ...this.restedSymbols(now)]);
         const pick = pickBest(
             this.scan,
             this.settings.selectivity,
             { mode: this.scanMode() },
             { symbols: skipSymbols, keys: skipKeys },
-            this.pickyBump(now)
+            this.pickyBump(now),
+            this.settings.meterGuide
+                ? {
+                      bump: cell => this.meterFor(cell, now).bump,
+                      rank: cell => this.meterFor(cell, now).rank,
+                      veto: cell => !this.meterFor(cell, now).allow,
+                  }
+                : undefined
         );
         if (!pick) return;
         const { cell } = pick;
@@ -473,7 +496,7 @@ export class SixfoldRunner {
         );
         if (this.settings.entry === 'ANY' || this.brainGoverns()) {
             const digit = this.io.feed.getLastDigit(cell.symbol);
-            if (digit !== null && this.recoveryFormOk(cell.symbol) && this.brainOk(cell.symbol)) void this.execute(digit);
+            if (digit !== null && this.recoveryFormOk(cell.symbol) && this.brainOk(cell.symbol) && this.meterFresh(cell.symbol)) void this.execute(digit);
         }
     }
 
@@ -563,12 +586,60 @@ export class SixfoldRunner {
         return formGateOk(this.settings.recoveryEntry, this.settings.recoveryForm, series, traded);
     }
 
-    /** Market and contract pairs the Meter reads as cold, when the Meter gate is on. */
-    private coldKeys(): Set<string> {
-        const out = new Set<string>();
-        if (!this.settings.meterGate || !this.regime) return out;
-        for (const c of this.regime.cells) if (c.state === 'COLD') out.add(`${c.symbol}|${c.key}`);
-        return out;
+    /**
+     * What the Meter says about buying this cell now. It reads the contract that WOULD be bought (the recovery barrier after
+     * a loss), the market-wide climate, and how long the bot has waited since its last result.
+     */
+    private meterFor(cell: Cell, now: number): MeterCall {
+        if (!this.settings.meterGuide) return { allow: true, bump: 0, rank: 0, note: '' };
+        const traded = tradeContract(cell.contract, this.session.consecutiveLosses, this.settings).contract;
+        const reading = this.tradeRegime?.cells.find(c => c.symbol === cell.symbol && c.key === contractKey(traded)) ?? null;
+        return meterCall({
+            climate: climateOf(this.tradeRegime),
+            cell: reading,
+            recovering: this.isRecovering(),
+            waitedMs: now - this.meterSince,
+            patienceMs: this.settings.meterPatience * 1000,
+        });
+    }
+
+    /**
+     * Last look at the moment of purchase. The scan is up to a second and a half old, so the contract about to be bought is
+     * read afresh from the live ticks; if it has just fallen into a loss cluster it is not bought.
+     */
+    private meterFresh(symbol: string): boolean {
+        if (!this.settings.meterGuide || !this.armed) return true;
+        const traded = this.tradedFor(symbol);
+        if (!traded) return true;
+        const reading = regimeCell(symbol, this.io.feed.getLiveSeries()[symbol] ?? [], traded);
+        if (!reading || reading.state !== 'COLD') return true;
+        const armed = this.armed;
+        this.blocked.set(`${armed.symbol}|${armed.cellKey}`, this.io.now() + COLD_AT_BUY_BLOCK_MS);
+        this.armed = null;
+        this.addLog('info', `${armed.label} on ${armed.name} not bought: it just fell into a loss cluster on the Meter.`);
+        this.emit();
+        return false;
+    }
+
+    /** The climate and the extra bar an average contract faces right now, for the page. */
+    private meterStatus(now: number): MeterStatus {
+        if (!this.settings.meterGuide) return IDLE_STATUS;
+        const climate = climateOf(this.tradeRegime);
+        if (!climate) return { ...IDLE_STATUS, on: true };
+        const patienceMs = this.settings.meterPatience * 1000;
+        const waitedMs = now - this.meterSince;
+        const recovering = this.isRecovering();
+        const call = meterCall({ climate, cell: null, recovering, waitedMs, patienceMs });
+        const full = meterCall({ climate, cell: null, recovering, waitedMs: 0, patienceMs });
+        return {
+            on: true,
+            verdict: climate.verdict,
+            meter: climate.meter,
+            coldShare: climate.coldShare,
+            bump: call.bump,
+            recovering,
+            easesInSec: full.bump > 0 ? Math.max(0, Math.ceil((patienceMs - waitedMs) / 1000)) : 0,
+        };
     }
 
     private restedSymbols(now: number): Set<string> {
@@ -612,8 +683,18 @@ export class SixfoldRunner {
             }
         }
         this.regime = computeRegime(series, symbols, primaryContracts(this.settings), now);
+        // After a loss the contracts bought are the recovery barriers, so the guide reads those, not the armed ones.
+        const nextContracts = [
+            ...new Map(
+                primaryContracts(this.settings).map(c => {
+                    const t = tradeContract(c, this.session.consecutiveLosses, this.settings).contract;
+                    return [contractKey(t), t] as const;
+                })
+            ).values(),
+        ];
+        const samePrimary = nextContracts.every(c => primaryContracts(this.settings).some(p => contractKey(p) === contractKey(c)));
+        this.tradeRegime = samePrimary ? this.regime : computeRegime(series, symbols, nextContracts, now);
         const rested = this.restedSymbols(now);
-        const cold = this.coldKeys();
         const bump = this.pickyBump(now);
         this.queue = this.scan.cells
             .filter(c => c.executable && !this.quarantined.has(c.symbol))
@@ -621,8 +702,10 @@ export class SixfoldRunner {
             .slice(0, 8)
             .map(cell => {
                 if (rested.has(cell.symbol)) return { cell, ok: false, reason: 'Resting after a loss on this market' };
-                if (cold.has(`${cell.symbol}|${cell.key}`)) return { cell, ok: false, reason: 'Loss cluster on the Meter' };
-                return { cell, ...eligibility(cell, this.settings.selectivity, bump) };
+                const call = this.meterFor(cell, now);
+                if (!call.allow) return { cell, ok: false, reason: 'Loss cluster on the Meter' };
+                const e = eligibility(cell, this.settings.selectivity, bump + call.bump);
+                return { cell, ok: e.ok, reason: e.ok && call.bump > 0 ? `${e.reason}; ${call.note}` : e.reason };
             });
         this.scheduleEmit();
     }
@@ -826,6 +909,8 @@ export class SixfoldRunner {
         } else {
             this.session = applyResult(this.session, profit, this.settings);
             this.lastResultAt = this.io.now();
+            this.meterSince = this.lastResultAt;
+            this.scanAt = 0; // the next scan reads the contracts that will be bought after this result
             if (trade) this.updateShield(trade.symbol, trade.name, trade.entryDigit, profit < 0);
             if (trade) {
                 trade.profit = profit;
@@ -880,6 +965,7 @@ export class SixfoldRunner {
             })),
             pickyBump: this.pickyBump(this.io.now()),
             regime: this.regime,
+            meterGuide: this.meterStatus(this.io.now()),
             brain: this.brain,
         };
     }

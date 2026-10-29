@@ -1,5 +1,5 @@
 import { TradeRequestError } from '@/utils/trade-errors';
-import { DEFAULT_SETTINGS, type SixfoldSettings } from '../money';
+import { DEFAULT_SETTINGS, normalizeSettings, type SixfoldSettings } from '../money';
 import { MIN_TICKS, type RunnerIO, SixfoldRunner } from '../runner';
 
 // A market where Over 2 wins on every simulated trade (1 -> 7 -> 1 -> 7 ...), so the scanner finds it at once.
@@ -73,7 +73,7 @@ function harness(over: Partial<SixfoldSettings> = {}, io: Partial<RunnerIO> = {}
         currency: () => 'USD',
         afterStop: () => {},
         now: () => t,
-        loadSettings: () => ({ ...DEFAULT_SETTINGS, entry: 'SMART', markets: ['P', 'Q'], selectivity: 'strict', lossShield: false, pickyAfterLoss: false, ...over }),
+        loadSettings: () => ({ ...DEFAULT_SETTINGS, entry: 'SMART', markets: ['P', 'Q'], selectivity: 'strict', lossShield: false, pickyAfterLoss: false, meterGuide: false, ...over }),
         saveSettings: () => {},
         ...io,
     });
@@ -649,7 +649,7 @@ describe('SixfoldRunner Meter gate', () => {
     });
     it('skips a contract in a loss cluster only when the gate is on', () => {
         const mk = (gate: boolean) => {
-            const h = harness({ selectivity: 'active', markets: ['P'], useUnder: false, meterGate: gate });
+            const h = harness({ selectivity: 'active', markets: ['P'], useUnder: false, meterGuide: gate });
             // Over 2 looks fine historically (1,7,1,7...) but the last six ticks all lose.
             h.series.P.push(0, 0, 0, 0, 0, 0);
             h.runner.start();
@@ -661,5 +661,115 @@ describe('SixfoldRunner Meter gate', () => {
         const on = mk(true);
         expect(on.runner.getSnapshot().armed).toBeNull();
         expect(on.runner.getSnapshot().queue[0].reason).toMatch(/Meter/);
+    });
+});
+
+describe('SixfoldRunner Meter guide', () => {
+    // Over 2 wins on 80% of ticks here, evenly spread: a healthy, un-clustered contract.
+    const healthy = Array.from({ length: 600 }, (_, i) => [1, 5, 6, 7, 8][i % 5]);
+    // The same, but the last 30 ticks only won 18 times (no long losing run): below normal without being a loss cluster.
+    const poorTail = () => {
+        const s = healthy.slice(0, 570);
+        for (let i = 0; i < 30; i++) s.push(i % 5 === 0 || i % 5 === 2 ? 1 : 6);
+        return s;
+    };
+    const setup = (over: Partial<SixfoldSettings>, digits: number[]) => {
+        const h = harness({ selectivity: 'active', markets: ['P'], useUnder: false, meterGuide: true, ...over });
+        h.series.P.splice(0, h.series.P.length, ...digits);
+        return h;
+    };
+
+    // Random-looking digits whose Over 2 reading scores 60 and whose last 30 ticks run weak but not clustered: the Meter asks
+    // for more score than it has until it has waited.
+    const mkNoise = (seed: number) => {
+        let a = seed;
+        return Array.from({ length: 600 }, () => ((a = (a * 1103515245 + 12345) & 0x7fffffff), (a >> 8) % 10));
+    };
+
+    it('trades a contract the Meter reads well, with no extra bar', () => {
+        const h = setup({}, healthy);
+        h.runner.start();
+        const s = h.runner.getSnapshot();
+        expect(s.armed?.label).toBe('Over 2');
+        expect(s.meterGuide).toMatchObject({ on: true, verdict: 'GO', bump: 0 });
+    });
+
+    it('raises the bar on a weak reading, then eases off while it waits instead of locking trading', () => {
+        const guided = setup({}, mkNoise(25));
+        guided.runner.start();
+        let s = guided.runner.getSnapshot();
+        expect(s.armed).toBeNull();
+        expect(s.queue[0].reason).toMatch(/Meter/);
+        expect(s.meterGuide.bump).toBeGreaterThan(0);
+        expect(s.meterGuide.easesInSec).toBeGreaterThan(0);
+        // The very same contract is taken when the guide is off: the Meter, not the scanner, held it back.
+        const free = setup({ meterGuide: false }, mkNoise(25));
+        free.runner.start();
+        expect(free.runner.getSnapshot().armed).not.toBeNull();
+        // Still held shortly after; then, well before the patience has run out, the bar has eased enough to take it.
+        guided.advance(10_000);
+        guided.runner.tick();
+        expect(guided.runner.getSnapshot().armed).toBeNull();
+        guided.advance(40_000);
+        guided.runner.tick();
+        s = guided.runner.getSnapshot();
+        expect(s.armed?.label).toBe('Over 2');
+        expect(s.meterGuide.bump).toBeGreaterThan(0);
+        expect(s.meterGuide.bump).toBeLessThan(10);
+    });
+
+    it('does not buy a contract that fell into a loss cluster after the last scan', async () => {
+        const run = async (guide: boolean) => {
+            const h = setup({ meterGuide: guide }, healthy.slice());
+            h.runner.start();
+            const entry = h.runner.getSnapshot().armed!.entryDigits[0];
+            h.series.P.push(0, 0, 0, 0, 0); // five losses in a row since the scan: the stored reading is stale
+            h.runner.handleFeedTick('P', entry);
+            await flush();
+            return h;
+        };
+        const off = await run(false);
+        expect(off.calls.buy).toHaveLength(1);
+        const on = await run(true);
+        expect(on.calls.buy).toHaveLength(0);
+        expect(on.runner.getSnapshot().armed).toBeNull();
+        expect(on.runner.getSnapshot().log[0].text).toMatch(/loss cluster/i);
+    });
+
+    it('reads the recovery contract it will buy, not the one that was armed', async () => {
+        // Over 2 is fine here (3 > 2) but Over 3 has just lost six times running (3 is not above 3).
+        const digits = [...healthy.slice(0, 594), 3, 3, 3, 3, 3, 3];
+        const run = async (guide: boolean) => {
+            const h = setup({ meterGuide: guide, takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, recovery: true, recoveryOver: 3 }, digits.slice());
+            h.runner.start();
+            const entry = h.runner.getSnapshot().armed!.entryDigits[0];
+            h.queueProfits(-1);
+            h.runner.handleFeedTick('P', entry); // the first trade is a normal Over 2 and loses
+            await flush();
+            h.advance(2_000);
+            h.runner.tick();
+            return h;
+        };
+        const off = await run(false);
+        expect(off.runner.getSnapshot().session.consecutiveLosses).toBe(1);
+        expect(off.runner.getSnapshot().armed).not.toBeNull();
+        const on = await run(true);
+        expect(on.runner.getSnapshot().session.consecutiveLosses).toBe(1);
+        expect(on.runner.getSnapshot().armed).toBeNull();
+        expect(on.runner.getSnapshot().queue[0].reason).toMatch(/loss cluster/i);
+    });
+
+    it('does nothing at all when the guide is off', () => {
+        const h = setup({ meterGuide: false }, mkNoise(25));
+        h.runner.start();
+        expect(h.runner.getSnapshot().meterGuide.on).toBe(false);
+        expect(h.runner.getSnapshot().queue[0].reason).not.toMatch(/Meter/);
+    });
+
+    it('is on by default, and an old saved meterGate setting is ignored', () => {
+        expect(DEFAULT_SETTINGS.meterGuide).toBe(true);
+        expect(normalizeSettings({ meterGate: false } as never).meterGuide).toBe(true);
+        expect(normalizeSettings({ meterPatience: 5 }).meterPatience).toBe(10);
+        expect(normalizeSettings({ meterPatience: 9999 }).meterPatience).toBe(600);
     });
 });

@@ -407,6 +407,17 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                     </div>
                 )}
                 <Switch on={s.pickyAfterLoss} onChange={v => set({ pickyAfterLoss: v })} title='Pickier after a loss' sub='Ask for a higher score next' />
+                <Switch
+                    on={s.meterGuide}
+                    onChange={v => set({ meterGuide: v })}
+                    title='Meter guide'
+                    sub='Trade when the Meter reads well; recovery asks for more'
+                />
+                {s.meterGuide && (
+                    <div className='sf-sub'>
+                        <Num label='Meter patience (s)' value={s.meterPatience} onCommit={n => set({ meterPatience: n })} hint='10–600: how long its extra bar takes to ease off' />
+                    </div>
+                )}
                 <div className='sf-grid3'>
                     <Num label='Length (ticks)' value={s.duration} onCommit={n => set({ duration: n })} />
                     <Num label='Wait (s)' value={s.waitSeconds} onCommit={n => set({ waitSeconds: n })} hint='for entry' />
@@ -446,6 +457,23 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                                 </span>
                             )}
                             {sx.pickyBump > 0 && <span>Pickier: +{sx.pickyBump} score</span>}
+                        </div>
+                    )}
+                    {sx.running && sx.meterGuide.on && sx.meterGuide.verdict !== 'LOADING' && (
+                        <div
+                            className='sf-rest'
+                            role='status'
+                            title='The Meter guide never buys a contract in a loss cluster. A poor Meter raises the score a trade needs (recovery most), and that extra bar eases off while Sixfold waits.'
+                        >
+                            <span>
+                                Meter {sx.meterGuide.meter} · {sx.meterGuide.verdict === 'GO' ? 'good' : sx.meterGuide.verdict === 'AVOID' ? 'poor' : 'mixed'}
+                                {sx.meterGuide.recovering ? ' · recovery' : ''}
+                            </span>
+                            <span>
+                                {sx.meterGuide.bump > 0
+                                    ? `Asking +${sx.meterGuide.bump} score${sx.meterGuide.easesInSec > 0 ? `, easing off over ${sx.meterGuide.easesInSec}s` : ''}`
+                                    : 'No extra bar'}
+                            </span>
                         </div>
                     )}
                     {sx.running && sx.armed?.plan && (
