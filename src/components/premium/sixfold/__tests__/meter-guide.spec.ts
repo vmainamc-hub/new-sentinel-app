@@ -84,4 +84,37 @@ describe('meterCall', () => {
         expect(climateOf(r)).toEqual({ meter: 47, coldShare: 0.25, verdict: 'WAIT' });
         expect(climateOf(null)).toBeNull();
     });
+
+    describe('hard floor', () => {
+        const at = (climate: number, cell: number, floor: number, recovering = false, waitedMs = 0) =>
+            meterCall({
+                ...base,
+                floor,
+                recovering,
+                waitedMs,
+                climate: { meter: climate, coldShare: 0, verdict: climate >= 50 ? 'GO' : 'WAIT' },
+                cell: { state: 'NORMAL', strength: cell },
+            });
+
+        it('buys at the floor and not under it, for the market-wide Meter and for the contract', () => {
+            expect(at(50, 50, 50).allow).toBe(true);
+            expect(at(49, 60, 50).allow).toBe(false);
+            expect(at(60, 49, 50).allow).toBe(false);
+            expect(at(49, 60, 50).note).toMatch(/Meter 49 is under the 50 floor/);
+        });
+
+        it('uses the recovery floor for recovery: 51 passes a normal trade but not a recovery trade at 52', () => {
+            expect(at(51, 51, 50, false).allow).toBe(true);
+            expect(at(51, 51, 52, true).allow).toBe(false);
+            expect(at(52, 52, 52, true).allow).toBe(true);
+        });
+
+        it('never eases off with waiting', () => {
+            for (const waitedMs of [0, 90_000, 60 * 60_000]) expect(at(40, 40, 50, false, waitedMs).allow).toBe(false);
+        });
+
+        it('is off at 0', () => {
+            expect(at(10, 10, 0).allow).toBe(true);
+        });
+    });
 });
