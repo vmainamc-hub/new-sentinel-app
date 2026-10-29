@@ -109,3 +109,29 @@ describe('meterTrackRecord', () => {
         expect(t.informative).toBe(false);
     });
 });
+
+import { computeRegimeFromSnapshot } from '../regime';
+
+describe('digits in the strip and per-market updates', () => {
+    it('keeps the digits behind each square, oldest first', () => {
+        const d = [...rnd(11, 80), 4, 1, 4, 1];
+        const c = regimeCell('A', d, over2)!;
+        expect(c.digits).toHaveLength(24);
+        expect(c.digits.slice(-4)).toEqual([4, 1, 4, 1]);
+        expect(c.strip.slice(-4)).toEqual([true, false, true, false]); // Over 2: 4 wins, 1 loses
+        const u = regimeCell('A', d, under7)!;
+        expect(u.strip.slice(-4)).toEqual([true, true, true, true]); // Under 7: both win
+    });
+    it('recomputes a market only when that market got new ticks', () => {
+        const a = rnd(21, 200);
+        const b = rnd(22, 200);
+        const first = computeRegimeFromSnapshot({ A: a, B: b }, ['A', 'B'], [over2], 0);
+        const again = computeRegimeFromSnapshot({ A: a, B: b }, ['A', 'B'], [over2], 1);
+        expect(again.cells[0].strip).toBe(first.cells[0].strip); // same arrays: nothing recomputed
+        expect(again.cells[1].strip).toBe(first.cells[1].strip);
+        const a2 = [...a, 5]; // only A ticked
+        const next = computeRegimeFromSnapshot({ A: a2, B: b }, ['A', 'B'], [over2], 2);
+        expect(next.cells[0].strip).not.toBe(first.cells[0].strip);
+        expect(next.cells[1].strip).toBe(first.cells[1].strip);
+    });
+});

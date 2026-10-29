@@ -19,6 +19,29 @@ export const MARKETS: ReadonlyArray<readonly [string, string]> = [
 export const marketName = (symbol: string) => MARKETS.find(m => m[0] === symbol)?.[1] ?? symbol;
 
 export const MAX_TICKS = 2000;
+
+/** Seconds between ticks that Deriv documents for a market: 1 for the 1s indices, 2 for the plain volatility indices. */
+export const expectedTickSeconds = (symbol: string): number => (symbol.startsWith('1HZ') ? 1 : 2);
+
+export type FeedTelemetry = {
+    symbol: string;
+    expected: number;
+    /** Median seconds between the last ticks, read from Deriv's own tick clock (null until 3 ticks). */
+    measured: number | null;
+    /** Ticks that arrived in the last 60 seconds. */
+    lastMinute: number;
+    /** Seconds since the last tick arrived. */
+    ageSeconds: number | null;
+    /** Live ticks accepted since connecting. */
+    accepted: number;
+    /** Ticks dropped because their Deriv timestamp was not newer than the last one (a repeat or out-of-order delivery). */
+    dropped: number;
+    /** Ticks for a market that is not one of the ten Sixfold tracks. */
+    foreign: number;
+};
+
+const TELEMETRY_KEEP = 40;
+type Tel = { epochs: number[]; arrivals: number[]; accepted: number; dropped: number };
 export const LEGACY_ENDPOINT = 'wss://ws.binaryws.com/websockets/v3?app_id=1089';
 
 /** Deriv reports either a decimal count (2) or a pip value (0.01). Returns decimals, or null if unusable. */
@@ -75,6 +98,8 @@ export class SixfoldFeed {
     private dirty = new Set<string>();
     private decimals: Record<string, number> = {};
     private lastTick: Record<string, number> = {};
+    private tel: Record<string, Tel> = {};
+    private foreign = 0;
     private socket: SocketLike | null = null;
     private generation = 0;
     private attempts = 0;
@@ -104,6 +129,28 @@ export class SixfoldFeed {
     getLiveSeries = (): Series => this.buf;
     getLastDigit = (symbol: string): number | null => this.buf[symbol]?.at(-1) ?? null;
     getLastTickAt = (symbol: string): number | null => this.lastTick[symbol] ?? null;
+    /** How each market's ticks are actually arriving: measured rate against Deriv's documented rate. */
+    getTelemetry = (): FeedTelemetry[] => {
+        const now = this.now();
+        return SYMBOLS.map(symbol => {
+            const t = this.tel[symbol];
+            const gaps: number[] = [];
+            if (t) for (let i = 1; i < t.epochs.length; i++) gaps.push(t.epochs[i] - t.epochs[i - 1]);
+            const sorted = gaps.slice().sort((a, b) => a - b);
+            const measured = sorted.length >= 3 ? sorted[Math.floor(sorted.length / 2)] : null;
+            const last = this.lastTick[symbol];
+            return {
+                symbol,
+                expected: expectedTickSeconds(symbol),
+                measured,
+                lastMinute: t ? t.arrivals.filter(a => now - a <= 60_000).length : 0,
+                ageSeconds: last === undefined ? null : Math.max(0, (now - last) / 1000),
+                accepted: t?.accepted ?? 0,
+                dropped: t?.dropped ?? 0,
+                foreign: this.foreign,
+            };
+        });
+    };
     isLive = () => this.mode === 'live' && this.status === 'live';
     getMode = () => this.mode;
     getStatus = () => this.status;
@@ -127,6 +174,8 @@ export class SixfoldFeed {
         const mine = this.generation;
         this.mode = 'live';
         this.error = '';
+        this.tel = {};
+        this.foreign = 0;
         this.replaceAll({});
         this.attempts = 0;
         this.setStatus('connecting');
@@ -285,17 +334,39 @@ export class SixfoldFeed {
         }
         if (msg.msg_type === 'history' && msg.history?.prices) {
             const symbol: string | undefined = msg.echo_req?.ticks_history;
-            if (!symbol) return;
+            if (!symbol || !SYMBOLS.includes(symbol)) return;
             const prices: number[] = msg.history.prices.map(Number);
             const places = pipDecimals(msg.pip_size) ?? inferDecimals(prices);
             this.decimals[symbol] = places;
             this.buf[symbol] = prices.map(q => digitFromQuote(q, places)).slice(-MAX_TICKS);
+            // Deriv's own tick times: they show the market's real rate straight away and let repeats be recognised.
+            const times: number[] = Array.isArray(msg.history.times) ? msg.history.times.map(Number).filter(Number.isFinite) : [];
+            this.tel[symbol] = { epochs: times.slice(-TELEMETRY_KEEP), arrivals: [], accepted: 0, dropped: 0 };
             this.lastTick[symbol] = this.now();
             this.dirty.add(symbol);
             this.schedulePublish();
         }
         if (msg.msg_type === 'tick' && msg.tick?.symbol) {
             const symbol: string = msg.tick.symbol;
+            // Each tick belongs to exactly the market it names. Anything else is ignored rather than guessed at.
+            if (!SYMBOLS.includes(symbol)) {
+                this.foreign += 1;
+                return;
+            }
+            const t = (this.tel[symbol] ??= { epochs: [], arrivals: [], accepted: 0, dropped: 0 });
+            const epoch = Number(msg.tick.epoch);
+            const lastEpoch = t.epochs.at(-1);
+            if (Number.isFinite(epoch) && lastEpoch !== undefined && epoch <= lastEpoch) {
+                t.dropped += 1; // a repeat or out-of-order delivery: never counted as a new tick
+                return;
+            }
+            if (Number.isFinite(epoch)) {
+                t.epochs.push(epoch);
+                if (t.epochs.length > TELEMETRY_KEEP) t.epochs.splice(0, t.epochs.length - TELEMETRY_KEEP);
+            }
+            t.arrivals.push(this.now());
+            if (t.arrivals.length > 150) t.arrivals.splice(0, t.arrivals.length - 150);
+            t.accepted += 1;
             const places = pipDecimals(msg.tick.pip_size) ?? this.decimals[symbol] ?? 2;
             this.decimals[symbol] = places;
             const digit = digitFromQuote(Number(msg.tick.quote), places);

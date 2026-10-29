@@ -9,6 +9,7 @@ import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from
 import { bankrollSim, calibrateLabels, contractRuns, entryTest, rollingRate, structureTable, transitionTest, uniformityTest } from './analysis';
 import { sentinelAgreement } from './agree';
 import { MeterStrip, MeterTab } from './meter-ui';
+import { computeRegimeFromSnapshot } from './regime';
 import type { RecoveryEntry } from './entry';
 import { type BotConfig, type Contract, contractKey, contractLabel, DEFAULT_BOT, equityCurve, isValidContract, winProbability } from './bot';
 import { bestPerMarket, type Cell, eligibility } from './scanner';
@@ -171,6 +172,11 @@ const SixfoldPage = () => {
     const feed = useFeed();
     const sx = useSixfold(true);
     const [tab, setTab] = useState<Tab>('scanner');
+    // Read straight from the published ticks: a market's strip changes only when that market's own ticks arrive.
+    const regime = useMemo(
+        () => computeRegimeFromSnapshot(feed.series, sx.settings.markets, primaryContracts(sx.settings), Date.now()),
+        [feed.series, sx.settings]
+    );
     const [market, setMarket] = useState('1HZ10V');
     const [contract, setContract] = useState<Contract>({ side: 'OVER', param: 2 });
     const [importText, setImportText] = useState('');
@@ -211,9 +217,9 @@ const SixfoldPage = () => {
                 {feed.error && <span className='sf-msg bad'>{feed.error}</span>}
             </section>
 
-            {tab === 'scanner' && <MeterStrip regime={sx.regime} running={sx.running} onOpen={() => setTab('meter')} />}
+            {tab === 'scanner' && <MeterStrip regime={regime} running={sx.running} onOpen={() => setTab('meter')} />}
             {tab === 'scanner' && <ScannerTab sx={sx} openContract={open} />}
-            {tab === 'meter' && <MeterTab regime={sx.regime} series={feed.series} settings={sx.settings} panel={Panel} />}
+            {tab === 'meter' && <MeterTab regime={regime} series={feed.series} settings={sx.settings} panel={Panel} />}
             {tab === 'board' && <BoardTab sx={sx} open={open} />}
             {tab === 'contract' && (
                 <ContractTab
@@ -516,6 +522,9 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                                 <span>
                                     {t.label}
                                     {t.recovery ? ' ↺' : ''}
+                                </span>
+                                <span className='dg' title='entry digit, then the digit the contract settled on'>
+                                    <i>{t.entryDigit ?? '·'}</i>→<i className={t.status === 'won' ? 'w' : t.status === 'lost' ? 'l' : ''}>{t.exitDigit ?? '·'}</i>
                                 </span>
                                 <span>stake {t.stake.toFixed(2)}</span>
                                 <em>{t.profit === null ? (t.status === 'open' ? 'open' : '?') : money(t.profit)}</em>

@@ -1,7 +1,7 @@
 // Sixfold Meter screens: a compact verdict bar for the Scanner and a full Meter tab.
-import { type ReactNode, useMemo } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { primaryContracts, type SixfoldSettings } from './money';
-import { marketName, shortName } from './feed';
+import { expectedTickSeconds, type FeedTelemetry, marketName, shortName, sixfoldFeed } from './feed';
 import { meterTrackRecord, type RegimeCell, type RegimeState, type RegimeSummary, type Verdict } from './regime';
 import { sixfoldRunner } from './runner-instance';
 
@@ -39,12 +39,41 @@ export function Gauge({ value, verdict, size = 200 }: { value: number; verdict: 
 }
 
 const Strip = ({ cell }: { cell: RegimeCell }) => (
-    <div className='mt-strip' aria-label={`Last ${cell.strip.length} results, oldest first`}>
+    <div className='mt-strip' role='list' aria-label={`Last ${cell.strip.length} results with their digits, oldest first`}>
         {cell.strip.map((w, i) => (
-            <i key={i} className={w ? 'w' : 'l'} title={w ? 'win' : 'loss'} />
+            <i key={i} role='listitem' className={w ? 'w' : 'l'} title={`digit ${cell.digits[i]}: ${w ? 'win' : 'loss'}`}>
+                {cell.digits[i]}
+            </i>
         ))}
     </div>
 );
+
+/** Live arrival rate of each market, polled once a second. */
+function useTelemetry(): Record<string, FeedTelemetry> {
+    const [tel, setTel] = useState<Record<string, FeedTelemetry>>({});
+    useEffect(() => {
+        const read = () => setTel(Object.fromEntries(sixfoldFeed.getTelemetry().map(t => [t.symbol, t])));
+        read();
+        const id = window.setInterval(read, 1000);
+        return () => window.clearInterval(id);
+    }, []);
+    return tel;
+}
+
+const rateText = (t: FeedTelemetry | undefined, symbol: string) => {
+    const expected = expectedTickSeconds(symbol);
+    if (!t || t.measured === null) return `ticks every ~${expected}s`;
+    return `ticks every ${t.measured.toFixed(t.measured % 1 ? 1 : 0)}s`;
+};
+
+function feedStatus(t: FeedTelemetry | undefined): { ok: boolean; text: string } {
+    if (!t || (t.accepted + t.dropped === 0 && t.measured === null)) return { ok: false, text: 'No ticks yet' };
+    if (t.measured !== null && Math.abs(t.measured - t.expected) > t.expected * 0.3) {
+        return { ok: false, text: t.measured < t.expected ? 'Faster than Deriv documents' : 'Slower than Deriv documents' };
+    }
+    if (t.ageSeconds !== null && t.ageSeconds > t.expected * 8) return { ok: false, text: 'Gone quiet' };
+    return { ok: true, text: 'Matches Deriv' };
+}
 
 /** A compact bar above the Scanner: should you press Run? */
 export function MeterStrip({ regime, running, onOpen }: { regime: RegimeSummary | null; running: boolean; onOpen: () => void }) {
@@ -91,6 +120,7 @@ export function MeterTab({
         regime?.cells.forEach(c => m.set(c.symbol, [...(m.get(c.symbol) ?? []), c]));
         return [...m.entries()].sort((a, b) => Math.max(...b[1].map(c => c.strength)) - Math.max(...a[1].map(c => c.strength)));
     }, [regime]);
+    const tel = useTelemetry();
     const labels = contracts.map(c => `${c.side === 'OVER' ? 'Over' : 'Under'} ${c.param}`);
     const Panel = panel;
 
@@ -148,7 +178,7 @@ export function MeterTab({
                 </p>
             </Panel>
 
-            <Panel eyebrow='EVERY MARKET' title='Recent wins and losses'>
+            <Panel eyebrow='EVERY MARKET' title='Recent wins and losses, with the digit'>
                 <div className='mt-rows' style={{ ['--n' as string]: labels.length }}>
                     <div className='mt-row th'>
                         <span>Market</span>
@@ -160,6 +190,7 @@ export function MeterTab({
                         <div className='mt-row' key={symbol}>
                             <span className='nm' title={marketName(symbol)}>
                                 {shortName(symbol)}
+                                <small>{rateText(tel[symbol], symbol)}</small>
                             </span>
                             {cells.map(c => (
                                 <div key={c.key} className={`mt-cell st-${c.state.toLowerCase()}`}>
@@ -178,8 +209,44 @@ export function MeterTab({
                     {!byMarket.length && <p className='sf-muted'>Waiting for 60+ ticks on the selected markets.</p>}
                 </div>
                 <p className='sf-note'>
+                    Each square is one tick of that market, newest on the right: green is a win for the contract, red a loss, and the number is the digit that decided it. A market adds a
+                    square only when its own tick arrives, so 1s indices move every second and plain indices every two.
+                </p>
+                <p className='sf-note'>
                     “clusters” appears when wins and losses on that market and contract arrive in more clumps than chance allows, even after correcting for the number of cells checked
                     ({regime?.clustered ?? 0} right now). Expect it to be rare. Even where clusters are real, the track record above is what says whether they help you time entries.
+                </p>
+            </Panel>
+
+            <Panel eyebrow='FEED CHECK' title='How fast each market is really ticking'>
+                <div className='sf-table' role='table' aria-label='Feed check'>
+                    <div className='tr th'>
+                        <span>Market</span>
+                        <span>Deriv says</span>
+                        <span>Measured</span>
+                        <span>Last 60s</span>
+                        <span>Repeats dropped</span>
+                        <span>Status</span>
+                    </div>
+                    {settings.markets.map(symbol => {
+                        const t = tel[symbol];
+                        const st = feedStatus(t);
+                        return (
+                            <div className='tr' key={symbol}>
+                                <span>{shortName(symbol)}</span>
+                                <span>every {expectedTickSeconds(symbol)}s</span>
+                                <span>{t?.measured == null ? '—' : `every ${t.measured.toFixed(t.measured % 1 ? 1 : 0)}s`}</span>
+                                <span>{t ? `${t.lastMinute} ticks` : '—'}</span>
+                                <span>{t?.dropped ?? 0}</span>
+                                <span className={st.ok ? 'pos' : 'neg'}>{st.text}</span>
+                            </div>
+                        );
+                    })}
+                </div>
+                <p className='sf-note'>
+                    “Measured” is the usual gap between the last ticks on Deriv’s own clock, so it does not depend on this page or your connection. Deriv sends a tick every second for the
+                    1s indices and every two seconds for the plain indices. If a plain index ever shows about 1s here, the data would be wrong; a repeat counter above zero means Deriv
+                    sent the same tick twice and Sixfold ignored the copy.
                 </p>
             </Panel>
         </main>

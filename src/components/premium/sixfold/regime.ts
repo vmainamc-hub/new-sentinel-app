@@ -47,6 +47,8 @@ export type RegimeCell = {
     winRun: number;
     /** Oldest first, true = would have won. */
     strip: boolean[];
+    /** The digits behind the strip, oldest first. */
+    digits: number[];
     /** p-value that wins and losses arrive in clusters (dispersion test over blocks of 20 ticks); null with too little history. */
     clusterP: number | null;
     /** The same p after correcting for every cell tested. */
@@ -103,6 +105,7 @@ export function regimeCell(symbol: string, digits: readonly number[], contract: 
         lossRun,
         winRun,
         strip: o.slice(-STRIP_LENGTH),
+        digits: digits.slice(-STRIP_LENGTH),
         clusterP: clusterPValue(o, p),
         clusterQ: null,
     };
@@ -158,6 +161,38 @@ export function computeRegime(
         for (const contract of contracts) {
             const c = regimeCell(symbol, series[symbol] ?? [], contract);
             if (c) cells.push(c);
+        }
+    }
+    return summarize(cells, at);
+}
+
+const cellCache = new Map<string, WeakMap<readonly number[], RegimeCell | null>>();
+
+/**
+ * Like `computeRegime`, but for published (immutable) series snapshots: a market's cell is recomputed only when that
+ * market's own array changed, so each market updates exactly when its own ticks arrive and never because another did.
+ * Do not use with arrays that are mutated in place.
+ */
+export function computeRegimeFromSnapshot(
+    series: Record<string, readonly number[]>,
+    symbols: readonly string[],
+    contracts: readonly Contract[],
+    at: number
+): RegimeSummary {
+    const cells: RegimeCell[] = [];
+    for (const symbol of symbols) {
+        const digits = series[symbol];
+        if (!digits) continue;
+        for (const contract of contracts) {
+            const k = `${symbol}|${contractKey(contract)}`;
+            let byArray = cellCache.get(k);
+            if (!byArray) cellCache.set(k, (byArray = new WeakMap()));
+            let cell = byArray.get(digits);
+            if (cell === undefined) {
+                cell = regimeCell(symbol, digits, contract);
+                byArray.set(digits, cell);
+            }
+            if (cell) cells.push(cell);
         }
     }
     return summarize(cells, at);

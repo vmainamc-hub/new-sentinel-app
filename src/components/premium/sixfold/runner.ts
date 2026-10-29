@@ -78,6 +78,8 @@ export type TradeRecord = {
     label: string;
     recovery: boolean;
     entryDigit: number | null;
+    /** The last digit of the settlement tick, when Deriv reported it. */
+    exitDigit: number | null;
     stake: number;
     profit: number | null;
     status: 'open' | 'won' | 'lost' | 'unconfirmed';
@@ -607,6 +609,7 @@ export class SixfoldRunner {
                 label: bought.label,
                 recovery: bought.recovery,
                 entryDigit,
+                exitDigit: null,
                 stake,
                 profit: null,
                 status: 'open',
@@ -645,7 +648,7 @@ export class SixfoldRunner {
                 this.lastError = 'Contract result was not confirmed in time; stake settings were left unchanged.';
                 return this.finishTrade(contractId, null);
             }
-            this.finishTrade(contractId, profit);
+            this.finishTrade(contractId, profit, lastDigitOf(settled.exit_tick_display_value));
         } catch (error) {
             this.aborts.delete(abort);
             this.tradeInFlight = false;
@@ -708,7 +711,7 @@ export class SixfoldRunner {
     }
 
     /** `profit === null` means the result could not be confirmed: counted as a trade, never as a win or loss. */
-    private finishTrade(contractId: number, profit: number | null) {
+    private finishTrade(contractId: number, profit: number | null, exitDigit: number | null = null) {
         this.tradeInFlight = false;
         this.settling = false;
         this.armed = null;
@@ -723,6 +726,7 @@ export class SixfoldRunner {
             if (trade) this.updateShield(trade.symbol, trade.name, trade.entryDigit, profit < 0);
             if (trade) {
                 trade.profit = profit;
+                trade.exitDigit = exitDigit;
                 trade.status = profit < 0 ? 'lost' : 'won';
             }
             this.addLog(
@@ -794,5 +798,10 @@ export class SixfoldRunner {
     }
 }
 
+/** Last digit of Deriv's displayed settlement quote, e.g. "4943.82" -> 2. */
+const lastDigitOf = (value: unknown): number | null => {
+    const m = /(\d)\s*$/.exec(String(value ?? ''));
+    return m ? Number(m[1]) : null;
+};
 const fmtPts = (x: number | null) => (x === null ? '—' : `${x >= 0 ? '+' : ''}${x.toFixed(1)} pts`);
 const fmtMoney = (x: number) => `${x >= 0 ? '+' : ''}${round2(x).toFixed(2)}`;
