@@ -62,7 +62,7 @@ export function smartEntryDigits(
 
 // ---------- form gate: wait for a run of wins or losses before a recovery entry ----------
 
-export type RecoveryEntry = 'OFF' | 'MOMENTUM' | 'REVERSION' | 'BOUNCE';
+export type RecoveryEntry = 'OFF' | 'MOMENTUM' | 'REVERSION' | 'BOUNCE' | 'LAB';
 
 /** Length of the winning run and of the losing run that ends at the latest tick, for `contract`. */
 export function trailingRun(series: readonly number[], contract: Contract): { wins: number; losses: number } {
@@ -93,7 +93,7 @@ export function lossesBeforeWin(series: readonly number[], contract: Contract): 
  * BOUNCE: `k` or more losses in a row, then a win on the latest tick. OFF always passes.
  */
 export function formGateOk(mode: RecoveryEntry, k: number, series: readonly number[], contract: Contract): boolean {
-    if (mode === 'OFF') return true;
+    if (mode === 'OFF' || mode === 'LAB') return true;
     if (mode === 'BOUNCE') return lossesBeforeWin(series, contract) >= k;
     const run = trailingRun(series, contract);
     return mode === 'MOMENTUM' ? run.wins >= k : run.losses >= k;

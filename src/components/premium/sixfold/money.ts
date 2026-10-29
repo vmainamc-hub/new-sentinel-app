@@ -4,7 +4,7 @@ import { type Contract, contractLabel, isValidContract, profitMultiple, winProba
 
 export type Selectivity = 'strict' | 'balanced' | 'active';
 export type RecoverySizing = 'PAYOUT' | 'MULTIPLIER';
-export type EntryRule = 'SMART' | 'SETUP' | 'ANY';
+export type EntryRule = 'SMART' | 'SETUP' | 'ANY' | 'LAB';
 
 export type SixfoldSettings = {
     /** The two contracts Sixfold trades. Over <primaryOver> and Under <primaryUnder>; either can be switched off. */
@@ -134,8 +134,8 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         recoveryUnder: Math.trunc(num(s.recoveryUnder, d.recoveryUnder, 1, 9)),
         duration: Math.trunc(num(s.duration, d.duration, 1, 5)),
         selectivity: s.selectivity === 'strict' || s.selectivity === 'active' ? s.selectivity : 'balanced',
-        entry: s.entry === 'ANY' || s.entry === 'SETUP' ? s.entry : 'SMART',
-        recoveryEntry: s.recoveryEntry === 'MOMENTUM' || s.recoveryEntry === 'REVERSION' || s.recoveryEntry === 'BOUNCE' ? s.recoveryEntry : 'OFF',
+        entry: s.entry === 'ANY' || s.entry === 'SETUP' || s.entry === 'LAB' ? s.entry : 'SMART',
+        recoveryEntry: s.recoveryEntry === 'MOMENTUM' || s.recoveryEntry === 'REVERSION' || s.recoveryEntry === 'BOUNCE' || s.recoveryEntry === 'LAB' ? s.recoveryEntry : 'OFF',
         recoveryForm: Math.trunc(num(s.recoveryForm, d.recoveryForm, 2, 8)),
         meterGate: typeof s.meterGate === 'boolean' ? s.meterGate : d.meterGate,
         lossShield: typeof s.lossShield === 'boolean' ? s.lossShield : d.lossShield,

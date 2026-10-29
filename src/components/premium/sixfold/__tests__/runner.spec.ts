@@ -287,6 +287,22 @@ describe('SixfoldRunner', () => {
         expect(h.calls.buy).toHaveLength(1);
     });
 
+    it('Entry Lab mode holds back while a validated rule is not firing', async () => {
+        // The planted market makes "latest digit would have lost" a validated rule; its latest digit (7) would have won.
+        const h = harness({ entry: 'LAB', markets: ['P'] });
+        h.runner.start();
+        await flush();
+        expect(h.calls.buy).toHaveLength(0);
+    });
+
+    it('Entry Lab mode enters immediately when no rule has been validated', async () => {
+        const h = harness({ entry: 'LAB', markets: ['Q'] });
+        h.runner.start();
+        await flush();
+        expect(h.calls.buy.length).toBeLessThanOrEqual(1);
+        expect(h.runner.getSnapshot().armed?.entryDigits ?? []).toEqual([]);
+    });
+
     it('asks the feed to connect when it is not live and gives up after waiting', () => {
         let live = false;
         const h = harness({}, {

@@ -8,6 +8,7 @@
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { bankrollSim, calibrateLabels, contractRuns, entryTest, rollingRate, structureTable, transitionTest, uniformityTest } from './analysis';
 import { sentinelAgreement } from './agree';
+import { LAB_RULE_BY_ID, entryLabReport } from './entry-lab';
 import { MeterStrip, MeterTab } from './meter-ui';
 import { computeRegimeFromSnapshot } from './regime';
 import type { RecoveryEntry } from './entry';
@@ -359,6 +360,7 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                             ['SMART', 'Adaptive'],
                             ['SETUP', 'Fixed digit'],
                             ['ANY', 'Any tick'],
+                            ['LAB', 'Entry Lab'],
                         ]}
                     />
                     <small>
@@ -366,7 +368,9 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                             ? 'Learns the entry digits from each market’s recent ticks and changes them as the market moves. The digit that just lost is skipped next time.'
                             : s.entry === 'SETUP'
                               ? 'Always waits for the same losing digits of the contract.'
-                              : 'Buys on the next tick after arming.'}
+                              : s.entry === 'LAB'
+                                ? 'Uses an entry rule only where the Lab has proved it beats entering immediately on that market, with out-of-sample and false-discovery checks. Otherwise it buys on the next tick.'
+                                : 'Buys on the next tick after arming.'}
                     </small>
                 </div>
                 <div className='sf-field'>
@@ -380,15 +384,18 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                             ['MOMENTUM', 'After wins'],
                             ['REVERSION', 'After losses'],
                             ['BOUNCE', 'Loss → win'],
+                            ['LAB', 'Entry Lab'],
                         ]}
                     />
-                    {s.recoveryEntry !== 'OFF' && (
+                    {s.recoveryEntry !== 'OFF' && s.recoveryEntry !== 'LAB' && (
                         <Num label='Ticks in a row' value={s.recoveryForm} onCommit={n => set({ recoveryForm: n })} hint='2–8' />
                     )}
                     <small>
                         {s.recoveryEntry === 'OFF'
                             ? 'Recovery trades enter exactly like normal ones. The Lab’s Entry test shows whether a run-based entry has ever helped on your live ticks.'
-                            : s.recoveryEntry === 'BOUNCE'
+                            : s.recoveryEntry === 'LAB'
+                              ? 'While recovering, enter by the Lab’s validated rule for the recovery contract on that market. With none validated it enters immediately, so it never waits for something that has not worked.'
+                              : s.recoveryEntry === 'BOUNCE'
                               ? `While recovering, also wait for ${s.recoveryForm} or more losing ticks in a row followed by a winning tick, for the contract being bought.`
                               : `While recovering, also wait until the market’s last ${s.recoveryForm} ticks would all have ${s.recoveryEntry === 'MOMENTUM' ? 'won' : 'lost'} for the contract being bought.`}
                     </small>
@@ -963,6 +970,61 @@ function EntryTestPanel({ series, contract, settings }: { series: Record<string,
     );
 }
 
+function EntryLabPanel({ series, settings }: { series: Record<string, number[]>; settings: SixfoldSettings }) {
+    const contracts = useMemo(() => {
+        const list: Contract[] = [...primaryContracts(settings)];
+        if (settings.recovery) {
+            if (settings.useOver) list.push({ side: 'OVER', param: settings.recoveryOver });
+            if (settings.useUnder) list.push({ side: 'UNDER', param: settings.recoveryUnder });
+        }
+        return [...new Map(list.map(c => [contractKey(c), c])).values()];
+    }, [settings]);
+    const symbols = useMemo(() => settings.markets.filter(s => (series[s]?.length ?? 0) >= 200), [series, settings.markets]);
+    const rep = useMemo(() => entryLabReport(series, symbols, contracts, settings.duration), [series, symbols, contracts, settings.duration]);
+    const leads = rep.cells
+        .flatMap(c => c.rules.filter(r => r.rule !== 'IMMEDIATE' && (r.state === 'VALIDATED' || r.state === 'PROMISING')).map(r => ({ c, r })))
+        .sort((a, b) => (b.r.edgePts ?? 0) - (a.r.edgePts ?? 0))
+        .slice(0, 8);
+    return (
+        <Panel
+            eyebrow='ENTRY LAB'
+            title={!rep.cells.length ? 'Not enough ticks yet' : rep.validated ? `${rep.validated} entry rule${rep.validated > 1 ? 's' : ''} validated` : 'No entry rule has beaten entering immediately'}
+        >
+            <p className='sf-lede'>
+                {rep.tests} rule tests across {rep.cells.length} market and contract pairs. About {rep.expectedByChance} would look good by chance alone at p &lt; 0.05; {rep.promising} did, and{' '}
+                {rep.validated} also survived the false-discovery correction, held in both the earlier and later part of the history and had 100+ trades.
+            </p>
+            {leads.length > 0 && (
+                <div className='sf-table' role='table' aria-label='Entry Lab leads'>
+                    <div className='tr th'>
+                        <span>Market · contract · rule</span>
+                        <span>Trades</span>
+                        <span>Win rate</span>
+                        <span>Edge</span>
+                        <span>Status</span>
+                    </div>
+                    {leads.map(({ c, r }) => (
+                        <div className='tr' key={`${c.symbol}${c.key}${r.rule}`}>
+                            <span>
+                                {marketName(c.symbol)} · {c.label} · {LAB_RULE_BY_ID[r.rule].label}
+                            </span>
+                            <span>{r.n}</span>
+                            <span>{r.rate === null ? '—' : pct(r.rate, 1)}</span>
+                            <span>{r.edgePts === null ? '—' : `${pts(r.edgePts)} pts`}</span>
+                            <span className={r.state === 'VALIDATED' ? 'pos' : ''}>{r.state === 'VALIDATED' ? 'Validated' : 'Promising'}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+            <p className='sf-note'>
+                Each rule is replayed on every market as a shadow trade that only sees ticks up to the entry, then compared with the ticks where it did not fire. The Entry Lab setting uses a rule
+                only when it is validated for that market and contract; otherwise it enters immediately. Deriv digits are random, so an empty list is the expected result, and a lead that appears is
+                worth re-checking after more ticks.
+            </p>
+        </Panel>
+    );
+}
+
 function LabTab(p: {
     series: Record<string, number[]>;
     market: string;
@@ -1021,6 +1083,7 @@ function LabTab(p: {
             </Panel>
 
             <EntryTestPanel series={p.series} contract={p.contract} settings={p.settings} />
+            <EntryLabPanel series={p.series} settings={p.settings} />
 
             <Panel
                 eyebrow='SIMULATIONS'

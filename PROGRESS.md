@@ -122,3 +122,11 @@ Not done / unverified:
 - [ ] Never run against a real Deriv account. Test on a DEMO account first.
 - [ ] Payouts are still an adjustable margin estimate (default 5%); the live proposal price is not used for scoring.
 - [ ] The old "Load into Recover bot" button was removed from the page (`recover-bots.ts` and its test are kept, unused).
+
+## Sixfold Entry Lab (entry rules that must beat "enter immediately")
+- New `sixfold/entry-lab.ts`, modelled on Sentinel's entry-condition discovery: 10 entry rules plus an IMMEDIATE control are replayed on every market and contract as shadow trades (rule sees only ticks up to the entry, resolved on the real settlement digit, one trade at a time per rule).
+- A rule is VALIDATED only with BH-corrected q <= 0.10 across all tests, a positive edge in both the earlier 60% and later 40% of history, and 100+ trades. Otherwise the answer is "enter immediately".
+- New settings: Entry = "Entry Lab" and Recovery entry = "Entry Lab" (recovery uses the recovery barrier's own report). Runner refreshes the report every 8 s; with no validated rule it buys on the next tick.
+- Lab tab: Entry Lab panel with test count, chance expectation, and leading rules.
+- Fix: trade-row exit digit now reads the settled contract's display-value fields in order (exit_tick_display_value, exit_spot_display_value, exit_spot, sell_spot_display_value, …).
+- Tests: entry-lab.spec.ts (random digits validate ~nothing; planted edge validates), runner LAB tests.

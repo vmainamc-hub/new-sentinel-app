@@ -25,11 +25,14 @@ import {
     stopReason,
     tradeContract,
 } from './money';
+import { bestValidatedRule, entryLabReport, type LabReport, type LabRuleId, ruleFiresNow } from './entry-lab';
+import { type Contract, contractKey } from './bot';
 import { computeRegime, type RegimeSummary } from './regime';
 import { type Cell, eligibility, pickBest, type ScanResult, scanMarkets } from './scanner';
 
 export const MODULE_ID = 'sixfold';
 
+const LAB_REFRESH_MS = 8000;
 const SCAN_MS = 1500;
 const LOG_LIMIT = 60;
 const TRADE_LIMIT = 40;
@@ -156,6 +159,8 @@ export class SixfoldRunner {
     private session: SessionStats;
     private armed: Armed | null = null;
     private scan: ScanResult | null = null;
+    private labReport: LabReport | null = null;
+    private labAt = 0;
     private scanAt = 0;
     private queue: SixfoldSnapshot['queue'] = [];
     private tradeInFlight = false;
@@ -390,8 +395,9 @@ export class SixfoldRunner {
     handleFeedTick(symbol: string, digit: number) {
         if (!this.running || this.tradeInFlight || !this.armed || this.armed.symbol !== symbol) return;
         if (this.io.now() < this.cooldownUntil) return;
-        if (this.settings.entry !== 'ANY' && !this.armed.entryDigits.includes(digit)) return;
+        if (this.settings.entry !== 'ANY' && this.settings.entry !== 'LAB' && !this.armed.entryDigits.includes(digit)) return;
         if (!this.recoveryFormOk(symbol)) return;
+        if (!this.labOk(symbol)) return;
         void this.execute(digit);
     }
 
@@ -407,7 +413,7 @@ export class SixfoldRunner {
         const pick = pickBest(
             this.scan,
             this.settings.selectivity,
-            { mode: this.settings.entry === 'ANY' ? 'ANY' : 'SETUP' },
+            { mode: this.immediate() ? 'ANY' : 'SETUP' },
             { symbols: skipSymbols, keys: skipKeys },
             this.pickyBump(now)
         );
@@ -420,20 +426,24 @@ export class SixfoldRunner {
             score: cell.score,
             edgePts: cell.edgePts,
             significant: cell.significant,
-            entryDigits: this.settings.entry === 'ANY' ? [] : this.entryDigitsFor(cell.symbol, cell, pick.entryDigits),
+            entryDigits: this.immediate() ? [] : this.entryDigitsFor(cell.symbol, cell, pick.entryDigits),
             why: pick.why,
             since: now,
             expiresAt: now + this.settings.waitSeconds * 1000,
             cellKey: cell.key,
         };
         const entry =
-            this.settings.entry === 'ANY'
+            this.settings.entry === 'LAB'
+                ? 'entering by the Entry Lab (a rule only if it has beaten immediate entry here, otherwise the next tick)'
+                : this.settings.entry === 'ANY'
                 ? 'buying on the next tick'
                 : `waiting for digit ${this.armed.entryDigits.join(' / ')}${this.settings.entry === 'SMART' ? ' (learned from this market)' : ''}`;
         const gate =
             this.settings.recoveryEntry !== 'OFF' && this.isRecovering()
                 ? ` Recovery entry: also needs ${
-                      this.settings.recoveryEntry === 'BOUNCE'
+                      this.settings.recoveryEntry === 'LAB'
+                          ? 'the Entry Lab rule for this market, if one has beaten immediate entry.'
+                          : this.settings.recoveryEntry === 'BOUNCE'
                           ? `${this.settings.recoveryForm} losing ticks in a row and then a winning one.`
                           : `${this.settings.recoveryForm} ${this.settings.recoveryEntry === 'MOMENTUM' ? 'winning' : 'losing'} ticks in a row.`
                   }`
@@ -442,9 +452,9 @@ export class SixfoldRunner {
             'pick',
             `Armed ${cell.label} on ${marketName(cell.symbol)} (score ${cell.score}, ${fmtPts(cell.edgePts)} vs break-even${cell.significant ? ', significant' : ''}): ${entry}.${gate}`
         );
-        if (this.settings.entry === 'ANY') {
+        if (this.immediate()) {
             const digit = this.io.feed.getLastDigit(cell.symbol);
-            if (digit !== null && this.recoveryFormOk(cell.symbol)) void this.execute(digit);
+            if (digit !== null && this.recoveryFormOk(cell.symbol) && this.labOk(cell.symbol)) void this.execute(digit);
         }
     }
 
@@ -458,6 +468,35 @@ export class SixfoldRunner {
         if (last !== undefined) avoid.add(last);
         const next = smartEntryDigits(series, traded, this.settings.duration, avoid).digits;
         return next.length === fixed.length && next.every((d, i) => d === fixed[i]) ? fixed : next;
+    }
+
+    private immediate(): boolean {
+        return this.settings.entry === 'ANY' || this.settings.entry === 'LAB';
+    }
+
+    /** The contract that would actually be bought on this market right now (recovery barrier after a loss). */
+    private tradedFor(symbol: string) {
+        const cell = this.scan?.cells.find(c => c.symbol === symbol && c.key === this.armed?.cellKey);
+        return cell ? tradeContract(cell.contract, this.session.consecutiveLosses, this.settings).contract : null;
+    }
+
+    private labActive(): boolean {
+        return this.isRecovering() ? this.settings.recoveryEntry === 'LAB' : this.settings.entry === 'LAB';
+    }
+
+    /** Entry Lab gate: a validated rule must fire now; with none validated for this market and contract, enter immediately. */
+    private labOk(symbol: string): boolean {
+        if (!this.labActive() || !this.labReport) return true;
+        const traded = this.tradedFor(symbol);
+        if (!traded) return true;
+        const rule = bestValidatedRule(this.labReport, symbol, traded);
+        if (!rule) return true;
+        return ruleFiresNow(rule, this.io.feed.getLiveSeries()[symbol] ?? [], traded);
+    }
+
+    /** The rule the Entry Lab is applying for a market right now, or null when it enters immediately. */
+    labRuleFor(symbol: string, contract: Parameters<typeof bestValidatedRule>[2]): LabRuleId | null {
+        return this.labReport ? bestValidatedRule(this.labReport, symbol, contract) : null;
     }
 
     private isRecovering(): boolean {
@@ -505,11 +544,23 @@ export class SixfoldRunner {
         this.scan = scanMarkets(
             series,
             symbols,
-            { duration: this.settings.duration, entry: { mode: this.settings.entry === 'ANY' ? 'ANY' : 'SETUP' }, margin: this.settings.margin },
+            { duration: this.settings.duration, entry: { mode: this.immediate() ? 'ANY' : 'SETUP' }, margin: this.settings.margin },
             now,
             primaryContracts(this.settings)
         );
         this.scanAt = now;
+        if (this.settings.entry === 'LAB' || this.settings.recoveryEntry === 'LAB') {
+            if (!this.labReport || now - this.labAt >= LAB_REFRESH_MS) {
+                const contracts: Contract[] = [...primaryContracts(this.settings)];
+                if (this.settings.recovery) {
+                    if (this.settings.useOver) contracts.push({ side: 'OVER', param: this.settings.recoveryOver });
+                    if (this.settings.useUnder) contracts.push({ side: 'UNDER', param: this.settings.recoveryUnder });
+                }
+                const uniq = [...new Map(contracts.map(c => [contractKey(c), c])).values()];
+                this.labReport = entryLabReport(series, symbols, uniq, this.settings.duration);
+                this.labAt = now;
+            }
+        }
         this.regime = computeRegime(series, symbols, primaryContracts(this.settings), now);
         const rested = this.restedSymbols(now);
         const cold = this.coldKeys();
@@ -648,7 +699,7 @@ export class SixfoldRunner {
                 this.lastError = 'Contract result was not confirmed in time; stake settings were left unchanged.';
                 return this.finishTrade(contractId, null);
             }
-            this.finishTrade(contractId, profit, lastDigitOf(settled.exit_tick_display_value));
+            this.finishTrade(contractId, profit, lastDigitOf(settled.exit_tick_display_value ?? settled.exit_spot_display_value ?? settled.exit_spot ?? settled.sell_spot_display_value ?? settled.sell_spot ?? settled.exit_tick));
         } catch (error) {
             this.aborts.delete(abort);
             this.tradeInFlight = false;
