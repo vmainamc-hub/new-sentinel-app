@@ -63,6 +63,13 @@ export type SixfoldSettings = {
     meterGuide: boolean;
     /** Seconds for the Meter's extra score bar to fade away while nothing qualifies. */
     meterPatience: number;
+    /**
+     * Hard Meter floors (0 = off). With the guide on, a trade is only bought while the Meter reading (market-wide and for
+     * the contract itself) is at or above `meterFloor`; recovery trades need `meterFloorRecovery` (never lower than the
+     * normal floor). Nothing eases these off: Sixfold waits.
+     */
+    meterFloor: number;
+    meterFloorRecovery: number;
     /** After a loss, ask for a higher score on the next trade (fades if nothing qualifies). */
     pickyAfterLoss: boolean;
     /** How long an armed contract waits for its entry digit before it is dropped. */
@@ -104,6 +111,8 @@ export const DEFAULT_SETTINGS: SixfoldSettings = {
     restTrades: 3,
     meterGuide: true,
     meterPatience: 90,
+    meterFloor: 50,
+    meterFloorRecovery: 52,
     pickyAfterLoss: true,
     waitSeconds: 45,
     margin: 0.05,
@@ -152,6 +161,8 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         recoveryForm: Math.trunc(num(s.recoveryForm, d.recoveryForm, 2, 8)),
         meterGuide: typeof s.meterGuide === 'boolean' ? s.meterGuide : d.meterGuide,
         meterPatience: Math.trunc(num(s.meterPatience, d.meterPatience, 10, 600)),
+        meterFloor: Math.trunc(num(s.meterFloor, d.meterFloor, 0, 100)),
+        meterFloorRecovery: Math.trunc(num(s.meterFloorRecovery, d.meterFloorRecovery, 0, 100)),
         lossShield: typeof s.lossShield === 'boolean' ? s.lossShield : d.lossShield,
         restTrades: Math.trunc(num(s.restTrades, d.restTrades, 1, 10)),
         pickyAfterLoss: typeof s.pickyAfterLoss === 'boolean' ? s.pickyAfterLoss : d.pickyAfterLoss,

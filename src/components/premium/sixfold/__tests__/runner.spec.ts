@@ -695,7 +695,7 @@ describe('SixfoldRunner Meter guide', () => {
     });
 
     it('raises the bar on a weak reading, then eases off while it waits instead of locking trading', () => {
-        const guided = setup({}, mkNoise(25));
+        const guided = setup({ meterFloor: 0, meterFloorRecovery: 0 }, mkNoise(25));
         guided.runner.start();
         let s = guided.runner.getSnapshot();
         expect(s.armed).toBeNull();
@@ -703,7 +703,7 @@ describe('SixfoldRunner Meter guide', () => {
         expect(s.meterGuide.bump).toBeGreaterThan(0);
         expect(s.meterGuide.easesInSec).toBeGreaterThan(0);
         // The very same contract is taken when the guide is off: the Meter, not the scanner, held it back.
-        const free = setup({ meterGuide: false }, mkNoise(25));
+        const free = setup({ meterGuide: false, meterFloor: 0, meterFloorRecovery: 0 }, mkNoise(25));
         free.runner.start();
         expect(free.runner.getSnapshot().armed).not.toBeNull();
         // Still held shortly after; then, well before the patience has run out, the bar has eased enough to take it.
@@ -759,6 +759,57 @@ describe('SixfoldRunner Meter guide', () => {
         expect(on.runner.getSnapshot().queue[0].reason).toMatch(/loss cluster/i);
     });
 
+    it('buys only while the Meter is at or above the floor, and keeps waiting under it', () => {
+        // Same weak market as above: Meter 36, so under the default floor of 50 nothing is bought, however long it waits.
+        const h = setup({}, poorTail());
+        h.runner.start();
+        let s = h.runner.getSnapshot();
+        expect(s.meterGuide).toMatchObject({ floor: 50, underFloor: true });
+        expect(s.armed).toBeNull();
+        expect(s.queue[0].reason).toMatch(/under the 50 floor/i);
+        h.advance(10 * 60_000);
+        h.runner.tick();
+        expect(h.runner.getSnapshot().armed).toBeNull();
+        // Floors off: the same market is traded.
+        const off = setup({ meterFloor: 0, meterFloorRecovery: 0 }, poorTail());
+        off.runner.start();
+        expect(off.runner.getSnapshot().armed?.label).toBe('Over 2');
+        // A healthy market clears the floor.
+        const ok = setup({}, healthy);
+        ok.runner.start();
+        expect(ok.runner.getSnapshot().meterGuide).toMatchObject({ underFloor: false, floor: 50 });
+        expect(ok.runner.getSnapshot().armed?.label).toBe('Over 2');
+    });
+
+    it('holds the contract itself to the floor too, even when the market-wide Meter is fine', () => {
+        // P is strong (64) and Q is weak (30): the Meter across both is 47, over the floor of 40, yet Q is still not bought.
+        const h = setup({ meterFloor: 40, meterFloorRecovery: 40, markets: ['P', 'Q'] }, healthy.slice());
+        h.series.Q.splice(0, h.series.Q.length, ...mkNoise(25));
+        h.runner.start();
+        const s = h.runner.getSnapshot();
+        expect(s.meterGuide.underFloor).toBe(false);
+        expect(s.armed?.symbol).toBe('P');
+        const q = s.queue.find(x => x.cell.symbol === 'Q')!;
+        expect(q.ok).toBe(false);
+        expect(q.reason).toMatch(/contract's Meter reading 30 is under the 40 floor/i);
+    });
+
+    it('asks more for recovery: the recovery floor applies after a loss', async () => {
+        const h = setup({ meterFloor: 50, meterFloorRecovery: 100, takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, recovery: true }, healthy.slice());
+        h.runner.start();
+        expect(h.runner.getSnapshot().meterGuide.floor).toBe(50);
+        const entry = h.runner.getSnapshot().armed!.entryDigits[0];
+        h.queueProfits(-1);
+        h.runner.handleFeedTick('P', entry);
+        await flush();
+        h.advance(2_000);
+        h.runner.tick();
+        const s = h.runner.getSnapshot();
+        expect(s.session.consecutiveLosses).toBe(1);
+        expect(s.meterGuide).toMatchObject({ floor: 100, recovering: true, underFloor: true });
+        expect(s.armed).toBeNull();
+    });
+
     it('does nothing at all when the guide is off', () => {
         const h = setup({ meterGuide: false }, mkNoise(25));
         h.runner.start();
@@ -769,6 +820,8 @@ describe('SixfoldRunner Meter guide', () => {
     it('is on by default, and an old saved meterGate setting is ignored', () => {
         expect(DEFAULT_SETTINGS.meterGuide).toBe(true);
         expect(normalizeSettings({ meterGate: false } as never).meterGuide).toBe(true);
+        expect(DEFAULT_SETTINGS).toMatchObject({ meterFloor: 50, meterFloorRecovery: 52 });
+        expect(normalizeSettings({ meterFloor: 150, meterFloorRecovery: -3 })).toMatchObject({ meterFloor: 100, meterFloorRecovery: 0 });
         expect(normalizeSettings({ meterPatience: 5 }).meterPatience).toBe(10);
         expect(normalizeSettings({ meterPatience: 9999 }).meterPatience).toBe(600);
     });

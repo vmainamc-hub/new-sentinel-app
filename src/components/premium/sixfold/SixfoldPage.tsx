@@ -411,11 +411,15 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                     on={s.meterGuide}
                     onChange={v => set({ meterGuide: v })}
                     title='Meter guide'
-                    sub='Trade when the Meter reads well; recovery asks for more'
+                    sub='Buy only when the Meter is at or above the floor'
                 />
                 {s.meterGuide && (
                     <div className='sf-sub'>
-                        <Num label='Meter patience (s)' value={s.meterPatience} onCommit={n => set({ meterPatience: n })} hint='10–600: how long its extra bar takes to ease off' />
+                        <div className='sf-grid3'>
+                            <Num label='Meter floor' value={s.meterFloor} onCommit={n => set({ meterFloor: n })} hint='0 = off · buy only at or above' />
+                            <Num label='Recovery floor' value={s.meterFloorRecovery} onCommit={n => set({ meterFloorRecovery: n })} hint='0 = off · for recovery trades' />
+                            <Num label='Patience (s)' value={s.meterPatience} onCommit={n => set({ meterPatience: n })} hint='extra score bar eases off' />
+                        </div>
                     </div>
                 )}
                 <div className='sf-grid3'>
@@ -470,9 +474,13 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                                 {sx.meterGuide.recovering ? ' · recovery' : ''}
                             </span>
                             <span>
-                                {sx.meterGuide.bump > 0
-                                    ? `Asking +${sx.meterGuide.bump} score${sx.meterGuide.easesInSec > 0 ? `, easing off over ${sx.meterGuide.easesInSec}s` : ''}`
-                                    : 'No extra bar'}
+                                {sx.meterGuide.underFloor
+                                    ? `Waiting: the Meter must reach ${sx.meterGuide.floor}${sx.meterGuide.recovering ? ' for recovery' : ''}`
+                                    : sx.meterGuide.bump > 0
+                                      ? `Asking +${sx.meterGuide.bump} score${sx.meterGuide.easesInSec > 0 ? `, easing off over ${sx.meterGuide.easesInSec}s` : ''}`
+                                      : sx.meterGuide.floor > 0
+                                        ? `Meter at or above ${sx.meterGuide.floor}`
+                                        : 'No extra bar'}
                             </span>
                         </div>
                     )}

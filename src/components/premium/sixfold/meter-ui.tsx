@@ -141,8 +141,8 @@ export function MeterTab({
                         <label className='mt-gate'>
                             <input type='checkbox' checked={settings.meterGuide} onChange={e => sixfoldRunner.updateSettings({ meterGuide: e.target.checked })} />
                             <span>
-                                <b>Let the Meter guide trading</b> A contract in a loss cluster is not bought. A poor Meter raises the score a trade needs, recovery most of all, and the extra bar eases off
-                                while Sixfold waits, so it slows trading down but never freezes it.
+                                <b>Let the Meter guide trading</b> Sixfold only buys while the Meter, and the contract's own reading, are at or above the floor (50, or 52 for recovery), and never a contract in a loss
+                                cluster. It waits while the Meter is under the floor; change or switch off the floors in the settings.
                             </span>
                         </label>
                     </div>

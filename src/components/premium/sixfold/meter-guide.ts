@@ -33,6 +33,11 @@ export const climateOf = (r: RegimeSummary | null | undefined): Climate | null =
 
 export type MeterInput = {
     climate: Climate | null;
+    /**
+     * Hard floor (0 = off). Both the market-wide Meter reading and the contract's own reading must be at or above it, or the
+     * contract is not bought. Unlike the score bar this never fades: waiting is the whole point.
+     */
+    floor?: number;
     /** The Meter's reading of the contract that will be bought on this market. Null = no reading yet (treated as neutral). */
     cell: Pick<RegimeCell, 'state' | 'strength'> | null;
     recovering: boolean;
@@ -42,7 +47,7 @@ export type MeterInput = {
 };
 
 export type MeterCall = {
-    /** False only for a cell in a loss cluster. */
+    /** False for a cell in a loss cluster, or when the Meter or the contract's own reading is under the floor. */
     allow: boolean;
     /** Score points added to the bar for this cell right now. */
     bump: number;
@@ -54,6 +59,18 @@ export type MeterCall = {
 export function meterCall(i: MeterInput): MeterCall {
     if (i.cell?.state === 'COLD') {
         return { allow: false, bump: 0, rank: 0, note: 'loss cluster on the Meter' };
+    }
+    const floor = i.floor ?? 0;
+    if (floor > 0 && i.climate && i.climate.meter < floor) {
+        return { allow: false, bump: 0, rank: 0, note: `Meter ${i.climate.meter} is under the ${floor} floor` };
+    }
+    if (floor > 0 && i.cell && i.cell.strength < floor) {
+        return {
+            allow: false,
+            bump: 0,
+            rank: 0,
+            note: `this contract's Meter reading ${i.cell.strength} is under the ${floor} floor`,
+        };
     }
     const climatePts = i.climate
         ? clamp((50 - i.climate.meter) * 0.5, 0, 10) + clamp((i.climate.coldShare - 0.25) * 20, 0, 6)
@@ -81,6 +98,10 @@ export type MeterStatus = {
     coldShare: number;
     /** Extra score currently asked of an average cell. */
     bump: number;
+    /** The floor in force right now (the recovery floor while recovering); 0 = none. */
+    floor: number;
+    /** True while the market-wide Meter is under that floor, so nothing is being bought. */
+    underFloor: boolean;
     recovering: boolean;
     /** Seconds until the extra bar has fully faded (0 when it is not asking for anything). */
     easesInSec: number;
@@ -92,6 +113,8 @@ export const IDLE_STATUS: MeterStatus = {
     meter: 0,
     coldShare: 0,
     bump: 0,
+    floor: 0,
+    underFloor: false,
     recovering: false,
     easesInSec: 0,
 };

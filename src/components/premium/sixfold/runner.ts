@@ -402,7 +402,7 @@ export class SixfoldRunner {
                 ? eligibility(cell, this.settings.selectivity, Math.max(0, this.pickyBump(now) + (call?.bump ?? 0) - ARMED_HYSTERESIS))
                 : null;
             if (cell && call && !call.allow) {
-                this.addLog('info', `${this.armed.label} on ${this.armed.name} dropped: the Meter reads a loss cluster there.`);
+                this.addLog('info', `${this.armed.label} on ${this.armed.name} dropped: ${call.note}.`);
                 this.armed = null;
             } else if (!cell || !verdict?.ok) {
                 this.addLog('info', `${this.armed.label} on ${this.armed.name} dropped: ${verdict?.reason ?? 'no longer scanned'}.`);
@@ -596,6 +596,7 @@ export class SixfoldRunner {
         const reading = this.tradeRegime?.cells.find(c => c.symbol === cell.symbol && c.key === contractKey(traded)) ?? null;
         return meterCall({
             climate: climateOf(this.tradeRegime),
+            floor: this.meterFloor(),
             cell: reading,
             recovering: this.isRecovering(),
             waitedMs: now - this.meterSince,
@@ -603,20 +604,35 @@ export class SixfoldRunner {
         });
     }
 
+    /** The hard floor in force now: the recovery floor while recovering (never lower than the normal one). */
+    private meterFloor(): number {
+        const { meterFloor, meterFloorRecovery } = this.settings;
+        return this.isRecovering() ? Math.max(meterFloor, meterFloorRecovery) : meterFloor;
+    }
+
     /**
      * Last look at the moment of purchase. The scan is up to a second and a half old, so the contract about to be bought is
-     * read afresh from the live ticks; if it has just fallen into a loss cluster it is not bought.
+     * read afresh from the live ticks; if it has just fallen into a loss cluster or under the floor it is not bought.
      */
     private meterFresh(symbol: string): boolean {
         if (!this.settings.meterGuide || !this.armed) return true;
         const traded = this.tradedFor(symbol);
         if (!traded) return true;
         const reading = regimeCell(symbol, this.io.feed.getLiveSeries()[symbol] ?? [], traded);
-        if (!reading || reading.state !== 'COLD') return true;
+        if (!reading) return true;
+        const call = meterCall({
+            climate: climateOf(this.tradeRegime),
+            floor: this.meterFloor(),
+            cell: reading,
+            recovering: this.isRecovering(),
+            waitedMs: 0,
+            patienceMs: 0,
+        });
+        if (call.allow) return true;
         const armed = this.armed;
         this.blocked.set(`${armed.symbol}|${armed.cellKey}`, this.io.now() + COLD_AT_BUY_BLOCK_MS);
         this.armed = null;
-        this.addLog('info', `${armed.label} on ${armed.name} not bought: it just fell into a loss cluster on the Meter.`);
+        this.addLog('info', `${armed.label} on ${armed.name} not bought: ${call.note}.`);
         this.emit();
         return false;
     }
@@ -629,6 +645,7 @@ export class SixfoldRunner {
         const patienceMs = this.settings.meterPatience * 1000;
         const waitedMs = now - this.meterSince;
         const recovering = this.isRecovering();
+        const floor = this.meterFloor();
         const call = meterCall({ climate, cell: null, recovering, waitedMs, patienceMs });
         const full = meterCall({ climate, cell: null, recovering, waitedMs: 0, patienceMs });
         return {
@@ -637,6 +654,8 @@ export class SixfoldRunner {
             meter: climate.meter,
             coldShare: climate.coldShare,
             bump: call.bump,
+            floor,
+            underFloor: floor > 0 && climate.meter < floor,
             recovering,
             easesInSec: full.bump > 0 ? Math.max(0, Math.ceil((patienceMs - waitedMs) / 1000)) : 0,
         };
@@ -703,7 +722,7 @@ export class SixfoldRunner {
             .map(cell => {
                 if (rested.has(cell.symbol)) return { cell, ok: false, reason: 'Resting after a loss on this market' };
                 const call = this.meterFor(cell, now);
-                if (!call.allow) return { cell, ok: false, reason: 'Loss cluster on the Meter' };
+                if (!call.allow) return { cell, ok: false, reason: call.note.charAt(0).toUpperCase() + call.note.slice(1) };
                 const e = eligibility(cell, this.settings.selectivity, bump + call.bump);
                 return { cell, ok: e.ok, reason: e.ok && call.bump > 0 ? `${e.reason}; ${call.note}` : e.reason };
             });
