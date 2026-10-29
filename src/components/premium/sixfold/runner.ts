@@ -25,6 +25,7 @@ import {
     stopReason,
     tradeContract,
 } from './money';
+import { computeRegime, type RegimeSummary } from './regime';
 import { type Cell, eligibility, pickBest, type ScanResult, scanMarkets } from './scanner';
 
 export const MODULE_ID = 'sixfold';
@@ -108,6 +109,8 @@ export type SixfoldSnapshot = {
     resting: Array<{ symbol: string; name: string; tradesLeft: number }>;
     /** Extra score currently asked for because of the latest loss. */
     pickyBump: number;
+    /** The Meter: the regime each market and contract is in, and the overall verdict. */
+    regime: RegimeSummary | null;
 };
 
 export type RunnerIO = {
@@ -172,6 +175,7 @@ export class SixfoldRunner {
     /** Entry digit of the last losing trade on a market, left out the next time it is armed. */
     private lastLossEntry = new Map<string, number>();
     private lastResultAt = 0;
+    private regime: RegimeSummary | null = null;
     private aborts = new Set<AbortController>();
     private listeners = new Set<() => void>();
     private emitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -360,7 +364,10 @@ export class SixfoldRunner {
         if (this.armed) {
             const cell = this.scan.cells.find(c => c.symbol === this.armed!.symbol && c.key === this.armed!.cellKey);
             const verdict = cell ? eligibility(cell, this.settings.selectivity, this.pickyBump(now)) : null;
-            if (!cell || !verdict?.ok) {
+            if (cell && this.coldKeys().has(`${cell.symbol}|${cell.key}`)) {
+                this.addLog('info', `${this.armed.label} on ${this.armed.name} dropped: the Meter reads a loss cluster there.`);
+                this.armed = null;
+            } else if (!cell || !verdict?.ok) {
                 this.addLog('info', `${this.armed.label} on ${this.armed.name} dropped: ${verdict?.reason ?? 'no longer scanned'}.`);
                 this.armed = null;
             } else {
@@ -393,6 +400,7 @@ export class SixfoldRunner {
             if (until > now) skipKeys.add(key);
             else this.blocked.delete(key);
         });
+        this.coldKeys().forEach(k => skipKeys.add(k));
         const skipSymbols = new Set<string>([...this.quarantined, ...this.restedSymbols(now)]);
         const pick = pickBest(
             this.scan,
@@ -464,6 +472,14 @@ export class SixfoldRunner {
         return formGateOk(this.settings.recoveryEntry, this.settings.recoveryForm, series, traded);
     }
 
+    /** Market and contract pairs the Meter reads as cold, when the Meter gate is on. */
+    private coldKeys(): Set<string> {
+        const out = new Set<string>();
+        if (!this.settings.meterGate || !this.regime) return out;
+        for (const c of this.regime.cells) if (c.state === 'COLD') out.add(`${c.symbol}|${c.key}`);
+        return out;
+    }
+
     private restedSymbols(now: number): Set<string> {
         const out = new Set<string>();
         if (!this.settings.lossShield) return out;
@@ -492,7 +508,9 @@ export class SixfoldRunner {
             primaryContracts(this.settings)
         );
         this.scanAt = now;
+        this.regime = computeRegime(series, symbols, primaryContracts(this.settings), now);
         const rested = this.restedSymbols(now);
+        const cold = this.coldKeys();
         const bump = this.pickyBump(now);
         this.queue = this.scan.cells
             .filter(c => c.executable && !this.quarantined.has(c.symbol))
@@ -500,6 +518,7 @@ export class SixfoldRunner {
             .slice(0, 8)
             .map(cell => {
                 if (rested.has(cell.symbol)) return { cell, ok: false, reason: 'Resting after a loss on this market' };
+                if (cold.has(`${cell.symbol}|${cell.key}`)) return { cell, ok: false, reason: 'Loss cluster on the Meter' };
                 return { cell, ...eligibility(cell, this.settings.selectivity, bump) };
             });
         this.scheduleEmit();
@@ -753,6 +772,7 @@ export class SixfoldRunner {
                 tradesLeft: Math.max(0, (this.rest.get(symbol)?.untilTrades ?? 0) - this.session.trades),
             })),
             pickyBump: this.pickyBump(this.io.now()),
+            regime: this.regime,
         };
     }
 

@@ -566,3 +566,28 @@ describe('SixfoldRunner recovery entry gate', () => {
         expect(g.calls.buy).toHaveLength(2);
     });
 });
+
+describe('SixfoldRunner Meter gate', () => {
+    it('exposes the Meter reading while scanning', () => {
+        const h = harness();
+        h.runner.start();
+        const r = h.runner.getSnapshot().regime!;
+        expect(r.total).toBe(4); // 2 markets x Over 2 / Under 7
+        expect(['GO', 'WAIT', 'AVOID']).toContain(r.verdict);
+    });
+    it('skips a contract in a loss cluster only when the gate is on', () => {
+        const mk = (gate: boolean) => {
+            const h = harness({ selectivity: 'active', markets: ['P'], useUnder: false, meterGate: gate });
+            // Over 2 looks fine historically (1,7,1,7...) but the last six ticks all lose.
+            h.series.P.push(0, 0, 0, 0, 0, 0);
+            h.runner.start();
+            return h;
+        };
+        const off = mk(false);
+        expect(off.runner.getSnapshot().regime!.cells[0].state).toBe('COLD');
+        expect(off.runner.getSnapshot().armed).not.toBeNull();
+        const on = mk(true);
+        expect(on.runner.getSnapshot().armed).toBeNull();
+        expect(on.runner.getSnapshot().queue[0].reason).toMatch(/Meter/);
+    });
+});

@@ -54,6 +54,8 @@ export type SixfoldSettings = {
     recoveryForm: number;
     lossShield: boolean;
     restTrades: number;
+    /** Skip any market and contract the Meter reads as being in a loss cluster. */
+    meterGate: boolean;
     /** After a loss, ask for a higher score on the next trade (fades if nothing qualifies). */
     pickyAfterLoss: boolean;
     /** How long an armed contract waits for its entry digit before it is dropped. */
@@ -93,6 +95,7 @@ export const DEFAULT_SETTINGS: SixfoldSettings = {
     recoveryForm: 3,
     lossShield: true,
     restTrades: 3,
+    meterGate: false,
     pickyAfterLoss: true,
     waitSeconds: 45,
     margin: 0.05,
@@ -134,6 +137,7 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         entry: s.entry === 'ANY' || s.entry === 'SETUP' ? s.entry : 'SMART',
         recoveryEntry: s.recoveryEntry === 'MOMENTUM' || s.recoveryEntry === 'REVERSION' || s.recoveryEntry === 'BOUNCE' ? s.recoveryEntry : 'OFF',
         recoveryForm: Math.trunc(num(s.recoveryForm, d.recoveryForm, 2, 8)),
+        meterGate: typeof s.meterGate === 'boolean' ? s.meterGate : d.meterGate,
         lossShield: typeof s.lossShield === 'boolean' ? s.lossShield : d.lossShield,
         restTrades: Math.trunc(num(s.restTrades, d.restTrades, 1, 10)),
         pickyAfterLoss: typeof s.pickyAfterLoss === 'boolean' ? s.pickyAfterLoss : d.pickyAfterLoss,

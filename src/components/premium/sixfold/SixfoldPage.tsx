@@ -8,6 +8,7 @@
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from 'react';
 import { bankrollSim, calibrateLabels, contractRuns, entryTest, rollingRate, structureTable, transitionTest, uniformityTest } from './analysis';
 import { sentinelAgreement } from './agree';
+import { MeterStrip, MeterTab } from './meter-ui';
 import type { RecoveryEntry } from './entry';
 import { type BotConfig, type Contract, contractKey, contractLabel, DEFAULT_BOT, equityCurve, isValidContract, winProbability } from './bot';
 import { bestPerMarket, type Cell, eligibility } from './scanner';
@@ -35,9 +36,10 @@ import { useSixfold } from './use-sixfold';
 import { useSentinelAi } from '@/pages/sentinel-ai/use-sentinel-ai';
 import './sixfold.scss';
 
-type Tab = 'scanner' | 'board' | 'contract' | 'lab';
+type Tab = 'scanner' | 'meter' | 'board' | 'contract' | 'lab';
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
     ['scanner', 'Scanner'],
+    ['meter', 'Meter'],
     ['board', 'Board'],
     ['contract', 'Contract'],
     ['lab', 'Lab'],
@@ -209,7 +211,9 @@ const SixfoldPage = () => {
                 {feed.error && <span className='sf-msg bad'>{feed.error}</span>}
             </section>
 
+            {tab === 'scanner' && <MeterStrip regime={sx.regime} running={sx.running} onOpen={() => setTab('meter')} />}
             {tab === 'scanner' && <ScannerTab sx={sx} openContract={open} />}
+            {tab === 'meter' && <MeterTab regime={sx.regime} series={feed.series} settings={sx.settings} panel={Panel} />}
             {tab === 'board' && <BoardTab sx={sx} open={open} />}
             {tab === 'contract' && (
                 <ContractTab

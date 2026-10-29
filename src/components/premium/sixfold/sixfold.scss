@@ -1448,3 +1448,135 @@
     line-height: 1.45;
     color: var(--muted);
 }
+
+/* ---------- Meter ---------- */
+.sixfold {
+    --mt-go: var(--green);
+    --mt-wait: var(--amber);
+    --mt-avoid: var(--red);
+}
+.sixfold .mt-gauge {
+    display: block;
+    .trk {
+        fill: none;
+        stroke: var(--line);
+        stroke-width: 14;
+        stroke-linecap: butt;
+    }
+    .seg {
+        fill: none;
+        stroke-width: 14;
+        opacity: 0.85;
+        &.avoid { stroke: var(--mt-avoid); }
+        &.wait { stroke: var(--mt-wait); }
+        &.go { stroke: var(--mt-go); }
+    }
+    .needle { stroke: var(--text-strong); stroke-width: 3; stroke-linecap: round; }
+    .hub { fill: var(--text-strong); }
+    .val { fill: var(--text-strong); font-size: 20px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; }
+}
+.sixfold .mt-strip-bar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 14px;
+    margin: 0 0 14px;
+    padding: 10px 16px;
+    border: 1px solid var(--line);
+    border-left-width: 4px;
+    border-radius: 14px;
+    background: var(--panel);
+    &.t-go { border-left-color: var(--mt-go); }
+    &.t-wait { border-left-color: var(--mt-wait); }
+    &.t-avoid { border-left-color: var(--mt-avoid); }
+    .txt { display: grid; gap: 2px; min-width: 0; }
+    .txt b { color: var(--text-strong); font-size: 16px; }
+    .txt span { color: var(--muted); font-size: 13px; line-height: 1.4; }
+}
+.sixfold .mt-tab { display: grid; gap: 14px; }
+.sixfold .mt-hero {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 22px;
+    align-items: center;
+    .lede { margin: 0 0 10px; color: var(--text); font-size: 15px; line-height: 1.5; }
+}
+.sixfold .mt-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+    span {
+        padding: 3px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        font-size: 12px;
+        color: var(--muted);
+        b { color: var(--text-strong); margin-left: 4px; }
+    }
+    .st-cold { border-color: var(--red); }
+    .st-hot { border-color: var(--green); }
+    .st-turning { border-color: var(--teal); }
+}
+.sixfold .mt-gate {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+    b { display: block; color: var(--text-strong); }
+    input { margin-top: 3px; accent-color: var(--teal); }
+}
+.sixfold .mt-track {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    .cell {
+        display: grid;
+        gap: 2px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel-2);
+        b { font-size: 22px; color: var(--text-strong); font-family: ui-monospace, Menlo, monospace; }
+        small { color: var(--muted); font-size: 12px; }
+    }
+}
+.sixfold .mt-rows {
+    display: grid;
+    gap: 6px;
+    .mt-row {
+        display: grid;
+        grid-template-columns: minmax(110px, 150px) repeat(var(--n, 2), minmax(0, 1fr));
+        gap: 10px;
+        align-items: center;
+        &.th { color: var(--muted); font-size: 12px; }
+        .nm { color: var(--text-strong); font-weight: 600; font-size: 13px; }
+    }
+}
+.sixfold .mt-cell {
+    display: grid;
+    gap: 4px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    &.st-cold { border-color: var(--red); }
+    &.st-hot { border-color: var(--green); }
+    &.st-turning { border-color: var(--teal); }
+    .meta { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); em { font-style: normal; color: var(--text); } }
+}
+.sixfold .mt-strip {
+    display: grid;
+    grid-template-columns: repeat(24, minmax(0, 1fr));
+    gap: 2px;
+    i { display: block; height: 14px; border-radius: 3px; &.w { background: var(--green); } &.l { background: var(--red); opacity: 0.8; } }
+}
+@media (max-width: 760px) {
+    .sixfold .mt-strip-bar { grid-template-columns: 1fr; justify-items: start; }
+    .sixfold .mt-hero { grid-template-columns: 1fr; justify-items: center; }
+    .sixfold .mt-track { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .sixfold .mt-rows .mt-row { grid-template-columns: 1fr; }
+    .sixfold .mt-rows .mt-row.th { display: none; }
+}
