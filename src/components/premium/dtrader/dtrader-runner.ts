@@ -10,8 +10,10 @@ import { type Duration } from './dtrader-catalog';
 import {
     describeEntry, entryError, type EntryRule, exposureError, FAMILIES, type Family, type Leg, legsFor, matchEntry, MAX_TRADES_PER_ENTRY, nextStake, offsetError, planBurst, predictionError, round2,
 type SideChoice,
-    stopReason, tickPickError, } from './dtrader-engine';
+    stopReason, tickLegs, tickPickError, } from './dtrader-engine';
+import { bestTicks, coverStats, type TickQuote } from './dtrader-hedge';
 import { type Preflight, type PreflightInput } from './dtrader-preflight';
+import { afterEntry, freshRisk, NO_RISK, recoveryStake, type RiskSettings } from './dtrader-risk';
 import { type Decision, defaultStrategyId, getStrategy, resolveParams, sigmaOffset, type StrategyParams } from './dtrader-strategies';
 
 export type RunMode = 'single' | 'repeat';
@@ -24,6 +26,14 @@ export type RunConfig = {
     prediction: number;
     /** High Tick / Low Tick hedge: the tick the Low Tick trade picks when it differs from `prediction` (the High Tick's). */
     prediction2?: number;
+    /** High Tick / Low Tick cover: one trade per listed tick on each side (replaces the single pick). Sides still filter it. */
+    cover?: { high: number[]; low: number[] };
+    /** High Tick / Low Tick, from Deriv's live quotes: pick the best-value ticks, and/or skip entries whose average result is under minEdge (a fraction of the money staked, e.g. -0.02). */
+    quoteGuard?: { pickBest: boolean; minEdge: number | null };
+    /** Streak protection: loss breaker, recovery stake, cool-down. */
+    risk?: RiskSettings;
+    /** Total payout per 1 staked seen in the panel's quote, used by the recovery stake until a win shows the real one. */
+    payoutHint?: number;
     /** Barrier distance from the entry spot (Higher/Lower, Ends Between/Outside). */
     offset: number;
     duration: number;
@@ -86,6 +96,8 @@ export interface RunnerIO {
     sleep(ms: number): Promise<void>;
     /** Ask Deriv for a contract again (used when a closing update carried no exit tick). */
     lookupContract?(contractId: number): Promise<any>;
+    /** Deriv's quoted payout for a High Tick and a Low Tick trade on each of the 5 ticks, for this stake (High Tick / Low Tick). */
+    quoteTicks?(symbol: string, stake: number, currency: string): Promise<TickQuote[]>;
     /** Checks the contract against Deriv's rules and quotes before anything is bought (Higher/Lower, Ends Between/Outside). */
     preflight?(input: PreflightInput): Promise<Preflight>;
 }
@@ -95,6 +107,8 @@ const SETTLE_WAIT_MS = 90_000;
 const POLL_AFTER_MS = 2500;
 const POLL_BATCH = 25;
 const DIAGNOSE_AFTER_MS = 8000;
+/** Quotes older than this are asked for again before the next entry. */
+const QUOTE_TTL_MS = 30_000;
 const EXIT_LOOKUP_DELAYS_MS = [400, 1200, 2500, 4500];
 const num = (value: unknown, fallback = 0) => { const n = Number(value); return Number.isFinite(n) ? n : fallback; };
 const numOrNull = (value: unknown) => { const n = Number(value); return value !== undefined && value !== null && value !== '' && Number.isFinite(n) ? n : null; };
@@ -114,6 +128,18 @@ export const configError = (cfg: RunConfig): string | null => {
     const fixed = FAMILIES[cfg.family].fixedTicks;
     if (fixed !== undefined) { if (cfg.duration !== fixed) return `${FAMILIES[cfg.family].title} always runs ${fixed} ticks.`; }
     else if (!Number.isInteger(cfg.duration) || cfg.duration < 1 || cfg.duration > 10) return 'Ticks must be a whole number from 1 to 10.';
+    if (cfg.cover) {
+        const bad = [...cfg.cover.high, ...cfg.cover.low].map(k => tickPickError(cfg.family, k)).find(Boolean);
+        if (bad) return bad;
+        if (cfg.cover.high.length + cfg.cover.low.length === 0) return 'Pick at least one tick for the cover.';
+    }
+    if (cfg.risk) {
+        const r = cfg.risk;
+        if (!Number.isInteger(r.breakerAfter) || r.breakerAfter < 0) return 'Loss breaker: enter a whole number of losing entries (0 = off).';
+        if (!Number.isInteger(r.cooldownTicks) || r.cooldownTicks < 0 || !Number.isInteger(r.pauseTicks) || r.pauseTicks < 0) return 'Cool-down and pause are whole numbers of ticks.';
+        if (r.recovery && (!Number.isInteger(r.recoverySteps) || r.recoverySteps < 1)) return 'Recovery steps must be a whole number from 1.';
+        if (!(r.recoveryTarget >= 0)) return 'Recovery target cannot be negative.';
+    }
     if (!(cfg.stake > 0)) return 'Enter a stake.';
     if (!Number.isInteger(cfg.tradesPerEntry) || cfg.tradesPerEntry < 1 || cfg.tradesPerEntry > MAX_TRADES_PER_ENTRY) return `Trades per entry must be from 1 to ${MAX_TRADES_PER_ENTRY}.`;
     return null;
@@ -126,6 +152,9 @@ export class DTraderRunner {
     private buyMs = DEFAULT_BUY_MS;
     /** What the preflight settled on for this run: the duration Deriv offers and the smallest barrier distance it accepts. */
     private resolved: { duration: Duration; offsetFloor: number } | null = null;
+    private tickQuotes: { quotes: TickQuote[]; stake: number; at: number } | null = null;
+    private payoutRatio: number | null = null;
+    private lastSkip = '';
     private rowSeq = 0;
     private batchSeq = 0;
     totals: Totals = emptyTotals();
@@ -160,12 +189,19 @@ export class DTraderRunner {
         let sessionPnl = 0;
         let waitNextTick = false;
         this.resolved = null;
+        this.tickQuotes = null;
+        this.payoutRatio = null;
+        this.lastSkip = '';
+        const risk = cfg.risk ?? NO_RISK;
+        let riskState = freshRisk();
         this.log(`Run started on ${cfg.symbol}. ${describeEntry(cfg.entry)}.`);
         try {
             if (!(await this.checkContract(cfg, stake))) return;
             while (!this.stopped) {
                 const auto = cfg.side === 'auto';
                 this.state('waiting', auto ? `Waiting for the ${this.strategyFor(cfg).title} signal…` : cfg.entry.mode === 'instant' ? 'Placing the next entry…' : `Waiting for the entry: ${describeEntry(cfg.entry)}.`);
+                await this.refreshQuotes(cfg, stake);
+                if (this.stopped) break;
                 const entry = await this.waitForEntry(cfg, waitNextTick);
                 waitNextTick = false;
                 if (entry === null || this.stopped) break;
@@ -175,12 +211,26 @@ export class DTraderRunner {
                 if (outcome.kind === 'missed') { waitNextTick = true; continue; }
                 if (outcome.kind === 'failed') break;
                 sessionPnl = round2(sessionPnl + outcome.profit);
-                stake = nextStake(cfg.stake, stake, outcome.profit, cfg.martingale);
+                const step = afterEntry(riskState, outcome.profit, risk);
+                riskState = step.state;
+                if (step.note) this.log(step.note, 'warn');
+                if (step.stop) { this.log(step.stop, 'warn'); break; }
+                if (step.resetStake) stake = cfg.stake;
+                else if (risk.recovery) {
+                    const next = this.recoveryNext(cfg, riskState, risk, outcome.trades, outcome.perLeg);
+                    if (next.reset) riskState = { ...riskState, deficit: 0, steps: 0 };
+                    else if (riskState.deficit > 0) riskState = { ...riskState, steps: riskState.steps + 1 };
+                    stake = next.stake;
+                } else stake = nextStake(cfg.stake, stake, outcome.profit, cfg.martingale);
 
                 const reason = stopReason(sessionPnl, cfg.takeProfit, cfg.stopLoss);
                 if (reason) { this.log(reason, 'warn'); break; }
                 if (cfg.mode === 'single') break;
                 if (stake !== cfg.stake) this.log(`Next stake ${stake.toFixed(2)} ${cfg.currency}.`);
+                if (step.waitTicks > 0 && !this.stopped) {
+                    this.state('waiting', `Waiting ${step.waitTicks} tick${step.waitTicks === 1 ? '' : 's'} before the next entry…`);
+                    await this.waitTicks(cfg.symbol, step.waitTicks);
+                }
             }
         } catch (error) {
             this.log(`Run stopped by an error: ${errorText(error)}`, 'error');
@@ -190,6 +240,75 @@ export class DTraderRunner {
             this.state('idle', this.stopped ? 'Stopped.' : 'Run finished.');
             this.log(this.stopped ? 'Stopped. No more trades will be placed.' : 'Run finished.');
         }
+    }
+
+    /** Resolves after `n` more ticks of the market, or at once when the run is stopped. */
+    private waitTicks(symbol: string, n: number): Promise<void> {
+        if (n <= 0 || this.stopped) return Promise.resolve();
+        return new Promise<void>(resolve => {
+            let left = Math.trunc(n);
+            let off: (() => void) | null = null;
+            const done = () => { off?.(); this.cancelWait = null; resolve(); };
+            this.cancelWait = done;
+            off = this.io.onTick(s => { if (s === symbol && ((left -= 1) <= 0 || this.stopped)) done(); });
+        });
+    }
+
+    /** Stake for the next entry when the recovery stake is on: what one win needs to pay back the streak. `reset` = the limit was hit. */
+    private recoveryNext(cfg: RunConfig, state: { deficit: number; steps: number }, risk: RiskSettings, trades: number, perLeg: number): { stake: number; reset: boolean } {
+        const ratio = this.payoutRatio ?? cfg.payoutHint ?? 0;
+        const winNet = ratio > 0 ? ratio * perLeg - trades : 0;
+        const next = recoveryStake({ base: cfg.stake, deficit: state.deficit, target: risk.recoveryTarget, winNetPerStake: winNet, steps: state.steps, maxSteps: risk.recoverySteps });
+        if (next === null) {
+            this.log(winNet > 0.05
+                ? `Recovery limit of ${risk.recoverySteps} raised stakes reached. The stake restarts at ${cfg.stake.toFixed(2)}; the ${state.deficit.toFixed(2)} lost is not chased.`
+                : 'A winning entry would not pay back its own stakes at this payout, so the recovery stake cannot work. The stake restarts at the base.', 'warn');
+            return { stake: cfg.stake, reset: true };
+        }
+        return { stake: next, reset: false };
+    }
+
+    /** High Tick / Low Tick: ask Deriv for the quote of every tick when quotes are wanted and the ones held are old. */
+    private async refreshQuotes(cfg: RunConfig, stake: number): Promise<void> {
+        if (!FAMILIES[cfg.family].needsTick || !cfg.quoteGuard || !this.io.quoteTicks) return;
+        const held = this.tickQuotes;
+        if (held && held.stake === stake && this.io.now() - held.at < QUOTE_TTL_MS) return;
+        try {
+            const quotes = await this.io.quoteTicks(cfg.symbol, stake, cfg.currency);
+            this.tickQuotes = quotes.length >= 5 ? { quotes, stake, at: this.io.now() } : null;
+        } catch (error) {
+            this.tickQuotes = null;
+            this.log(`Could not read quotes from Deriv: ${errorText(error)}`, 'warn');
+        }
+    }
+
+    /** The ticks each side trades for this entry (cover, best-value picking, the minimum-edge gate), or null to skip the entry. */
+    private tickPicks(cfg: RunConfig, decision: Decision, stake: number): { high: number[]; low: number[] } | null {
+        const wantHigh = decision.side === 0 || decision.side === 'both';
+        const wantLow = decision.side === 1 || decision.side === 'both';
+        const base = decision.prediction ?? cfg.prediction;
+        let high = wantHigh ? (cfg.cover ? [...cfg.cover.high] : [base]) : [];
+        let low = wantLow ? (cfg.cover ? [...cfg.cover.low] : [decision.prediction ?? cfg.prediction2 ?? cfg.prediction]) : [];
+        const held = this.tickQuotes;
+        // Quotes scale with the stake, so they stay usable when the stake changes.
+        const quotes = held ? held.quotes.map(q => ({ high: q.high === null ? null : (q.high * stake) / held.stake, low: q.low === null ? null : (q.low * stake) / held.stake })) : null;
+        const guard = cfg.quoteGuard;
+        if (guard?.pickBest && quotes) { high = bestTicks('high', high.length, stake, quotes); low = bestTicks('low', low.length, stake, quotes); }
+        if (guard && guard.minEdge !== null) {
+            const stats = quotes ? coverStats(stake, high, low, quotes) : null;
+            const skip = !quotes || !stats || stats.expectedPerCost === null
+                ? 'Entry skipped: no quote from Deriv to check the minimum edge against.'
+                : stats.expectedPerCost < guard.minEdge
+                    ? `Entry skipped: at Deriv's quotes this entry averages ${(stats.expectedPerCost * 100).toFixed(1)}% of the money staked, under your minimum of ${(guard.minEdge * 100).toFixed(1)}%.`
+                    : '';
+            if (skip) {
+                if (skip !== this.lastSkip) this.log(skip, 'warn');
+                this.lastSkip = skip;
+                return null;
+            }
+            this.lastSkip = '';
+        }
+        return { high, low };
     }
 
     private strategyFor(cfg: RunConfig) {
@@ -252,7 +371,7 @@ export class DTraderRunner {
         return true;
     }
 
-    private async burst(cfg: RunConfig, stake: number, decidedAt: number, decision: Decision): Promise<{ kind: 'done'; profit: number } | { kind: 'missed' } | { kind: 'failed' }> {
+    private async burst(cfg: RunConfig, stake: number, decidedAt: number, decision: Decision): Promise<{ kind: 'done'; profit: number; trades: number; perLeg: number } | { kind: 'missed' } | { kind: 'failed' }> {
         const view = this.io.market(cfg.symbol);
         if (!view) { this.log('No live ticks for this market yet.', 'error'); return { kind: 'failed' }; }
         const side = decision.side === 'both' ? 'both' : decision.side === 0 ? 'first' : 'second';
@@ -261,7 +380,13 @@ export class DTraderRunner {
         const offset = Math.max(this.resolved?.offsetFloor ?? 0, decision.offset ?? cfg.offset);
         const invalid = predictionError(cfg.family, side, prediction) ?? tickPickError(cfg.family, prediction);
         if (invalid) { this.log(`${invalid} Skipping this entry.`, 'warn'); return { kind: 'missed' }; }
-        const legs: Leg[] = legsFor(cfg.family, side, prediction, offset, view.decimals, decision.prediction === undefined ? cfg.prediction2 : undefined);
+        let legs: Leg[];
+        if (FAMILIES[cfg.family].needsTick) {
+            const picks = this.tickPicks(cfg, decision, stake);
+            if (!picks) return { kind: 'missed' };
+            legs = tickLegs(picks.high, picks.low);
+            if (!legs.length) { this.log('Nothing to trade on this side. Skipping this entry.', 'warn'); return { kind: 'missed' }; }
+        } else legs = legsFor(cfg.family, side, prediction, offset, view.decimals);
         const duration = this.resolved?.duration ?? { value: cfg.duration, unit: 't' as const };
         const interval = tickIntervalMs(view.times);
         const plan = planBurst({
@@ -301,6 +426,7 @@ export class DTraderRunner {
                 exitDigit,
             });
             batchProfit = round2(batchProfit + profit);
+            if (profit > 0 && stake > 0) this.payoutRatio = (stake + profit) / stake;
             this.totals = {
                 ...this.totals,
                 payout: round2(this.totals.payout + Math.max(0, stake + profit)),
@@ -413,7 +539,7 @@ export class DTraderRunner {
             const open = owned.size - settled.size;
             if (open > 0) this.log(`${open} contract(s) are still open. They stay on your Deriv account; check the statement.`, 'warn');
             else this.log(`Batch ${batch}: ${owned.size} settled · P/L ${batchProfit.toFixed(2)} ${cfg.currency}. ${note}`, report.synced ? 'success' : 'warn');
-            return { kind: 'done', profit: batchProfit };
+            return { kind: 'done', profit: batchProfit, trades: owned.size, perLeg: plan.perLeg };
         } finally {
             off();
         }

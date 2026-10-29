@@ -1,3 +1,4 @@
+import { NO_RISK } from '../dtrader-risk';
 import { configError, DTraderRunner, type MarketView, type RunConfig, type RunnerEvent, type RunnerIO } from '../dtrader-runner';
 
 type Listener = (symbol: string) => void;
@@ -368,5 +369,120 @@ describe('DTraderRunner · High Tick / Low Tick', () => {
         await done;
         expect(w.buys.length).toBeGreaterThan(0);
         expect(w.buys.every(b => b.params.contract_type === 'TICKHIGH' && b.params.selected_tick === 5)).toBe(true);
+    });
+});
+
+const until = async (condition: () => boolean) => { for (let i = 0; i < 400 && !condition(); i += 1) await new Promise(resolve => setTimeout(resolve, 5)); };
+
+describe('DTraderRunner · cover, quote guard and streak protection', () => {
+    const pair = (w: ReturnType<typeof makeWorld>, patch: Partial<RunConfig> = {}) => baseConfig(w.symbol, { family: 'tickhighlow', side: 'both', prediction: 5, duration: 5, tradesPerEntry: 1, ...patch });
+    const flatQuotes = (payout: number) => async (_s: string, stake: number) => [1, 2, 3, 4, 5].map(() => ({ high: payout * stake, low: payout * stake }));
+
+    it('a cover buys one trade per picked tick on each side, all in one burst', async () => {
+        const w = makeWorld();
+        seed(w, [4, 5, 6, 7]);
+        const c = collect();
+        await new DTraderRunner(w.io, c.emit).run(pair(w, { cover: { high: [1, 5], low: [1, 5] }, tradesPerEntry: 2 }));
+        expect(w.buys).toHaveLength(8);
+        const picks = (type: string) => w.buys.filter(b => b.params.contract_type === type).map(b => b.params.selected_tick).sort();
+        expect(picks('TICKHIGH')).toEqual([1, 1, 5, 5]);
+        expect(picks('TICKLOW')).toEqual([1, 1, 5, 5]);
+        expect(new Set(w.buys.map(b => b.atTick)).size).toBe(1);
+    });
+    it('a cover respects the side: High only trades just the High ticks', async () => {
+        const w = makeWorld();
+        seed(w, [4, 5, 6, 7]);
+        await new DTraderRunner(w.io, collect().emit).run(pair(w, { side: 'first', cover: { high: [1, 5], low: [1, 5] } }));
+        expect(w.buys.map(b => [b.params.contract_type, b.params.selected_tick])).toEqual([['TICKHIGH', 1], ['TICKHIGH', 5]]);
+    });
+    it('refuses an empty cover or a tick outside 1 to 5', () => {
+        const w = makeWorld();
+        expect(configError(pair(w, { cover: { high: [], low: [] } }))).toMatch(/at least one tick/);
+        expect(configError(pair(w, { cover: { high: [6], low: [] } }))).toMatch(/1 to 5/);
+    });
+
+    it('minimum edge: skips the entry when Deriv\'s quotes are too low, trades when they are good', async () => {
+        const poor = makeWorld({});
+        poor.io.quoteTicks = flatQuotes(3);
+        seed(poor, [4, 5, 6, 7]);
+        const c = collect();
+        const runner = new DTraderRunner(poor.io, c.emit);
+        const done = runner.run(pair(poor, { quoteGuard: { pickBest: false, minEdge: -0.05 } }));
+        await until(() => c.of('journal').some(j => /Entry skipped/.test(j.text)));
+        runner.stop(); await done;
+        expect(poor.buys).toHaveLength(0);
+        expect(c.of('journal').filter(j => /Entry skipped/.test(j.text))).toHaveLength(1);   // said once, not every tick
+
+        const good = makeWorld({});
+        good.io.quoteTicks = flatQuotes(4.7);
+        seed(good, [4, 5, 6, 7]);
+        await new DTraderRunner(good.io, collect().emit).run(pair(good, { quoteGuard: { pickBest: false, minEdge: -0.05 } }));
+        expect(good.buys).toHaveLength(2);
+    });
+    it('skips when the guard is on but Deriv gives no quote at all', async () => {
+        const w = makeWorld({});
+        w.io.quoteTicks = async () => { throw new Error('no quote'); };
+        seed(w, [4, 5, 6, 7]);
+        const c = collect();
+        const runner = new DTraderRunner(w.io, c.emit);
+        const done = runner.run(pair(w, { quoteGuard: { pickBest: false, minEdge: 0 } }));
+        await until(() => c.of('journal').some(j => /no quote from Deriv/.test(j.text)));
+        runner.stop(); await done;
+        expect(w.buys).toHaveLength(0);
+    });
+    it('best-value picking moves each side to the tick Deriv pays best for', async () => {
+        const w = makeWorld({});
+        w.io.quoteTicks = async (_s, stake) => [1, 2, 3, 4, 5].map(k => ({ high: (k === 3 ? 20 : 4) * stake, low: (k === 2 ? 20 : 4) * stake }));
+        seed(w, [4, 5, 6, 7]);
+        await new DTraderRunner(w.io, collect().emit).run(pair(w, { prediction: 5, quoteGuard: { pickBest: true, minEdge: null } }));
+        expect(w.buys.map(b => [b.params.contract_type, b.params.selected_tick])).toEqual([['TICKHIGH', 3], ['TICKLOW', 2]]);
+    });
+
+    it('loss breaker stops the run after N losing entries in a row', async () => {
+        const w: ReturnType<typeof makeWorld> = makeWorld({ settleProfit: n => -w.buys[n - 1].params.amount });
+        seed(w, [4, 5, 6, 7]);
+        const c = collect();
+        await new DTraderRunner(w.io, c.emit).run(pair(w, { mode: 'repeat', risk: { ...NO_RISK, breakerAfter: 2, breakerAction: 'stop' } }));
+        expect(w.buys).toHaveLength(4);   // two entries of a High + Low pair
+        expect(c.of('journal').some(j => /Loss breaker: 2 losing entries in a row\. Stopped/.test(j.text))).toBe(true);
+    });
+    it('loss breaker can restart the stake instead of stopping', async () => {
+        const w: ReturnType<typeof makeWorld> = makeWorld({ settleProfit: n => -w.buys[n - 1].params.amount });
+        seed(w, [4, 5, 6, 7]);
+        const c = collect();
+        const runner = new DTraderRunner(w.io, c.emit);
+        const done = runner.run(pair(w, { mode: 'repeat', martingale: 2, risk: { ...NO_RISK, breakerAfter: 2, breakerAction: 'reset' } }));
+        await until(() => w.buys.length >= 8);
+        runner.stop(); await done;
+        const stakes = w.buys.filter((_, i) => i % 2 === 0).map(b => b.params.amount);
+        expect(stakes.slice(0, 4)).toEqual([1, 2, 1, 2]);   // x2 after a loss, back to 1 after every second loss
+    });
+    it('recovery stake raises the stake just enough for one win to pay back the streak, then stops at its limit', async () => {
+        const w: ReturnType<typeof makeWorld> = makeWorld({ settleProfit: n => -w.buys[n - 1].params.amount });
+        seed(w, [4, 5, 6, 7]);
+        const c = collect();
+        await new DTraderRunner(w.io, c.emit).run(pair(w, {
+            mode: 'repeat', payoutHint: 4.7, risk: { ...NO_RISK, recovery: true, recoverySteps: 2, breakerAfter: 4, breakerAction: 'stop' },
+        }));
+        const stakes = w.buys.filter((_, i) => i % 2 === 0).map(b => b.params.amount);
+        expect(stakes[0]).toBe(1);
+        expect(stakes[1]).toBe(1);                        // deficit 2 / (4.7 - 2) = 0.74, never below the base
+        expect(stakes[2]).toBeCloseTo(4 / 2.7, 2);        // deficit 4
+        expect(stakes[3]).toBe(1);                        // step limit of 2 raised stakes reached: back to the base
+        expect(c.of('journal').some(j => /Recovery limit of 2/.test(j.text))).toBe(true);
+    });
+    it('cool-down waits the set number of ticks after a loss', async () => {
+        const w: ReturnType<typeof makeWorld> = makeWorld({ settleProfit: n => -w.buys[n - 1].params.amount });
+        seed(w, [4, 5, 6, 7]);
+        const c = collect();
+        const runner = new DTraderRunner(w.io, c.emit);
+        const done = runner.run(pair(w, { mode: 'repeat', risk: { ...NO_RISK, cooldownTicks: 2 } }));
+        await until(() => w.buys.length >= 2 && c.of('state').some(e => /Waiting 2 ticks/.test(e.note)));
+        expect(w.buys).toHaveLength(2);
+        w.pushTick(1); await tick();
+        expect(w.buys).toHaveLength(2);                   // one tick is not enough
+        w.pushTick(2); await until(() => w.buys.length >= 4);
+        expect(w.buys).toHaveLength(4);
+        runner.stop(); w.pushTick(3); await done;
     });
 });

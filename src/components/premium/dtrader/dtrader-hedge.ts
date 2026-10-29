@@ -134,3 +134,89 @@ export const recentPickOdds = (prices: readonly number[], maxWindows = 600): { h
     }
     return windows ? { high: high.map(n => n / windows), low: low.map(n => n / windows), windows } : { high, low, windows: 0 };
 };
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Cover: several ticks on each side, so fewer entries lose everything
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** Payout Deriv quotes (stake included) for a High Tick and a Low Tick trade on one tick; null when it did not quote. */
+export type TickQuote = { high: number | null; low: number | null };
+
+const cleanPicks = (picks: readonly number[]): number[] => [...new Set(picks.filter(inRange))].sort((a, b) => a - b);
+
+/** Average result per 1 staked of one trade on `pick`, from its quote and the chance model (a High and a Low pick have equal chance). */
+export const tickEdge = (pick: number, payout: number, stake: number): number => (inRange(pick) && stake > 0 ? PICK_ODDS[pick - 1] * (payout / stake) - 1 : NaN);
+
+/** Tick order when no quotes are known: the ends first, then the middle. */
+const DEFAULT_ORDER = [5, 1, 2, 4, 3];
+
+/** The `count` best ticks for one side: highest average result first at the quoted payouts, else the end ticks first. */
+export const bestTicks = (side: 'high' | 'low', count: number, stake: number, quotes: readonly TickQuote[] | null): number[] => {
+    const n = Math.max(0, Math.min(5, Math.trunc(count)));
+    if (!quotes || quotes.length < 5) return DEFAULT_ORDER.slice(0, n).sort((a, b) => a - b);
+    const scored = DEFAULT_ORDER.map((pick, order) => {
+        const payout = quotes[pick - 1]?.[side];
+        return { pick, order, edge: payout === null || payout === undefined ? -Infinity : tickEdge(pick, payout, stake) };
+    });
+    return scored.sort((a, b) => b.edge - a.edge || a.order - b.order).slice(0, n).map(x => x.pick).sort((a, b) => a - b);
+};
+
+export type CoverOutcome = { wins: number; chance: number; net: number | null };
+export type CoverStats = {
+    trades: number;
+    cost: number;
+    /** Chance that at least one trade wins / that every trade loses. */
+    pAtLeastOne: number;
+    pLoseAll: number;
+    /** By number of winning trades. */
+    outcomes: CoverOutcome[];
+    /** With quotes for every ticked pick: chance the entry makes money, the average result per entry and per 1 staked. */
+    pProfit: number | null;
+    expected: number | null;
+    expectedPerCost: number | null;
+    /** Does ONE winning trade pay back every stake in the entry? Worst case result of an entry where exactly one trade wins. */
+    singleWinCovers: boolean | null;
+    worstSingleWinNet: number | null;
+    note: string;
+};
+
+/** Exact chances (from the same model as hedgeStats) for a set of High Tick picks plus a set of Low Tick picks, one trade each. */
+export const coverStats = (stake: number, highPicks: readonly number[], lowPicks: readonly number[], quotes: readonly TickQuote[] | null): CoverStats | null => {
+    const A = cleanPicks(highPicks);
+    const B = cleanPicks(lowPicks);
+    if (!(stake > 0) || A.length + B.length === 0) return null;
+    const cost = (A.length + B.length) * stake;
+    const known = Boolean(quotes && quotes.length >= 5 && A.every(k => Number.isFinite(quotes[k - 1]?.high ?? NaN)) && B.every(k => Number.isFinite(quotes[k - 1]?.low ?? NaN)));
+    const total = JOINT.reduce((sum, row) => sum + row.reduce((a, b) => a + b, 0), 0);
+    const byWins = new Map<number, { chance: number; net: number }>();
+    let pProfit = 0;
+    let expected = 0;
+    for (let a = 0; a < 5; a += 1) {
+        for (let b = 0; b < 5; b += 1) {
+            const p = JOINT[a][b] / total;
+            if (p === 0) continue;
+            const winHigh = A.includes(a + 1);
+            const winLow = B.includes(b + 1);
+            const wins = Number(winHigh) + Number(winLow);
+            const net = known ? (winHigh ? quotes![a].high! : 0) + (winLow ? quotes![b].low! : 0) - cost : 0;
+            const entry = byWins.get(wins) ?? { chance: 0, net: 0 };
+            entry.chance += p; entry.net += p * net;
+            byWins.set(wins, entry);
+            if (known) { expected += p * net; if (net > 0) pProfit += p; }
+        }
+    }
+    const outcomes = [0, 1, 2].filter(w => byWins.has(w)).map(w => ({ wins: w, chance: byWins.get(w)!.chance, net: known ? r2(byWins.get(w)!.net / byWins.get(w)!.chance) : null }));
+    const pLoseAll = byWins.get(0)?.chance ?? 0;
+    const payouts = known ? [...A.map(k => quotes![k - 1].high!), ...B.map(k => quotes![k - 1].low!)] : [];
+    const worst = known ? Math.min(...payouts) - cost : null;
+    const covers = known ? worst! > 0 : null;
+    return {
+        trades: A.length + B.length, cost: r2(cost),
+        pAtLeastOne: 1 - pLoseAll, pLoseAll, outcomes,
+        pProfit: known ? pProfit : null, expected: known ? r2(expected) : null, expectedPerCost: known ? Math.round((expected / cost) * 1000) / 1000 : null,
+        singleWinCovers: covers, worstSingleWinNet: worst === null ? null : r2(worst),
+        note: pLoseAll < 0.0005
+            ? 'Every entry has at least one winning trade.'
+            : `${(pLoseAll * 100).toFixed(1)}% of entries lose every stake; ${(((1 - pLoseAll)) * 100).toFixed(1)}% have at least one winner.${covers === false ? ' A single win does NOT pay back all the stakes, so a win alone can still be a loss.' : ''}`,
+    };
+};
