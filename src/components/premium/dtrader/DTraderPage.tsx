@@ -5,7 +5,7 @@ import { bulkFeed } from '../bulk-feed';
 import { tickIntervalMs } from '../burst-pace';
 import { BULK_MARKETS } from '../over-under-engine';
 import { pairOutcome } from './dtrader-catalog';
-import { hedgeStats, type PickRow, pickTable, recentPickOdds } from './dtrader-hedge';
+import { coverStats, hedgeStats, type PickRow, pickTable, recentPickOdds, type TickQuote } from './dtrader-hedge';
 import {
 decimalsText, describeEntry,     DIGIT_OPS, type DigitOp, digitStats, type EntryRule, FAMILIES, type Family, FAMILY_ORDER, legsFor, offsetError, opNeedsDigit, parseSequence, predictionError,
 type SideChoice,
@@ -15,6 +15,7 @@ import {
 configError,     DTraderRunner, emptyTotals, type RunConfig, type RunnerEvent, type RunnerIO, type RunnerState, type Totals, type TradeRow,
 } from './dtrader-runner';
 import { backtest, backtestText, defaultStrategyId, getStrategy, paramDefaults, resolveParams, sigmaOffset, strategiesFor, type StrategyParams } from './dtrader-strategies';
+import { type BreakerAction, NO_RISK } from './dtrader-risk';
 import './dtrader.scss';
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -27,6 +28,12 @@ type Form = {
     takeProfit: string; stopLoss: string; mode: 'single' | 'repeat'; entryMode: EntryMode;
     digitOp: DigitOp; digitValue: string;
     patternKind: 'last' | 'sequence'; lastCount: string; lastOp: DigitOp; lastDigit: string; seqText: string; fireAfter: string;
+    /** High Tick / Low Tick cover: one trade per ticked tick on each side. */
+    coverOn: boolean; highTicks: number[]; lowTicks: number[];
+    /** High Tick / Low Tick, from Deriv's live quotes: pick the best-value ticks; skip entries below a minimum average result (percent). */
+    bestValue: boolean; minEdgeOn: boolean; minEdge: string;
+    /** Streak protection. */
+    breakerAfter: string; breakerAction: BreakerAction; pauseTicks: string; recovery: boolean; recoveryTarget: string; recoverySteps: string; cooldown: string;
     guard: boolean; chart: 'line' | 'candles'; digitsView: 'default' | 'digits'; candleSize: string; window: string;
     /** Strategy id for the Auto side ('' = the family's standard one) and its settings, kept per strategy. */
     strategy: string; strategyParams: Record<string, Record<string, string>>;
@@ -36,6 +43,8 @@ const DEFAULT_FORM: Form = {
     symbol: '1HZ100V', family: 'overunder', side: 'second', prediction: '8', pick2: '', offset: '0.5', duration: '1', stake: '1', trades: '1', martingale: '1',
     takeProfit: '', stopLoss: '', mode: 'repeat', entryMode: 'instant', digitOp: '=', digitValue: '2',
     patternKind: 'sequence', lastCount: '2', lastOp: '>=', lastDigit: '9', seqText: '1 2 5', fireAfter: '',
+    coverOn: false, highTicks: [1, 5], lowTicks: [1, 5], bestValue: false, minEdgeOn: false, minEdge: '-3',
+    breakerAfter: '', breakerAction: 'stop', pauseTicks: '20', recovery: false, recoveryTarget: '0', recoverySteps: '4', cooldown: '',
     guard: true, chart: 'line', digitsView: 'default', candleSize: '5', window: '1000', strategy: '', strategyParams: {},
 };
 const STORAGE_KEY = 'dtrader_form_v1';
@@ -73,8 +82,19 @@ const numericParams = (form: Pick<Form, 'family' | 'strategy' | 'strategyParams'
     return resolveParams(strategy, Object.fromEntries(Object.entries(saved).map(([key, value]) => [key, Number(value)])));
 };
 
+/** Streak-protection settings, or undefined when none is switched on. */
+const riskFor = (form: Form): RunConfig['risk'] => {
+    const breakerAfter = Math.max(0, Math.trunc(toNumber(form.breakerAfter, 0)));
+    const cooldownTicks = Math.max(0, Math.trunc(toNumber(form.cooldown, 0)));
+    if (!breakerAfter && !form.recovery && !cooldownTicks) return undefined;
+    return {
+        ...NO_RISK, breakerAfter, breakerAction: form.breakerAction, pauseTicks: Math.max(0, Math.trunc(toNumber(form.pauseTicks, 20))),
+        recovery: form.recovery, recoveryTarget: Math.max(0, toNumber(form.recoveryTarget, 0)), recoverySteps: Math.trunc(toNumber(form.recoverySteps, 4)), cooldownTicks,
+    };
+};
+
 /** The form -> a run configuration, or the reason it is not ready. */
-export const buildRun = (form: Form, currency: string): { config: RunConfig } | { error: string } => {
+export const buildRun = (form: Form, currency: string, payoutHint?: number): { config: RunConfig } | { error: string } => {
     let entry: EntryRule;
     if (form.entryMode === 'instant') entry = { mode: 'instant' };
     else if (form.entryMode === 'digit') entry = { mode: 'digit', op: form.digitOp, digit: toNumber(form.digitValue, 0) };
@@ -90,6 +110,10 @@ export const buildRun = (form: Form, currency: string): { config: RunConfig } | 
         takeProfit: Math.max(0, toNumber(form.takeProfit, 0)), stopLoss: Math.max(0, toNumber(form.stopLoss, 0)),
         mode: form.mode, entry, sameTickGuard: form.guard, currency,
         ...(form.side === 'auto' ? { strategy: { id: activeStrategyId(form), params: numericParams(form) } } : {}),
+        ...(FAMILIES[form.family].needsTick && form.coverOn ? { cover: { high: form.highTicks, low: form.lowTicks } } : {}),
+        ...(FAMILIES[form.family].needsTick && (form.bestValue || form.minEdgeOn) ? { quoteGuard: { pickBest: form.bestValue, minEdge: form.minEdgeOn ? toNumber(form.minEdge, 0) / 100 : null } } : {}),
+        ...(riskFor(form) ? { risk: riskFor(form) } : {}),
+        ...(payoutHint && payoutHint > 0 ? { payoutHint } : {}),
     };
     const error = configError(config);
     return error ? { error } : { config };
@@ -119,6 +143,18 @@ const preflightDeps: PreflightDeps = {
     proposal: parameters => PremiumDerivApiService.proposal(parameters),
 };
 
+/** Deriv's quoted payout for a High Tick and a Low Tick trade on each of the 5 ticks (quotes only; nothing is bought). */
+const fetchTickQuotes = async (symbol: string, stake: number, currency: string): Promise<TickQuote[]> => {
+    const ask = async (contract: string, pick: number) => {
+        try {
+            const q = await PremiumDerivApiService.proposal({ amount: stake, basis: 'stake', contract_type: contract, currency, underlying_symbol: symbol, duration: 5, duration_unit: 't', selected_tick: pick });
+            const payout = Number(q.payout);
+            return Number.isFinite(payout) ? payout : null;
+        } catch { return null; }
+    };
+    return Promise.all([1, 2, 3, 4, 5].map(async pick => ({ high: await ask('TICKHIGH', pick), low: await ask('TICKLOW', pick) })));
+};
+
 const makeIO = (): RunnerIO => ({
     now: () => Date.now(),
     market: symbol => bulkFeed.store[symbol],
@@ -129,6 +165,7 @@ const makeIO = (): RunnerIO => ({
     digitAt: (symbol, epoch) => bulkFeed.digitAt(symbol, epoch),
     sleep: ms => new Promise(resolve => window.setTimeout(resolve, ms)),
     preflight: input => preflightContract(preflightDeps, input),
+    quoteTicks: fetchTickQuotes,
     lookupContract: async id => (await PremiumDerivApiService.request({ proposal_open_contract: 1, contract_id: id })).proposal_open_contract,
 });
 
@@ -352,23 +389,39 @@ const DTraderPage = () => {
     const [tickRows, setTickRows] = useState<PickRow[] | null>(null);
     const [tickRowsBusy, setTickRowsBusy] = useState(false);
     const [tickRowsError, setTickRowsError] = useState('');
+    const [tickQuoteStake, setTickQuoteStake] = useState(0);
     const quoteAllTicks = async () => {
         const stake = toNumber(form.stake, 0);
         if (!(stake > 0)) { setTickRowsError('Enter a stake first.'); return; }
         setTickRowsBusy(true); setTickRowsError('');
         try {
-            const ask = async (contract: string, pick: number) => {
-                try {
-                    const q = await PremiumDerivApiService.proposal({ amount: stake, basis: 'stake', contract_type: contract, currency, underlying_symbol: form.symbol, duration: 5, duration_unit: 't', selected_tick: pick });
-                    const payout = Number(q.payout);
-                    return Number.isFinite(payout) ? payout : null;
-                } catch { return null; }
-            };
-            const quotes = await Promise.all([1, 2, 3, 4, 5].map(async pick => ({ high: await ask('TICKHIGH', pick), low: await ask('TICKLOW', pick) })));
+            const quotes = await fetchTickQuotes(form.symbol, stake, currency);
             if (quotes.every(q => q.high === null && q.low === null)) setTickRowsError('Deriv did not return a quote for any tick. Check you are logged in and the market is open.');
+            setTickQuoteStake(stake);
             setTickRows(pickTable(stake, quotes, recentPickOdds(bulkFeed.store[form.symbol]?.prices ?? [])));
         } finally { setTickRowsBusy(false); }
     };
+    // Keep the 5-tick quotes fresh while High Tick / Low Tick is selected (quotes only, nothing is bought).
+    useEffect(() => {
+        if (form.family !== 'tickhighlow' || !isAuthorized || !(toNumber(form.stake, 0) > 0)) return undefined;
+        const timer = window.setTimeout(() => { void quoteAllTicks(); }, 1200);
+        return () => window.clearTimeout(timer);
+    }, [form.family, form.symbol, form.stake, isAuthorized, currency]);  // eslint-disable-line react-hooks/exhaustive-deps
+    // The cover's numbers, from the last quotes (payouts scale with the stake, so a changed stake still works).
+    const cover = form.family === 'tickhighlow' && form.coverOn && toNumber(form.stake, 0) > 0
+        ? coverStats(
+            toNumber(form.stake, 0), form.highTicks, form.lowTicks,
+            tickRows && tickQuoteStake > 0 ? tickRows.map(r => ({ high: r.highPayout === null ? null : (r.highPayout * toNumber(form.stake, 0)) / tickQuoteStake, low: r.lowPayout === null ? null : (r.lowPayout * toNumber(form.stake, 0)) / tickQuoteStake })) : null,
+        )
+        : null;
+    const toggleTick = (side: 'highTicks' | 'lowTicks', tick: number) =>
+        set(side, form[side].includes(tick) ? form[side].filter(k => k !== tick) : [...form[side], tick].sort((a, b) => a - b));
+    // What one winning trade pays per 1 staked, for the recovery stake until a real win shows it.
+    const payoutHint = (() => {
+        const stake = toNumber(form.stake, 0);
+        const values = payouts.map(p => Number(p.payout)).filter(Number.isFinite);
+        return stake > 0 && values.length ? values.reduce((a, b) => a + b, 0) / values.length / stake : undefined;
+    })();
 
     const pair = form.side === 'both' && form.family !== 'tickhighlow' && payouts.length === 2
         ? pairOutcome(toNumber(form.stake, 0), Number(payouts[0].payout), Number(payouts[1].payout), !['matchesdiffers', 'evenodd'].includes(form.family))
@@ -377,7 +430,7 @@ const DTraderPage = () => {
     const start = (override?: Partial<Form>) => {
         setError('');
         if (!isAuthorized) { setError('Log in to a Deriv account to trade.'); return; }
-        const built = buildRun({ ...form, ...override }, currency);
+        const built = buildRun({ ...form, ...override }, currency, payoutHint);
         if ('error' in built) { setError(built.error); return; }
         void runner.run(built.config);
     };
@@ -387,7 +440,11 @@ const DTraderPage = () => {
     const seqDigits = parseSequence(form.seqText);
     const fireOptions = seqDigits ? seqDigits.map((_, i) => i + 1) : [];
     const planned = 'config' in prepared ? prepared.config : null;
-    const totalPerEntry = planned ? planned.tradesPerEntry * (planned.side === 'both' ? 2 : 1) : 0;
+    // Trades one entry sends: bulk size x legs. A cover has one leg per ticked tick (Auto may use either side, so its upper bound is shown).
+    const legCount = planned?.cover
+        ? (planned.side === 'second' ? 0 : planned.cover.high.length) + (planned.side === 'first' ? 0 : planned.cover.low.length)
+        : planned ? (planned.side === 'both' ? 2 : 1) : 0;
+    const totalPerEntry = planned ? planned.tradesPerEntry * legCount : 0;
 
     return (
         <div className='dt'>
@@ -522,17 +579,70 @@ const DTraderPage = () => {
                         </label>
                     )}
 
-                    {family.needsTick && (
+                    {family.needsTick && !form.coverOn && (
                         <label className='dt-field dt-field--wide'>Tick to pick (1 to {family.fixedTicks})
                             <input inputMode='numeric' value={form.prediction} disabled={running} onChange={e => set('prediction', e.target.value)} aria-invalid={Boolean(predictionIssue)} />
                             <small className='dt-hint'>{family.sides[0]} wins if that tick is the highest of the next {family.fixedTicks}; {family.sides[1]} wins if it is the lowest. There is no barrier.</small>
                         </label>
                     )}
 
-                    {family.needsTick && form.side === 'both' && (
+                    {family.needsTick && !form.coverOn && form.side === 'both' && (
                         <label className='dt-field dt-field--wide'>Low Tick pick (blank = same tick as High Tick)
                             <input inputMode='numeric' value={form.pick2} placeholder={form.prediction} disabled={running} onChange={e => set('pick2', e.target.value)} />
                         </label>
+                    )}
+
+                    {family.needsTick && (
+                        <div className='dt-cover'>
+                            <label className='dt-check'>
+                                <input
+                                    type='checkbox' checked={form.coverOn} disabled={running}
+                                    onChange={e => setForm(current => ({ ...current, coverOn: e.target.checked, ...(e.target.checked && current.side !== 'auto' ? { side: 'both' as SideChoice } : {}) }))}
+                                /> Cover builder: several ticks per side
+                            </label>
+                            {form.coverOn && (
+                                <>
+                                    {(['highTicks', 'lowTicks'] as const).map(side => (
+                                        <div key={side} className='dt-chips'>
+                                            <span>{side === 'highTicks' ? 'High Tick on' : 'Low Tick on'}</span>
+                                            {[1, 2, 3, 4, 5].map(tick => (
+                                                <button
+                                                    key={tick} type='button' disabled={running} aria-pressed={form[side].includes(tick)}
+                                                    className={`dt-chip ${form[side].includes(tick) ? 'is-on' : ''}`} onClick={() => toggleTick(side, tick)}
+                                                >{tick}</button>
+                                            ))}
+                                        </div>
+                                    ))}
+                                    <div className='dt-chips'>
+                                        <span>Presets</span>
+                                        {([['Pair on 5', [5], [5]], ['3 trades', [1, 5], [5]], ['Ends cover (4)', [1, 5], [1, 5]], ['Every tick (10)', [1, 2, 3, 4, 5], [1, 2, 3, 4, 5]]] as Array<[string, number[], number[]]>).map(([label, high, low]) => (
+                                            <button key={label} type='button' className='dt-chip dt-chip--wide' disabled={running} onClick={() => setForm(current => ({ ...current, highTicks: high, lowTicks: low }))}>{label}</button>
+                                        ))}
+                                    </div>
+                                    <p className='dt-hint'>One trade per ticked tick on each side, all bought together. The High / Low / Both buttons above choose which side(s) trade. Each extra trade costs one more stake.</p>
+                                    {cover && (
+                                        <>
+                                            <p className='dt-hint dt-hint--note'>
+                                                {cover.trades} trade{cover.trades === 1 ? '' : 's'}, {cover.cost.toFixed(2)} {currency} staked per entry. {(cover.pAtLeastOne * 100).toFixed(1)}% of entries have a winner, {(cover.pLoseAll * 100).toFixed(1)}% lose every stake.
+                                                {cover.outcomes.filter(o => o.wins > 0).map(o => ` ${o.wins} winner${o.wins === 1 ? '' : 's'}: ${(o.chance * 100).toFixed(1)}%${o.net === null ? '' : ` (${o.net >= 0 ? '+' : ''}${o.net.toFixed(2)})`}.`).join('')}
+                                            </p>
+                                            {cover.expected !== null ? (
+                                                <p className={`dt-hint ${cover.singleWinCovers === false || (cover.expected ?? 0) < 0 ? 'dt-hint--bad' : ''}`}>
+                                                    At Deriv&apos;s quotes the average result is {cover.expected >= 0 ? '+' : ''}{cover.expected.toFixed(2)} {currency} per entry ({((cover.expectedPerCost ?? 0) * 100).toFixed(1)}% of the money staked) and {((cover.pProfit ?? 0) * 100).toFixed(1)}% of entries make money.
+                                                    {cover.singleWinCovers === false ? ' A single win does NOT pay back every stake, so only entries with two winners make money.' : ' A single win pays back every stake.'}
+                                                </p>
+                                            ) : <p className='dt-hint'>{tickRowsBusy ? 'Asking Deriv for quotes…' : 'Log in so the panel can read Deriv\'s quotes and show the average result.'}</p>}
+                                        </>
+                                    )}
+                                </>
+                            )}
+                            <label className='dt-check'><input type='checkbox' checked={form.bestValue} disabled={running} onChange={e => set('bestValue', e.target.checked)} /> Pick the best-value tick on each side from live quotes</label>
+                            <div className='dt-row'>
+                                <label className='dt-check'><input type='checkbox' checked={form.minEdgeOn} disabled={running} onChange={e => set('minEdgeOn', e.target.checked)} /> Skip entries averaging below</label>
+                                <label className='dt-field'>% of stake<input inputMode='decimal' value={form.minEdge} disabled={running || !form.minEdgeOn} onChange={e => set('minEdge', e.target.value)} aria-label='Minimum average result in percent' /></label>
+                            </div>
+                            {(form.bestValue || form.minEdgeOn) && <p className='dt-hint'>Uses the payouts Deriv quotes before each entry and the chance model below. If Deriv gives no quote, the entry is skipped and nothing is bought.</p>}
+                        </div>
                     )}
 
                     {family.needsOffset && (
@@ -562,6 +672,31 @@ const DTraderPage = () => {
                         <label className='dt-field'>SL<input inputMode='decimal' value={form.stopLoss} placeholder='off' disabled={running} onChange={e => set('stopLoss', e.target.value)} /></label>
                         <label className='dt-field'>×<input inputMode='decimal' value={form.martingale} disabled={running} onChange={e => set('martingale', e.target.value)} aria-label='Stake multiplier after a loss' /></label>
                     </div>
+
+                    <details className='dt-risk'>
+                        <summary>Streak protection{riskFor(form) ? ' · on' : ''}</summary>
+                        <div className='dt-row'>
+                            <label className='dt-field'>After this many losing entries in a row<input inputMode='numeric' value={form.breakerAfter} placeholder='off' disabled={running} onChange={e => set('breakerAfter', e.target.value)} /></label>
+                            <label className='dt-field'>Then
+                                <select value={form.breakerAction} disabled={running} onChange={e => set('breakerAction', e.target.value as BreakerAction)}>
+                                    <option value='stop'>Stop the run</option><option value='pause'>Pause</option><option value='reset'>Restart the stake</option>
+                                </select>
+                            </label>
+                        </div>
+                        {form.breakerAction === 'pause' && <label className='dt-field'>Pause for (ticks)<input inputMode='numeric' value={form.pauseTicks} disabled={running} onChange={e => set('pauseTicks', e.target.value)} /></label>}
+                        <label className='dt-field'>Cool-down after a loss (ticks)<input inputMode='numeric' value={form.cooldown} placeholder='off' disabled={running} onChange={e => set('cooldown', e.target.value)} /></label>
+                        <label className='dt-check'><input type='checkbox' checked={form.recovery} disabled={running} onChange={e => set('recovery', e.target.checked)} /> Recovery stake (replaces the × multiplier)</label>
+                        {form.recovery && (
+                            <div className='dt-row'>
+                                <label className='dt-field'>Profit wanted ({currency})<input inputMode='decimal' value={form.recoveryTarget} disabled={running} onChange={e => set('recoveryTarget', e.target.value)} /></label>
+                                <label className='dt-field'>Most raised stakes<input inputMode='numeric' value={form.recoverySteps} disabled={running} onChange={e => set('recoverySteps', e.target.value)} /></label>
+                            </div>
+                        )}
+                        <p className='dt-hint'>
+                            These do not change the odds of any entry; they limit what a run of losses can cost. The recovery stake is sized from the real payout so one winning entry pays back the losses so far (plus the profit wanted).
+                            After the most raised stakes the stake restarts at the base and that loss is accepted.
+                        </p>
+                    </details>
 
                     <div className='dt-payout'>
                         {payouts.length ? payouts.map(p => <div key={p.label}><span>Payout · {p.label}</span><b>{p.payout} {currency}</b></div>) : <div><span>Payout</span><b>—</b></div>}
@@ -604,8 +739,8 @@ const DTraderPage = () => {
                                 </table>
                             )}
                             <p className='dt-hint'>
-                                The highest (or lowest) of 5 ticks is the first or last tick about 27% of the time and a middle tick about 14 to 16%. "Avg" is the average result per 1 staked from the payout Deriv quotes and that chance
-                                (negative = you lose on average). It assumes each tick moves independently, so check it against "Recent" and try a demo account first. Two opposite trades never change the average, only how often you win.
+                                The highest (or lowest) of 5 ticks is the first or last tick about 27% of the time and a middle tick about 14 to 16%. &quot;Avg&quot; is the average result per 1 staked from the payout Deriv quotes and that chance
+                                (negative = you lose on average). It assumes each tick moves independently, so check it against &quot;Recent&quot; and try a demo account first. Two opposite trades never change the average, only how often you win.
                             </p>
                         </div>
                     )}

@@ -126,6 +126,14 @@ export const legsFor = (family: Family, side: Exclude<SideChoice, 'auto'>, predi
     return [make(side === 'first' ? 0 : 1)];
 };
 
+/** High Tick / Low Tick cover: one trade per picked tick on each side. Ticks are whole numbers 1 to 5; duplicates are dropped. */
+export const tickLegs = (highPicks: readonly number[], lowPicks: readonly number[]): Leg[] => {
+    const def = FAMILIES.tickhighlow;
+    const clean = (picks: readonly number[]) => [...new Set(picks.filter(k => Number.isInteger(k) && k >= 1 && k <= 5))].sort((x, y) => x - y);
+    const make = (index: SideIndex) => (pick: number): Leg => ({ contract: def.contracts[index], selectedTick: pick, label: `${def.sides[index]} #${pick}`, sideIndex: index });
+    return [...clean(highPicks).map(make(0)), ...clean(lowPicks).map(make(1))];
+};
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Digit statistics
 // ---------------------------------------------------------------------------------------------------------------------
