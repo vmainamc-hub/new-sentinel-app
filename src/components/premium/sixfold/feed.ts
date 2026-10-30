@@ -151,6 +151,8 @@ export class SixfoldFeed {
             };
         });
     };
+    /** Deriv's epoch (seconds) of the latest accepted tick for a market. */
+    getLastEpoch = (symbol: string): number | null => this.tel[symbol]?.epochs.at(-1) ?? null;
     isLive = () => this.mode === 'live' && this.status === 'live';
     getMode = () => this.mode;
     getStatus = () => this.status;

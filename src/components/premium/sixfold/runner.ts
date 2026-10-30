@@ -12,7 +12,7 @@ import type { RunnerStores, StoreWatcher } from '@/pages/sentinel-ai/sentinel-ai
 import { describeTradeFailure } from '@/utils/trade-errors';
 import { formGateOk, smartEntryDigits } from './entry';
 import { streakRead } from './streak-guard';
-import { type FeedMode, type FeedSnapshot, marketName } from './feed';
+import { expectedTickSeconds, type FeedMode, type FeedSnapshot, marketName } from './feed';
 import {
     applyResult,
     applyWriteOff,
@@ -143,6 +143,7 @@ export type RunnerIO = {
         getLiveSeries: () => Record<string, readonly number[]>;
         getLastTickAt: (symbol: string) => number | null;
         getLastDigit: (symbol: string) => number | null;
+        getLastEpoch?: (symbol: string) => number | null;
         isLive: () => boolean;
         getSnapshot: () => FeedSnapshot;
         connect: () => void;
@@ -792,6 +793,8 @@ export class SixfoldRunner {
         const cell = this.scan.cells.find(c => c.symbol === armed.symbol && c.key === armed.cellKey);
         if (!cell) return;
 
+        const triggerEpoch = this.io.feed.getLastEpoch?.(armed.symbol) ?? null;
+        const tickAgeMs = this.io.now() - lastTick;
         const token = this.runToken;
         const bought = tradeContract(cell.contract, this.session.consecutiveLosses, this.settings);
         const sized = stakeFor(this.session, bought.contract, this.settings);
@@ -836,7 +839,9 @@ export class SixfoldRunner {
         let contractId = 0;
         const abort = new AbortController();
         try {
+            const sentAt = this.io.now();
             const buy = await this.io.buy({ parameters, price: stake });
+            const buyMs = this.io.now() - sentAt;
             contractId = buy.contract_id;
             this.buyErrors = 0;
             this.skipStreak = 0;
@@ -866,7 +871,7 @@ export class SixfoldRunner {
             this.trades = [record, ...this.trades].slice(0, TRADE_LIMIT);
             this.addLog(
                 'trade',
-                `Bought ${bought.label}${bought.recovery ? ' (recovery)' : ''} on ${armed.name}, stake ${stake.toFixed(2)}${entryDigit === null ? '' : `, entry digit ${entryDigit}`}${this.brainGoverns() && armed.plan ? `, plan: ${armed.plan.label}` : ''}.`
+                `Bought ${bought.label}${bought.recovery ? ' (recovery)' : ''} on ${armed.name}, stake ${stake.toFixed(2)}${entryDigit === null ? '' : `, entry digit ${entryDigit}`}${this.brainGoverns() && armed.plan ? `, plan: ${armed.plan.label}` : ''}. Sent ${Math.max(0, Math.round(tickAgeMs))} ms after the trigger tick, confirmed in ${Math.max(0, Math.round(buyMs))} ms.`
             );
             if (token !== this.runToken) {
                 this.tradeInFlight = false;
@@ -888,6 +893,7 @@ export class SixfoldRunner {
                 this.tradeInFlight = false;
                 return;
             }
+            this.reportStart(armed, settled, triggerEpoch);
             const isFinal =
                 Boolean(settled.is_sold) || ['won', 'lost', 'sold'].includes(String(settled.status ?? '').toLowerCase());
             const profit = Number(settled.profit);
@@ -918,6 +924,20 @@ export class SixfoldRunner {
             }
             this.addLog('warn', failure.message);
             this.emit();
+        }
+    }
+
+    /**
+     * Checks where the contract really began. A contract bought on a tick starts on the next tick Deriv prints; "ticks late"
+     * is how many extra ticks passed between the trigger tick and that start (0 = bought on the very next tick).
+     */
+    private reportStart(armed: Armed, settled: Loose, triggerEpoch: number | null) {
+        const start = Number(settled.entry_tick_time ?? settled.entry_spot_time ?? settled.date_start);
+        if (triggerEpoch === null || !Number.isFinite(start) || start <= 0) return;
+        const secs = expectedTickSeconds(armed.symbol);
+        const late = Math.max(0, Math.round((start - triggerEpoch) / secs) - 1);
+        if (late > 0) {
+            this.addLog('warn', `${armed.label} on ${armed.name} started ${late} tick${late > 1 ? 's' : ''} after the trigger tick (${start - triggerEpoch}s later): the purchase was slower than the market's tick.`);
         }
     }
 

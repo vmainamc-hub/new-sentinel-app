@@ -168,3 +168,7 @@ Next: demo run, read the ledger after 100+ trades, then prune methods that read 
 - A market with too many losses in its last 10 (expected losses + `lossAbort`) is dropped, and the scanner skips it; it first prefers markets already part-way into a run of wins, then any non-aborted market.
 - With the guard on, the old "wait for a losing digit" setups do not apply (the streak is the entry); Brain digits, recovery gates and Meter floors still apply on top.
 - Tests: streak-guard.spec.ts, two runner tests.
+
+## Sixfold purchase timing
+- Investigated "delayed execution": a confirmed entry calls `execute` synchronously from the feed tick and sends one `buy` request (no separate proposal, no timer). The only built-in pause is the 1 s cooldown after a contract settles.
+- Added measurement: every Bought log line now shows ms from the trigger tick to the buy being sent and the buy round trip; after settlement a warning appears if the contract started later than the very next tick (`reportStart`, uses Deriv's entry tick time vs the trigger tick epoch). `sixfoldFeed.getLastEpoch`.
