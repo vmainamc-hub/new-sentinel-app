@@ -31,6 +31,7 @@ import { type Contract, contractKey, winningDigits, winProbability } from './bot
 import { freshVh, vhAfterReal, vhAfterVirtual, type VhConfig, type VhState } from './virtual-hook';
 import { type ArmId, type BrainReport, brainReport, choosePlan, fallbackPlan, findCell, type Plan, planFires } from './entry-brain';
 import { climateOf, IDLE_STATUS, meterCall, type MeterCall, type MeterStatus } from './meter-guide';
+import { type RunnerOverlay, type TradeNotice } from './overlay';
 import { computeRegime, regimeCell, type RegimeSummary } from './regime';
 import { type Cell, eligibility, pickBest, type ScanResult, scanMarkets } from './scanner';
 import { mulberry32, profitMultiple } from './stats';
@@ -190,6 +191,8 @@ export type RunnerIO = {
     now: () => number;
     loadSettings: () => SixfoldSettings;
     saveSettings: (settings: SixfoldSettings) => void;
+    /** Another tool's second opinion on every step (Sentinel AI). Absent for Sixfold itself. */
+    overlay?: RunnerOverlay;
 };
 
 const round2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
@@ -245,6 +248,8 @@ export class SixfoldRunner {
     private emitTimer: ReturnType<typeof setTimeout> | null = null;
     private retainCount = 0;
     private snap: SixfoldSnapshot;
+    /** What was armed and bought for each open trade, kept for the overlay's settle notice. */
+    private notices = new Map<number, TradeNotice>();
 
     constructor(private io: RunnerIO) {
         this.settings = normalizeSettings(io.loadSettings());
@@ -267,6 +272,17 @@ export class SixfoldRunner {
     };
     getSnapshot = () => this.snap;
     isRunning = () => this.running;
+
+    private get moduleId() {
+        return this.io.overlay?.moduleId ?? MODULE_ID;
+    }
+    private get name() {
+        return this.io.overlay?.name ?? 'Sixfold';
+    }
+    /** The contracts scanned and traded: the overlay's, or the Over / Under switched on in the settings. */
+    private contractList(): Contract[] {
+        return this.io.overlay ? this.io.overlay.contracts(this.settings) : primaryContracts(this.settings);
+    }
 
     /** The page asks for live scans while it is open, even when no session is running. Returns the release function. */
     retainScan = () => {
@@ -296,7 +312,7 @@ export class SixfoldRunner {
     start() {
         if (this.running) return;
         if (!this.stores) {
-            this.lastError = 'Sixfold is still starting. Try again in a moment.';
+            this.lastError = `${this.name} is still starting. Try again in a moment.`;
             return this.emit();
         }
         if (!this.io.isAuthorized()) {
@@ -307,14 +323,14 @@ export class SixfoldRunner {
             this.lastError = 'Pick at least one market to scan.';
             return this.emit();
         }
-        if (primaryContracts(this.settings).length === 0) {
-            this.lastError = 'Switch on Over or Under: Sixfold needs at least one contract to trade.';
+        if (this.contractList().length === 0) {
+            this.lastError = this.io.overlay ? `${this.name} needs at least one contract switched on.` : 'Switch on Over or Under: Sixfold needs at least one contract to trade.';
             return this.emit();
         }
         const { run_panel, dashboard } = this.stores;
         try {
             const other = dashboard.active_trading_module;
-            if (other && other !== MODULE_ID) dashboard.stopActiveTradingModule();
+            if (other && other !== this.moduleId) dashboard.stopActiveTradingModule();
         } catch {
             /* a failing foreign stop handler must not block Run */
         }
@@ -332,6 +348,7 @@ export class SixfoldRunner {
         this.vh = freshVh();
         this.virtualOpen = null;
         this.paper = { trades: 0, wins: 0, pnl: 0 };
+        this.notices.clear();
         this.lastResultAt = 0;
         this.meterSince = this.io.now();
         this.armed = null;
@@ -349,14 +366,14 @@ export class SixfoldRunner {
         } catch {
             /* optional run-panel mount failures are ignored */
         }
-        dashboard.setActiveTradingModule(MODULE_ID);
-        dashboard.registerTradingStopHandler(MODULE_ID, () => this.stop('Stopped from the Run Panel'));
+        dashboard.setActiveTradingModule(this.moduleId);
+        dashboard.registerTradingStopHandler(this.moduleId, () => this.stop('Stopped from the Run Panel'));
         this.disposeStoreWatch?.();
         this.disposeStoreWatch =
             this.watchStores?.((runPanelRunning, activeModule) => {
                 if (!this.running) return;
                 if (!runPanelRunning) this.stop('Stopped from the Run Panel');
-                else if (activeModule && activeModule !== MODULE_ID) {
+                else if (activeModule && activeModule !== this.moduleId) {
                     this.stop('Another trading module took over the Run Panel');
                 }
             }) ?? null;
@@ -384,8 +401,8 @@ export class SixfoldRunner {
         this.disposeStoreWatch = null;
         if (this.stores) {
             const { run_panel, dashboard } = this.stores;
-            dashboard.unregisterTradingStopHandler(MODULE_ID);
-            if (dashboard.active_trading_module === MODULE_ID) dashboard.setActiveTradingModule(null);
+            dashboard.unregisterTradingStopHandler(this.moduleId);
+            if (dashboard.active_trading_module === this.moduleId) dashboard.setActiveTradingModule(null);
             try {
                 run_panel.is_contract_buying_in_progress = false;
                 run_panel.setIsRunning(false);
@@ -507,12 +524,12 @@ export class SixfoldRunner {
                 { mode: this.scanMode() },
                 { symbols: skipSymbols, keys: skipKeys },
                 this.pickyBump(now),
-                this.settings.meterGuide || guarded
+                this.settings.meterGuide || this.io.overlay || guarded
                     ? {
-                          bump: cell => (this.settings.meterGuide ? this.meterFor(cell, now).bump : 0),
-                          rank: cell => (this.settings.meterGuide ? this.meterFor(cell, now).rank : 0),
+                          bump: cell => this.meterFor(cell, now).bump,
+                          rank: cell => this.meterFor(cell, now).rank,
                           veto: cell => {
-                              if (this.settings.meterGuide && !this.meterFor(cell, now).allow) return true;
+                              if (!this.meterFor(cell, now).allow) return true;
                               if (this.guards.has(`${cell.symbol}|${cell.key}`)) return true;
                               if (!guarded) return false;
                               const read = this.streakOf(cell.symbol, cell);
@@ -570,6 +587,11 @@ export class SixfoldRunner {
 
     /** Entry digits for a market: learned from its recent ticks when SMART, otherwise the fixed setup digits. */
     private entryDigitsFor(symbol: string, cell: Cell, fixed: number[]): number[] {
+        // An overlay (Sentinel AI) may hold a validated entry digit for this exact contract. It is not used while recovering,
+        // because the contract bought then is the recovery barrier, which the digit was not validated for.
+        const recovering = this.isRecovering();
+        const forced = this.io.overlay?.entryDigits?.(cell, { recovering });
+        if (forced && forced.length && !recovering && this.settings.entry !== 'ANY' && !this.brainGoverns()) return forced;
         if (this.settings.entry !== 'SMART') return fixed;
         const series = this.io.feed.getLiveSeries()[symbol] ?? [];
         const traded = tradeContract(cell.contract, this.session.consecutiveLosses, this.settings).contract;
@@ -685,6 +707,22 @@ export class SixfoldRunner {
      * a loss), the market-wide climate, and how long the bot has waited since its last result.
      */
     private meterFor(cell: Cell, now: number): MeterCall {
+        const meter = this.meterOnly(cell, now);
+        const overlay = this.io.overlay;
+        if (!overlay) return meter;
+        const extra = overlay.call(cell, { recovering: this.isRecovering(), now });
+        return {
+            allow: meter.allow && extra.allow,
+            bump: meter.bump + extra.bump,
+            rank: meter.rank + extra.rank,
+            note: [meter.allow ? '' : meter.note, extra.allow ? '' : extra.note, meter.allow && extra.allow ? meter.note : '', extra.allow ? extra.note : '']
+                .filter(Boolean)
+                .join('; '),
+        };
+    }
+
+    /** The Meter's part alone (see `meterFor`). */
+    private meterOnly(cell: Cell, now: number): MeterCall {
         if (!this.settings.meterGuide) return { allow: true, bump: 0, rank: 0, note: '' };
         const traded = tradeContract(cell.contract, this.session.consecutiveLosses, this.settings).contract;
         const reading = this.tradeRegime?.cells.find(c => c.symbol === cell.symbol && c.key === contractKey(traded)) ?? null;
@@ -816,37 +854,38 @@ export class SixfoldRunner {
         if (!force && this.scan && now - this.scanAt < SCAN_MS) return;
         const series = this.io.feed.getLiveSeries();
         const symbols = this.settings.markets.filter(s => (series[s]?.length ?? 0) >= MIN_TICKS);
+        this.io.overlay?.refresh?.(now, symbols);
         this.scan = scanMarkets(
             series,
             symbols,
             { duration: this.settings.duration, entry: { mode: this.scanMode() }, margin: this.settings.margin },
             now,
-            primaryContracts(this.settings)
+            this.contractList()
         );
         this.scanAt = now;
         if (this.settings.entry === 'BRAIN' || this.settings.recoveryEntry === 'BRAIN' || this.retainCount > 0) {
             if (!this.brain || now - this.brainAt >= BRAIN_REFRESH_MS) {
-                const contracts: Contract[] = [...primaryContracts(this.settings)];
+                const contracts: Contract[] = [...this.contractList()];
                 if (this.settings.recovery) {
-                    if (this.settings.useOver) contracts.push({ side: 'OVER', param: this.settings.recoveryOver });
-                    if (this.settings.useUnder) contracts.push({ side: 'UNDER', param: this.settings.recoveryUnder });
+                    if (contracts.some(c => c.side === 'OVER')) contracts.push({ side: 'OVER', param: this.settings.recoveryOver });
+                    if (contracts.some(c => c.side === 'UNDER')) contracts.push({ side: 'UNDER', param: this.settings.recoveryUnder });
                 }
                 const uniq = [...new Map(contracts.map(c => [contractKey(c), c])).values()];
                 this.brain = brainReport(series, symbols, uniq, this.settings.duration, now);
                 this.brainAt = now;
             }
         }
-        this.regime = computeRegime(series, symbols, primaryContracts(this.settings), now);
+        this.regime = computeRegime(series, symbols, this.contractList(), now);
         // After a loss the contracts bought are the recovery barriers, so the guide reads those, not the armed ones.
         const nextContracts = [
             ...new Map(
-                primaryContracts(this.settings).map(c => {
+                this.contractList().map(c => {
                     const t = tradeContract(c, this.session.consecutiveLosses, this.settings).contract;
                     return [contractKey(t), t] as const;
                 })
             ).values(),
         ];
-        const samePrimary = nextContracts.every(c => primaryContracts(this.settings).some(p => contractKey(p) === contractKey(c)));
+        const samePrimary = nextContracts.every(c => this.contractList().some(p => contractKey(p) === contractKey(c)));
         this.tradeRegime = samePrimary ? this.regime : computeRegime(series, symbols, nextContracts, now);
         this.guards = this.computeGuards(series);
         const rested = this.restedSymbols(now);
@@ -925,7 +964,7 @@ export class SixfoldRunner {
         const baseContract: Loose = {
             display_name: armed.symbol,
             underlying_symbol: armed.symbol,
-            shortcode: `SIXFOLD_${contractType}_${armed.symbol}`,
+            shortcode: `${this.name.replace(/\W+/g, '_').toUpperCase()}_${contractType}_${armed.symbol}`,
             contract_type: contractType,
             currency,
             date_start: startedAt,
@@ -965,6 +1004,15 @@ export class SixfoldRunner {
                 at: this.io.now(),
             };
             this.trades = [record, ...this.trades].slice(0, TRADE_LIMIT);
+            const notice: TradeNotice = {
+                contractId, symbol: armed.symbol, armed: cell.contract, bought: bought.contract, recovery: bought.recovery, stake, entryDigit,
+            };
+            this.notices.set(contractId, notice);
+            try {
+                this.io.overlay?.onBought?.(notice);
+            } catch {
+                /* an overlay failure must never disturb a live trade */
+            }
             this.addLog(
                 'trade',
                 `Bought ${bought.label}${bought.recovery ? ' (recovery)' : ''} on ${armed.name}, stake ${stake.toFixed(2)}${entryDigit === null ? '' : `, entry digit ${entryDigit}`}${this.brainGoverns() && armed.plan ? `, plan: ${armed.plan.label}` : ''}. Sent ${Math.max(0, Math.round(tickAgeMs))} ms after the trigger tick, confirmed in ${Math.max(0, Math.round(buyMs))} ms.`
@@ -1189,6 +1237,15 @@ export class SixfoldRunner {
         this.armed = null;
         this.cooldownUntil = this.io.now() + COOLDOWN_MS;
         const trade = this.trades.find(t => t.contractId === contractId);
+        const notice = this.notices.get(contractId);
+        this.notices.delete(contractId);
+        if (notice) {
+            try {
+                this.io.overlay?.onSettled?.({ ...notice, profit });
+            } catch {
+                /* an overlay failure must never disturb a live session */
+            }
+        }
         if (profit === null) {
             this.session = { ...this.session, trades: this.session.trades + 1 };
             if (trade) trade.status = 'unconfirmed';

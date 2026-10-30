@@ -31,7 +31,7 @@ import {
     type SixfoldSettings,
     streakChance,
 } from './money';
-import type { Phase, TradeRecord } from './runner';
+import type { Phase, SixfoldRunner, TradeRecord } from './runner';
 import { sixfoldRunner } from './runner-instance';
 import { STATE_TEXT, type ViabilityState } from './viability';
 import { useFeed } from './use-feed';
@@ -66,7 +66,7 @@ const PHASE_TEXT: Record<Phase, { title: string; sub: string; tone: 'idle' | 'sc
 
 // ---------- small controls ----------
 
-function Num({ label, value, onCommit, hint }: { label: string; value: number; onCommit: (n: number) => void; hint?: string }) {
+export function Num({ label, value, onCommit, hint }: { label: string; value: number; onCommit: (n: number) => void; hint?: string }) {
     const [text, setText] = useState(String(value));
     useEffect(() => setText(String(value)), [value]);
     const commit = () => {
@@ -89,7 +89,7 @@ function Num({ label, value, onCommit, hint }: { label: string; value: number; o
     );
 }
 
-function Switch({ on, onChange, title, sub }: { on: boolean; onChange: (v: boolean) => void; title: string; sub: string }) {
+export function Switch({ on, onChange, title, sub }: { on: boolean; onChange: (v: boolean) => void; title: string; sub: string }) {
     return (
         <button type='button' className={`sf-switch ${on ? 'on' : ''}`} role='switch' aria-checked={on} onClick={() => onChange(!on)}>
             <span>
@@ -101,7 +101,7 @@ function Switch({ on, onChange, title, sub }: { on: boolean; onChange: (v: boole
     );
 }
 
-function Seg<T extends string>({ value, options, onChange, label }: { value: T; options: ReadonlyArray<readonly [T, string]>; onChange: (v: T) => void; label: string }) {
+export function Seg<T extends string>({ value, options, onChange, label }: { value: T; options: ReadonlyArray<readonly [T, string]>; onChange: (v: T) => void; label: string }) {
     return (
         <div className='sf-seg' role='radiogroup' aria-label={label}>
             {options.map(([v, text]) => (
@@ -146,7 +146,7 @@ function ContractCard({ side, on, barrier, onToggle, onBarrier }: { side: 'Over'
     );
 }
 
-const Panel = ({ eyebrow, title, children, aside }: { eyebrow?: string; title?: string; children: ReactNode; aside?: ReactNode }) => (
+export const Panel = ({ eyebrow, title, children, aside }: { eyebrow?: string; title?: string; children: ReactNode; aside?: ReactNode }) => (
     <section className='sf-panel'>
         {(eyebrow || title || aside) && (
             <header>
@@ -161,7 +161,7 @@ const Panel = ({ eyebrow, title, children, aside }: { eyebrow?: string; title?: 
     </section>
 );
 
-const Stat = ({ label, value, tone }: { label: string; value: ReactNode; tone?: 'pos' | 'neg' }) => (
+export const Stat = ({ label, value, tone }: { label: string; value: ReactNode; tone?: 'pos' | 'neg' }) => (
     <div className={`sf-stat ${tone ?? ''}`}>
         <small>{label}</small>
         <b>{value}</b>
@@ -170,14 +170,29 @@ const Stat = ({ label, value, tone }: { label: string; value: ReactNode; tone?: 
 
 // ---------- page ----------
 
-const SixfoldPage = () => {
+export type SixfoldPageProps = {
+    /** Another runner (Sentinel AI) drives the same page. Default: Sixfold's own. */
+    runner?: SixfoldRunner;
+    brand?: string;
+    brandSub?: string;
+    /** The contracts the scanner looks at, for the Meter and the board. Default: the Over / Under switched on. */
+    contracts?: (s: SixfoldSettings) => Contract[];
+    /** Replaces the Over / Under contract cards in the scanner tab. */
+    contractControls?: ReactNode;
+    /** Shown at the top of the scanner tab. */
+    topSlot?: ReactNode;
+    footerText?: string;
+    className?: string;
+};
+
+const SixfoldPage = ({ runner = sixfoldRunner, brand = 'SIXFOLD', brandSub = 'AUTO', contracts = primaryContracts, contractControls, topSlot, footerText, className = '' }: SixfoldPageProps = {}) => {
     const feed = useFeed();
-    const sx = useSixfold(true);
+    const sx = useSixfold(true, runner);
     const [tab, setTab] = useState<Tab>('scanner');
     // Read straight from the published ticks: a market's strip changes only when that market's own ticks arrive.
     const regime = useMemo(
-        () => computeRegimeFromSnapshot(feed.series, sx.settings.markets, primaryContracts(sx.settings), Date.now()),
-        [feed.series, sx.settings]
+        () => computeRegimeFromSnapshot(feed.series, sx.settings.markets, contracts(sx.settings), Date.now()),
+        [feed.series, sx.settings, contracts]
     );
     const [market, setMarket] = useState('1HZ10V');
     const [contract, setContract] = useState<Contract>({ side: 'OVER', param: 2 });
@@ -195,10 +210,10 @@ const SixfoldPage = () => {
     };
 
     return (
-        <div className='sixfold sf'>
+        <div className={`sixfold sf ${className}`}>
             <header className='sf-top'>
                 <b className='sf-brand'>
-                    SIXFOLD<small>AUTO</small>
+                    {brand}<small>{brandSub}</small>
                 </b>
                 <nav aria-label='Sixfold sections'>
                     {TABS.map(([k, l]) => (
@@ -220,9 +235,10 @@ const SixfoldPage = () => {
             </section>
 
             {tab === 'scanner' && <MeterStrip regime={regime} running={sx.running} onOpen={() => setTab('meter')} />}
-            {tab === 'scanner' && <ScannerTab sx={sx} openContract={open} />}
+            {tab === 'scanner' && topSlot}
+            {tab === 'scanner' && <ScannerTab sx={sx} openContract={open} runner={runner} contractControls={contractControls} />}
             {tab === 'meter' && <MeterTab regime={regime} series={feed.series} settings={sx.settings} panel={Panel} />}
-            {tab === 'board' && <BoardTab sx={sx} open={open} />}
+            {tab === 'board' && <BoardTab sx={sx} open={open} contracts={contracts} />}
             {tab === 'contract' && (
                 <ContractTab
                     series={feed.series}
@@ -239,9 +255,7 @@ const SixfoldPage = () => {
             {tab === 'lab' && <LabTab series={feed.series} market={market} setMarket={setMarket} contract={contract} setContract={setContract} settings={sx.settings} brain={sx.brain} trades={sx.trades} />}
 
             <footer className='sf-foot'>
-                Sixfold reads patterns in past digits. Deriv digits are generated randomly, so “no edge” is a normal and honest result, and every contract
-                carries a payout margin: over many trades the expected result is a loss, whatever the scanner picks. Martingale makes each loss bigger
-                and cannot change that. Test on a demo account first. Not financial advice.
+                {footerText ?? 'Sixfold reads patterns in past digits. Deriv digits are generated randomly, so “no edge” is a normal and honest result, and every contract carries a payout margin: over many trades the expected result is a loss, whatever the scanner picks. Martingale makes each loss bigger and cannot change that. Test on a demo account first. Not financial advice.'}
             </footer>
         </div>
     );
@@ -249,8 +263,8 @@ const SixfoldPage = () => {
 
 // ---------- scanner ----------
 
-function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; openContract: (m: string, c?: Contract) => void }) {
-    const set = (patch: Partial<SixfoldSettings>) => sixfoldRunner.updateSettings(patch);
+function ScannerTab({ sx, openContract, runner, contractControls }: { sx: ReturnType<typeof useSixfold>; openContract: (m: string, c?: Contract) => void; runner: SixfoldRunner; contractControls?: ReactNode }) {
+    const set = (patch: Partial<SixfoldSettings>) => runner.updateSettings(patch);
     const s = sx.settings;
     const phase = PHASE_TEXT[sx.phase];
     const best = useMemo(() => (sx.scan ? bestPerMarket(sx.scan, s.markets) : {}), [sx.scan, s.markets]);
@@ -270,6 +284,7 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
     return (
         <main className='sf-scanner'>
             <Panel eyebrow='SCANNER SETTINGS' title='Configure your trade'>
+                {contractControls ?? (
                 <div className='sf-field sf-first'>
                     <span>Contracts</span>
                     <div className='sf-grid2'>
@@ -281,6 +296,7 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                         {s.recovery ? `After a loss it switches to Over ${s.recoveryOver} / Under ${s.recoveryUnder}.` : 'Recovery barrier is off.'}
                     </small>
                 </div>
+                )}
                 <div className='sf-grid3'>
                     <Num label='Stake' value={s.stake} onCommit={n => set({ stake: n })} />
                     <Num label='TP' value={s.takeProfit} onCommit={n => set({ takeProfit: n })} hint='0 = off' />
@@ -585,11 +601,11 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                               : sx.stopReason ?? `${sx.readyMarkets} of ${s.markets.length} markets ready`}
                     </div>
                     {sx.running ? (
-                        <button className='sf-run stop' onClick={() => sixfoldRunner.stop('Stopped by you')}>
+                        <button className='sf-run stop' onClick={() => runner.stop('Stopped by you')}>
                             Stop
                         </button>
                     ) : (
-                        <button className='sf-run' onClick={() => sixfoldRunner.start()}>
+                        <button className='sf-run' onClick={() => runner.start()}>
                             Run
                         </button>
                     )}
@@ -695,9 +711,9 @@ function heatTier(c: Cell | undefined): string {
     return 'down';
 }
 
-function BoardTab({ sx, open }: { sx: ReturnType<typeof useSixfold>; open: (m: string, c?: Contract) => void }) {
+function BoardTab({ sx, open, contracts: contractsOf }: { sx: ReturnType<typeof useSixfold>; open: (m: string, c?: Contract) => void; contracts: (s: SixfoldSettings) => Contract[] }) {
     const scan = sx.scan;
-    const contracts = primaryContracts(sx.settings);
+    const contracts = contractsOf(sx.settings);
     const rows = useMemo(() => {
         const symbols = MARKETS.map(m => m[0]);
         return symbols

@@ -29,6 +29,8 @@ export const SCAN_CONTRACTS: Contract[] = [
 
 /** False-discovery rate used for the "significant" flag. */
 export const FDR_Q = 0.1;
+/** Most score points an outside engine can take off the bar for a cell. */
+export const MAX_EASE = 12;
 /** A cell needs at least this many simulated trades in its window to be tested at all. */
 export const MIN_TESTED_TRADES = 20;
 
@@ -159,7 +161,9 @@ export type Eligibility = { ok: boolean; reason: string };
 
 /** Which cells the runner may trade at each selectivity. Everything also has to be executable on Deriv. */
 export function eligibility(cell: Cell, selectivity: Selectivity, bump = 0): Eligibility {
-    const need = (base: number) => Math.min(95, base + Math.max(0, bump));
+    // A positive bump raises the bar (a loss, a cold Meter). A negative one eases it a little, up to MAX_EASE points: it is how an
+    // outside engine agreeing with the scan counts for something. The states below (trap, hostile, warming) are never eased.
+    const need = (base: number) => Math.min(95, base + Math.max(-MAX_EASE, bump));
     const a = cell.assessment;
     if (!cell.executable) return { ok: false, reason: 'Sixfold cannot execute this contract type' };
     if (a.state === 'WARMING') return { ok: false, reason: 'Too few simulated trades yet' };

@@ -1611,3 +1611,60 @@
         &.l { background: color-mix(in srgb, var(--red) 24%, transparent); color: var(--red); }
     }
 }
+
+/* Sentinel AI (unified) reuses this page; these are its extra controls. */
+.sixfold.sentinel-ai-auto {
+    .sf-presets {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 8px;
+        button {
+            text-align: left;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(128, 128, 128, 0.35);
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+            b,
+            small {
+                display: block;
+            }
+            small {
+                opacity: 0.7;
+                margin-top: 2px;
+            }
+            &.on {
+                border-color: currentColor;
+                box-shadow: inset 0 0 0 1px currentColor;
+            }
+        }
+    }
+    .sf-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        button {
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(128, 128, 128, 0.4);
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+            &.on {
+                border-color: currentColor;
+                font-weight: 600;
+            }
+        }
+    }
+    .sf-table {
+        width: 100%;
+        border-collapse: collapse;
+        th,
+        td {
+            text-align: left;
+            padding: 6px 8px;
+            border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+        }
+    }
+}
