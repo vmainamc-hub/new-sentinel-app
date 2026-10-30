@@ -229,6 +229,10 @@ class RealSentinelAiEngine implements SentinelAiEngine {
         const digits = derivBus.getDigits(symbol);
         return digits.length ? digits[digits.length - 1] : null;
     }
+
+    markets() {
+        return APEX_UNIVERSE.map(market => ({ symbol: market.symbol, name: market.name }));
+    }
 }
 
 export const sentinelAiEngine: SentinelAiEngine = new RealSentinelAiEngine();

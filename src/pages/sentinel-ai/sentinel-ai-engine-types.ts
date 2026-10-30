@@ -37,4 +37,6 @@ export interface SentinelAiEngine {
     onTick(callback: (symbol: string) => void): () => void;
     /** The most recent printed digit for a market, or null when nothing has printed yet. */
     getLastDigit(symbol: string): number | null;
+    /** Every market the engine analyses, for the radar. Optional for simple engines. */
+    markets?(): Array<{ symbol: string; name: string }>;
 }

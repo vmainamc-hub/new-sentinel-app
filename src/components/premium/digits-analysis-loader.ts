@@ -5,7 +5,17 @@
 import { PremiumDerivApiService } from '@/services/premium-deriv-api.service';
 import type { RankedMarket, Trade } from './apex-logic';
 import { fetchFreeBotById, loadBotXmlIntoBuilder } from './pages/FreeBotsPage';
-import { submarketFor, type ActiveSymbolLike } from './signal-zone/signal-zone-bot';
+
+export type ActiveSymbolLike = { symbol?: string; market?: string; submarket?: string };
+
+/**
+ * The submarket DBot lists the symbol under. Taken from the live active symbols when available. The fallback is the value the
+ * shipped Masika bots use for a 1-second market (`random_index`), which is what Deriv's own bots carry.
+ */
+export const submarketFor = (symbol: string, active?: ActiveSymbolLike[]): string => {
+    const match = active?.find(item => item.symbol === symbol && item.submarket);
+    return match?.submarket || 'random_index';
+};
 
 /** The two bots, resolved by id from the free-bots manifest (never by file path). */
 export const DIGITS_BOT_IDS = {
