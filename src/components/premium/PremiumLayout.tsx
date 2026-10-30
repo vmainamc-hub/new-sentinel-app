@@ -25,7 +25,6 @@ import CalculatorPage from './pages/CalculatorPage';
 import DigitsAnalysisPage from './pages/DigitsAnalysisPage';
 import DashboardHome from './pages/DashboardHome';
 import FreeBotsPage, { prefetchFreeBots } from './pages/FreeBotsPage';
-import SignalZoneBridge from './signal-zone/SignalZoneBridge';
 import {
     AdvancedManualTradingPage,
     AutoTraderPage,
@@ -68,9 +67,6 @@ import './apex-bulk.scss';
 // Sentinel AI pulls in the whole Sentinel engine, so it loads on demand instead of with the shell.
 const SentinelAiPage = lazy(() => import('@/pages/sentinel-ai'));
 const SentinelAiBridge = lazy(() => import('@/pages/sentinel-ai/sentinel-ai-bridge'));
-// Signal Zone reads both the Sentinel and the Insight Fusion engines, so its page also loads on demand. Its small bridge stays mounted
-// so the stop loss keeps working while Bot Builder is open.
-const SignalZonePage = lazy(() => import('./signal-zone/SignalZonePage'));
 // Sixfold carries its own simulator and crowd model, so it also loads on demand.
 const SixfoldPage = lazy(() => import('./sixfold/SixfoldPage'));
 // Its runner trades on its own, so the bridge stays mounted on every tab (Run Panel hand-off, Stop sync, session-drop stop).
@@ -78,13 +74,15 @@ const SixfoldBridge = lazy(() => import('./sixfold/sixfold-bridge'));
 const DTraderPage = lazy(() => import('./dtrader/DTraderPage'));
 
 const validSections: PremiumSection[] = [
-    'dashboard', 'bot_ideas', 'quick_bot', 'bot_builder', 'free_bots', 'signal_ai', 'auto_trader', 'signal_zone', 'sentinel_ai',
+    'dashboard', 'bot_ideas', 'quick_bot', 'bot_builder', 'free_bots', 'signal_ai', 'auto_trader', 'sentinel_ai',
     'manual_trading', 'bulk_trader', 'batch_trader', 'copy_trading', 'speedbot', 'calculator', 'pro_ai', 'analysis_tools',
     'analysis_hub', 'charts', 'tradingview', 'dtrader', 'ai_bots', 'digits_analysis', 'sixfold',
 ];
 
 const sectionFromHash = (hash: string): PremiumSection => {
-    const value = hash.replace(/^#\/?/, '').split('?')[0] as PremiumSection;
+    const raw = hash.replace(/^#\/?/, '').split('?')[0];
+    // Signal Zone was merged into Sentinel AI: old links and bookmarks land there.
+    const value = (raw === 'signal_zone' ? 'sentinel_ai' : raw) as PremiumSection;
     return validSections.includes(value) ? value : 'dashboard';
 };
 
@@ -224,7 +222,6 @@ const PremiumLayout = observer(() => {
             case 'free_bots': return <FreeBotsPage openBotBuilder={openBotBuilder} />;
             case 'signal_ai': return <SignalAIPage />;
             case 'auto_trader': return <AutoTradesPage />;
-            case 'signal_zone': return <Suspense fallback={<PremiumLoader />}><SignalZonePage openBotBuilder={openBotBuilder} /></Suspense>;
             case 'sentinel_ai': return <Suspense fallback={<PremiumLoader />}><SentinelAiPage /></Suspense>;
             // The nav's "DTrader" tab. The previous page (src/pages/manual-trading) is left in the repo, unused, so it can be restored.
             case 'manual_trading': return <Suspense fallback={<PremiumLoader />}><DTraderPage /></Suspense>;
@@ -261,9 +258,8 @@ const PremiumLayout = observer(() => {
         style={themeStyle}
     >
         <GlobalContractBridge />
-        <Suspense fallback={null}><SentinelAiBridge openBotBuilder={openBotBuilder} /></Suspense>
+        <Suspense fallback={null}><SentinelAiBridge /></Suspense>
         <Suspense fallback={null}><SixfoldBridge /></Suspense>
-        <SignalZoneBridge />
         <PremiumHeader active={section} navigation={customization.navigation} onChange={changeSection} />
         <main className='prodb-premium-content'>
             {!isBotBuilder && renderSection()}

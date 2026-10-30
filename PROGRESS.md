@@ -1,5 +1,18 @@
 # Sentinel AI integration — progress
 
+## Signal Zone + Sentinel AI merged into one machine (latest)
+Signal Zone is gone as a separate tab; everything it did now lives inside **Sentinel AI**, which trades by itself the way Sixfold does.
+- **One scanner loop** (`sentinel-ai-board.ts` + runner): every second the board ranks every vetted Sentinel candidate; the runner arms the best tradable one, waits for its entry digit, buys, settles, then looks again. A worked setup is not re-armed until it leaves the board and returns ("spent"). A waiting signal is only swapped for a clearly better one (8+ rank points).
+- **Both engines, one decision** (`sentinel-ai-fusion.ts`): Insight Fusion is read from the app-wide feed (`bulkFeed`, same one the Bulk Trader uses). Setting `engines`: `prefer` (default: Fusion agreeing moves a signal up 6, disagreeing moves it down 12), `require` (both must agree), `fusion_leads` (Fusion picks the contract, Sentinel's validated entry digit rides along, else the default digits), `sentinel` (Fusion ignored). If Fusion cannot be read the scanner carries on with Sentinel alone.
+- **Sixfold-style safety**: loss shield (the market that lost rests a few trades, doubles on a second loss there, comes back by itself after 5 min) and a small extra score bar after a loss that fades in under a minute. Both are settings and can be switched off.
+- **Page**: status dial (scanning / armed / buying / in trade / next), market radar, scanner board with the reason every row is or is not tradable and what Fusion says, then the existing signal card, outcome log, history and trades. Settings: Engines first, then stake, martingale, recovery, risk (+ loss shield); execution mode, default entry digits, signal quality and alerts moved under "Advanced settings".
+- **Signal Zone removed**: `src/components/premium/signal-zone/` deleted (page, load-into-Masika-bot flow, bridge, history). Nav entry, header icon, site-config and types cleaned; old `#signal_zone` links open Sentinel AI. `submarketFor` moved into `digits-analysis-loader.ts` (the only thing outside Signal Zone that used it).
+- Per-setup alerts are now off while Run is on (the Run Panel shows each trade); they still fire while watching.
+- Engines (`src/sentinel-engine`, `src/lib`) untouched.
+
+Checked: 196 Sentinel AI tests pass (incl. new board, Fusion, scanner-cycle and page-render tests), `npm run build` passes, site registry / customization / free-bots validators pass, no type or lint errors in touched files. The 13 failing tests in Auto Trades, recover-bots and digits-analysis-loader fail identically on the untouched original (bot-manifest data), not from this work.
+Not verified: a live run with a real Deriv account and the live Fusion feed. **Run on a demo account first.**
+
 Goal: a **Sentinel AI** tab between Auto Trades and TradingView. The Sentinel Signal Engine (from the zip) is the
 backend, untouched. A new frontend and runner trade its signals on their entry digit, the same way Auto Trades runs,
 and every trade shows on the Run Panel (the main deck).

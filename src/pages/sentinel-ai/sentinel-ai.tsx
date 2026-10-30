@@ -1,7 +1,8 @@
-// SENTINEL AI — frontend for the Sentinel Signal Engine.
+// SENTINEL AI — one autonomous trading machine.
 //
-// The engine (src/lib/**) produces signals; this page shows the live signal with its entry digit, lets the
-// operator set stake / martingale / recovery / risk, and runs the session on the Run Panel like Auto Trades.
+// The Sentinel engine and Insight Fusion (what used to be Signal Zone) feed one scanner. Press Run and it keeps going round
+// the markets by itself: arm the best setup, wait for its entry digit, buy, settle, then look again. Every trade shows on the
+// Run Panel. This page shows what the scanner is doing and lets the operator set stake / martingale / recovery / risk.
 import { useEffect, useState } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
@@ -12,8 +13,11 @@ import { getNotificationPermission, requestNotificationPermission } from './sent
 import SentinelAiOutcomePanel from './sentinel-ai-outcome-panel';
 import { sentinelAiRunner } from './sentinel-ai-runner-instance';
 import type {
+    BoardRow,
+    EngineMode,
     ExecutionMode,
     MartingaleMode,
+    Phase,
     SentinelAiSettings,
     SentinelAiSignal,
     SentinelAiSnapshot,
@@ -42,6 +46,43 @@ const OUTCOME_LABEL: Record<SignalOutcome, string> = {
     WATCHED: 'Not traded',
     SKIPPED: 'Skipped',
 };
+
+const PHASE_TEXT: Record<Phase, { title: string; sub: string; tone: 'idle' | 'scan' | 'armed' | 'trade' | 'warn' }> = {
+    idle: { title: 'READY', sub: 'Press Run and the scanner takes over', tone: 'idle' },
+    connecting: { title: 'CONNECTING', sub: 'Waiting for the market feed', tone: 'warn' },
+    scanning: { title: 'SCANNING', sub: 'Going round every market', tone: 'scan' },
+    armed: { title: 'ARMED', sub: 'Waiting for the entry digit', tone: 'armed' },
+    buying: { title: 'BUYING', sub: 'Placing the contract', tone: 'trade' },
+    settling: { title: 'IN TRADE', sub: 'Waiting for the result', tone: 'trade' },
+    cooling: { title: 'NEXT', sub: 'Looking for the next setup', tone: 'scan' },
+};
+
+const ENGINE_OPTIONS: Array<{ value: EngineMode; label: string; hint: string }> = [
+    {
+        value: 'prefer',
+        label: 'Both engines',
+        hint: 'Sentinel picks the setups. When Insight Fusion backs one it moves up the board; when Fusion disagrees it moves down. Recommended.',
+    },
+    {
+        value: 'require',
+        label: 'Only when both agree',
+        hint: 'Trades only setups that Sentinel and Insight Fusion both back (same market, side and barrier). Fewer trades.',
+    },
+    {
+        value: 'fusion_leads',
+        label: 'Fusion leads',
+        hint: 'Insight Fusion picks the contract. Sentinel supplies the entry digit when it has a validated one.',
+    },
+    { value: 'sentinel', label: 'Sentinel only', hint: 'The Sentinel engine alone decides. Insight Fusion is ignored.' },
+];
+
+const CONSENSUS_LABEL = {
+    off: 'n/a',
+    both: 'Agrees',
+    partial: 'Other barrier',
+    conflict: 'Disagrees',
+    silent: 'No read',
+} as const;
 
 const digitsText = (digits: number[]) => digits.join(' or ');
 
@@ -274,6 +315,89 @@ const MARTINGALE_OPTIONS: Array<{ value: MartingaleMode; label: string }> = [
     { value: 'custom', label: 'After N losses' },
 ];
 
+// ── scanner ──────────────────────────────────────────────────────────────────────────────────────
+const ScannerPanel = ({ snapshot }: { snapshot: SentinelAiSnapshot }) => {
+    const phase = PHASE_TEXT[snapshot.phase];
+    const { signal, fusion, markets, resting, pickyBump } = snapshot;
+    const centre = signal && (snapshot.phase === 'armed' || snapshot.phase === 'buying' || snapshot.phase === 'settling')
+        ? signal.label
+        : phase.title;
+    const sub = signal && centre === signal.label ? signal.marketName : phase.sub;
+    const restingSymbols = new Set(resting.map(item => item.symbol));
+    return (
+        <section className={classNames('sentinel-ai-scanner', `is-${phase.tone}`)} aria-label='Scanner'>
+            <div className='sentinel-ai-scanner__dial' aria-live='polite'>
+                <b>{centre}</b>
+                <span>{sub}</span>
+            </div>
+            <div className='sentinel-ai-scanner__side'>
+                <ul className='sentinel-ai-radar' aria-label='Markets'>
+                    {markets.map(market => {
+                        const state = restingSymbols.has(market.symbol)
+                            ? 'is-resting'
+                            : signal && signal.symbol === market.symbol && snapshot.phase !== 'scanning'
+                              ? 'is-armed'
+                              : market.best?.eligible
+                                ? 'is-ready'
+                                : market.best
+                                  ? 'is-held'
+                                  : '';
+                        return (
+                            <li
+                                key={market.symbol}
+                                className={classNames('sentinel-ai-radar__dot', state)}
+                                title={`${market.name}${market.best ? `: ${market.best.label}, ${market.best.reason}` : ': no setup'}`}
+                            >
+                                <i aria-hidden='true' />
+                                <span>{market.symbol.replace('1HZ', '').replace('V', '')}</span>
+                            </li>
+                        );
+                    })}
+                </ul>
+                <p className='sentinel-ai-muted'>
+                    {fusion.enabled
+                        ? fusion.ready > 0
+                            ? `Insight Fusion is reading ${fusion.ready} of ${fusion.total} markets.`
+                            : 'Insight Fusion is warming up. Sentinel trades alone until it has a read.'
+                        : 'Insight Fusion is off. Sentinel decides alone.'}
+                    {resting.length > 0
+                        ? ` Resting after a loss: ${resting.map(item => `${item.name} (${item.tradesLeft})`).join(', ')}.`
+                        : ''}
+                    {pickyBump > 0 ? ` Bar raised by ${pickyBump} for a moment after the loss.` : ''}
+                </p>
+            </div>
+        </section>
+    );
+};
+
+const BoardPanel = ({ rows }: { rows: BoardRow[] }) => (
+    <section className='sentinel-ai-card'>
+        <h3>Scanner board</h3>
+        {rows.length === 0 ? (
+            <p className='sentinel-ai-muted'>No setup on any market yet. The scanner keeps looking.</p>
+        ) : (
+            <ul className='sentinel-ai-board'>
+                {rows.map(row => (
+                    <li key={row.key} className={classNames(`is-${row.state}`)}>
+                        <span className='sentinel-ai-board__main'>
+                            <b>{row.label}</b> · {row.marketName}
+                            <small>
+                                {row.entryDigit === null ? 'default entry' : `entry ${row.entryDigit}`} · score {row.score}
+                                {row.danger !== null ? ` · danger ${row.danger}` : ''}
+                                {row.source === 'fusion' ? ' · Fusion pick' : ''}
+                            </small>
+                            <small className='sentinel-ai-board__why'>{row.reason}</small>
+                        </span>
+                        <span className={classNames('sentinel-ai-pill', `is-fusion-${row.fusion.consensus}`)} title={row.fusion.note}>
+                            Fusion: {CONSENSUS_LABEL[row.fusion.consensus]}
+                        </span>
+                    </li>
+                ))}
+            </ul>
+        )}
+    </section>
+);
+
 // ── page ─────────────────────────────────────────────────────────────────────────────────────────
 const SentinelAi = observer(() => {
     const snapshot = useSentinelAi(true);
@@ -319,7 +443,7 @@ const SentinelAi = observer(() => {
                     <header className='sentinel-ai-head'>
                         <div>
                             <h1>Sentinel AI</h1>
-                            <p>Signals from the Sentinel engine, traded on their entry digit.</p>
+                            <p>One machine: the Sentinel engine and Insight Fusion scan every market, and it trades by itself.</p>
                         </div>
                         <div
                             className={classNames('sentinel-ai-chip', {
@@ -426,6 +550,8 @@ const SentinelAi = observer(() => {
                         </div>
                     </section>
 
+                    <ScannerPanel snapshot={snapshot} />
+
                     <div className='sentinel-ai-grid'>
                         <div className='sentinel-ai-col'>
                             <section className={classNames('sentinel-ai-signal', { 'is-fresh': fresh })} aria-live='polite'>
@@ -474,6 +600,11 @@ const SentinelAi = observer(() => {
                                         <p className='sentinel-ai-signal__state'>
                                             {stateText(snapshot)}
                                         </p>
+                                        {snapshot.consensus && snapshot.consensus.consensus !== 'off' ? (
+                                            <p className={classNames('sentinel-ai-consensus', `is-${snapshot.consensus.consensus}`)}>
+                                                {snapshot.consensus.note}
+                                            </p>
+                                        ) : null}
                                         {snapshot.momentum.enabled && snapshot.momentum.current ? (
                                             <p
                                                 className={classNames('sentinel-ai-momentum', {
@@ -531,6 +662,8 @@ const SentinelAi = observer(() => {
                                     </div>
                                 )}
                             </section>
+
+                            <BoardPanel rows={snapshot.board} />
 
                             <SentinelAiOutcomePanel />
 
@@ -595,112 +728,24 @@ const SentinelAi = observer(() => {
 
                         <div className='sentinel-ai-col'>
                             <fieldset className='sentinel-ai-card' disabled={running}>
-                                <legend>Execution mode</legend>
-                                <div className='sentinel-ai-segment' role='radiogroup' aria-label='Execution mode'>
-                                    {EXECUTION_OPTIONS.map(option => (
+                                <legend>Engines</legend>
+                                <div className='sentinel-ai-segment' role='radiogroup' aria-label='Which engines decide'>
+                                    {ENGINE_OPTIONS.map(option => (
                                         <button
                                             key={option.value}
                                             type='button'
                                             role='radio'
-                                            aria-checked={settings.executionMode === option.value}
-                                            className={classNames({ 'is-on': settings.executionMode === option.value })}
-                                            onClick={() => set({ executionMode: option.value })}
+                                            aria-checked={settings.engines === option.value}
+                                            className={classNames({ 'is-on': settings.engines === option.value })}
+                                            onClick={() => set({ engines: option.value })}
                                         >
                                             {option.label}
                                         </button>
                                     ))}
                                 </div>
                                 <p className='sentinel-ai-muted'>
-                                    {EXECUTION_OPTIONS.find(option => option.value === settings.executionMode)?.hint}
+                                    {ENGINE_OPTIONS.find(option => option.value === settings.engines)?.hint}
                                 </p>
-                            </fieldset>
-
-                            <fieldset className='sentinel-ai-card' disabled={running}>
-                                <legend>Default entry digits</legend>
-                                <p className='sentinel-ai-muted'>
-                                    Used only when a signal arrives without an entry digit. The first listed digit to print
-                                    triggers the trade.
-                                </p>
-                                <div className='sentinel-ai-row'>
-                                    <DigitListField
-                                        label='Over signals'
-                                        value={settings.defaultOverDigits}
-                                        hint='Default 2, 4'
-                                        onCommit={value => set({ defaultOverDigits: value })}
-                                    />
-                                    <DigitListField
-                                        label='Under signals'
-                                        value={settings.defaultUnderDigits}
-                                        hint='Default 5, 7'
-                                        onCommit={value => set({ defaultUnderDigits: value })}
-                                    />
-                                </div>
-                            </fieldset>
-
-                            <fieldset className='sentinel-ai-card'>
-                                <legend>Signal quality</legend>
-                                <p className='sentinel-ai-muted'>
-                                    Signals that fail these checks are never traded; the next best one is used instead. A signal that
-                                    turns bad while it waits is dropped, and a Touch-once run pauses until it qualifies again.
-                                </p>
-                                <div className='sentinel-ai-row'>
-                                    <NumberField
-                                        label='Minimum score'
-                                        value={settings.minScore}
-                                        min={0}
-                                        max={100}
-                                        step={1}
-                                        hint="Default 70, the engine's own bar. 0 = off"
-                                        onCommit={value => set({ minScore: value })}
-                                    />
-                                    <NumberField
-                                        label='Maximum danger'
-                                        value={settings.maxDanger}
-                                        min={0}
-                                        max={100}
-                                        step={1}
-                                        hint="Default 45, the engine's safety boundary. 0 = off"
-                                        onCommit={value => set({ maxDanger: value })}
-                                    />
-                                </div>
-                                <Toggle
-                                    label='Skip signals the engine marks as blocked'
-                                    hint='Blocked candidates carry a score of 0'
-                                    checked={settings.skipBlocked}
-                                    onChange={checked => set({ skipBlocked: checked })}
-                                />
-                                <Toggle
-                                    label='Require momentum before trading'
-                                    hint='Only trade signals whose recent digit movement favours the contract. This reduces how many signals trade; it does not make them more likely to win'
-                                    checked={settings.requireMomentum}
-                                    onChange={checked => set({ requireMomentum: checked })}
-                                />
-                                {settings.requireMomentum ? (
-                                    <p className='sentinel-ai-muted'>
-                                        Momentum blocked {snapshot.momentum.recentBlocked} of the last{' '}
-                                        {snapshot.momentum.recentSurfaced} surfaced signals
-                                        {snapshot.momentum.topBlocked
-                                            ? `. Holding back now: ${snapshot.momentum.topBlocked.label} on ${snapshot.momentum.topBlocked.market} (${snapshot.momentum.topBlocked.reason})`
-                                            : ''}
-                                    </p>
-                                ) : null}
-                                <SymbolListField
-                                    label='Excluded markets'
-                                    value={settings.excludedMarkets}
-                                    hint='Never traded. Default JD100 (Jump 100). Clear it to trade every market again'
-                                    onCommit={value => set({ excludedMarkets: value })}
-                                />
-                                {snapshot.filtered.count > 0 ? (
-                                    <p className='sentinel-ai-muted'>
-                                        Filtered out right now: {snapshot.filtered.count}
-                                        {snapshot.filtered.example ? ` (e.g. ${snapshot.filtered.example})` : ''}
-                                    </p>
-                                ) : null}
-                                {snapshot.quarantined.length > 0 ? (
-                                    <p className='sentinel-ai-muted'>
-                                        Taken out this session after Deriv kept refusing it: {snapshot.quarantined.join(', ')}
-                                    </p>
-                                ) : null}
                             </fieldset>
 
                             <fieldset className='sentinel-ai-card' disabled={running}>
@@ -866,6 +911,141 @@ const SentinelAi = observer(() => {
                                     }
                                     onCommit={value => set({ signalWaitSeconds: value })}
                                 />
+                                <Toggle
+                                    label='Rest a market after a loss'
+                                    hint='The market that lost sits out for a few trades while the scanner trades somewhere else'
+                                    checked={settings.lossShield}
+                                    onChange={checked => set({ lossShield: checked })}
+                                />
+                                {settings.lossShield ? (
+                                    <NumberField
+                                        label='Rest for (trades)'
+                                        value={settings.restTrades}
+                                        min={1}
+                                        max={20}
+                                        step={1}
+                                        hint='Doubles on a second loss in a row there'
+                                        onCommit={value => set({ restTrades: value })}
+                                    />
+                                ) : null}
+                                <Toggle
+                                    label='Ask for a higher score right after a loss'
+                                    hint='A small extra bar that fades by itself in under a minute'
+                                    checked={settings.pickyAfterLoss}
+                                    onChange={checked => set({ pickyAfterLoss: checked })}
+                                />
+                            </fieldset>
+
+                            <details className='sentinel-ai-advanced'>
+                                <summary>Advanced settings</summary>
+                                <div className='sentinel-ai-advanced__body'>
+                            <fieldset className='sentinel-ai-card' disabled={running}>
+                                <legend>Execution mode</legend>
+                                <div className='sentinel-ai-segment' role='radiogroup' aria-label='Execution mode'>
+                                    {EXECUTION_OPTIONS.map(option => (
+                                        <button
+                                            key={option.value}
+                                            type='button'
+                                            role='radio'
+                                            aria-checked={settings.executionMode === option.value}
+                                            className={classNames({ 'is-on': settings.executionMode === option.value })}
+                                            onClick={() => set({ executionMode: option.value })}
+                                        >
+                                            {option.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className='sentinel-ai-muted'>
+                                    {EXECUTION_OPTIONS.find(option => option.value === settings.executionMode)?.hint}
+                                </p>
+                            </fieldset>
+
+                            <fieldset className='sentinel-ai-card' disabled={running}>
+                                <legend>Default entry digits</legend>
+                                <p className='sentinel-ai-muted'>
+                                    Used only when a signal arrives without an entry digit. The first listed digit to print
+                                    triggers the trade.
+                                </p>
+                                <div className='sentinel-ai-row'>
+                                    <DigitListField
+                                        label='Over signals'
+                                        value={settings.defaultOverDigits}
+                                        hint='Default 2, 4'
+                                        onCommit={value => set({ defaultOverDigits: value })}
+                                    />
+                                    <DigitListField
+                                        label='Under signals'
+                                        value={settings.defaultUnderDigits}
+                                        hint='Default 5, 7'
+                                        onCommit={value => set({ defaultUnderDigits: value })}
+                                    />
+                                </div>
+                            </fieldset>
+
+                            <fieldset className='sentinel-ai-card'>
+                                <legend>Signal quality</legend>
+                                <p className='sentinel-ai-muted'>
+                                    Signals that fail these checks are never traded; the next best one is used instead. A signal that
+                                    turns bad while it waits is dropped, and a Touch-once run pauses until it qualifies again.
+                                </p>
+                                <div className='sentinel-ai-row'>
+                                    <NumberField
+                                        label='Minimum score'
+                                        value={settings.minScore}
+                                        min={0}
+                                        max={100}
+                                        step={1}
+                                        hint="Default 70, the engine's own bar. 0 = off"
+                                        onCommit={value => set({ minScore: value })}
+                                    />
+                                    <NumberField
+                                        label='Maximum danger'
+                                        value={settings.maxDanger}
+                                        min={0}
+                                        max={100}
+                                        step={1}
+                                        hint="Default 45, the engine's safety boundary. 0 = off"
+                                        onCommit={value => set({ maxDanger: value })}
+                                    />
+                                </div>
+                                <Toggle
+                                    label='Skip signals the engine marks as blocked'
+                                    hint='Blocked candidates carry a score of 0'
+                                    checked={settings.skipBlocked}
+                                    onChange={checked => set({ skipBlocked: checked })}
+                                />
+                                <Toggle
+                                    label='Require momentum before trading'
+                                    hint='Only trade signals whose recent digit movement favours the contract. This reduces how many signals trade; it does not make them more likely to win'
+                                    checked={settings.requireMomentum}
+                                    onChange={checked => set({ requireMomentum: checked })}
+                                />
+                                {settings.requireMomentum ? (
+                                    <p className='sentinel-ai-muted'>
+                                        Momentum blocked {snapshot.momentum.recentBlocked} of the last{' '}
+                                        {snapshot.momentum.recentSurfaced} surfaced signals
+                                        {snapshot.momentum.topBlocked
+                                            ? `. Holding back now: ${snapshot.momentum.topBlocked.label} on ${snapshot.momentum.topBlocked.market} (${snapshot.momentum.topBlocked.reason})`
+                                            : ''}
+                                    </p>
+                                ) : null}
+                                <SymbolListField
+                                    label='Excluded markets'
+                                    value={settings.excludedMarkets}
+                                    hint='Never traded. Default JD100 (Jump 100). Clear it to trade every market again'
+                                    onCommit={value => set({ excludedMarkets: value })}
+                                />
+                                {snapshot.filtered.count > 0 ? (
+                                    <p className='sentinel-ai-muted'>
+                                        Filtered out right now: {snapshot.filtered.count}
+                                        {snapshot.filtered.example ? ` (e.g. ${snapshot.filtered.example})` : ''}
+                                    </p>
+                                ) : null}
+                                {snapshot.quarantined.length > 0 ? (
+                                    <p className='sentinel-ai-muted'>
+                                        Taken out this session after Deriv kept refusing it: {snapshot.quarantined.join(', ')}
+                                    </p>
+                                ) : null}
                             </fieldset>
 
                             <section className='sentinel-ai-card'>
@@ -910,6 +1090,8 @@ const SentinelAi = observer(() => {
                                     </p>
                                 ) : null}
                             </section>
+                                </div>
+                            </details>
                         </div>
                     </div>
                 </div>

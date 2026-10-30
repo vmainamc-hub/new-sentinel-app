@@ -852,3 +852,255 @@
         gap: 8px;
     }
 }
+
+// ── scanner (the Sixfold-style cycle: scan, arm, buy, settle, look again) ─────────────────────────
+.sentinel-ai-scanner {
+    --sai-tone: var(--sai-dim);
+    display: grid;
+    grid-template-columns: 168px 1fr;
+    gap: 16px;
+    align-items: center;
+    padding: 16px;
+    background: var(--sai-card);
+    border: 1px solid var(--sai-border);
+    border-radius: 12px;
+
+    &.is-scan {
+        --sai-tone: var(--sai-blue);
+    }
+
+    &.is-armed {
+        --sai-tone: var(--sai-accent);
+    }
+
+    &.is-trade {
+        --sai-tone: var(--sai-win);
+    }
+
+    &.is-warn {
+        --sai-tone: var(--sai-warn);
+    }
+
+    &__dial {
+        width: 160px;
+        height: 160px;
+        border-radius: 50%;
+        border: 3px solid var(--sai-tone);
+        box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.02), inset 0 0 28px rgba(0, 0, 0, 0.45);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 14px;
+        gap: 4px;
+
+        b {
+            color: var(--sai-tone);
+            font-size: 1.8rem;
+            letter-spacing: 0.06em;
+            line-height: 1.15;
+            overflow-wrap: anywhere;
+        }
+
+        span {
+            color: var(--sai-dim);
+            font-size: 1.1rem;
+            line-height: 1.3;
+        }
+    }
+
+    &.is-scan &__dial,
+    &.is-armed &__dial {
+        animation: sai-pulse 2.4s ease-in-out infinite;
+    }
+
+    &__side {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 0;
+    }
+}
+
+@keyframes sai-pulse {
+    50% {
+        box-shadow: 0 0 0 10px rgba(255, 255, 255, 0.03), inset 0 0 28px rgba(0, 0, 0, 0.45);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sentinel-ai-scanner__dial {
+        animation: none !important;
+    }
+}
+
+.sentinel-ai-radar {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    &__dot {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 9px 3px 7px;
+        border: 1px solid var(--sai-border);
+        border-radius: 999px;
+        font-size: 1.15rem;
+        color: var(--sai-muted);
+
+        i {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--sai-border);
+        }
+
+        &.is-held i {
+            background: var(--sai-warn);
+        }
+
+        &.is-ready {
+            color: var(--sai-text);
+
+            i {
+                background: var(--sai-win);
+            }
+        }
+
+        &.is-armed {
+            color: var(--sai-accent);
+            border-color: rgba(232, 184, 74, 0.55);
+
+            i {
+                background: var(--sai-accent);
+            }
+        }
+
+        &.is-resting {
+            border-style: dashed;
+
+            i {
+                background: var(--sai-loss);
+            }
+        }
+    }
+}
+
+// ── scanner board ────────────────────────────────────────────────────────────────────────────────
+.sentinel-ai-board {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    li {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 10px;
+        border: 1px solid var(--sai-border-soft);
+        border-radius: 8px;
+        background: var(--sai-card-2);
+
+        &.is-armed {
+            border-color: rgba(232, 184, 74, 0.55);
+        }
+
+        &.is-held,
+        &.is-spent,
+        &.is-resting {
+            opacity: 0.7;
+        }
+    }
+
+    &__main {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        font-size: 1.3rem;
+
+        small {
+            color: var(--sai-muted);
+            font-size: 1.1rem;
+        }
+    }
+
+    &__why {
+        color: var(--sai-dim) !important;
+    }
+}
+
+.sentinel-ai-pill {
+    &.is-fusion-both {
+        color: var(--sai-win);
+        border-color: rgba(0, 204, 122, 0.4);
+    }
+
+    &.is-fusion-conflict {
+        color: var(--sai-loss);
+        border-color: rgba(224, 48, 78, 0.45);
+    }
+
+    &.is-fusion-partial {
+        color: var(--sai-warn);
+        border-color: rgba(217, 146, 26, 0.5);
+    }
+}
+
+.sentinel-ai-consensus {
+    font-size: 1.2rem;
+    color: var(--sai-dim);
+
+    &.is-both {
+        color: var(--sai-win);
+    }
+
+    &.is-conflict {
+        color: var(--sai-loss);
+    }
+
+    &.is-partial {
+        color: var(--sai-warn);
+    }
+}
+
+// ── advanced settings ────────────────────────────────────────────────────────────────────────────
+.sentinel-ai-advanced {
+    border: 1px solid var(--sai-border);
+    border-radius: 12px;
+    background: var(--sai-card);
+
+    summary {
+        cursor: pointer;
+        padding: 12px 14px;
+        font-weight: 600;
+        color: var(--sai-text);
+    }
+
+    &__body {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 0 10px 12px;
+    }
+}
+
+@media (max-width: 640px) {
+    .sentinel-ai-scanner {
+        grid-template-columns: 1fr;
+        justify-items: center;
+
+        &__side {
+            width: 100%;
+        }
+    }
+}

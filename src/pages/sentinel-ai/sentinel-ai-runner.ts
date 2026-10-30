@@ -10,7 +10,9 @@
 import { contract_stages } from '@/constants/contract-stage';
 import { describeTradeFailure } from '@/utils/trade-errors';
 import type { RankedOpportunity } from '@/sentinel-engine/lib/apex/types';
-import type { SentinelAiEngine, VettedCandidate } from './sentinel-ai-engine-types';
+import { buildBoard, choosePick, marketDots, pickyBumpAfterLoss, type Board } from './sentinel-ai-board';
+import type { EngineSample, SentinelAiEngine, VettedCandidate } from './sentinel-ai-engine-types';
+import type { FusionRead, FusionSource } from './sentinel-ai-fusion';
 import type { OutcomeSink } from './sentinel-ai-outcome-log';
 import type { OutcomeContract, SurfacedSignalInput } from './sentinel-ai-outcomes';
 import { initialStakeState, nextStakeState, requiredEntry, sessionStopReason, tradeBarrier } from './sentinel-ai-money';
@@ -22,6 +24,7 @@ import {
     type EngineInfo,
     type EntrySource,
     type MomentumView,
+    type Phase,
     type SentinelAiSettings,
     type SentinelAiSignal,
     type SentinelAiSnapshot,
@@ -53,6 +56,13 @@ const HOLD_TOLERANCE = 10;
 const RECENT_SURFACED = 40;
 /** Pause after a transient failure so Immediate mode cannot hammer the API. */
 const RETRY_COOLDOWN_MS = 3_000;
+/** A setup that was worked (traded, expired, dropped or refused) is not armed again for this long, unless it leaves the board first. */
+const SPENT_MS = 20_000;
+/** A market that lost rests at most this long, even when too few other trades happen to bring it back. */
+const REST_MAX_MS = 5 * 60_000;
+/** Rows of the scanner board sent to the page. */
+const BOARD_ROWS = 12;
+const PASSING_MOMENTUM = { pass: true, measurable: true, score: 0, blockers: [] as string[] };
 
 type Loose = Record<string, any>;
 
@@ -87,6 +97,8 @@ export type StoreWatcher = (onChange: (runPanelRunning: boolean, activeModule: s
 
 export type RunnerIO = {
     engine: SentinelAiEngine;
+    /** Insight Fusion's feed. Optional: without it the scanner runs on the Sentinel engine alone. */
+    fusion?: FusionSource;
     buy: (args: { parameters: Loose; price: number }) => Promise<{
         buy_price: number;
         contract_id: number;
@@ -179,10 +191,22 @@ export class SentinelAiRunner {
     private runToken = 0;
     private releaseEngine: (() => void) | null = null;
     private releaseTick: (() => void) | null = null;
+    private releaseFusion: (() => void) | null = null;
     private loopTimer: ReturnType<typeof setInterval> | null = null;
 
     private active: ActiveSignal | null = null;
     private pending: SentinelAiSignal | null = null;
+    /** The scanner board built from the latest engine sample, and what Insight Fusion said in it. */
+    private board: Board = { rows: [], signals: new Map() };
+    private fusionRead: FusionRead | null = null;
+    private marketList: Array<{ symbol: string; name: string }> = [];
+    /** Setups already worked: key -> time they may be armed again. */
+    private spent = new Map<string, number>();
+    /** Loss shield: per market, the trade count / time it rests until, and its run of losses there. */
+    private rest = new Map<string, { untilTrades: number; untilAt: number; streak: number }>();
+    private lastResultAt = 0;
+    /** The buy went through and the contract is open (the phase after buying). */
+    private settling = false;
     private lastKey: string | null = null;
     private tradeInFlight = false;
     private buyErrors = 0;
@@ -267,7 +291,9 @@ export class SentinelAiRunner {
                 return;
             }
         }
-        this.emit();
+        // The board depends on the settings (engines, momentum, loss shield): rebuild it now instead of on the next scan.
+        if (this.releaseEngine) this.loop();
+        else this.emit();
     }
 
     // ── run lifecycle (mirrors Auto Trades' handleRun / stopTrading) ─────────────────────────────
@@ -304,6 +330,10 @@ export class SentinelAiRunner {
         this.marketRefusals.clear();
         this.quarantined.clear();
         this.carryLock = false;
+        this.spent.clear();
+        this.rest.clear();
+        this.lastResultAt = 0;
+        this.settling = false;
         this.session = this.freshSession();
         this.runToken += 1;
         this.running = true;
@@ -351,6 +381,7 @@ export class SentinelAiRunner {
         this.runToken += 1;
         this.stopReason = reason;
         this.tradeInFlight = false;
+        this.settling = false;
         this.aborts.forEach(controller => controller.abort());
         this.aborts.clear();
         this.disposeStoreWatch?.();
@@ -398,6 +429,8 @@ export class SentinelAiRunner {
         if (this.releaseEngine) return;
         this.releaseEngine = this.io.engine.retain();
         this.releaseTick = this.io.engine.onTick(symbol => this.onTick(symbol));
+        this.releaseFusion = this.io.fusion?.retain() ?? null;
+        this.marketList = this.io.engine.markets?.() ?? [];
         this.loopTimer = setInterval(() => this.loop(), LOOP_MS);
         this.loop();
     }
@@ -408,6 +441,8 @@ export class SentinelAiRunner {
         this.loopTimer = null;
         this.releaseTick?.();
         this.releaseTick = null;
+        this.releaseFusion?.();
+        this.releaseFusion = null;
         this.releaseEngine?.();
         this.releaseEngine = null;
         if (this.emitTimer) clearTimeout(this.emitTimer);
@@ -423,7 +458,8 @@ export class SentinelAiRunner {
             });
             this.engineInfo = sample.info;
             this.noteVetted(sample.vetted ?? []);
-            this.ingest(sample.surfaced);
+            this.scan(sample);
+            this.ingestBoard();
             this.applyQualityToActive();
         } catch (error) {
             this.engineInfo = { ...this.engineInfo, degraded: true, failsafes: ['ENGINE ERROR'] };
@@ -512,6 +548,7 @@ export class SentinelAiRunner {
         active.rejectedSince = active.rejectedSince ?? this.io.now();
         if (this.io.now() - active.rejectedSince < DROP_GRACE_MS) return;
         active.done = true;
+        this.spend(active.signal.key);
         const record = this.history.find(r => r.signal.id === active.signal.id);
         if (record && record.outcome === 'ACTIVE') record.outcome = active.runsDone > 0 ? 'TRADED' : 'SKIPPED';
         this.dropNotice = `Dropped ${active.signal.label} on ${active.signal.marketName}: ${verdict.reason}`;
@@ -536,21 +573,113 @@ export class SentinelAiRunner {
         return true;
     }
 
-    /** One NEW signal event per newly surfaced market × contract cell (same rule the Forge used). */
-    private ingest(surfaced: RankedOpportunity | null) {
-        if (!surfaced) {
+    // ── the scanner ──────────────────────────────────────────────────────────────────────────────
+    /** Marks a setup as worked, so the scanner looks at the next one instead of re-arming it straight away. */
+    private spend(key: string) {
+        this.spent.set(key, this.io.now() + SPENT_MS);
+    }
+
+    /** Extra score asked for right after a loss. It fades, so a quiet market can never freeze the session. */
+    private pickyBump(now: number): number {
+        if (!this.settings.pickyAfterLoss) return 0;
+        return pickyBumpAfterLoss(this.session.consecutiveLosses, now - this.lastResultAt);
+    }
+
+    /** Markets resting after a loss: symbol -> trades left. Empty when the shield is off. */
+    private restingMap(now: number): Map<string, number> {
+        const out = new Map<string, number>();
+        if (!this.settings.lossShield) return out;
+        const active = this.active;
+        // A signal that is part-way through its runs keeps its market: the user asked for several runs on it.
+        const working = active && !active.done && !active.expired && active.runsDone > 0 ? active.signal.symbol : null;
+        this.rest.forEach((entry, symbol) => {
+            if (symbol === working) return;
+            if (this.session.trades < entry.untilTrades && now < entry.untilAt) {
+                out.set(symbol, entry.untilTrades - this.session.trades);
+            }
+        });
+        return out;
+    }
+
+    /** Loss shield bookkeeping after a settled trade on `symbol`: a loss rests the market, a win clears it. */
+    private updateShield(symbol: string, lost: boolean) {
+        if (!lost) {
+            this.rest.delete(symbol);
+            return;
+        }
+        const streak = (this.rest.get(symbol)?.streak ?? 0) + 1;
+        const wait = this.settings.restTrades * (streak >= 2 ? 2 : 1);
+        this.rest.set(symbol, {
+            untilTrades: this.session.trades + wait,
+            untilAt: this.io.now() + REST_MAX_MS,
+            streak,
+        });
+    }
+
+    /**
+     * Builds the board from what the engines see right now: every vetted Sentinel candidate (or Insight Fusion's own picks in
+     * Fusion-leads mode), ranked, each with the reason it is or is not tradable. The scanner then arms the best tradable row.
+     */
+    private scan(sample: EngineSample) {
+        const now = this.io.now();
+        try {
+            this.fusionRead = this.io.fusion ? this.io.fusion.read(now) : null;
+        } catch {
+            this.fusionRead = null; // Fusion is a second opinion; a failing read never stops the scanner.
+        }
+        const vetted: readonly VettedCandidate[] =
+            sample.vetted ??
+            (sample.surfaced ? [{ opportunity: sample.surfaced, momentum: PASSING_MOMENTUM, blocked: false }] : []);
+        this.spent.forEach((until, key) => {
+            if (until <= now) this.spent.delete(key);
+        });
+        const active = this.active;
+        const working = active && !active.done && !active.expired ? active.signal.key : null;
+        this.board = buildBoard({
+            vetted,
+            fusion: this.fusionRead,
+            settings: this.settings,
+            now,
+            spent: new Set(this.spent.keys()),
+            resting: this.restingMap(now),
+            pickyBump: this.pickyBump(now),
+            activeKey: working,
+            isOut: (symbol, contractId) =>
+                this.isBlocked(`${symbol}|${contractId}`) ||
+                this.settings.excludedMarkets.includes(symbol) ||
+                this.quarantined.has(symbol),
+        });
+        // A setup that has left the board and comes back later is a NEW setup: it is no longer "worked".
+        const onBoard = new Set(this.board.rows.map(row => row.key));
+        this.spent.forEach((_until, key) => {
+            if (!onBoard.has(key)) this.spent.delete(key);
+        });
+    }
+
+    /**
+     * Arms the board's best tradable row. One NEW signal event per newly armed cell. A signal that is only waiting for its entry
+     * digit keeps its place unless a clearly better setup appears (see SWITCH_MARGIN); one already trading is never abandoned,
+     * and the newer pick waits its turn.
+     */
+    private ingestBoard() {
+        const active = this.active;
+        const live = active && !active.done && !active.expired ? active : null;
+        const pick = choosePick(
+            this.board,
+            live ? { key: live.signal.key, hold: !live.locked && !this.tradeInFlight } : null,
+            this.settings.engines
+        );
+        const incoming = pick ? (this.board.signals.get(pick.key) ?? null) : null;
+        if (!incoming) {
             this.lastKey = null;
             return;
         }
-        const incoming = toSentinelAiSignal(surfaced, this.io.now());
         if (incoming.key !== this.lastKey) {
             this.lastKey = incoming.key;
             this.onNewSignal(incoming);
             return;
         }
-        // Same cell still surfaced: refresh the entry point the engine currently recommends, unless a
-        // trade is already in flight on it.
-        const active = this.active;
+        // Same cell still armed: refresh the entry point the engine currently recommends, unless a trade is already in flight on it.
         if (active && active.signal.key === incoming.key && !active.done && !this.tradeInFlight) {
             active.signal = { ...incoming, id: active.signal.id, receivedAt: active.signal.receivedAt };
             // Not running yet: the signal stays fresh for as long as the engine keeps surfacing it, so pressing Run
@@ -563,10 +692,13 @@ export class SentinelAiRunner {
 
     private onNewSignal(signal: SentinelAiSignal) {
         this.alertSeq += 1;
-        try {
-            this.io.alert(signal, this.settings);
-        } catch {
-            // Alerts are best effort.
+        // While Run is on, the machine trades by itself and the Run Panel shows every trade: it does not announce each setup it arms.
+        if (!this.running) {
+            try {
+                this.io.alert(signal, this.settings);
+            } catch {
+                // Alerts are best effort.
+            }
         }
 
         const current = this.active;
@@ -620,6 +752,7 @@ export class SentinelAiRunner {
         if (!active || active.done || active.expired || active.locked || this.tradeInFlight) return;
         if (this.io.now() < active.expiresAt) return;
         active.expired = true;
+        this.spend(active.signal.key);
         const record = this.history.find(r => r.signal.id === active.signal.id);
         if (record && record.outcome === 'ACTIVE') record.outcome = active.runsDone > 0 ? 'TRADED' : 'EXPIRED';
         if (this.pending) this.activate(this.pending);
@@ -772,6 +905,8 @@ export class SentinelAiRunner {
                 return; // Stopped while buying: the purchase is on the deck, but the run is over.
             }
 
+            this.settling = true;
+            this.emit();
             this.aborts.add(abort);
             const settled = await this.io.settle({
                 contractId,
@@ -799,6 +934,7 @@ export class SentinelAiRunner {
         } catch (error) {
             this.aborts.delete(abort);
             this.tradeInFlight = false;
+            this.settling = false;
             if (token !== this.runToken) return;
             // The purchase went through but something after it failed: never count that as a failed buy.
             if (contractId) {
@@ -839,6 +975,7 @@ export class SentinelAiRunner {
         this.skipStreak += 1;
         if (active.locked) this.carryLock = true; // Touch-once keeps going on the next signal, no new touch needed.
         active.done = true;
+        this.spend(signal.key);
         const record = this.history.find(r => r.signal.id === signal.id);
         if (record) record.outcome = 'SKIPPED';
         this.lastError = `Skipped ${signal.label} on ${signal.marketName}: ${message}`;
@@ -857,6 +994,7 @@ export class SentinelAiRunner {
     /** `profit === null` means the result could not be confirmed: counted as a trade, never as a win/loss. */
     private finishTrade(contractId: number, profit: number | null, active: ActiveSignal) {
         this.tradeInFlight = false;
+        this.settling = false;
         const trade = this.trades.find(t => t.contractId === contractId);
 
         this.session = { ...this.session, trades: this.session.trades + 1 };
@@ -873,6 +1011,8 @@ export class SentinelAiRunner {
                 martingaleStep: next.martingaleStep,
             };
             active.pnl = round2(active.pnl + profit);
+            this.lastResultAt = this.io.now();
+            this.updateShield(active.signal.symbol, profit < 0);
             if (trade) {
                 trade.profit = profit;
                 trade.status = profit < 0 ? 'lost' : 'won';
@@ -896,6 +1036,7 @@ export class SentinelAiRunner {
             // Touch-once: keep firing until a limit, the target or Stop ends the session (runs per signal is ignored).
         } else if (active.runsDone >= active.runsTotal) {
             active.done = true;
+            this.spend(active.signal.key);
             if (record) record.outcome = 'TRADED';
             if (this.pending) this.activate(this.pending);
         } else {
@@ -949,8 +1090,20 @@ export class SentinelAiRunner {
         };
     }
 
+    /** Where the scanner is in its cycle: scanning for a setup, armed and waiting for its entry, buying, in a trade, or paused. */
+    private phase(): Phase {
+        if (!this.running) return 'idle';
+        if (this.engineInfo.status !== 'live') return 'connecting';
+        if (this.tradeInFlight) return this.settling ? 'settling' : 'buying';
+        if (this.io.now() < this.cooldownUntil) return 'cooling';
+        const active = this.active;
+        return active && !active.done && !active.expired ? 'armed' : 'scanning';
+    }
+
     private buildSnapshot(): SentinelAiSnapshot {
         const active = this.active;
+        const now = this.io.now();
+        const activeRow = active ? this.board.rows.find(row => row.key === active.signal.key) : undefined;
         const { digits: requiredDigits, source: entrySource } = this.requirement();
         let signalState: ActiveSignalState | null = null;
         if (active) {
@@ -968,8 +1121,25 @@ export class SentinelAiRunner {
                 ? Math.max(0, Math.ceil((active.expiresAt - this.io.now()) / 1000))
                 : 0;
 
+        const resting = Array.from(this.restingMap(now), ([symbol, tradesLeft]) => ({
+            symbol,
+            name: this.marketList.find(market => market.symbol === symbol)?.name ?? symbol,
+            tradesLeft,
+        }));
+
         return {
             status: this.running ? 'RUNNING' : this.watchers > 0 ? 'WATCHING' : 'IDLE',
+            phase: this.phase(),
+            board: this.board.rows.slice(0, BOARD_ROWS),
+            markets: marketDots(this.board, this.marketList),
+            fusion: {
+                enabled: this.settings.engines !== 'sentinel',
+                ready: this.fusionRead?.ready ?? 0,
+                total: this.fusionRead?.total ?? 0,
+            },
+            consensus: activeRow ? activeRow.fusion : null,
+            resting,
+            pickyBump: this.pickyBump(now),
             engine: this.engineInfo,
             signal: active ? active.signal : null,
             signalState,

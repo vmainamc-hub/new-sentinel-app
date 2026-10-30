@@ -13,7 +13,18 @@ export type MartingaleMode = 'off' | 'after_1' | 'after_2' | 'custom';
  */
 export type ExecutionMode = 'entry_digit' | 'immediate' | 'touch_once';
 
+/**
+ * Which engines decide what to trade.
+ * `sentinel`: the Sentinel engine alone decides; Insight Fusion is only shown.
+ * `prefer` (default): Sentinel decides, and Insight Fusion's opinion moves a signal up (agrees) or down (disagrees).
+ * `require`: only signals both engines back (same market, side and barrier) are traded.
+ * `fusion_leads`: Insight Fusion picks the contract; Sentinel supplies the entry digit when it has a validated one.
+ */
+export type EngineMode = 'sentinel' | 'prefer' | 'require' | 'fusion_leads';
+
 export type SentinelAiSettings = {
+    /** Which engines pick what is traded (see EngineMode). */
+    engines: EngineMode;
     executionMode: ExecutionMode;
     /** Base stake per trade. */
     stake: number;
@@ -47,6 +58,11 @@ export type SentinelAiSettings = {
     maxConsecutiveLosses: number;
     /** How long a signal may wait for its entry digit before it is dropped. */
     signalWaitSeconds: number;
+    /** After a loss, the market it happened on rests for `restTrades` trades while the scanner looks elsewhere. */
+    lossShield: boolean;
+    restTrades: number;
+    /** After a loss the scanner asks for a slightly higher score; the extra bar fades by itself. */
+    pickyAfterLoss: boolean;
     /**
      * Entry digits used ONLY when the engine gave a signal no entry digit of its own; the first listed digit to print
      * triggers the trade. An empty list means such signals of that side are not traded.
@@ -77,6 +93,7 @@ export type SentinelAiSettings = {
 export const MIN_STAKE = 0.35;
 
 export const DEFAULT_SETTINGS: SentinelAiSettings = {
+    engines: 'prefer',
     executionMode: 'entry_digit',
     stake: 1,
     martingaleMode: 'after_1',
@@ -94,6 +111,9 @@ export const DEFAULT_SETTINGS: SentinelAiSettings = {
     maxTrades: 0,
     maxConsecutiveLosses: 0,
     signalWaitSeconds: 45,
+    lossShield: true,
+    restTrades: 2,
+    pickyAfterLoss: true,
     defaultOverDigits: [2, 4],
     defaultUnderDigits: [5, 7],
     minScore: 70,
@@ -120,6 +140,7 @@ const bool = (value: unknown, fallback: boolean) => (typeof value === 'boolean' 
 
 const MODES: MartingaleMode[] = ['off', 'after_1', 'after_2', 'custom'];
 const EXECUTION_MODES: ExecutionMode[] = ['entry_digit', 'immediate', 'touch_once'];
+const ENGINE_MODES: EngineMode[] = ['sentinel', 'prefer', 'require', 'fusion_leads'];
 
 /** Keeps whole digits 0-9 only, unique and ascending. Not a list -> fallback; an empty list is valid ("none"). */
 export const normalizeDigitList = (value: unknown, fallback: number[]): number[] => {
@@ -154,6 +175,7 @@ export const parseDigitList = (text: string): number[] | null => {
 export const normalizeSettings = (raw: unknown, base: SentinelAiSettings = DEFAULT_SETTINGS): SentinelAiSettings => {
     const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
     return {
+        engines: ENGINE_MODES.includes(r.engines as EngineMode) ? (r.engines as EngineMode) : base.engines,
         executionMode: EXECUTION_MODES.includes(r.executionMode as ExecutionMode)
             ? (r.executionMode as ExecutionMode)
             : base.executionMode,
@@ -175,6 +197,9 @@ export const normalizeSettings = (raw: unknown, base: SentinelAiSettings = DEFAU
         maxTrades: num(r.maxTrades, base.maxTrades, 0, 100000, true),
         maxConsecutiveLosses: num(r.maxConsecutiveLosses, base.maxConsecutiveLosses, 0, 50, true),
         signalWaitSeconds: num(r.signalWaitSeconds, base.signalWaitSeconds, 10, 600, true),
+        lossShield: bool(r.lossShield, base.lossShield),
+        restTrades: num(r.restTrades, base.restTrades, 1, 20, true),
+        pickyAfterLoss: bool(r.pickyAfterLoss, base.pickyAfterLoss),
         defaultOverDigits: normalizeDigitList(r.defaultOverDigits, base.defaultOverDigits),
         defaultUnderDigits: normalizeDigitList(r.defaultUnderDigits, base.defaultUnderDigits),
         minScore: num(r.minScore, base.minScore, 0, 100, true),
@@ -303,8 +328,80 @@ export type MomentumView = {
     topBlocked: { label: string; market: string; reason: string } | null;
 };
 
+/** What Insight Fusion says about a Sentinel signal's market. */
+export type Consensus =
+    /** Fusion is not consulted (engines = sentinel, or no Fusion data yet). */
+    | 'off'
+    /** Fusion recommends the same market, side and barrier. */
+    | 'both'
+    /** Fusion recommends the same side on this market but another barrier. */
+    | 'partial'
+    /** Fusion recommends the opposite side on this market, or stands down on this exact contract. */
+    | 'conflict'
+    /** Fusion has no recommendation on this market. */
+    | 'silent';
+
+export type FusionView = {
+    consensus: Consensus;
+    /** Fusion's own score / danger for the matching contract (null when it has none). */
+    score: number | null;
+    danger: number | null;
+    /** One plain-words line for the page. */
+    note: string;
+};
+
+/** Where a board row came from. */
+export type BoardSource = 'sentinel' | 'fusion';
+
+/** armed: being worked. next: tradable, queued. spent: already worked. resting: market rests after a loss. held: a rule keeps it out. */
+export type BoardRowState = 'armed' | 'next' | 'spent' | 'resting' | 'held';
+
+/** One candidate on the scanner board, with the reason it is or is not tradable right now. */
+export type BoardRow = {
+    key: string;
+    symbol: string;
+    marketName: string;
+    label: string;
+    contractType: 'DIGITOVER' | 'DIGITUNDER';
+    barrier: number;
+    source: BoardSource;
+    /** The Sentinel engine's own score and danger (Fusion's for a Fusion-led row). */
+    score: number;
+    danger: number | null;
+    /** The ordering score: the engine score plus what Insight Fusion's opinion adds or takes away. */
+    rank: number;
+    entryDigit: number | null;
+    entryStatus: string;
+    fusion: FusionView;
+    eligible: boolean;
+    state: BoardRowState;
+    /** Plain words: why this row is tradable now, or why it is not. */
+    reason: string;
+};
+
+/** The scanner's position in its cycle, shown as the big status on the page. */
+export type Phase = 'idle' | 'connecting' | 'scanning' | 'armed' | 'buying' | 'settling' | 'cooling';
+
+export type MarketDot = { symbol: string; name: string; best: BoardRow | null };
+
+export type FusionStatus = { enabled: boolean; ready: number; total: number };
+
 export type SentinelAiSnapshot = {
     status: RunnerStatus;
+    /** Where the scanner is in its cycle (scanning, armed, buying, in trade, next). */
+    phase: Phase;
+    /** The scanner board: the best candidates, best first, with consensus and the reason each is or is not tradable. */
+    board: BoardRow[];
+    /** Every market with its best candidate (null when it has none), for the radar. */
+    markets: MarketDot[];
+    /** Insight Fusion's side of the machine. */
+    fusion: FusionStatus;
+    /** What Fusion says about the signal being worked. */
+    consensus: FusionView | null;
+    /** Markets resting after a loss, with the trades left before they return. */
+    resting: Array<{ symbol: string; name: string; tradesLeft: number }>;
+    /** Extra score the scanner currently asks for because of the latest loss. */
+    pickyBump: number;
     engine: EngineInfo;
     signal: SentinelAiSignal | null;
     signalState: ActiveSignalState | null;

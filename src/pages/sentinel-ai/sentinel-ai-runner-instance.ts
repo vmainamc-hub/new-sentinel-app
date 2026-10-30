@@ -4,6 +4,7 @@ import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purc
 import { fireSignalAlerts } from './sentinel-ai-alerts';
 import { derivBus } from '@/sentinel-engine/lib/deriv/tick-bus';
 import { sentinelAiEngine } from './sentinel-ai-engine';
+import { bulkFusionSource } from './sentinel-ai-fusion';
 import { loadStoredRecords, saveStoredRecords, SignalOutcomeLog } from './sentinel-ai-outcome-log';
 import { SentinelAiRunner } from './sentinel-ai-runner';
 import { loadSettings, saveSettings } from './sentinel-ai-types';
@@ -20,6 +21,7 @@ export const sentinelAiOutcomeLog = new SignalOutcomeLog({
 
 export const sentinelAiRunner = new SentinelAiRunner({
     engine: sentinelAiEngine,
+    fusion: bulkFusionSource,
     buy: ({ parameters, price }) => buyContractForUi({ parameters, price, source: 'SentinelAI' }),
     settle: ({ contractId, fallback, onUpdate, signal }) =>
         streamContractUntilSettled({ contractId, fallback, onUpdate, signal, source: 'SentinelAI' }),
