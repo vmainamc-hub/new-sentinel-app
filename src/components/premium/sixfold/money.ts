@@ -71,6 +71,12 @@ export type SixfoldSettings = {
      */
     meterFloor: number;
     meterFloorRecovery: number;
+    /** Losing-side pressure gate: skip markets where digits that lose the bought contract are crowding in. */
+    pressureGate: boolean;
+    /** Highest losing-side pressure index allowed (10–90). */
+    pressureMax: number;
+    /** Require strength across 60 / 120 / 240 / 480 tick windows. */
+    multiWindowGate: boolean;
     /**
      * Win-streak guard: never buy while losing digits are appearing. The contract about to be bought must have won on each of
      * the market's last `winStreak` ticks, and a market with too many losses in its last 10 (`lossAbort` above what that
@@ -131,6 +137,9 @@ export const DEFAULT_SETTINGS: SixfoldSettings = {
     meterPatience: 90,
     meterFloor: 50,
     meterFloorRecovery: 52,
+    pressureGate: true,
+    pressureMax: 35,
+    multiWindowGate: true,
     winStreakGate: true,
     virtualHook: false,
     vhMode: 'STREAK',
@@ -189,6 +198,9 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         meterPatience: Math.trunc(num(s.meterPatience, d.meterPatience, 10, 600)),
         meterFloor: Math.trunc(num(s.meterFloor, d.meterFloor, 0, 100)),
         meterFloorRecovery: Math.trunc(num(s.meterFloorRecovery, d.meterFloorRecovery, 0, 100)),
+        pressureGate: typeof s.pressureGate === 'boolean' ? s.pressureGate : d.pressureGate,
+        pressureMax: Math.trunc(num(s.pressureMax, d.pressureMax, 10, 90)),
+        multiWindowGate: typeof s.multiWindowGate === 'boolean' ? s.multiWindowGate : d.multiWindowGate,
         winStreakGate: typeof s.winStreakGate === 'boolean' ? s.winStreakGate : d.winStreakGate,
         winStreak: Math.trunc(num(s.winStreak, d.winStreak, 2, 10)),
         lossAbort: Math.trunc(num(s.lossAbort, d.lossAbort, 0, 4)),

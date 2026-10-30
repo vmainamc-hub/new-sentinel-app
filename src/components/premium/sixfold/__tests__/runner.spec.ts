@@ -73,7 +73,7 @@ function harness(over: Partial<SixfoldSettings> = {}, io: Partial<RunnerIO> = {}
         currency: () => 'USD',
         afterStop: () => {},
         now: () => t,
-        loadSettings: () => ({ ...DEFAULT_SETTINGS, entry: 'SMART', markets: ['P', 'Q'], selectivity: 'strict', lossShield: false, pickyAfterLoss: false, meterGuide: false, winStreakGate: false, ...over }),
+        loadSettings: () => ({ ...DEFAULT_SETTINGS, entry: 'SMART', markets: ['P', 'Q'], selectivity: 'strict', lossShield: false, pickyAfterLoss: false, meterGuide: false, winStreakGate: false, pressureGate: false, multiWindowGate: false, ...over }),
         saveSettings: () => {},
         ...io,
     });
@@ -864,5 +864,82 @@ describe('SixfoldRunner Meter guide', () => {
         expect(normalizeSettings({ meterFloor: 150, meterFloorRecovery: -3 })).toMatchObject({ meterFloor: 100, meterFloorRecovery: 0 });
         expect(normalizeSettings({ meterPatience: 5 }).meterPatience).toBe(10);
         expect(normalizeSettings({ meterPatience: 9999 }).meterPatience).toBe(600);
+    });
+});
+
+
+describe('SixfoldRunner danger gates', () => {
+    const fill = (h: ReturnType<typeof harness>, digits: number[]) => {
+        h.series.P.length = 0;
+        h.series.P.push(...digits);
+    };
+    const repeat = (unit: number[], n: number) => Array.from({ length: n }, (_, i) => unit[i % unit.length]);
+
+    it('refuses a market whose losing digits are crowding in, and says why', () => {
+        const mk = (on: boolean) => {
+            // planted: digit 1 (a losing digit for Over 2) prints every other tick, half the losing side's fair share again.
+            const h = harness({ selectivity: 'active', markets: ['P'], useUnder: false, pressureGate: on });
+            h.runner.start();
+            return h;
+        };
+        expect(mk(false).runner.getSnapshot().armed).not.toBeNull();
+        const on = mk(true);
+        expect(on.runner.getSnapshot().armed).toBeNull();
+        expect(on.runner.getSnapshot().queue[0].reason).toMatch(/losing/i);
+    });
+
+    it('lets a quiet market through the pressure gate', () => {
+        const h = harness({ selectivity: 'active', markets: ['P'], useUnder: false, pressureGate: true });
+        // Losing digit 1 shows up once in ten ticks (fair share), always followed by a winner.
+        fill(h, repeat([1, 5, 6, 7, 8, 9, 5, 6, 7, 8], 600));
+        h.runner.start();
+        expect(h.runner.getSnapshot().armed?.symbol).toBe('P');
+    });
+
+    it('refuses a recent-only surge when the multi-window gate is on', () => {
+        const mk = (on: boolean) => {
+            const h = harness({ selectivity: 'active', markets: ['P'], useUnder: false, multiWindowGate: on });
+            // 420 ticks that win Over 2 half the time, then 60 that win 95% of the time: a thrust in the latest window only.
+            const older = Array.from({ length: 420 }, (_, i) => (i % 10 < 5 ? 5 : 1));
+            const recent = Array.from({ length: 60 }, (_, i) => (i % 20 < 19 ? 5 : 1));
+            fill(h, [...older, ...recent]);
+            h.runner.start();
+            return h;
+        };
+        expect(mk(false).runner.getSnapshot().queue[0].reason).not.toMatch(/thrust/i);
+        const on = mk(true);
+        expect(on.runner.getSnapshot().armed).toBeNull();
+        expect(on.runner.getSnapshot().queue[0].reason).toMatch(/thrust/i);
+    });
+
+    it('after a loss reads the recovery contract: Over 3 also loses on a 3, so a market crowded with 3s is refused', async () => {
+        const run = async (on: boolean) => {
+            const h = harness({
+                takeProfit: 0,
+                stopLoss: 0,
+                maxConsecutiveLosses: 0,
+                selectivity: 'active',
+                recovery: true,
+                lossShield: false,
+                markets: ['P'],
+                useUnder: false,
+                pressureGate: on,
+            });
+            // Digit 3 prints four ticks in ten: harmless for Over 2, but it is a losing digit for the Over 3 recovery trade.
+            fill(h, repeat([1, 5, 3, 6, 3, 7, 3, 8, 3, 9], 600));
+            h.queueProfits(-1, 0.35);
+            h.runner.start();
+            const a = h.runner.getSnapshot().armed!;
+            expect(a).not.toBeNull(); // the first trade (Over 2) is fine
+            h.runner.handleFeedTick(a.symbol, a.entryDigits[0]);
+            await flush();
+            h.advance(1500);
+            h.runner.tick();
+            return h;
+        };
+        expect((await run(false)).runner.getSnapshot().armed).not.toBeNull();
+        const on = await run(true);
+        expect(on.runner.getSnapshot().armed).toBeNull();
+        expect(on.runner.getSnapshot().queue[0].reason).toMatch(/losing/i);
     });
 });

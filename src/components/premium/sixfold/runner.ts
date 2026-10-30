@@ -11,6 +11,7 @@ import { contract_stages } from '@/constants/contract-stage';
 import type { RunnerStores, StoreWatcher } from '@/pages/sentinel-ai/sentinel-ai-runner';
 import { describeTradeFailure } from '@/utils/trade-errors';
 import { formGateOk, smartEntryDigits } from './entry';
+import { losingSidePressure, multiWindowGate, multiWindowHealth, pressureGate } from './pressure';
 import { streakRead } from './streak-guard';
 import { expectedTickSeconds, type FeedMode, type FeedSnapshot, marketName } from './feed';
 import {
@@ -233,6 +234,8 @@ export class SixfoldRunner {
     private lastLossEntry = new Map<string, number>();
     private lastResultAt = 0;
     private regime: RegimeSummary | null = null;
+    /** Market/contract pairs currently refused by the pressure and multi-window gates. */
+    private guards = new Map<string, string>();
     /** The Meter's read of the contracts that will actually be bought next (the recovery barriers after a loss). */
     private tradeRegime: RegimeSummary | null = null;
     /** Start of the wait the Meter's extra bar fades over: Run, or the last result. */
@@ -484,6 +487,7 @@ export class SixfoldRunner {
         if (!this.recoveryFormOk(symbol)) return;
         if (!this.brainOk(symbol)) return;
         if (!this.meterFresh(symbol)) return;
+        if (this.freshGuardBlocks(symbol)) return;
         void this.execute(digit);
     }
 
@@ -509,6 +513,7 @@ export class SixfoldRunner {
                           rank: cell => (this.settings.meterGuide ? this.meterFor(cell, now).rank : 0),
                           veto: cell => {
                               if (this.settings.meterGuide && !this.meterFor(cell, now).allow) return true;
+                              if (this.guards.has(`${cell.symbol}|${cell.key}`)) return true;
                               if (!guarded) return false;
                               const read = this.streakOf(cell.symbol, cell);
                               // Never a market that is losing; first choice is one already part-way into a run of wins.
@@ -559,7 +564,7 @@ export class SixfoldRunner {
         );
         if (this.settings.entry === 'ANY' || this.brainGoverns()) {
             const digit = this.io.feed.getLastDigit(cell.symbol);
-            if (digit !== null && this.streakFresh(cell.symbol) && this.recoveryFormOk(cell.symbol) && this.brainOk(cell.symbol) && this.meterFresh(cell.symbol)) void this.execute(digit);
+            if (digit !== null && this.streakFresh(cell.symbol) && this.recoveryFormOk(cell.symbol) && this.brainOk(cell.symbol) && this.meterFresh(cell.symbol) && !this.freshGuardBlocks(cell.symbol)) void this.execute(digit);
         }
     }
 
@@ -750,6 +755,47 @@ export class SixfoldRunner {
         };
     }
 
+    /** Evaluate the contract that will actually be bought, including the recovery barrier after a loss. */
+    private guardReason(digits: readonly number[], primary: Contract): string | null {
+        const { pressureGate: pressureOn, multiWindowGate: windowsOn, pressureMax } = this.settings;
+        if (!pressureOn && !windowsOn) return null;
+        const traded = tradeContract(primary, this.session.consecutiveLosses, this.settings).contract;
+        if (pressureOn) {
+            const g = pressureGate(losingSidePressure(digits, traded), pressureMax);
+            if (!g.ok) return g.reason;
+        }
+        if (windowsOn) {
+            const g = multiWindowGate(multiWindowHealth(digits, traded));
+            if (!g.ok) return g.reason;
+        }
+        return null;
+    }
+
+    private computeGuards(series: Record<string, readonly number[]>): Map<string, string> {
+        const out = new Map<string, string>();
+        if (!this.scan) return out;
+        for (const cell of this.scan.cells) {
+            const why = this.guardReason(series[cell.symbol] ?? [], cell.contract);
+            if (why) out.set(`${cell.symbol}|${cell.key}`, why);
+        }
+        return out;
+    }
+
+    /** Last look before buying: re-read the latest ticks so a newly hostile market is not entered. */
+    private freshGuardBlocks(symbol: string): boolean {
+        if (!this.armed || !this.scan) return false;
+        const cell = this.scan.cells.find(c => c.symbol === symbol && c.key === this.armed!.cellKey);
+        if (!cell) return false;
+        const why = this.guardReason(this.io.feed.getLiveSeries()[symbol] ?? [], cell.contract);
+        if (!why) return false;
+        const armed = this.armed;
+        this.guards.set(`${cell.symbol}|${cell.key}`, why);
+        this.armed = null;
+        this.addLog('info', `${armed.label} on ${armed.name} dropped: ${why}.`);
+        this.emit();
+        return true;
+    }
+
     private restedSymbols(now: number): Set<string> {
         const out = new Set<string>();
         if (!this.settings.lossShield) return out;
@@ -802,6 +848,7 @@ export class SixfoldRunner {
         ];
         const samePrimary = nextContracts.every(c => primaryContracts(this.settings).some(p => contractKey(p) === contractKey(c)));
         this.tradeRegime = samePrimary ? this.regime : computeRegime(series, symbols, nextContracts, now);
+        this.guards = this.computeGuards(series);
         const rested = this.restedSymbols(now);
         const bump = this.pickyBump(now);
         this.queue = this.scan.cells
@@ -810,6 +857,8 @@ export class SixfoldRunner {
             .slice(0, 8)
             .map(cell => {
                 if (rested.has(cell.symbol)) return { cell, ok: false, reason: 'Resting after a loss on this market' };
+                const guard = this.guards.get(`${cell.symbol}|${cell.key}`) ?? null;
+                if (guard) return { cell, ok: false, reason: guard };
                 const call = this.meterFor(cell, now);
                 if (!call.allow) return { cell, ok: false, reason: call.note.charAt(0).toUpperCase() + call.note.slice(1) };
                 const e = eligibility(cell, this.settings.selectivity, bump + call.bump);

@@ -454,6 +454,23 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                 )}
                 <Switch on={s.pickyAfterLoss} onChange={v => set({ pickyAfterLoss: v })} title='Pickier after a loss' sub='Ask for a higher score next' />
                 <Switch
+                    on={s.pressureGate}
+                    onChange={v => set({ pressureGate: v })}
+                    title='Losing-digit pressure gate'
+                    sub='Skip a market while the digits that would lose are crowding in'
+                />
+                {s.pressureGate && (
+                    <div className='sf-sub'>
+                        <Num label='Max pressure' value={s.pressureMax} onCommit={n => set({ pressureMax: n })} hint='10–90, lower is stricter' />
+                    </div>
+                )}
+                <Switch
+                    on={s.multiWindowGate}
+                    onChange={v => set({ multiWindowGate: v })}
+                    title='Multi-window gate'
+                    sub='Needs strength across 60 / 120 / 240 / 480 ticks, not only the latest'
+                />
+                <Switch
                     on={s.meterGuide}
                     onChange={v => set({ meterGuide: v })}
                     title='Meter guide'
