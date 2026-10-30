@@ -25,9 +25,9 @@ const UNDER_XML = read(entry(RECOVER_BOTS.DIGITUNDER.id).asset);
 const OVER_XML = read(entry(RECOVER_BOTS.DIGITOVER.id).asset);
 
 describe('Recover bandwagon bots in the bot list', () => {
-    it('are listed as bots 106 and 107 and the count matches', () => {
-        expect(entry(RECOVER_BOTS.DIGITUNDER.id).name).toMatch(/^106\. Recover Under/);
-        expect(entry(RECOVER_BOTS.DIGITOVER.id).name).toMatch(/^107\. Recover Over/);
+    it('are listed as bots 103 and 104 and the count matches', () => {
+        expect(entry(RECOVER_BOTS.DIGITUNDER.id).name).toMatch(/^103\. Recover Under/);
+        expect(entry(RECOVER_BOTS.DIGITOVER.id).name).toMatch(/^104\. Recover Over/);
         expect(domain.count).toBe(domain.bots.length);
         expect(new Set(domain.bots.map(b => b.priority)).size).toBe(domain.bots.length);
     });

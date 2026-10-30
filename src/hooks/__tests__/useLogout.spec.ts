@@ -87,7 +87,7 @@ describe('useLogout', () => {
 
             await handleLogout();
 
-            expect(ErrorLogger.error).toHaveBeenCalledWith('Logout', 'Logout failed', mockError);
+            expect(ErrorLogger.error).toHaveBeenCalledWith('Logout', 'Logout request failed; clearing local session anyway', mockError);
         });
 
         it('should clear auth-related sessionStorage items on logout failure', async () => {
@@ -138,51 +138,32 @@ describe('useLogout', () => {
         });
     });
 
-    describe('Storage Clearing Fallback', () => {
-        it('should clear all storage if targeted clearing fails', async () => {
-            const mockError = new Error('Logout failed');
-            mockLogout.mockRejectedValue(mockError);
-
-            // Mock removeItem to throw error
+    describe('Storage clearing', () => {
+        it('logs a failure to clear the persisted auth storage, and never wipes all storage', async () => {
+            mockLogout.mockRejectedValue(new Error('Logout failed'));
             const storageError = new Error('Storage error');
             Storage.prototype.removeItem = jest.fn().mockImplementation(() => {
                 throw storageError;
             });
 
             const { result } = renderHook(() => useLogout());
-            const handleLogout = result.current;
-
-            await handleLogout();
+            await result.current();
 
             await waitFor(() => {
-                expect(ErrorLogger.error).toHaveBeenCalledWith('Logout', 'Failed to clear auth storage', storageError);
-                expect(sessionStorage.clear).toHaveBeenCalled();
-                expect(localStorage.clear).toHaveBeenCalled();
+                expect(ErrorLogger.error).toHaveBeenCalledWith('Logout', 'Failed to clear persisted auth storage', storageError);
             });
+            expect(sessionStorage.clear).not.toHaveBeenCalled();
+            expect(localStorage.clear).not.toHaveBeenCalled();
         });
 
-        it('should log error if final storage clear also fails', async () => {
-            const mockError = new Error('Logout failed');
-            mockLogout.mockRejectedValue(mockError);
-
-            // Mock both removeItem and clear to throw errors
-            const storageError = new Error('Storage error');
-            const finalError = new Error('Final storage error');
+        it('does not throw when the storage cannot be cleared', async () => {
+            mockLogout.mockRejectedValue(new Error('Logout failed'));
             Storage.prototype.removeItem = jest.fn().mockImplementation(() => {
-                throw storageError;
-            });
-            Storage.prototype.clear = jest.fn().mockImplementation(() => {
-                throw finalError;
+                throw new Error('Storage error');
             });
 
             const { result } = renderHook(() => useLogout());
-            const handleLogout = result.current;
-
-            await handleLogout();
-
-            await waitFor(() => {
-                expect(ErrorLogger.error).toHaveBeenCalledWith('Logout', 'Failed to clear all storage', finalError);
-            });
+            await expect(result.current()).resolves.not.toThrow();
         });
     });
 

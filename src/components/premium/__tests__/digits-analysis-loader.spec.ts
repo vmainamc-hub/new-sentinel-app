@@ -9,11 +9,11 @@ const OVER = fs.readFileSync(path.join(LIBRARY, 'apex-library-masika-strategies-
 const UNDER = fs.readFileSync(path.join(LIBRARY, 'apex-library-masika-strategies-digit-under-104.xml'), 'utf8');
 
 describe('bot ids', () => {
-    it('point at bots 105 (Over) and 104 (Under) in the manifest', () => {
+    it('point at bots 102 (Over) and 101 (Under) in the manifest', () => {
         const manifest = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'public/free-bots/domains/apex-sentinel.json'), 'utf8'));
         const byId = (id: string) => manifest.bots.find((bot: { id: string }) => bot.id === id);
-        expect(byId(DIGITS_BOT_IDS.DIGITOVER)?.priority).toBe(105);
-        expect(byId(DIGITS_BOT_IDS.DIGITUNDER)?.priority).toBe(104);
+        expect(byId(DIGITS_BOT_IDS.DIGITOVER)?.priority).toBe(102);
+        expect(byId(DIGITS_BOT_IDS.DIGITUNDER)?.priority).toBe(101);
     });
 });
 
@@ -44,7 +44,9 @@ describe('configureDigitsBot', () => {
         const xml = configureDigitsBot(OVER, '1HZ10V', 'DIGITOVER');
         expect(marketOf(xml)).toEqual({ market: 'synthetic_index', submarket: 'random_index', symbol: '1HZ10V' });
         expect(purchaseOf(xml)).toBe('DIGITOVER');
+        // The XML serializer may write an empty element as <a/> or <a></a>: both mean the same, so compare them in one form.
         const strip = (text: string) => text
+            .replace(/<(\w+)([^<>]*?)\/>/g, '<$1$2></$1>')
             .replace(/<field name="SYMBOL_LIST">[^<]*<\/field>/, '')
             .replace(/<block type="lists_create_with"[\s\S]*?<\/statement>/, '');
         expect(strip(xml).length).toBe(strip(OVER).length);

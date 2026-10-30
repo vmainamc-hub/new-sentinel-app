@@ -162,9 +162,8 @@ const config: Config = {
     testMatch: ['**/__tests__/**/*.[jt]s?(x)', '**/?(*.)+(spec|test).[tj]s?(x)'],
 
     // An array of regexp pattern strings that are matched against all test paths, matched tests are skipped
-    // testPathIgnorePatterns: [
-    //   "/node_modules/"
-    // ],
+    // `bot/spec.ts` under precision-edge is a bot specification (data), not a test file.
+    testPathIgnorePatterns: ['/node_modules/', '/precision-edge/bot/spec\\.ts$'],
 
     // The regexp pattern or array of patterns that Jest uses to detect test files
     // testRegex: [],

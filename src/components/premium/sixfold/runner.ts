@@ -8,7 +8,7 @@
 // It is a singleton service (not tied to the page), so a session keeps running while you look at other tabs.
 // All I/O is injected, which keeps it unit-testable.
 import { contract_stages } from '@/constants/contract-stage';
-import type { RunnerStores, StoreWatcher } from '@/pages/sentinel-ai/sentinel-ai-runner';
+import type { RunnerStores, StoreWatcher } from './stores';
 import { describeTradeFailure } from '@/utils/trade-errors';
 import { type Contract, contractKey, winningDigits, winProbability } from './bot';
 import { formGateOk, smartEntryDigits } from './entry';
@@ -524,7 +524,7 @@ export class SixfoldRunner {
                 { mode: this.scanMode() },
                 { symbols: skipSymbols, keys: skipKeys },
                 this.pickyBump(now),
-                this.settings.meterGuide || this.io.overlay || guarded
+                this.settings.meterGuide || this.io.overlay || guarded || this.guards.size > 0
                     ? {
                           bump: cell => this.meterFor(cell, now).bump,
                           rank: cell => this.meterFor(cell, now).rank,

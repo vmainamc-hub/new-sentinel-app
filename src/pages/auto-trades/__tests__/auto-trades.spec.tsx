@@ -5,6 +5,10 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AutoTrades from '../auto-trades';
 
+// The trade type is the select that offers the Only Ups / Only Downs types (the strategy template select now comes first).
+const tradeTypeSelectEl = () =>
+    screen.getAllByRole('combobox').find(el => el.querySelector('option[value="RUNHIGH"]')) as HTMLElement;
+
 jest.mock('@/hooks/useStore', () => ({
     useStore: jest.fn(),
 }));
@@ -39,6 +43,7 @@ jest.mock('@/external/bot-skeleton', () => ({
         is_authorized: true,
         account_info: { loginid: 'CR12345' },
         api: {
+            connection: { readyState: 1 }, // an open Deriv socket: the page waits for one before it subscribes
             subscribe: (...args: unknown[]) => mockApiSubscribe(...args),
             send: (...args: unknown[]) => mockApiSend(...args),
         },
@@ -121,7 +126,7 @@ describe('<AutoTrades />', () => {
             expect(screen.getByText('0/13 selected')).toBeInTheDocument();
         });
 
-        expect(screen.getByRole('button', { name: /Run Auto Trades/i })).toBeDisabled();
+        expect(screen.getByRole('button', { name: /Start Trading/i })).toBeDisabled();
         expect(screen.getByText(/Select at least one market to show live quotes/i)).toBeInTheDocument();
 
         await user.click(screen.getByRole('button', { name: 'Select all' }));
@@ -130,7 +135,7 @@ describe('<AutoTrades />', () => {
             expect(screen.getByText('13/13 selected')).toBeInTheDocument();
         });
 
-        expect(screen.getByRole('button', { name: /Run Auto Trades/i })).not.toBeDisabled();
+        expect(screen.getByRole('button', { name: /Start Trading/i })).not.toBeDisabled();
     });
 
     it('shows analysis ticks control for all trade types', async () => {
@@ -138,7 +143,7 @@ describe('<AutoTrades />', () => {
 
         render(<AutoTrades />);
 
-        const tradeTypeSelect = screen.getAllByRole('combobox')[0];
+        const tradeTypeSelect = tradeTypeSelectEl();
         await user.selectOptions(tradeTypeSelect, 'RUNHIGH');
 
         await waitFor(() => {
@@ -146,7 +151,7 @@ describe('<AutoTrades />', () => {
             expect(screen.getByText(/falling ticks \+ bullish 5m candle/i)).toBeInTheDocument();
         });
 
-        const analysisTickSelect = screen.getAllByRole('combobox')[1];
+        const analysisTickSelect = screen.getAllByRole('combobox')[screen.getAllByRole('combobox').indexOf(tradeTypeSelectEl()) + 1];
         await user.selectOptions(analysisTickSelect, '3');
 
         expect(screen.getByText(/Only Ups \(3 ticks\)/i)).toBeInTheDocument();
@@ -166,7 +171,7 @@ describe('<AutoTrades />', () => {
 
         render(<AutoTrades />);
 
-        await user.click(screen.getByRole('button', { name: /Run Auto Trades/i }));
+        await user.click(screen.getByRole('button', { name: /Start Trading/i }));
         await user.click(screen.getByRole('button', { name: /Stop/i }));
 
         expect(store.run_panel.setIsRunning).toHaveBeenLastCalledWith(false);
@@ -266,8 +271,8 @@ describe('<AutoTrades />', () => {
 
         render(<AutoTrades />);
 
-        await user.selectOptions(screen.getAllByRole('combobox')[0], 'RUNHIGH');
-        await user.click(screen.getByRole('button', { name: /Run Auto Trades/i }));
+        await user.selectOptions(tradeTypeSelectEl(), 'RUNHIGH');
+        await user.click(screen.getByRole('button', { name: /Start Trading/i }));
 
         await waitFor(() => {
             expect(tickSubscribers['1HZ10V']).toBeDefined();
@@ -307,7 +312,7 @@ describe('<AutoTrades />', () => {
 
         render(<AutoTrades />);
 
-        await user.click(screen.getByRole('button', { name: /Run Auto Trades/i }));
+        await user.click(screen.getByRole('button', { name: /Start Trading/i }));
 
         await waitFor(() => {
             expect(tickSubscribers['1HZ10V']).toBeDefined();
@@ -360,7 +365,7 @@ describe('<AutoTrades />', () => {
 
         render(<AutoTrades />);
 
-        await user.click(screen.getByRole('button', { name: /Run Auto Trades/i }));
+        await user.click(screen.getByRole('button', { name: /Start Trading/i }));
 
         await waitFor(() => {
             expect(tickSubscribers['1HZ10V']).toBeDefined();
@@ -396,8 +401,8 @@ describe('<AutoTrades />', () => {
 
         render(<AutoTrades />);
 
-        await user.selectOptions(screen.getAllByRole('combobox')[0], 'CALL');
-        await user.click(screen.getByRole('button', { name: /Run Auto Trades/i }));
+        await user.selectOptions(tradeTypeSelectEl(), 'CALL');
+        await user.click(screen.getByRole('button', { name: /Start Trading/i }));
 
         await waitFor(() => {
             expect(tickSubscribers['1HZ10V']).toBeDefined();
@@ -479,7 +484,7 @@ describe('<AutoTrades />', () => {
 
         render(<AutoTrades />);
 
-        await user.click(screen.getByRole('button', { name: /Run Auto Trades/i }));
+        await user.click(screen.getByRole('button', { name: /Start Trading/i }));
 
         await waitFor(() => {
             expect(tickSubscribers['1HZ10V']).toBeDefined();

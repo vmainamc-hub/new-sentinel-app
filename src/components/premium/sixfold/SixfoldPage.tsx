@@ -36,7 +36,7 @@ import { sixfoldRunner } from './runner-instance';
 import { STATE_TEXT, type ViabilityState } from './viability';
 import { useFeed } from './use-feed';
 import { useSixfold } from './use-sixfold';
-import { useSentinelAi } from '@/pages/sentinel-ai/use-sentinel-ai';
+import { sentinelOverlay } from '../sentinel/runner-instance';
 import './sixfold.scss';
 
 type Tab = 'scanner' | 'meter' | 'board' | 'contract' | 'lab';
@@ -860,7 +860,8 @@ function ContractTab(p: {
 }) {
     const [sens, setSens] = useState<Sensitivity>('standard');
     const [bot, setBot] = useState<BotConfig>({ ...DEFAULT_BOT, duration: p.settings.duration, margin: p.settings.margin });
-    const sentinel = useSentinelAi(false).signal;
+    // Information only: the best contract the Sentinel AI engines back on this market right now.
+    const sentinel = sentinelOverlay.board().find(r => r.symbol === p.market) ?? sentinelOverlay.board()[0] ?? null;
     const cfg = useMemo(() => ({ ...DEFAULT_CROWD, ...SENSITIVITY[sens] }), [sens]);
     const digits = p.series[p.market] ?? [];
     const d = useMemo(() => (digits.length ? buildDossier(digits, p.contract, bot, cfg) : null), [digits, p.contract, bot, cfg]);
@@ -868,7 +869,7 @@ function ContractTab(p: {
     const wins = useMemo(() => (d ? d.run.trades.map(t => t.won) : []), [d]);
     const equity = useMemo(() => (d ? equityCurve(d.run.trades, winProbability(p.contract), bot.margin) : []), [d, p.contract, bot.margin]);
     const rolling = useMemo(() => rollingRate(wins, 30, 10).map(v => (v === null ? null : v * 100)), [wins]);
-    const agree = sentinelAgreement(sentinel, p.market, p.contract);
+    const agree = sentinelAgreement(sentinel && { symbol: sentinel.symbol, contractType: sentinel.contract, barrier: sentinel.barrier, label: sentinel.label }, p.market, p.contract);
 
     return (
         <main className='sf-contract'>
