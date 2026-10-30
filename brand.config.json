@@ -1,23 +1,23 @@
 {
-  "brand_name": "MainAFX",
-  "brand_domain": "mainafx.netlify.app",
+  "brand_name": "MasikaFX",
+  "brand_domain": "masikafx.netlify.app",
   "brand_hostname": {
-    "staging": "mainafx.netlify.app",
-    "production": "mainafx.netlify.app"
+    "staging": "masikafx.netlify.app",
+    "production": "masikafx.netlify.app"
   },
-  "domain_name": "mainafx.netlify.app",
+  "domain_name": "masikafx.netlify.app",
   "sites": {
     "default_site": "apex-sentinel",
     "entries": [
       {
         "id": "apex-sentinel",
         "hosts": [
-          "mainafx.netlify.app",
+          "masikafx.netlify.app",
           "localhost"
         ],
-        "display_domain": "MainAFX",
-        "website_url": "https://mainafx.netlify.app",
-        "redirect_uri": "https://mainafx.netlify.app/callback",
+        "display_domain": "MasikaFX",
+        "website_url": "https://masikafx.netlify.app",
+        "redirect_uri": "https://masikafx.netlify.app/callback",
         "client_id": "34BIr72thLXMJHaL9PQxN",
         "scopes": [
           "trade",
@@ -145,14 +145,14 @@
     "css_variable_prefix": "--brand"
   },
   "platform": {
-    "name": "MainAFX",
+    "name": "MasikaFX",
     "logo": {
       "type": "component",
       "component_name": "BrandLogo",
-      "alt_text": "MainAFX",
+      "alt_text": "MasikaFX",
       "link_url": "/",
       "show_text": true,
-      "text": "MainAFX"
+      "text": "MasikaFX"
     },
     "footer": {
       "enable_language_settings": false,
@@ -160,10 +160,10 @@
     },
     "hostname": {
       "production": {
-        "com": "mainafx.netlify.app"
+        "com": "masikafx.netlify.app"
       },
       "staging": {
-        "com": "mainafx.netlify.app"
+        "com": "masikafx.netlify.app"
       }
     },
     "auth2_url": {
