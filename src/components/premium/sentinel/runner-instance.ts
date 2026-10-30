@@ -1,13 +1,13 @@
 // SENTINEL AI (unified): the app-wide runner. It is Sixfold's runner with the Sentinel + Fusion overlay, its own settings and Run Panel id.
 import { api_base } from '@/external/bot-skeleton';
-import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purchase';
 import { sentinelAiEngine } from '@/pages/sentinel-ai/sentinel-ai-engine';
+import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purchase';
 import { bulkFeed } from '../bulk-feed';
 import { sixfoldFeed } from '../sixfold/feed';
 import { SixfoldRunner } from '../sixfold/runner';
-import { readSources } from '../signal-zone/signal-zone-sources';
 import { createSentinelOverlay } from './overlay';
 import { type EngineSettings, loadEngine, loadTrading, saveEngine, saveTrading } from './settings';
+import { readEngines } from './sources';
 
 let engine: EngineSettings = loadEngine();
 export const getEngineSettings = () => engine;
@@ -18,7 +18,7 @@ export const setEngineSettings = (next: EngineSettings) => {
 
 export const sentinelOverlay = createSentinelOverlay({
     getEngine: () => engine,
-    read: (requireMomentum, now) => readSources(requireMomentum, now),
+    read: readEngines,
 });
 
 export const sentinelRunner = new SixfoldRunner({

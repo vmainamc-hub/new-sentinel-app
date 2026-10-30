@@ -1,8 +1,12 @@
 // SENTINEL AI (unified): settings. Two parts, stored apart:
 //   - the trading settings, which are Sixfold's own (stake, recovery, loss shield, Meter floors...), and
 //   - the engine settings below: how much the Sentinel + Fusion engines must agree, and the quality gates.
-import { DEFAULT_SETTINGS as SIXFOLD_DEFAULTS, normalizeSettings as normalizeTrading, type SixfoldSettings } from '../sixfold/money';
 import type { Contract } from '../sixfold/bot';
+import {
+    DEFAULT_SETTINGS as SIXFOLD_DEFAULTS,
+    normalizeSettings as normalizeTrading,
+    type SixfoldSettings,
+} from '../sixfold/money';
 
 /** careful: both engines must back the contract. balanced: either engine backs it (both = easier bar). active: the scanner may trade alone at a higher bar. */
 export type EngineMode = 'careful' | 'balanced' | 'active';
@@ -40,7 +44,9 @@ export const normalizeEngine = (raw: unknown): EngineSettings => {
     const s = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
     const d = DEFAULT_ENGINE;
     const props = Array.isArray(s.propositions)
-        ? Array.from(new Set(s.propositions.map(String))).filter(p => (PROPOSITION_KEYS as readonly string[]).includes(p))
+        ? Array.from(new Set(s.propositions.map(String))).filter(p =>
+              (PROPOSITION_KEYS as readonly string[]).includes(p)
+          )
         : [...d.propositions];
     return {
         mode: ENGINE_MODES.includes(s.mode as EngineMode) ? (s.mode as EngineMode) : d.mode,
@@ -53,7 +59,11 @@ export const normalizeEngine = (raw: unknown): EngineSettings => {
 };
 
 /** Sixfold's trading defaults, tuned for this tool: the engine's own entry digit is used (SMART learns one when the engine has none). */
-export const DEFAULT_TRADING: SixfoldSettings = normalizeTrading({ ...SIXFOLD_DEFAULTS, entry: 'SMART', selectivity: 'balanced' });
+export const DEFAULT_TRADING: SixfoldSettings = normalizeTrading({
+    ...SIXFOLD_DEFAULTS,
+    entry: 'SMART',
+    selectivity: 'balanced',
+});
 export const normalizeTradingSettings = (raw: Partial<SixfoldSettings> | null | undefined): SixfoldSettings =>
     normalizeTrading({ ...DEFAULT_TRADING, ...(raw ?? {}) });
 
@@ -63,22 +73,52 @@ export const contractsFor = (engine: Pick<EngineSettings, 'propositions'>): Cont
         return { side: side as 'OVER' | 'UNDER', param: Number(param) };
     });
 
-export type Preset = { id: string; name: string; blurb: string; engine: Partial<EngineSettings>; trading: Partial<SixfoldSettings> };
+export type Preset = {
+    id: string;
+    name: string;
+    blurb: string;
+    engine: Partial<EngineSettings>;
+    trading: Partial<SixfoldSettings>;
+};
 export const PRESETS: Preset[] = [
     {
-        id: 'careful', name: 'Careful', blurb: 'Both engines must back a contract. Fewer trades, strict Meter floors.',
+        id: 'careful',
+        name: 'Careful',
+        blurb: 'Both engines must back a contract. Fewer trades, strict Meter floors.',
         engine: { mode: 'careful', requireMomentum: true, skipBlocked: true, minScore: 55, maxDanger: 60 },
-        trading: { selectivity: 'strict', meterFloor: 55, meterFloorRecovery: 58, lossShield: true, pickyAfterLoss: true },
+        trading: {
+            selectivity: 'strict',
+            meterFloor: 55,
+            meterFloorRecovery: 58,
+            lossShield: true,
+            pickyAfterLoss: true,
+        },
     },
     {
-        id: 'balanced', name: 'Balanced', blurb: 'Either engine can back a contract; both agreeing eases the bar.',
+        id: 'balanced',
+        name: 'Balanced',
+        blurb: 'Either engine can back a contract; both agreeing eases the bar.',
         engine: { mode: 'balanced', requireMomentum: true, skipBlocked: true, minScore: 0, maxDanger: 0 },
-        trading: { selectivity: 'balanced', meterFloor: 50, meterFloorRecovery: 52, lossShield: true, pickyAfterLoss: true },
+        trading: {
+            selectivity: 'balanced',
+            meterFloor: 50,
+            meterFloorRecovery: 52,
+            lossShield: true,
+            pickyAfterLoss: true,
+        },
     },
     {
-        id: 'active', name: 'Active', blurb: 'The scanner may trade alone at a higher bar. More trades, more variance.',
+        id: 'active',
+        name: 'Active',
+        blurb: 'The scanner may trade alone at a higher bar. More trades, more variance.',
         engine: { mode: 'active', requireMomentum: false, skipBlocked: true, minScore: 0, maxDanger: 0 },
-        trading: { selectivity: 'active', meterFloor: 45, meterFloorRecovery: 48, lossShield: true, pickyAfterLoss: true },
+        trading: {
+            selectivity: 'active',
+            meterFloor: 45,
+            meterFloorRecovery: 48,
+            lossShield: true,
+            pickyAfterLoss: true,
+        },
     },
 ];
 

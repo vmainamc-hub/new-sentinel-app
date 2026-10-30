@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
-import { sixfoldRunner } from './runner-instance';
 import type { SixfoldRunner, SixfoldSnapshot } from './runner';
+import { sixfoldRunner } from './runner-instance';
 
 /** React view of the Sixfold runner. `scan` keeps live scans coming while the page is open, even with no session. */
 export function useSixfold(scan = true, runner: SixfoldRunner = sixfoldRunner): SixfoldSnapshot {

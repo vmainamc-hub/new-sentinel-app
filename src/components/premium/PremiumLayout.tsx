@@ -65,8 +65,8 @@ import './apex-pages.scss';
 import './apex-bulk.scss';
 
 // Sentinel AI pulls in the whole Sentinel engine, so it loads on demand instead of with the shell.
-const SentinelAiPage = lazy(() => import('@/pages/sentinel-ai'));
-const SentinelAiBridge = lazy(() => import('@/pages/sentinel-ai/sentinel-ai-bridge'));
+const SentinelAiPage = lazy(() => import('./sentinel/SentinelAiPage'));
+const SentinelAiBridge = lazy(() => import('./sentinel/SentinelAiBridge'));
 // Sixfold carries its own simulator and crowd model, so it also loads on demand.
 const SixfoldPage = lazy(() => import('./sixfold/SixfoldPage'));
 // Its runner trades on its own, so the bridge stays mounted on every tab (Run Panel hand-off, Stop sync, session-drop stop).

@@ -1,5 +1,6 @@
 import { TradeRequestError } from '@/utils/trade-errors';
 import { DEFAULT_SETTINGS, normalizeSettings, type SixfoldSettings } from '../money';
+import type { RunnerOverlay } from '../overlay';
 import { MIN_TICKS, type RunnerIO, SixfoldRunner } from '../runner';
 
 // A market where Over 2 wins on every simulated trade (1 -> 7 -> 1 -> 7 ...), so the scanner finds it at once.
@@ -73,7 +74,19 @@ function harness(over: Partial<SixfoldSettings> = {}, io: Partial<RunnerIO> = {}
         currency: () => 'USD',
         afterStop: () => {},
         now: () => t,
-        loadSettings: () => ({ ...DEFAULT_SETTINGS, entry: 'SMART', markets: ['P', 'Q'], selectivity: 'strict', lossShield: false, pickyAfterLoss: false, meterGuide: false, winStreakGate: false, pressureGate: false, multiWindowGate: false, ...over }),
+        loadSettings: () => ({
+            ...DEFAULT_SETTINGS,
+            entry: 'SMART',
+            markets: ['P', 'Q'],
+            selectivity: 'strict',
+            lossShield: false,
+            pickyAfterLoss: false,
+            meterGuide: false,
+            winStreakGate: false,
+            pressureGate: false,
+            multiWindowGate: false,
+            ...over,
+        }),
         saveSettings: () => {},
         ...io,
     });
@@ -175,7 +188,16 @@ describe('SixfoldRunner', () => {
     });
 
     it('doubles the stake after a loss when martingale is on, and uses the recovery barrier', async () => {
-        const h = harness({ takeProfit: 0, martingale: true, multiplier: 2, recoverySizing: 'MULTIPLIER', streakBudget: 0, recovery: true, recoveryOver: 4, recoveryUnder: 5 });
+        const h = harness({
+            takeProfit: 0,
+            martingale: true,
+            multiplier: 2,
+            recoverySizing: 'MULTIPLIER',
+            streakBudget: 0,
+            recovery: true,
+            recoveryOver: 4,
+            recoveryUnder: 5,
+        });
         h.queueProfits(-1);
         h.runner.start();
         const side = h.runner.getSnapshot().armed!.label.split(' ')[0];
@@ -218,7 +240,11 @@ describe('SixfoldRunner', () => {
             {
                 buy: async () => {
                     n++;
-                    throw new TradeRequestError('Contract not offered', { stage: 'buy', kind: 'rejected', code: 'InvalidContractProposal' });
+                    throw new TradeRequestError('Contract not offered', {
+                        stage: 'buy',
+                        kind: 'rejected',
+                        code: 'InvalidContractProposal',
+                    });
                 },
             }
         );
@@ -243,7 +269,11 @@ describe('SixfoldRunner', () => {
             {},
             {
                 buy: async () => {
-                    throw new TradeRequestError('Purchase request timed out.', { stage: 'buy', kind: 'timeout', outcomeUnknown: true });
+                    throw new TradeRequestError('Purchase request timed out.', {
+                        stage: 'buy',
+                        kind: 'timeout',
+                        outcomeUnknown: true,
+                    });
                 },
             }
         );
@@ -325,7 +355,7 @@ describe('SixfoldRunner', () => {
         expect(h.runner.getSnapshot().brain).not.toBeNull();
     });
 
-    it('Entry Brain enters only on the market\'s trigger digits and never on any other digit', async () => {
+    it("Entry Brain enters only on the market's trigger digits and never on any other digit", async () => {
         const h = harness({ entry: 'BRAIN', markets: ['P'] });
         h.runner.start();
         const plan = h.runner.getSnapshot().armed!.plan!;
@@ -376,7 +406,18 @@ describe('SixfoldRunner', () => {
     });
 
     it('virtual hook: after real losses the next trade is paper only, settles on ticks and moves no money', async () => {
-        const h = harness({ entry: 'ANY', markets: ['P'], takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, recovery: false, virtualHook: true, vhEnterLosses: 1, vhReturnWins: 1, winStreakGate: false });
+        const h = harness({
+            entry: 'ANY',
+            markets: ['P'],
+            takeProfit: 0,
+            stopLoss: 0,
+            maxConsecutiveLosses: 0,
+            recovery: false,
+            virtualHook: true,
+            vhEnterLosses: 1,
+            vhReturnWins: 1,
+            winStreakGate: false,
+        });
         h.queueProfits(-1);
         h.runner.start();
         await flush();
@@ -401,16 +442,19 @@ describe('SixfoldRunner', () => {
 
     it('asks the feed to connect when it is not live and gives up after waiting', () => {
         let live = false;
-        const h = harness({}, {
-            feed: {
-                getLiveSeries: () => ({}),
-                getLastTickAt: () => null,
-                getLastDigit: () => null,
-                isLive: () => live,
-                getSnapshot: () => ({ mode: 'live', status: 'offline', error: 'No route', series: {}, version: 1 }),
-                connect: () => void (live = false),
-            },
-        });
+        const h = harness(
+            {},
+            {
+                feed: {
+                    getLiveSeries: () => ({}),
+                    getLastTickAt: () => null,
+                    getLastDigit: () => null,
+                    isLive: () => live,
+                    getSnapshot: () => ({ mode: 'live', status: 'offline', error: 'No route', series: {}, version: 1 }),
+                    connect: () => void (live = false),
+                },
+            }
+        );
         h.runner.start();
         expect(h.runner.getSnapshot().phase).toBe('connecting');
         h.advance(30_000);
@@ -448,7 +492,9 @@ describe('SixfoldRunner trades only the primary contracts', () => {
         }
         expect(h.calls.buy.length).toBeGreaterThan(3);
         for (const b of h.calls.buy) {
-            const ok = (b.parameters.contract_type === 'DIGITOVER' && b.parameters.barrier === '2') || (b.parameters.contract_type === 'DIGITUNDER' && b.parameters.barrier === '7');
+            const ok =
+                (b.parameters.contract_type === 'DIGITOVER' && b.parameters.barrier === '2') ||
+                (b.parameters.contract_type === 'DIGITUNDER' && b.parameters.barrier === '7');
             expect(ok).toBe(true);
         }
     });
@@ -466,7 +512,9 @@ describe('SixfoldRunner trades only the primary contracts', () => {
         const a2 = h.runner.getSnapshot().armed!;
         h.runner.handleFeedTick(a2.symbol, a2.entryDigits[0]);
         await flush();
-        expect(h.calls.buy[1].parameters.barrier).toBe(h.calls.buy[1].parameters.contract_type === 'DIGITOVER' ? '3' : '6');
+        expect(h.calls.buy[1].parameters.barrier).toBe(
+            h.calls.buy[1].parameters.contract_type === 'DIGITOVER' ? '3' : '6'
+        );
         h.advance(1500);
         h.runner.tick();
         const a3 = h.runner.getSnapshot().armed!;
@@ -497,7 +545,15 @@ describe('SixfoldRunner trades only the primary contracts', () => {
 describe('SixfoldRunner loss shield and result-aware rules', () => {
     // Two markets that both look healthy, so after a loss on one the other must be used.
     const twoGood = () => {
-        const h = harness({ takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, selectivity: 'active', recovery: false, lossShield: true, pickyAfterLoss: true });
+        const h = harness({
+            takeProfit: 0,
+            stopLoss: 0,
+            maxConsecutiveLosses: 0,
+            selectivity: 'active',
+            recovery: false,
+            lossShield: true,
+            pickyAfterLoss: true,
+        });
         h.series.Q = planted.slice();
         return h;
     };
@@ -536,7 +592,15 @@ describe('SixfoldRunner loss shield and result-aware rules', () => {
     });
 
     it('lets a rested market return after five minutes even if nothing else traded', async () => {
-        const h = harness({ takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, selectivity: 'active', recovery: false, markets: ['P'], lossShield: true });
+        const h = harness({
+            takeProfit: 0,
+            stopLoss: 0,
+            maxConsecutiveLosses: 0,
+            selectivity: 'active',
+            recovery: false,
+            markets: ['P'],
+            lossShield: true,
+        });
         h.queueProfits(-1);
         h.runner.start();
         await buyOnce(h);
@@ -582,7 +646,15 @@ describe('SixfoldRunner loss shield and result-aware rules', () => {
     });
 
     it('smart entry skips the digit that just lost on that market', async () => {
-        const h = harness({ takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, selectivity: 'active', recovery: false, markets: ['P'], lossShield: false });
+        const h = harness({
+            takeProfit: 0,
+            stopLoss: 0,
+            maxConsecutiveLosses: 0,
+            selectivity: 'active',
+            recovery: false,
+            markets: ['P'],
+            lossShield: false,
+        });
         h.queueProfits(-1);
         h.runner.start();
         const a = h.runner.getSnapshot().armed!;
@@ -640,7 +712,16 @@ describe('SixfoldRunner streak budget', () => {
 
 describe('SixfoldRunner recovery entry gate', () => {
     const lossThenArm = async (over: Partial<SixfoldSettings>) => {
-        const h = harness({ takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, selectivity: 'active', recovery: false, lossShield: false, markets: ['P'], ...over });
+        const h = harness({
+            takeProfit: 0,
+            stopLoss: 0,
+            maxConsecutiveLosses: 0,
+            selectivity: 'active',
+            recovery: false,
+            lossShield: false,
+            markets: ['P'],
+            ...over,
+        });
         h.queueProfits(-1, 0.35);
         h.runner.start();
         const a = h.runner.getSnapshot().armed!;
@@ -780,7 +861,17 @@ describe('SixfoldRunner Meter guide', () => {
         // Over 2 is fine here (3 > 2) but Over 3 has just lost six times running (3 is not above 3).
         const digits = [...healthy.slice(0, 594), 3, 3, 3, 3, 3, 3];
         const run = async (guide: boolean) => {
-            const h = setup({ meterGuide: guide, takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, recovery: true, recoveryOver: 3 }, digits.slice());
+            const h = setup(
+                {
+                    meterGuide: guide,
+                    takeProfit: 0,
+                    stopLoss: 0,
+                    maxConsecutiveLosses: 0,
+                    recovery: true,
+                    recoveryOver: 3,
+                },
+                digits.slice()
+            );
             h.runner.start();
             const entry = h.runner.getSnapshot().armed!.entryDigits[0];
             h.queueProfits(-1);
@@ -835,7 +926,17 @@ describe('SixfoldRunner Meter guide', () => {
     });
 
     it('asks more for recovery: the recovery floor applies after a loss', async () => {
-        const h = setup({ meterFloor: 50, meterFloorRecovery: 100, takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, recovery: true }, healthy.slice());
+        const h = setup(
+            {
+                meterFloor: 50,
+                meterFloorRecovery: 100,
+                takeProfit: 0,
+                stopLoss: 0,
+                maxConsecutiveLosses: 0,
+                recovery: true,
+            },
+            healthy.slice()
+        );
         h.runner.start();
         expect(h.runner.getSnapshot().meterGuide.floor).toBe(50);
         const entry = h.runner.getSnapshot().armed!.entryDigits[0];
@@ -861,12 +962,14 @@ describe('SixfoldRunner Meter guide', () => {
         expect(DEFAULT_SETTINGS.meterGuide).toBe(true);
         expect(normalizeSettings({ meterGate: false } as never).meterGuide).toBe(true);
         expect(DEFAULT_SETTINGS).toMatchObject({ meterFloor: 50, meterFloorRecovery: 52 });
-        expect(normalizeSettings({ meterFloor: 150, meterFloorRecovery: -3 })).toMatchObject({ meterFloor: 100, meterFloorRecovery: 0 });
+        expect(normalizeSettings({ meterFloor: 150, meterFloorRecovery: -3 })).toMatchObject({
+            meterFloor: 100,
+            meterFloorRecovery: 0,
+        });
         expect(normalizeSettings({ meterPatience: 5 }).meterPatience).toBe(10);
         expect(normalizeSettings({ meterPatience: 9999 }).meterPatience).toBe(600);
     });
 });
-
 
 describe('SixfoldRunner danger gates', () => {
     const fill = (h: ReturnType<typeof harness>, digits: number[]) => {
@@ -941,5 +1044,82 @@ describe('SixfoldRunner danger gates', () => {
         const on = await run(true);
         expect(on.runner.getSnapshot().armed).toBeNull();
         expect(on.runner.getSnapshot().queue[0].reason).toMatch(/losing/i);
+    });
+});
+
+describe('SixfoldRunner with an engine overlay', () => {
+    const overlay = (over: Partial<RunnerOverlay> = {}): RunnerOverlay => ({
+        moduleId: 'sentinel-ai',
+        name: 'Sentinel AI',
+        contracts: () => [{ side: 'OVER', param: 2 }],
+        call: () => ({ allow: true, bump: 0, rank: 0, note: '' }),
+        ...over,
+    });
+
+    it('trades only the overlay contracts, under its own Run Panel id and shortcode', async () => {
+        const h = harness({}, { overlay: overlay() });
+        h.runner.start();
+        const s = h.runner.getSnapshot();
+        expect(s.armed?.label).toBe('Over 2');
+        expect(h.stores.dashboard.active_trading_module).toBe('sentinel-ai');
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+        expect(h.calls.pushed[0].shortcode).toBe('SENTINEL_AI_DIGITOVER_P');
+    });
+
+    it('arms nothing while the overlay vetoes every cell, and says why', () => {
+        const h = harness(
+            {},
+            { overlay: overlay({ call: () => ({ allow: false, bump: 0, rank: 0, note: 'neither engine backs it' }) }) }
+        );
+        h.runner.start();
+        const s = h.runner.getSnapshot();
+        expect(s.armed).toBeNull();
+        expect(s.queue[0]?.reason).toMatch(/neither engine/i);
+    });
+
+    it('waits for the engine entry digit instead of its own, and reports bought and settled trades', async () => {
+        const bought: number[] = [];
+        const settled: Array<number | null> = [];
+        const h = harness(
+            {},
+            {
+                overlay: overlay({
+                    entryDigits: () => [4],
+                    onBought: n => bought.push(n.contractId),
+                    onSettled: n => settled.push(n.profit),
+                }),
+            }
+        );
+        h.runner.start();
+        expect(h.runner.getSnapshot().armed?.entryDigits).toEqual([4]);
+        h.runner.handleFeedTick('P', 1); // the runner's own digit: ignored
+        expect(h.calls.buy).toHaveLength(0);
+        h.runner.handleFeedTick('P', 4);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+        expect(bought).toHaveLength(1);
+        expect(settled).toEqual([0.35]);
+    });
+
+    it('an overlay that throws never disturbs a live trade', async () => {
+        const h = harness(
+            {},
+            {
+                overlay: overlay({
+                    onBought: () => {
+                        throw new Error('boom');
+                    },
+                    onSettled: () => {
+                        throw new Error('boom');
+                    },
+                }),
+            }
+        );
+        h.runner.start();
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.runner.getSnapshot().session.trades).toBe(1);
     });
 });

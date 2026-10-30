@@ -10,10 +10,11 @@
 import { contract_stages } from '@/constants/contract-stage';
 import type { RunnerStores, StoreWatcher } from '@/pages/sentinel-ai/sentinel-ai-runner';
 import { describeTradeFailure } from '@/utils/trade-errors';
+import { type Contract, contractKey, winningDigits, winProbability } from './bot';
 import { formGateOk, smartEntryDigits } from './entry';
-import { losingSidePressure, multiWindowGate, multiWindowHealth, pressureGate } from './pressure';
-import { streakRead } from './streak-guard';
+import { type ArmId, type BrainReport, brainReport, choosePlan, fallbackPlan, findCell, type Plan, planFires } from './entry-brain';
 import { expectedTickSeconds, type FeedMode, type FeedSnapshot, marketName } from './feed';
+import { climateOf, IDLE_STATUS, type MeterCall, meterCall, type MeterStatus } from './meter-guide';
 import {
     applyResult,
     applyWriteOff,
@@ -27,14 +28,13 @@ import {
     stopReason,
     tradeContract,
 } from './money';
-import { type Contract, contractKey, winningDigits, winProbability } from './bot';
-import { freshVh, vhAfterReal, vhAfterVirtual, type VhConfig, type VhState } from './virtual-hook';
-import { type ArmId, type BrainReport, brainReport, choosePlan, fallbackPlan, findCell, type Plan, planFires } from './entry-brain';
-import { climateOf, IDLE_STATUS, meterCall, type MeterCall, type MeterStatus } from './meter-guide';
 import { type RunnerOverlay, type TradeNotice } from './overlay';
+import { losingSidePressure, multiWindowGate, multiWindowHealth, pressureGate } from './pressure';
 import { computeRegime, regimeCell, type RegimeSummary } from './regime';
-import { type Cell, eligibility, pickBest, type ScanResult, scanMarkets } from './scanner';
+import { type Cell, eligibility, pickBest, scanMarkets,type ScanResult } from './scanner';
 import { mulberry32, profitMultiple } from './stats';
+import { streakRead } from './streak-guard';
+import { freshVh, vhAfterReal, vhAfterVirtual, type VhConfig, type VhState } from './virtual-hook';
 
 export const MODULE_ID = 'sixfold';
 

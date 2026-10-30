@@ -15,8 +15,8 @@ const SentinelAiBridge = () => {
     const store = useStore();
     const { isAuthorized } = useApiBase();
     const snapshot = useSixfold(false, sentinelRunner);
-    // The engines must keep reading while a session runs, even when the page is closed.
-    useEffect(() => (snapshot.running ? attachEngines() : undefined), [snapshot.running]);
+    // Always watching: both engines keep analysing every market on every tab, so a visit never starts cold.
+    useEffect(() => attachEngines(), []);
 
     useEffect(() => {
         if (!store) return undefined;

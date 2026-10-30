@@ -1,42 +1,97 @@
 // SENTINEL AI (unified): the engine overlay for the Sixfold runner. Pure apart from the injected `read`.
 //
-// Each scan, the Sentinel AI engine and Insight Fusion are read once and merged (the Signal Zone merge, unchanged). The overlay then
-// gives every scanner cell a verdict: vetoed when the engines do not back it (per mode), an easier bar when both agree, an ordering
-// bonus by combined score, and the engine's own validated entry digit to wait for. The scanner, Meter, loss shield and money rules
-// are Sixfold's. Neither engine can create an edge on random digits: they describe recent behaviour, and the app says so.
-import { keyOf, mergeCandidates, type FusionCandidate, type SentinelCandidate, type ZoneCandidate } from '../signal-zone/signal-zone-merge';
-import { normalizeSettings as normalizeZone, type MergeMode } from '../signal-zone/signal-zone-settings';
+// Each scan, the Sentinel AI engine and Insight Fusion are read once. Every scanner cell then gets a verdict: vetoed when the engines
+// do not back it (per mode) or Fusion stands down on it, an easier bar when both agree, an ordering bonus by combined score, and the
+// engine's own validated entry digit to wait for. The scanner, Meter, loss shield and money rules are Sixfold's. Neither engine can
+// create an edge on random digits: they describe recent behaviour, and the app says so.
+import type { OverUnderContract } from '../over-under-engine';
 import type { RunnerOverlay } from '../sixfold/overlay';
 import { contractsFor, type EngineSettings } from './settings';
 
-export type Sources = { sentinel: SentinelCandidate[]; fusion: FusionCandidate[] };
-export type OverlayView = { board: ZoneCandidate[]; at: number };
+/** What the Sentinel engine says about one contract, already through its quality gates. */
+export type SentinelRead = {
+    symbol: string;
+    market: string;
+    contract: OverUnderContract;
+    barrier: number;
+    label: string;
+    score: number;
+    danger: number | null;
+    entryDigit: number | null;
+    /** True when Sentinel's entry digit is validated (ENTER NOW or ARMED). */
+    entryUsable: boolean;
+};
+export type FusionRow = {
+    symbol: string;
+    market: string;
+    contract: OverUnderContract;
+    barrier: number;
+    label: string;
+    score: number;
+};
+export type Sources = { sentinel: SentinelRead[]; fusion: FusionRow[]; standDown: ReadonlySet<string> };
 
-const zoneFor = (engine: EngineSettings, mergeMode: MergeMode) =>
-    normalizeZone({ mergeMode, minScore: engine.minScore, maxDanger: engine.maxDanger, requireMomentum: engine.requireMomentum, skipBlocked: engine.skipBlocked });
+export type BoardRow = {
+    key: string;
+    symbol: string;
+    market: string;
+    contract: OverUnderContract;
+    barrier: number;
+    label: string;
+    source: 'both' | 'sentinel' | 'fusion';
+    score: number;
+    entryDigit: number | null;
+};
 
-/** The tradable board for a mode: only loadable candidates, restricted to the propositions switched on. */
-export const buildBoard = (src: Sources, engine: EngineSettings, now: number): ZoneCandidate[] => {
+export const keyOf = (symbol: string, contract: OverUnderContract, barrier: number) =>
+    `${symbol}|${contract}|${barrier}`;
+const sideOf = (side: string): OverUnderContract => (side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER');
+
+/** The contracts the engines back right now, restricted to the propositions switched on. Best first. */
+export const buildBoard = (src: Sources, engine: EngineSettings): BoardRow[] => {
     const on = new Set(engine.propositions);
-    const keep = (c: ZoneCandidate) => c.loadable && on.has(`${c.contract === 'DIGITOVER' ? 'OVER' : 'UNDER'}:${c.barrier}`);
-    const merged = (mode: MergeMode) => mergeCandidates(src.sentinel, src.fusion, zoneFor(engine, mode), now).filter(keep);
-    if (engine.mode === 'careful') return merged('both');
-    const byKey = new Map<string, ZoneCandidate>();
-    for (const c of [...merged('fusion_leads'), ...merged('sentinel_only')]) {
-        const prev = byKey.get(c.key);
-        if (!prev || (c.source === 'both' && prev.source !== 'both') || (prev.entrySource === 'default' && c.entrySource === 'engine')) byKey.set(c.key, c);
+    const allowed = (c: OverUnderContract, b: number) => on.has(`${c === 'DIGITOVER' ? 'OVER' : 'UNDER'}:${b}`);
+    const rows = new Map<string, BoardRow>();
+    const s = new Map(
+        src.sentinel.filter(x => allowed(x.contract, x.barrier)).map(x => [keyOf(x.symbol, x.contract, x.barrier), x])
+    );
+    const f = new Map(
+        src.fusion.filter(x => allowed(x.contract, x.barrier)).map(x => [keyOf(x.symbol, x.contract, x.barrier), x])
+    );
+    for (const key of new Set([...s.keys(), ...f.keys()])) {
+        const a = s.get(key);
+        const b = f.get(key);
+        // Fusion actively standing down is a veto, except in Active mode where the scanner trades on its own judgement.
+        if (engine.mode !== 'active' && src.standDown.has(key)) continue;
+        if (engine.mode === 'careful' && !(a && b)) continue;
+        const base = (a ?? b)!;
+        const scores = [a?.score, b?.score].filter((v): v is number => typeof v === 'number');
+        rows.set(key, {
+            key,
+            symbol: base.symbol,
+            market: base.market,
+            contract: base.contract,
+            barrier: base.barrier,
+            label: base.label,
+            source: a && b ? 'both' : a ? 'sentinel' : 'fusion',
+            score: Math.round((scores.reduce((x, y) => x + y, 0) / Math.max(1, scores.length)) * 10) / 10,
+            entryDigit: a && a.entryUsable ? a.entryDigit : null,
+        });
     }
-    return [...byKey.values()].sort((a, b) => Number(b.source === 'both') - Number(a.source === 'both') || b.rank - a.rank);
+    return [...rows.values()].sort(
+        (x, y) => Number(y.source === 'both') - Number(x.source === 'both') || y.score - x.score
+    );
 };
 
 export const createSentinelOverlay = (opts: {
     getEngine: () => EngineSettings;
-    read: (requireMomentum: boolean, now: number) => Sources;
-    onBoard?: (view: OverlayView) => void;
-}): RunnerOverlay & { board: () => ZoneCandidate[] } => {
-    let board: ZoneCandidate[] = [];
-    const index = new Map<string, ZoneCandidate>();
-    const find = (symbol: string, side: string, param: number) => index.get(keyOf(symbol, side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER', param));
+    read: (engine: EngineSettings, now: number) => Sources;
+    onBoard?: (rows: BoardRow[]) => void;
+}): RunnerOverlay & { board: () => BoardRow[]; blocked: () => ReadonlySet<string> } => {
+    let board: BoardRow[] = [];
+    let standDown: ReadonlySet<string> = new Set();
+    const index = new Map<string, BoardRow>();
+    const find = (symbol: string, side: string, param: number) => index.get(keyOf(symbol, sideOf(side), param));
 
     return {
         moduleId: 'sentinel-ai',
@@ -45,34 +100,53 @@ export const createSentinelOverlay = (opts: {
         refresh: now => {
             const engine = opts.getEngine();
             try {
-                board = buildBoard(opts.read(engine.requireMomentum, now), engine, now);
+                const src = opts.read(engine, now);
+                standDown = src.standDown;
+                board = buildBoard(src, engine);
             } catch {
-                board = []; // an engine failure means no backing: the scanner will not trade on engine-gated modes
+                board = []; // an engine failure means no backing: engine-gated modes will not trade
+                standDown = new Set();
             }
             index.clear();
-            for (const c of board) index.set(c.key, c);
-            opts.onBoard?.({ board, at: now });
+            for (const row of board) index.set(row.key, row);
+            opts.onBoard?.(board);
         },
         board: () => board,
+        blocked: () => standDown,
         call: cell => {
             const mode = opts.getEngine().mode;
-            const c = find(cell.symbol, cell.contract.side, cell.contract.param);
-            if (!c) {
-                return mode === 'active'
-                    ? { allow: true, bump: 6, rank: 0, note: 'no engine backs it: higher bar' }
-                    : { allow: false, bump: 0, rank: 0, note: mode === 'careful' ? 'both engines must back it' : 'neither engine backs it' };
+            const row = find(cell.symbol, cell.contract.side, cell.contract.param);
+            if (!row) {
+                if (mode !== 'active') {
+                    const stood = standDown.has(keyOf(cell.symbol, sideOf(cell.contract.side), cell.contract.param));
+                    return {
+                        allow: false,
+                        bump: 0,
+                        rank: 0,
+                        note: stood
+                            ? 'Insight Fusion stands down'
+                            : mode === 'careful'
+                              ? 'both engines must back it'
+                              : 'neither engine backs it',
+                    };
+                }
+                return { allow: true, bump: 6, rank: 0, note: 'no engine backs it: higher bar' };
             }
-            const both = c.source === 'both';
+            const both = row.source === 'both';
             return {
                 allow: true,
                 bump: both ? -8 : 0,
-                rank: Math.min(10, c.rank / 10) + (both ? 3 : 0),
-                note: both ? 'both engines agree' : c.source === 'sentinel' ? 'Sentinel AI backs it' : 'Insight Fusion backs it',
+                rank: Math.min(10, row.score / 10) + (both ? 3 : 0),
+                note: both
+                    ? 'both engines agree'
+                    : row.source === 'sentinel'
+                      ? 'Sentinel AI backs it'
+                      : 'Insight Fusion backs it',
             };
         },
         entryDigits: cell => {
-            const c = find(cell.symbol, cell.contract.side, cell.contract.param);
-            return c && c.entrySource === 'engine' && c.entryDigit !== null ? [c.entryDigit] : null;
+            const row = find(cell.symbol, cell.contract.side, cell.contract.param);
+            return row && row.entryDigit !== null ? [row.entryDigit] : null;
         },
     };
 };

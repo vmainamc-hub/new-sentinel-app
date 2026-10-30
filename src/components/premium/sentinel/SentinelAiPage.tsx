@@ -4,7 +4,14 @@
 import { useMemo } from 'react';
 import SixfoldPage, { Num, Panel, Seg, Switch } from '../sixfold/SixfoldPage';
 import { sentinelOverlay, sentinelRunner } from './runner-instance';
-import { ENGINE_MODES, type EngineMode, type EngineSettings, PRESETS, PROPOSITION_KEYS, contractsFor } from './settings';
+import {
+    contractsFor,
+    ENGINE_MODES,
+    type EngineMode,
+    type EngineSettings,
+    PRESETS,
+    PROPOSITION_KEYS,
+} from './settings';
 import { useSentinel } from './use-sentinel';
 
 const MODE_TEXT: Record<EngineMode, string> = {
@@ -19,7 +26,11 @@ const EnginePanel = () => {
     const { sx, engine, update } = useSentinel();
     const board = sentinelOverlay.board();
     const toggle = (key: string) =>
-        update({ propositions: engine.propositions.includes(key) ? engine.propositions.filter(p => p !== key) : [...engine.propositions, key] });
+        update({
+            propositions: engine.propositions.includes(key)
+                ? engine.propositions.filter(p => p !== key)
+                : [...engine.propositions, key],
+        });
     const applyPreset = (id: string) => {
         const preset = PRESETS.find(p => p.id === id);
         if (!preset) return;
@@ -33,7 +44,13 @@ const EnginePanel = () => {
                     <span>Style</span>
                     <div className='sf-presets'>
                         {PRESETS.map(p => (
-                            <button key={p.id} type='button' className={engine.mode === p.id ? 'on' : ''} onClick={() => applyPreset(p.id)} disabled={sx.running}>
+                            <button
+                                key={p.id}
+                                type='button'
+                                className={engine.mode === p.id ? 'on' : ''}
+                                onClick={() => applyPreset(p.id)}
+                                disabled={sx.running}
+                            >
                                 <b>{p.name}</b>
                                 <small>{p.blurb}</small>
                             </button>
@@ -42,14 +59,25 @@ const EnginePanel = () => {
                 </div>
                 <div className='sf-field'>
                     <span>Agreement</span>
-                    <Seg<EngineMode> label='Agreement' value={engine.mode} onChange={mode => update({ mode })} options={ENGINE_MODES.map(m => [m, m[0].toUpperCase() + m.slice(1)] as const)} />
+                    <Seg<EngineMode>
+                        label='Agreement'
+                        value={engine.mode}
+                        onChange={mode => update({ mode })}
+                        options={ENGINE_MODES.map(m => [m, m[0].toUpperCase() + m.slice(1)] as const)}
+                    />
                     <small>{MODE_TEXT[engine.mode]}</small>
                 </div>
                 <div className='sf-field'>
                     <span>Contracts it may trade</span>
                     <div className='sf-chips'>
                         {PROPOSITION_KEYS.map(k => (
-                            <button key={k} type='button' className={engine.propositions.includes(k) ? 'on' : ''} onClick={() => toggle(k)} disabled={sx.running}>
+                            <button
+                                key={k}
+                                type='button'
+                                className={engine.propositions.includes(k) ? 'on' : ''}
+                                onClick={() => toggle(k)}
+                                disabled={sx.running}
+                            >
                                 {k.replace(':', ' ').replace('OVER', 'Over').replace('UNDER', 'Under')}
                             </button>
                         ))}
@@ -57,15 +85,38 @@ const EnginePanel = () => {
                     <small>After a loss, recovery trades use the recovery barriers in the settings below.</small>
                 </div>
                 <div className='sf-grid2'>
-                    <Num label='Min score' value={engine.minScore} onCommit={n => update({ minScore: n })} hint='Sentinel score, 0 = off' />
-                    <Num label='Max danger' value={engine.maxDanger} onCommit={n => update({ maxDanger: n })} hint='0 = off' />
+                    <Num
+                        label='Min score'
+                        value={engine.minScore}
+                        onCommit={n => update({ minScore: n })}
+                        hint='Sentinel score, 0 = off'
+                    />
+                    <Num
+                        label='Max danger'
+                        value={engine.maxDanger}
+                        onCommit={n => update({ maxDanger: n })}
+                        hint='0 = off'
+                    />
                 </div>
-                <Switch on={engine.requireMomentum} onChange={v => update({ requireMomentum: v })} title='Require momentum' sub='Skip signals the recent digits do not favour' />
-                <Switch on={engine.skipBlocked} onChange={v => update({ skipBlocked: v })} title='Skip blocked signals' sub='Never trade what the engine itself blocked' />
+                <Switch
+                    on={engine.requireMomentum}
+                    onChange={v => update({ requireMomentum: v })}
+                    title='Require momentum'
+                    sub='Skip signals the recent digits do not favour'
+                />
+                <Switch
+                    on={engine.skipBlocked}
+                    onChange={v => update({ skipBlocked: v })}
+                    title='Skip blocked signals'
+                    sub='Never trade what the engine itself blocked'
+                />
             </Panel>
             <Panel eyebrow='ENGINE BOARD' title={`Backed right now (${board.length})`}>
                 {board.length === 0 ? (
-                    <p className='sf-note'>No contract is backed at the moment. The scanner keeps going round and the engines are re-read on every scan.</p>
+                    <p className='sf-note'>
+                        No contract is backed at the moment. The scanner keeps going round and the engines are re-read
+                        on every scan.
+                    </p>
                 ) : (
                     <table className='sf-table'>
                         <thead>
@@ -83,8 +134,8 @@ const EnginePanel = () => {
                                     <td>{c.market}</td>
                                     <td>{c.label}</td>
                                     <td>{sourceText(c.source)}</td>
-                                    <td>{c.entrySource === 'engine' ? c.entryDigit : 'learned'}</td>
-                                    <td>{c.rank}</td>
+                                    <td>{c.entryDigit ?? 'learned'}</td>
+                                    <td>{c.score}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -98,7 +149,10 @@ const EnginePanel = () => {
 const ContractNote = () => (
     <div className='sf-field sf-first'>
         <span>Contracts</span>
-        <small>Chosen by the engines (see above): the six Over 1/2/3 and Under 8/7/6 propositions, on the market the scanner finds best.</small>
+        <small>
+            Chosen by the engines (see above): the six Over 1/2/3 and Under 8/7/6 propositions, on the market the
+            scanner finds best.
+        </small>
     </div>
 );
 
