@@ -438,6 +438,12 @@ function ScannerTab({ sx, openContract, runner, contractControls }: { sx: Return
                     </div>
                 )}
                 <Switch
+                    on={s.vhOpening}
+                    onChange={v => set({ vhOpening: v })}
+                    title='Open every run on paper'
+                    sub='The first trade is virtual; real trades start after its first win, and a loss waits for a win'
+                />
+                <Switch
                     on={s.virtualHook}
                     onChange={v => set({ virtualHook: v })}
                     title='Virtual hook'
@@ -486,6 +492,17 @@ function ScannerTab({ sx, openContract, runner, contractControls }: { sx: Return
                     title='Multi-window gate'
                     sub='Needs strength across 60 / 120 / 240 / 480 ticks, not only the latest'
                 />
+                <Switch
+                    on={s.winPressureGate}
+                    onChange={v => set({ winPressureGate: v })}
+                    title='Winning-digit pressure gate'
+                    sub='The digits that win must be gaining share across the 120 / 60 / 30 / 15 windows, not sitting flat'
+                />
+                {s.winPressureGate && (
+                    <div className='sf-sub'>
+                        <Num label='Min gain (pp)' value={s.winPressureMin} onCommit={n => set({ winPressureMin: n })} hint='1–15, higher is stricter' />
+                    </div>
+                )}
                 <Switch
                     on={s.meterGuide}
                     onChange={v => set({ meterGuide: v })}
@@ -567,12 +584,14 @@ function ScannerTab({ sx, openContract, runner, contractControls }: { sx: Return
                         <div className='sf-rest' role='status'>
                             <span>
                                 {sx.virtualHook.virtual
-                                    ? `Virtual: paper trades only${sx.virtualHook.open ? ' · one open' : ''}`
+                                    ? `${sx.virtualHook.opening ? 'Opening paper trade' : 'Virtual: paper trades only'}${sx.virtualHook.open ? ' · one open' : ''}`
                                     : `Real money · ${sx.virtualHook.realLosses}/${sx.virtualHook.enterLosses} losses to go virtual`}
                             </span>
                             {sx.virtualHook.virtual && (
                                 <span>
-                                    {sx.virtualHook.mode === 'STREAK'
+                                    {sx.virtualHook.opening
+                                        ? 'real trading starts after the first paper win'
+                                        : sx.virtualHook.mode === 'STREAK'
                                         ? `${sx.virtualHook.virtualWins}/${sx.virtualHook.returnWins} paper wins to return`
                                         : `${sx.virtualHook.virtualDone}/${sx.virtualHook.fixedCount} paper trades`}
                                 </span>

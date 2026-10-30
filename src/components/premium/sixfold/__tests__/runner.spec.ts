@@ -85,6 +85,8 @@ function harness(over: Partial<SixfoldSettings> = {}, io: Partial<RunnerIO> = {}
             winStreakGate: false,
             pressureGate: false,
             multiWindowGate: false,
+            winPressureGate: false,
+            vhOpening: false,
             ...over,
         }),
         saveSettings: () => {},
@@ -313,6 +315,60 @@ describe('SixfoldRunner', () => {
     it('ANY entry mode buys as soon as a contract is armed', async () => {
         const h = harness({ entry: 'ANY' });
         h.runner.start();
+        expect(h.calls.buy).toHaveLength(0); // never on a tick that printed before Run
+        const sym = h.runner.getSnapshot().armed!.symbol;
+        h.series[sym].push(7);
+        h.runner.handleFeedTick(sym, 7);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+    });
+
+    it('the first run waits for a fresh tick: nothing is bought on a tick that printed before Run', async () => {
+        const h = harness({ entry: 'ANY', markets: ['P'] });
+        h.runner.start();
+        await flush();
+        expect(h.calls.buy).toHaveLength(0);
+        h.series.P.push(7);
+        h.runner.handleFeedTick('P', 7);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+    });
+
+    it('opens on paper: the first trade is virtual, a paper loss waits for a paper win, then real trades start', async () => {
+        const h = harness({ entry: 'ANY', markets: ['P'], vhOpening: true, recovery: false, takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0 });
+        h.runner.start();
+        expect(h.runner.getSnapshot().virtualHook.opening).toBe(true);
+        h.series.P.push(7);
+        h.runner.handleFeedTick('P', 7); // the trigger: a virtual trade opens, nothing is bought
+        await flush();
+        expect(h.calls.buy).toHaveLength(0);
+        expect(h.runner.getSnapshot().trades[0].virtual).toBe(true);
+        h.runner.handleFeedTick('P', 1); // it settles on a losing digit (Over 2)
+        expect(h.runner.getSnapshot().trades[0].status).toBe('lost');
+        expect(h.runner.getSnapshot().virtualHook.virtual).toBe(true); // still waiting for a win
+        h.advance(1500);
+        h.runner.tick();
+        h.series.P.push(7);
+        h.runner.handleFeedTick('P', 7);
+        await flush();
+        expect(h.calls.buy).toHaveLength(0); // second paper trade
+        h.runner.handleFeedTick('P', 7); // wins
+        expect(h.runner.getSnapshot().trades[0].status).toBe('won');
+        expect(h.runner.getSnapshot().virtualHook.virtual).toBe(false);
+        expect(h.runner.getSnapshot().session.trades).toBe(0); // paper trades never touch the session
+        h.advance(1500);
+        h.runner.tick();
+        h.series.P.push(7);
+        h.runner.handleFeedTick('P', 7);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1); // real money from here
+    });
+
+    it('with the opening switched off the first trade is real', async () => {
+        const h = harness({ entry: 'ANY', markets: ['P'], vhOpening: false });
+        h.runner.start();
+        h.series.P.push(7);
+        h.runner.handleFeedTick('P', 7);
         await flush();
         expect(h.calls.buy).toHaveLength(1);
     });
@@ -401,6 +457,8 @@ describe('SixfoldRunner', () => {
         const h = harness({ entry: 'ANY', markets: ['P'], winStreakGate: true, winStreak: 4 });
         h.series.P.push(7, 3, 8, 5);
         h.runner.start();
+        h.series.P.push(9);
+        h.runner.handleFeedTick('P', 9);
         await flush();
         expect(h.calls.buy).toHaveLength(1);
     });
@@ -420,6 +478,8 @@ describe('SixfoldRunner', () => {
         });
         h.queueProfits(-1);
         h.runner.start();
+        h.series.P.push(7);
+        h.runner.handleFeedTick('P', 7);
         await flush();
         expect(h.calls.buy).toHaveLength(1); // the real trade, which loses
         await flush();

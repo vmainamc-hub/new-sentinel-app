@@ -177,3 +177,16 @@ Next: demo run, read the ledger after 100+ trades, then prune methods that read 
 - Studied the bot builder's Virtual Hook (`tradeEngine/trade/VirtualHook.js`): after N real losses it trades with zero stake, settled on real ticks, and returns to real after M consecutive virtual wins (or a fixed count); virtual results skip the strategy's martingale logic and are excluded from run totals.
 - Sixfold port: `virtual-hook.ts` (state machine) + runner integration. Settings `virtualHook` (off by default), `vhMode` STREAK/FIXED, `vhEnterLosses` 2, `vhReturnWins` 2, `vhFixedCount` 3. Paper trades use the same picks, entry rules and guards, settle on the market's ticks (exit on the d-th tick after the trigger), show in the transactions panel as Virtual, and never touch session P&L, stakes, loss counts or the stop rules. A paper trade with no ticks for 120 s is dropped.
 - UI: Scanner switch + fields, status chip (real/virtual, progress, paper record), "Virtual" tag on trade rows. Tests: virtual-hook.spec.ts plus a runner test.
+
+## Sixfold repairs: paper opening, clean first run, winning-side pressure
+Done (204 sixfold tests pass under bun; strict tsc clean on runner / pressure / money; page typechecked against React stubs):
+- [x] Virtual hook from the start: new setting "Open every run on paper" (`vhOpening`, default ON). Each Run's first trade is virtual. A paper win starts real trading; a paper loss stays on paper until one wins. Paper trades never touch the session, stake ladder or martingale. The regular Virtual Hook (after real losses) is unchanged and still has its own switch.
+- [x] First run follows the rules: Run now starts from a clean slate (no scan, Brain read, guards from before Run or from older settings), and nothing is bought on a tick that printed before Run. Each market must print a fresh tick after Run first, then every gate (plan, streak, Meter, pressure, windows) is read on that tick. Previously the arming step could buy on the last pre-Run digit.
+- [x] Winning-side pressure gate (`winPressureGate`, default ON, `winPressureMin` default 2 pp): the digits that win the contract about to be bought must gain share step by step across the 120 / 60 / 30 / 15 windows, with the latest window at or above fair. Flat ("dormant") or falling markets are not traded; the reason is shown in the queue. Works with the existing losing-side pressure gate and multi-window health.
+
+Not done / unverified:
+- [ ] `npm ci`, full build, repo jest/eslint (registry blocked here). No live or demo run.
+- [ ] The winning-side gate trades less often; if it is too strict, lower "Min gain (pp)" or switch it off.
+- [ ] I could not reproduce the first-run entry live. The cause found in code was the arm-time purchase using a pre-Run digit plus state carried over from before Run; both are closed, but watch the first trade of the next demo run.
+
+Next: demo run, confirm the opening paper trade and the first real entry in the Activity log.

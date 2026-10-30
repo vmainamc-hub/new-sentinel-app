@@ -29,7 +29,7 @@ import {
     tradeContract,
 } from './money';
 import { type RunnerOverlay, type TradeNotice } from './overlay';
-import { losingSidePressure, multiWindowGate, multiWindowHealth, pressureGate } from './pressure';
+import { losingSidePressure, multiWindowGate, multiWindowHealth, pressureGate, winningSideGate, winningSidePressure } from './pressure';
 import { computeRegime, regimeCell, type RegimeSummary } from './regime';
 import { type Cell, eligibility, pickBest, scanMarkets,type ScanResult } from './scanner';
 import { mulberry32, profitMultiple } from './stats';
@@ -146,6 +146,8 @@ export type SixfoldSnapshot = {
 
 export type VirtualHookStatus = {
     on: boolean;
+    /** Opening spell of this Run: paper until the first paper win. */
+    opening: boolean;
     /** The next trades are paper trades. */
     virtual: boolean;
     /** A paper trade is open right now. */
@@ -217,6 +219,10 @@ export class SixfoldRunner {
     private settling = false;
     private cooldownUntil = 0;
     private vh: VhState = freshVh();
+    /** This Run opened on paper and has not had its first paper win yet. */
+    private opening = false;
+    /** Markets that have printed a tick since Run. Nothing is bought on a tick that printed before Run. */
+    private seenTick = new Set<string>();
     private virtualOpen: VirtualOpen | null = null;
     private virtualCount = 0;
     private paper = { trades: 0, wins: 0, pnl: 0 };
@@ -345,7 +351,15 @@ export class SixfoldRunner {
         this.quarantined.clear();
         this.rest.clear();
         this.lastLossEntry.clear();
-        this.vh = freshVh();
+        // A Run starts from nothing: no scan, Brain read, guard or Meter state left over from before Run or from older settings.
+        this.scan = null;
+        this.scanAt = 0;
+        this.brain = null;
+        this.brainAt = 0;
+        this.guards = new Map();
+        this.seenTick.clear();
+        this.opening = this.settings.vhOpening;
+        this.vh = this.opening ? { virtual: true, realLosses: 0, virtualWins: 0, virtualDone: 0 } : freshVh();
         this.virtualOpen = null;
         this.paper = { trades: 0, wins: 0, pnl: 0 };
         this.notices.clear();
@@ -356,7 +370,7 @@ export class SixfoldRunner {
         this.runToken += 1;
         this.running = true;
         this.waitingSince = this.io.now();
-        this.addLog('info', 'Run pressed: scanning every market.');
+        this.addLog('info', this.opening ? 'Run pressed: scanning every market. The first trade is a paper trade; real trading starts after its first win.' : 'Run pressed: scanning every market.');
 
         try {
             run_panel.setIsRunning(true);
@@ -492,6 +506,7 @@ export class SixfoldRunner {
 
     /** Every live tick of every market. Fires the trade when the armed market prints an entry digit. */
     handleFeedTick(symbol: string, digit: number) {
+        if (this.running) this.seenTick.add(symbol);
         if (this.running && this.virtualOpen) {
             if (this.virtualOpen.symbol === symbol) this.virtualTick(digit);
             return;
@@ -581,7 +596,7 @@ export class SixfoldRunner {
         );
         if (this.settings.entry === 'ANY' || this.brainGoverns()) {
             const digit = this.io.feed.getLastDigit(cell.symbol);
-            if (digit !== null && this.streakFresh(cell.symbol) && this.recoveryFormOk(cell.symbol) && this.brainOk(cell.symbol) && this.meterFresh(cell.symbol) && !this.freshGuardBlocks(cell.symbol)) void this.execute(digit);
+            if (digit !== null && this.seenTick.has(cell.symbol) && this.streakFresh(cell.symbol) && this.recoveryFormOk(cell.symbol) && this.brainOk(cell.symbol) && this.meterFresh(cell.symbol) && !this.freshGuardBlocks(cell.symbol)) void this.execute(digit);
         }
     }
 
@@ -795,8 +810,8 @@ export class SixfoldRunner {
 
     /** Evaluate the contract that will actually be bought, including the recovery barrier after a loss. */
     private guardReason(digits: readonly number[], primary: Contract): string | null {
-        const { pressureGate: pressureOn, multiWindowGate: windowsOn, pressureMax } = this.settings;
-        if (!pressureOn && !windowsOn) return null;
+        const { pressureGate: pressureOn, multiWindowGate: windowsOn, pressureMax, winPressureGate: winOn, winPressureMin } = this.settings;
+        if (!pressureOn && !windowsOn && !winOn) return null;
         const traded = tradeContract(primary, this.session.consecutiveLosses, this.settings).contract;
         if (pressureOn) {
             const g = pressureGate(losingSidePressure(digits, traded), pressureMax);
@@ -804,6 +819,10 @@ export class SixfoldRunner {
         }
         if (windowsOn) {
             const g = multiWindowGate(multiWindowHealth(digits, traded));
+            if (!g.ok) return g.reason;
+        }
+        if (winOn) {
+            const g = winningSideGate(winningSidePressure(digits, traded, winPressureMin));
             if (!g.ok) return g.reason;
         }
         return null;
@@ -927,7 +946,7 @@ export class SixfoldRunner {
         const cell = this.scan.cells.find(c => c.symbol === armed.symbol && c.key === armed.cellKey);
         if (!cell) return;
 
-        if (this.settings.virtualHook && this.vh.virtual) return this.executeVirtual(armed, cell, entryDigit);
+        if (this.paperNow()) return this.executeVirtual(armed, cell, entryDigit);
         const triggerEpoch = this.io.feed.getLastEpoch?.(armed.symbol) ?? null;
         const tickAgeMs = this.io.now() - lastTick;
         const token = this.runToken;
@@ -1071,6 +1090,11 @@ export class SixfoldRunner {
         }
     }
 
+    /** Is the next trade a paper trade? The opening spell of a Run, or the Virtual Hook after real losses. */
+    private paperNow(): boolean {
+        return this.vh.virtual && (this.opening || this.settings.virtualHook);
+    }
+
     private vhConfig(): VhConfig {
         const s = this.settings;
         return { enterLosses: s.vhEnterLosses, returnWins: s.vhReturnWins, mode: s.vhMode, fixedCount: s.vhFixedCount };
@@ -1170,9 +1194,21 @@ export class SixfoldRunner {
             transaction_ids: { buy: v.id, sell: v.id },
         });
         this.addLog(won ? 'win' : 'loss', `Virtual ${trade?.label ?? 'contract'} on ${trade?.name ?? ''} ${won ? 'won' : 'lost'} on paper (digit ${digit}). No money moved.`);
-        const step = vhAfterVirtual(this.vh, won, this.vhConfig());
-        this.vh = step.state;
-        if (step.event === 'returned') this.addLog('info', 'Virtual Hook: the paper trades did it. Back to real money.');
+        if (this.opening) {
+            // Opening spell: a loss means wait for a win on paper, a win means real trading starts now.
+            if (won) {
+                this.opening = false;
+                this.vh = freshVh();
+                this.addLog('info', 'Opening paper trade won. Real trading starts now.');
+            } else {
+                this.vh = { ...this.vh, virtualDone: this.vh.virtualDone + 1 };
+                this.addLog('info', 'Opening paper trade lost. Staying on paper until one wins.');
+            }
+        } else {
+            const step = vhAfterVirtual(this.vh, won, this.vhConfig());
+            this.vh = step.state;
+            if (step.event === 'returned') this.addLog('info', 'Virtual Hook: the paper trades did it. Back to real money.');
+        }
         this.tradeInFlight = false;
         this.settling = false;
         this.armed = null;
@@ -1318,8 +1354,9 @@ export class SixfoldRunner {
             meterGuide: this.meterStatus(this.io.now()),
             brain: this.brain,
             virtualHook: {
-                on: this.settings.virtualHook,
-                virtual: this.settings.virtualHook && this.vh.virtual,
+                on: this.settings.virtualHook || this.opening,
+                opening: this.opening,
+                virtual: this.paperNow(),
                 open: this.virtualOpen !== null,
                 realLosses: this.vh.realLosses,
                 virtualWins: this.vh.virtualWins,

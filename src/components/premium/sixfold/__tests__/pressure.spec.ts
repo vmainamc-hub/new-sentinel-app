@@ -5,6 +5,8 @@ import {
     multiWindowGate,
     multiWindowHealth,
     pressureGate,
+    winningSideGate,
+    winningSidePressure,
 } from '../pressure';
 import { mulberry32 } from '../stats';
 
@@ -113,5 +115,49 @@ describe('the gates in the Entry Lab', () => {
         const r = compareGuard(s, over3, guard, { warmup: 600 });
         expect(r.diffPts ?? 0).toBeGreaterThan(2);
         expect(r.verdict).toBe('LESS_BAD'); // better than not guarding, still under break-even
+    });
+});
+describe('winningSidePressure', () => {
+    // Over 2 wins on 3-9. Build a stream whose winning share climbs window by window: older ticks mixed, newest all winners.
+    const base = randomDigits(200, 4);
+    const climbing = [...base, ...[1, 7, 0, 8, 2, 9, 1, 7, 8, 7, 3, 9, 8, 7, 9, 4, 8, 7, 5, 9, 6, 8, 7, 9, 7, 8, 9, 7, 6, 8, 7, 9, 5, 8, 9, 7, 8, 6, 9, 7, 8, 9, 7, 9, 8, 7, 9]];
+    const falling = [...base.map(() => 8), ...[1, 0, 2, 0, 1, 7, 0, 1, 2, 0, 1, 2, 0, 1, 0, 2, 1, 0, 2, 1, 0, 2, 1, 0, 1, 2, 0, 1, 0, 2, 0, 1, 2, 0, 1, 0, 2, 1, 0, 2, 1, 0, 2, 1, 0, 2, 0]];
+
+    it('is not measurable on a short history and then passes the gate', () => {
+        const p = winningSidePressure([7, 8, 9], over2);
+        expect(p.measurable).toBe(false);
+        expect(winningSideGate(p).ok).toBe(true);
+    });
+
+    it('calls a winning side that gains share across the windows RISING and lets it through', () => {
+        const p = winningSidePressure(climbing, over2);
+        expect(p.state).toBe('RISING');
+        expect(p.ratePp).toBeGreaterThan(2);
+        expect(p.groupPct[3]).toBeGreaterThanOrEqual(p.fairPct);
+        expect(winningSideGate(p).ok).toBe(true);
+    });
+
+    it('blocks a falling winning side and says so', () => {
+        const p = winningSidePressure(falling, over2);
+        expect(p.state).toBe('FALLING');
+        const g = winningSideGate(p);
+        expect(g.ok).toBe(false);
+        expect(g.reason).toMatch(/falling/);
+    });
+
+    it('blocks a dormant winning side: flat at its normal rate is not building', () => {
+        const flat = Array.from({ length: 300 }, (_, i) => [7, 1, 8, 9, 3, 7, 0, 8, 9, 5][i % 10]); // 80% winners in every window
+        const p = winningSidePressure(flat, over2);
+        expect(p.state).toBe('DORMANT');
+        const g = winningSideGate(p);
+        expect(g.ok).toBe(false);
+        expect(g.reason).toMatch(/dormant/);
+    });
+
+    it('reads the contract that will be bought: a bigger minimum gain is stricter', () => {
+        const loose = winningSidePressure(climbing, over2, 1).state;
+        const strict = winningSidePressure(climbing, over2, 60).state;
+        expect(loose).toBe('RISING');
+        expect(strict).not.toBe('RISING');
     });
 });

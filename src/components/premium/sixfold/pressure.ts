@@ -153,6 +153,56 @@ export function pressureGate(p: LosingSidePressure, max = DEFAULT_PRESSURE_MAX):
     return { ok: true, reason: p.reason };
 }
 
+// ---------- winning-side pressure ----------
+
+export type WinningSideState = 'RISING' | 'DORMANT' | 'FALLING';
+
+export type WinningSidePressure = {
+    measurable: boolean;
+    state: WinningSideState;
+    /** Share of ticks that would have won the contract in each window, %, ordered 120, 60, 30, 15. */
+    groupPct: number[];
+    fairPct: number;
+    /** Latest window (15) minus the longest (120), in percentage points. */
+    ratePp: number;
+    /** Window-to-window changes 120>60, 60>30, 30>15, in percentage points. */
+    steps: number[];
+    reason: string;
+};
+
+/**
+ * The mirror of losing-side pressure. Calm losers are not enough: the digits that WIN the contract should be gaining share
+ * across the nested windows (120, 60, 30, 15), step after step, and the latest window should be at or above its fair share.
+ * A winning side that merely sits at its normal rate is DORMANT, and a falling one is FALLING; only RISING passes the gate.
+ */
+export function winningSidePressure(series: readonly number[], contract: Contract, minRisePp = 2): WinningSidePressure {
+    const winners = winningDigits(contract);
+    const fair = winners.length / 10;
+    if (series.length < MIN_PRESSURE_TICKS || winners.length === 0 || winners.length === 10) {
+        return { measurable: false, state: 'DORMANT', groupPct: [], fairPct: fair * 100, ratePp: 0, steps: [], reason: `Needs ${MIN_PRESSURE_TICKS} ticks to read the winning side.` };
+    }
+    const win = new Set(winners);
+    const share = (w: number) => {
+        let c = 0;
+        for (let i = series.length - w; i < series.length; i++) if (win.has(series[i])) c += 1;
+        return c / w;
+    };
+    const g = [share(120), share(60), share(30), share(15)];
+    const steps = [g[1] - g[0], g[2] - g[1], g[3] - g[2]].map(x => x * 100);
+    const ratePp = (g[3] - g[0]) * 100;
+    const up = steps.filter(t => t >= FLAT_PP).length;
+    const down = steps.filter(t => t <= -FLAT_PP).length;
+    const state: WinningSideState = ratePp >= minRisePp && up >= 2 && g[3] >= fair ? 'RISING' : ratePp <= -minRisePp && down >= 2 ? 'FALLING' : 'DORMANT';
+    const text = `Winning digits ${winners.join('/')} at ${g.map(x => `${(x * 100).toFixed(0)}%`).join(' > ')} over the last 120 / 60 / 30 / 15 ticks (fair ${(fair * 100).toFixed(0)}%)`;
+    return { measurable: true, state, groupPct: g.map(x => x * 100), fairPct: fair * 100, ratePp, steps, reason: `${text}, ${state.toLowerCase()} (${ratePp >= 0 ? '+' : ''}${ratePp.toFixed(1)}pp).` };
+}
+
+/** Winning-side gate: the winning side must be visibly gaining across the windows, not dormant. Too few ticks passes. */
+export function winningSideGate(p: WinningSidePressure): GateResult {
+    if (!p.measurable || p.state === 'RISING') return { ok: true, reason: p.reason };
+    return { ok: false, reason: `Winning side ${p.state === 'FALLING' ? 'falling' : 'dormant'}, not building: ${p.reason}` };
+}
+
 // ---------- multi-window health ----------
 
 export const HEALTH_WINDOWS = [60, 120, 240, 480] as const;

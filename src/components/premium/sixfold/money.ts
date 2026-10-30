@@ -77,6 +77,10 @@ export type SixfoldSettings = {
     pressureMax: number;
     /** Require strength across 60 / 120 / 240 / 480 tick windows. */
     multiWindowGate: boolean;
+    /** Winning-side gate: the digits that win the bought contract must be gaining share across the 120 / 60 / 30 / 15 windows. */
+    winPressureGate: boolean;
+    /** Smallest gain, latest window over longest, in percentage points. */
+    winPressureMin: number;
     /**
      * Win-streak guard: never buy while losing digits are appearing. The contract about to be bought must have won on each of
      * the market's last `winStreak` ticks, and a market with too many losses in its last 10 (`lossAbort` above what that
@@ -90,6 +94,8 @@ export type SixfoldSettings = {
      * a row (STREAK) or `vhFixedCount` virtual trades (FIXED), then go back to real money.
      */
     virtualHook: boolean;
+    /** Every Run opens on paper: the first trade is virtual, and real trading starts after the first paper win. */
+    vhOpening: boolean;
     vhMode: VhMode;
     vhEnterLosses: number;
     vhReturnWins: number;
@@ -140,8 +146,11 @@ export const DEFAULT_SETTINGS: SixfoldSettings = {
     pressureGate: true,
     pressureMax: 35,
     multiWindowGate: true,
+    winPressureGate: true,
+    winPressureMin: 2,
     winStreakGate: true,
     virtualHook: false,
+    vhOpening: true,
     vhMode: 'STREAK',
     vhEnterLosses: 2,
     vhReturnWins: 2,
@@ -201,10 +210,13 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         pressureGate: typeof s.pressureGate === 'boolean' ? s.pressureGate : d.pressureGate,
         pressureMax: Math.trunc(num(s.pressureMax, d.pressureMax, 10, 90)),
         multiWindowGate: typeof s.multiWindowGate === 'boolean' ? s.multiWindowGate : d.multiWindowGate,
+        winPressureGate: typeof s.winPressureGate === 'boolean' ? s.winPressureGate : d.winPressureGate,
+        winPressureMin: Math.trunc(num(s.winPressureMin, d.winPressureMin, 1, 15)),
         winStreakGate: typeof s.winStreakGate === 'boolean' ? s.winStreakGate : d.winStreakGate,
         winStreak: Math.trunc(num(s.winStreak, d.winStreak, 2, 10)),
         lossAbort: Math.trunc(num(s.lossAbort, d.lossAbort, 0, 4)),
         virtualHook: typeof s.virtualHook === 'boolean' ? s.virtualHook : d.virtualHook,
+        vhOpening: typeof s.vhOpening === 'boolean' ? s.vhOpening : d.vhOpening,
         vhMode: s.vhMode === 'FIXED' ? 'FIXED' : 'STREAK',
         vhEnterLosses: Math.trunc(num(s.vhEnterLosses, d.vhEnterLosses, 1, 10)),
         vhReturnWins: Math.trunc(num(s.vhReturnWins, d.vhReturnWins, 1, 10)),
