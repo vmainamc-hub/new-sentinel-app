@@ -172,3 +172,8 @@ Next: demo run, read the ledger after 100+ trades, then prune methods that read 
 ## Sixfold purchase timing
 - Investigated "delayed execution": a confirmed entry calls `execute` synchronously from the feed tick and sends one `buy` request (no separate proposal, no timer). The only built-in pause is the 1 s cooldown after a contract settles.
 - Added measurement: every Bought log line now shows ms from the trigger tick to the buy being sent and the buy round trip; after settlement a warning appears if the contract started later than the very next tick (`reportStart`, uses Deriv's entry tick time vs the trigger tick epoch). `sixfoldFeed.getLastEpoch`.
+
+## Sixfold Virtual Hook
+- Studied the bot builder's Virtual Hook (`tradeEngine/trade/VirtualHook.js`): after N real losses it trades with zero stake, settled on real ticks, and returns to real after M consecutive virtual wins (or a fixed count); virtual results skip the strategy's martingale logic and are excluded from run totals.
+- Sixfold port: `virtual-hook.ts` (state machine) + runner integration. Settings `virtualHook` (off by default), `vhMode` STREAK/FIXED, `vhEnterLosses` 2, `vhReturnWins` 2, `vhFixedCount` 3. Paper trades use the same picks, entry rules and guards, settle on the market's ticks (exit on the d-th tick after the trigger), show in the transactions panel as Virtual, and never touch session P&L, stakes, loss counts or the stop rules. A paper trade with no ticks for 120 s is dropped.
+- UI: Scanner switch + fields, status chip (real/virtual, progress, paper record), "Virtual" tag on trade rows. Tests: virtual-hook.spec.ts plus a runner test.

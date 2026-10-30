@@ -12,6 +12,7 @@ import { ARM_BY_ID, type BrainReport, type Evidence, planLedger, WINDOWS } from 
 import { MeterStrip, MeterTab } from './meter-ui';
 import { computeRegimeFromSnapshot } from './regime';
 import type { RecoveryEntry } from './entry';
+import type { VhMode } from './virtual-hook';
 import { type BotConfig, type Contract, contractKey, contractLabel, DEFAULT_BOT, equityCurve, isValidContract, winProbability } from './bot';
 import { bestPerMarket, type Cell, eligibility } from './scanner';
 import { DigitBars, Hexagon, LineChart, Radar, Sparkline, TransitionHeat } from './charts';
@@ -420,6 +421,37 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                         </div>
                     </div>
                 )}
+                <Switch
+                    on={s.virtualHook}
+                    onChange={v => set({ virtualHook: v })}
+                    title='Virtual hook'
+                    sub='After real losses, trade on paper until the entries win again'
+                />
+                {s.virtualHook && (
+                    <div className='sf-sub'>
+                        <Seg<VhMode>
+                            label='Virtual hook mode'
+                            value={s.vhMode}
+                            onChange={v => set({ vhMode: v })}
+                            options={[
+                                ['STREAK', 'Until paper wins'],
+                                ['FIXED', 'Fixed paper trades'],
+                            ]}
+                        />
+                        <div className='sf-grid3'>
+                            <Num label='Go virtual after losses' value={s.vhEnterLosses} onCommit={n => set({ vhEnterLosses: n })} hint='real losses in a row' />
+                            {s.vhMode === 'STREAK' ? (
+                                <Num label='Back to real after wins' value={s.vhReturnWins} onCommit={n => set({ vhReturnWins: n })} hint='paper wins in a row' />
+                            ) : (
+                                <Num label='Paper trades' value={s.vhFixedCount} onCommit={n => set({ vhFixedCount: n })} hint='then back to real' />
+                            )}
+                        </div>
+                        <small>
+                            Paper trades use the same picks, entry rules and guards, are settled on the market’s real ticks, and move no money. Recovery stakes and loss counts wait
+                            untouched. It cannot change the odds of a real trade: it only keeps real money out while the entries are losing.
+                        </small>
+                    </div>
+                )}
                 <Switch on={s.pickyAfterLoss} onChange={v => set({ pickyAfterLoss: v })} title='Pickier after a loss' sub='Ask for a higher score next' />
                 <Switch
                     on={s.meterGuide}
@@ -496,6 +528,27 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                                         ? `Meter at or above ${sx.meterGuide.floor}`
                                         : 'No extra bar'}
                             </span>
+                        </div>
+                    )}
+                    {sx.running && sx.virtualHook.on && (
+                        <div className='sf-rest' role='status'>
+                            <span>
+                                {sx.virtualHook.virtual
+                                    ? `Virtual: paper trades only${sx.virtualHook.open ? ' · one open' : ''}`
+                                    : `Real money · ${sx.virtualHook.realLosses}/${sx.virtualHook.enterLosses} losses to go virtual`}
+                            </span>
+                            {sx.virtualHook.virtual && (
+                                <span>
+                                    {sx.virtualHook.mode === 'STREAK'
+                                        ? `${sx.virtualHook.virtualWins}/${sx.virtualHook.returnWins} paper wins to return`
+                                        : `${sx.virtualHook.virtualDone}/${sx.virtualHook.fixedCount} paper trades`}
+                                </span>
+                            )}
+                            {sx.virtualHook.paper.trades > 0 && (
+                                <span>
+                                    Paper: {sx.virtualHook.paper.wins}/{sx.virtualHook.paper.trades} won
+                                </span>
+                            )}
                         </div>
                     )}
                     {sx.running && sx.armed?.plan && (
@@ -584,6 +637,7 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                         {sx.trades.slice(0, 12).map(t => (
                             <li key={t.contractId} className={t.status}>
                                 <b>{t.name}</b>
+                                {t.virtual && <span title='Paper trade: no money was staked'>Virtual</span>}
                                 <span title={t.plan ? `Entry plan: ${ARM_BY_ID[t.plan]?.label ?? t.plan}` : undefined}>
                                     {t.label}
                                     {t.recovery ? ' ↺' : ''}
@@ -591,7 +645,7 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                                 <span className='dg' title='entry digit, then the digit the contract settled on'>
                                     <i>{t.entryDigit ?? '·'}</i>→<i className={t.status === 'won' ? 'w' : t.status === 'lost' ? 'l' : ''}>{t.exitDigit ?? '·'}</i>
                                 </span>
-                                <span>stake {t.stake.toFixed(2)}</span>
+                                <span>{t.virtual ? 'paper' : 'stake'} {t.stake.toFixed(2)}</span>
                                 <em>{t.profit === null ? (t.status === 'open' ? 'open' : '?') : money(t.profit)}</em>
                             </li>
                         ))}

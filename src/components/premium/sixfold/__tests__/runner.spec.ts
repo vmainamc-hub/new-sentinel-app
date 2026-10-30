@@ -375,6 +375,30 @@ describe('SixfoldRunner', () => {
         expect(h.calls.buy).toHaveLength(1);
     });
 
+    it('virtual hook: after real losses the next trade is paper only, settles on ticks and moves no money', async () => {
+        const h = harness({ entry: 'ANY', markets: ['P'], takeProfit: 0, stopLoss: 0, maxConsecutiveLosses: 0, recovery: false, virtualHook: true, vhEnterLosses: 1, vhReturnWins: 1, winStreakGate: false });
+        h.queueProfits(-1);
+        h.runner.start();
+        await flush();
+        expect(h.calls.buy).toHaveLength(1); // the real trade, which loses
+        await flush();
+        h.advance(5000);
+        h.runner.tick();
+        await flush();
+        expect(h.calls.buy).toHaveLength(1); // now virtual: no purchase
+        const snap = h.runner.getSnapshot();
+        expect(snap.virtualHook.virtual).toBe(true);
+        expect(snap.trades[0].virtual).toBe(true);
+        expect(snap.session.trades).toBe(1);
+        // a winning tick (Over 2: 7) settles it on paper
+        h.runner.handleFeedTick('P', 7);
+        const after = h.runner.getSnapshot();
+        expect(after.trades[0].status).toBe('won');
+        expect(after.virtualHook.virtual).toBe(false);
+        expect(after.session.trades).toBe(1);
+        expect(after.session.pnl).toBeLessThan(0);
+    });
+
     it('asks the feed to connect when it is not live and gives up after waiting', () => {
         let live = false;
         const h = harness({}, {

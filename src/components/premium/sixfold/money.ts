@@ -1,5 +1,6 @@
 // Sixfold Auto: settings, stake / martingale / recovery rules and stop conditions. Pure functions, no I/O.
 import type { RecoveryEntry } from './entry';
+import type { VhMode } from './virtual-hook';
 import { type Contract, contractLabel, isValidContract, profitMultiple, winProbability } from './bot';
 
 export type Selectivity = 'strict' | 'balanced' | 'active';
@@ -78,6 +79,15 @@ export type SixfoldSettings = {
     winStreakGate: boolean;
     winStreak: number;
     lossAbort: number;
+    /**
+     * Virtual hook: after `vhEnterLosses` real losses in a row, trade on paper (no stake) until `vhReturnWins` virtual wins in
+     * a row (STREAK) or `vhFixedCount` virtual trades (FIXED), then go back to real money.
+     */
+    virtualHook: boolean;
+    vhMode: VhMode;
+    vhEnterLosses: number;
+    vhReturnWins: number;
+    vhFixedCount: number;
     /** After a loss, ask for a higher score on the next trade (fades if nothing qualifies). */
     pickyAfterLoss: boolean;
     /** How long an armed contract waits for its entry digit before it is dropped. */
@@ -122,6 +132,11 @@ export const DEFAULT_SETTINGS: SixfoldSettings = {
     meterFloor: 50,
     meterFloorRecovery: 52,
     winStreakGate: true,
+    virtualHook: false,
+    vhMode: 'STREAK',
+    vhEnterLosses: 2,
+    vhReturnWins: 2,
+    vhFixedCount: 3,
     winStreak: 6,
     lossAbort: 1,
     pickyAfterLoss: true,
@@ -177,6 +192,11 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         winStreakGate: typeof s.winStreakGate === 'boolean' ? s.winStreakGate : d.winStreakGate,
         winStreak: Math.trunc(num(s.winStreak, d.winStreak, 2, 10)),
         lossAbort: Math.trunc(num(s.lossAbort, d.lossAbort, 0, 4)),
+        virtualHook: typeof s.virtualHook === 'boolean' ? s.virtualHook : d.virtualHook,
+        vhMode: s.vhMode === 'FIXED' ? 'FIXED' : 'STREAK',
+        vhEnterLosses: Math.trunc(num(s.vhEnterLosses, d.vhEnterLosses, 1, 10)),
+        vhReturnWins: Math.trunc(num(s.vhReturnWins, d.vhReturnWins, 1, 10)),
+        vhFixedCount: Math.trunc(num(s.vhFixedCount, d.vhFixedCount, 1, 20)),
         lossShield: typeof s.lossShield === 'boolean' ? s.lossShield : d.lossShield,
         restTrades: Math.trunc(num(s.restTrades, d.restTrades, 1, 10)),
         pickyAfterLoss: typeof s.pickyAfterLoss === 'boolean' ? s.pickyAfterLoss : d.pickyAfterLoss,

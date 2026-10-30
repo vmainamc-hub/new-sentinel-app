@@ -26,12 +26,13 @@ import {
     stopReason,
     tradeContract,
 } from './money';
-import { type Contract, contractKey } from './bot';
+import { type Contract, contractKey, winningDigits, winProbability } from './bot';
+import { freshVh, vhAfterReal, vhAfterVirtual, type VhConfig, type VhState } from './virtual-hook';
 import { type ArmId, type BrainReport, brainReport, choosePlan, fallbackPlan, findCell, type Plan, planFires } from './entry-brain';
 import { climateOf, IDLE_STATUS, meterCall, type MeterCall, type MeterStatus } from './meter-guide';
 import { computeRegime, regimeCell, type RegimeSummary } from './regime';
 import { type Cell, eligibility, pickBest, type ScanResult, scanMarkets } from './scanner';
-import { mulberry32 } from './stats';
+import { mulberry32, profitMultiple } from './stats';
 
 export const MODULE_ID = 'sixfold';
 
@@ -102,6 +103,8 @@ export type TradeRecord = {
     stake: number;
     profit: number | null;
     status: 'open' | 'won' | 'lost' | 'unconfirmed';
+    /** A paper trade from the Virtual Hook: settled on real ticks, no money staked, not counted in the session. */
+    virtual?: boolean;
     score: number;
     at: number;
 };
@@ -136,7 +139,28 @@ export type SixfoldSnapshot = {
     meterGuide: MeterStatus;
     /** The Entry Brain's latest replay of every market, or null when it has not been needed yet. */
     brain: BrainReport | null;
+    virtualHook: VirtualHookStatus;
 };
+
+export type VirtualHookStatus = {
+    on: boolean;
+    /** The next trades are paper trades. */
+    virtual: boolean;
+    /** A paper trade is open right now. */
+    open: boolean;
+    realLosses: number;
+    virtualWins: number;
+    virtualDone: number;
+    mode: 'STREAK' | 'FIXED';
+    enterLosses: number;
+    returnWins: number;
+    fixedCount: number;
+    paper: { trades: number; wins: number; pnl: number };
+};
+
+type VirtualOpen = { id: number; symbol: string; contract: Contract; stake: number; remaining: number; at: number };
+const VIRTUAL_ID_BASE = 9_000_000_000_000;
+const VIRTUAL_TIMEOUT_MS = 120_000;
 
 export type RunnerIO = {
     feed: {
@@ -188,6 +212,10 @@ export class SixfoldRunner {
     private tradeInFlight = false;
     private settling = false;
     private cooldownUntil = 0;
+    private vh: VhState = freshVh();
+    private virtualOpen: VirtualOpen | null = null;
+    private virtualCount = 0;
+    private paper = { trades: 0, wins: 0, pnl: 0 };
     private buyErrors = 0;
     private skipStreak = 0;
     private waitingSince = 0;
@@ -298,6 +326,9 @@ export class SixfoldRunner {
         this.quarantined.clear();
         this.rest.clear();
         this.lastLossEntry.clear();
+        this.vh = freshVh();
+        this.virtualOpen = null;
+        this.paper = { trades: 0, wins: 0, pnl: 0 };
         this.lastResultAt = 0;
         this.meterSince = this.io.now();
         this.armed = null;
@@ -342,6 +373,7 @@ export class SixfoldRunner {
         this.stopMessage = reason;
         this.tradeInFlight = false;
         this.settling = false;
+        this.virtualOpen = null;
         this.armed = null;
         this.aborts.forEach(c => c.abort());
         this.aborts.clear();
@@ -379,6 +411,16 @@ export class SixfoldRunner {
             return;
         }
         if (!this.io.isAuthorized()) return this.stop('Disconnected from Deriv');
+        if (this.virtualOpen && now - this.virtualOpen.at > VIRTUAL_TIMEOUT_MS) {
+            const v = this.virtualOpen;
+            this.virtualOpen = null;
+            const t = this.trades.find(x => x.contractId === v.id);
+            if (t) t.status = 'unconfirmed';
+            this.tradeInFlight = false;
+            this.settling = false;
+            this.armed = null;
+            this.addLog('warn', 'A virtual trade never settled (no ticks arrived); it was dropped.');
+        }
         if (!this.io.feed.isLive()) {
             if (now - this.waitingSince > FEED_WAIT_MS) {
                 return this.stop(this.io.feed.getSnapshot().error || 'The market feed did not come up.');
@@ -430,6 +472,10 @@ export class SixfoldRunner {
 
     /** Every live tick of every market. Fires the trade when the armed market prints an entry digit. */
     handleFeedTick(symbol: string, digit: number) {
+        if (this.running && this.virtualOpen) {
+            if (this.virtualOpen.symbol === symbol) this.virtualTick(digit);
+            return;
+        }
         if (!this.running || this.tradeInFlight || !this.armed || this.armed.symbol !== symbol) return;
         if (this.io.now() < this.cooldownUntil) return;
         // With the streak guard on, the winning streak IS the entry: the old "wait for a losing digit" setups do not apply.
@@ -793,6 +839,7 @@ export class SixfoldRunner {
         const cell = this.scan.cells.find(c => c.symbol === armed.symbol && c.key === armed.cellKey);
         if (!cell) return;
 
+        if (this.settings.virtualHook && this.vh.virtual) return this.executeVirtual(armed, cell, entryDigit);
         const triggerEpoch = this.io.feed.getLastEpoch?.(armed.symbol) ?? null;
         const tickAgeMs = this.io.now() - lastTick;
         const token = this.runToken;
@@ -927,6 +974,115 @@ export class SixfoldRunner {
         }
     }
 
+    private vhConfig(): VhConfig {
+        const s = this.settings;
+        return { enterLosses: s.vhEnterLosses, returnWins: s.vhReturnWins, mode: s.vhMode, fixedCount: s.vhFixedCount };
+    }
+
+    private vhReturnText(): string {
+        const s = this.settings;
+        return s.vhMode === 'FIXED' ? `${s.vhFixedCount} paper trades are done` : `${s.vhReturnWins} paper win${s.vhReturnWins > 1 ? 's' : ''} in a row`;
+    }
+
+    private pushVirtual(data: Loose) {
+        try {
+            this.stores?.transactions.pushTransaction({ ...data, is_virtual_hook: 1, run_id: this.stores.run_panel.run_id });
+        } catch {
+            /* optional transactions-panel failures are ignored */
+        }
+    }
+
+    /** A paper trade: the same pick and entry as a real one, no purchase. It settles on the market's real ticks. */
+    private executeVirtual(armed: Armed, cell: Cell, entryDigit: number | null) {
+        const bought = tradeContract(cell.contract, this.session.consecutiveLosses, this.settings);
+        const stake = stakeFor(this.session, bought.contract, this.settings).stake;
+        const contractType = DERIV_CONTRACT_TYPE[bought.contract.side];
+        if (!contractType) return;
+        const id = VIRTUAL_ID_BASE + ++this.virtualCount;
+        const startedAt = Math.floor(this.io.now() / 1000);
+        this.virtualOpen = { id, symbol: armed.symbol, contract: bought.contract, stake, remaining: Math.max(1, this.settings.duration), at: this.io.now() };
+        this.tradeInFlight = true;
+        this.settling = true;
+        const record: TradeRecord = {
+            contractId: id,
+            symbol: armed.symbol,
+            name: armed.name,
+            label: bought.label,
+            recovery: bought.recovery,
+            entryDigit,
+            plan: null,
+            baseRate: null,
+            exitDigit: null,
+            stake,
+            profit: null,
+            status: 'open',
+            virtual: true,
+            score: armed.score,
+            at: this.io.now(),
+        };
+        this.trades = [record, ...this.trades].slice(0, TRADE_LIMIT);
+        this.pushVirtual({
+            display_name: armed.symbol,
+            underlying_symbol: armed.symbol,
+            shortcode: `SIXFOLD_VIRTUAL_${contractType}_${armed.symbol}`,
+            contract_type: contractType,
+            contract_id: id,
+            currency: this.stores?.client?.currency || this.io.currency() || 'USD',
+            date_start: startedAt,
+            buy_price: stake,
+            barrier: String(bought.contract.param),
+            status: 'open',
+            is_sold: 0,
+            profit: 0,
+            transaction_ids: { buy: id },
+        });
+        this.addLog('trade', `Virtual ${bought.label}${bought.recovery ? ' (recovery)' : ''} on ${armed.name}: paper trade, no money staked.`);
+        this.emit();
+    }
+
+    private virtualTick(digit: number) {
+        const v = this.virtualOpen;
+        if (!v) return;
+        v.remaining -= 1;
+        if (v.remaining > 0) return;
+        this.virtualOpen = null;
+        const won = winningDigits(v.contract).includes(digit);
+        const profit = won ? Math.round(v.stake * profitMultiple(winProbability(v.contract), this.settings.margin) * 100) / 100 : -v.stake;
+        const trade = this.trades.find(t => t.contractId === v.id);
+        if (trade) {
+            trade.profit = profit;
+            trade.exitDigit = digit;
+            trade.status = won ? 'won' : 'lost';
+        }
+        this.paper = { trades: this.paper.trades + 1, wins: this.paper.wins + (won ? 1 : 0), pnl: Math.round((this.paper.pnl + profit) * 100) / 100 };
+        this.pushVirtual({
+            display_name: v.symbol,
+            underlying_symbol: v.symbol,
+            contract_type: DERIV_CONTRACT_TYPE[v.contract.side],
+            contract_id: v.id,
+            buy_price: v.stake,
+            sell_price: won ? v.stake + profit : 0,
+            barrier: String(v.contract.param),
+            status: won ? 'won' : 'lost',
+            is_sold: 1,
+            is_expired: 1,
+            profit,
+            exit_spot: String(digit),
+            exit_digit: digit,
+            virtual_result: won ? 'win' : 'loss',
+            transaction_ids: { buy: v.id, sell: v.id },
+        });
+        this.addLog(won ? 'win' : 'loss', `Virtual ${trade?.label ?? 'contract'} on ${trade?.name ?? ''} ${won ? 'won' : 'lost'} on paper (digit ${digit}). No money moved.`);
+        const step = vhAfterVirtual(this.vh, won, this.vhConfig());
+        this.vh = step.state;
+        if (step.event === 'returned') this.addLog('info', 'Virtual Hook: the paper trades did it. Back to real money.');
+        this.tradeInFlight = false;
+        this.settling = false;
+        this.armed = null;
+        this.cooldownUntil = this.io.now() + COOLDOWN_MS;
+        this.emit();
+    }
+
     /**
      * Checks where the contract really began. A contract bought on a tick starts on the next tick Deriv prints; "ticks late"
      * is how many extra ticks passed between the trigger tick and that start (0 = bought on the very next tick).
@@ -992,6 +1148,13 @@ export class SixfoldRunner {
             this.lastResultAt = this.io.now();
             this.meterSince = this.lastResultAt;
             this.scanAt = 0; // the next scan reads the contracts that will be bought after this result
+            if (this.settings.virtualHook) {
+                const step = vhAfterReal(this.vh, profit >= 0, this.vhConfig());
+                this.vh = step.state;
+                if (step.event === 'entered') {
+                    this.addLog('info', `Virtual Hook: ${this.vh.realLosses} real loss${this.vh.realLosses > 1 ? 'es' : ''} in a row. Trading on paper (no money) until ${this.vhReturnText()}.`);
+                }
+            }
             if (trade) this.updateShield(trade.symbol, trade.name, trade.entryDigit, profit < 0);
             if (trade) {
                 trade.profit = profit;
@@ -1048,6 +1211,19 @@ export class SixfoldRunner {
             regime: this.regime,
             meterGuide: this.meterStatus(this.io.now()),
             brain: this.brain,
+            virtualHook: {
+                on: this.settings.virtualHook,
+                virtual: this.settings.virtualHook && this.vh.virtual,
+                open: this.virtualOpen !== null,
+                realLosses: this.vh.realLosses,
+                virtualWins: this.vh.virtualWins,
+                virtualDone: this.vh.virtualDone,
+                mode: this.settings.vhMode,
+                enterLosses: this.settings.vhEnterLosses,
+                returnWins: this.settings.vhReturnWins,
+                fixedCount: this.settings.vhFixedCount,
+                paper: this.paper,
+            },
         };
     }
 
