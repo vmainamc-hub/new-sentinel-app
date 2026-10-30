@@ -572,6 +572,14 @@ const BulkTraderPage = () => {
             armed: autoSession.armed, form: autoForm, runs: autoSession.runs, pnl: autoSession.pnl, note: autoNote, maxRuns: autoConfig.maxRuns, maxLoss: autoConfig.maxLoss,
             targetProfit: autoConfig.targetProfit, account: authData?.is_virtual === 1 ? 'DEMO' : authData?.is_virtual === 0 ? 'REAL' : '', mode: modeText(autoSession, autoConfig),
             recovery: autoConfig.recovery, entry: entryView, rule: liveRule ? ruleText(liveRule) : '', log: autoLog,
+            radar: {
+                watching: watched ? watched.symbol : null,
+                markets: BULK_MARKETS.map(market => {
+                    const best = bulkFeed.verdicts[market.symbol]?.best ?? null;
+                    const executable = best?.action === 'EXECUTE' || (autoConfig.grade === 'ANY' && best?.action === 'PREPARE');
+                    return { symbol: market.symbol, best: best ? { score: best.score } : undefined, eligible: executable, significant: best?.action === 'EXECUTE', quarantined: false };
+                }),
+            },
             next: nextPlan ? `${nextPlan.label} at ${stakeFor(baseStake, nextPlan).toFixed(2)} ${currency}${nextPlan.recovery ? ` (recovery step ${nextPlan.step})` : ''}` : '',
         }}
         onAutoToggle={toggleAuto} onAutoForm={onAutoForm}

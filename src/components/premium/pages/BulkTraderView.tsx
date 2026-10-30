@@ -2,6 +2,9 @@ import type { CSSProperties, RefObject } from 'react';
 import { BULK_MARKETS, FREE_BARRIERS, OVER_BARRIERS, UNDER_BARRIERS, hitRate, type Recommendation } from '../over-under-engine';
 import { MAX_BULK_RUNS, exposure, sanitizeBulk, type Tally } from '../bulk-run';
 import type { AutoLogRow } from '../auto-log';
+import { Radar, type DialMarket } from '../sixfold/charts';
+import { shortName } from '../sixfold/feed';
+import '../sixfold/sixfold.scss';
 
 export type LogRow = {
     id: number;
@@ -26,6 +29,8 @@ export type AutoView = {
     armed: boolean; form: AutoForm; runs: number; pnl: number; note: string; maxRuns: number; maxLoss: number; targetProfit: number; account: string;
     mode: string; recovery: boolean; next: string; rule: string; log: AutoLogRow[];
     entry: { need: number; want: string; symbols: string[]; waiting: boolean } | null;
+    /** One entry per market for the scanner dial: Fusion's best verdict there, and the market whose signal the auto trader is watching. */
+    radar: { markets: DialMarket[]; watching: string | null };
 };
 
 /** The signal lock: ON keeps Over/Under shut until the loaded signal reads EXECUTE; OFF leaves both free with any barrier. */
@@ -123,6 +128,17 @@ const RecommendationBar = ({ rec, watch, onLoadRec, marketsReady, live, locked, 
 const AutoPanel = ({ auto, running, currency, onAutoToggle, onAutoForm, onLogDownload, onLogClear }: Pick<BulkViewProps, 'auto' | 'currency' | 'onAutoToggle' | 'onAutoForm' | 'onLogDownload' | 'onLogClear'> & { running: boolean }) => {
     const f = auto.form;
     const lock = auto.armed;
+    const watchedMarket = auto.armed && auto.radar.watching ? BULK_MARKETS.find(m => m.symbol === auto.radar.watching)?.name ?? auto.radar.watching : null;
+    const tone: 'idle' | 'scan' | 'armed' | 'trade' | 'warn' = !auto.armed ? 'idle' : running ? 'trade' : auto.radar.watching ? 'armed' : 'scan';
+    const centre = !auto.armed ? 'IDLE' : running ? 'RUNNING' : auto.next ? auto.next.split(' at ')[0] : 'SCANNING';
+    const sub = !auto.armed ? `${auto.radar.markets.length} MARKETS` : auto.radar.watching ? shortName(auto.radar.watching) : 'FUSION';
+    const phase = !auto.armed
+        ? 'Press Run to scan Fusion signals and trade them automatically'
+        : running ? 'Run in progress'
+            : auto.entry ? (auto.entry.waiting ? `Signal found · waiting for ${auto.entry.need} ${auto.entry.want} ticks` : `Watching for ${auto.entry.need} ${auto.entry.want} ticks`)
+                : auto.radar.watching ? 'Signal found · entering' : 'Waiting for a qualifying Fusion signal';
+    const won = auto.log.filter(row => row.result === 'WIN').length;
+    const lost = auto.log.filter(row => row.result === 'LOSS').length;
     const field = (label: string, key: keyof AutoForm, mode: 'numeric' | 'decimal' = 'numeric') => (
         <label>{label}<input value={f[key]} disabled={lock} inputMode={mode} onChange={event => onAutoForm(key, event.target.value)} /></label>
     );
@@ -133,9 +149,24 @@ const AutoPanel = ({ auto, running, currency, onAutoToggle, onAutoForm, onLogDow
                     <small>AUTO TRADER</small>
                     <p className={`apex-bt__auto-note${auto.armed ? ' is-on' : ''}`}>{auto.note}</p>
                 </div>
-                <button type='button' className={`apex-bt__arm${auto.armed ? ' is-on' : ''}`} onClick={onAutoToggle} aria-pressed={auto.armed}>
-                    {auto.armed ? 'Disarm auto trader' : 'Arm auto trader'}
-                </button>
+            </div>
+
+            <div className='sixfold sf-embed'>
+                <div className='sf-dial'>
+                    <Radar markets={auto.radar.markets} armedSymbol={auto.armed ? auto.radar.watching : null} running={auto.armed} center={centre} sub={sub} tone={tone} />
+                    <div className='sf-dial-title'>{watchedMarket ? watchedMarket : auto.armed ? 'Scanning all markets' : 'All markets, one scanner'}</div>
+                    <div className={`sf-phase t-${tone}`}>{phase}</div>
+                    <button type='button' className={`sf-run${auto.armed ? ' stop' : ''}`} onClick={onAutoToggle} aria-pressed={auto.armed}>
+                        {auto.armed ? 'Stop' : 'Run'}
+                    </button>
+                </div>
+            </div>
+
+            <div className='apex-bt__tiles'>
+                <div><small>Runs</small><b>{auto.runs}/{auto.maxRuns}</b></div>
+                <div><small>Won / Lost</small><b>{won} / {lost}</b></div>
+                <div><small>Session P/L</small><b className={auto.pnl >= 0 ? 'is-win' : 'is-loss'}>{auto.pnl.toFixed(2)} {currency}</b></div>
+                <div><small>Next run</small><b>{auto.next || '–'}</b></div>
             </div>
 
             {auto.armed && (
@@ -154,6 +185,8 @@ const AutoPanel = ({ auto, running, currency, onAutoToggle, onAutoForm, onLogDow
                 </div>
             )}
 
+            <details className='apex-bt__params' open>
+            <summary>Parameters</summary>
             <h3>Trigger and limits</h3>
             <div className='apex-bt__auto-form'>
                 <label>Trade on
@@ -221,6 +254,8 @@ const AutoPanel = ({ auto, running, currency, onAutoToggle, onAutoForm, onLogDow
                     </select>
                 </label>
             </div>
+
+            </details>
 
             <h3>Run log</h3>
             <div className='apex-bt__log-actions'>

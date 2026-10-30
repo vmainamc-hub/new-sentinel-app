@@ -285,3 +285,12 @@
 .apex-bt__log th { color: var(--bt-muted); font-weight: 700; }
 .apex-bt__log .is-win { color: var(--bt-win); }
 .apex-bt__log .is-loss { color: var(--bt-red); }
+
+
+/* Auto trader scanner dial (Sixfold's radar, fed by Fusion) */
+.apex-bt .sixfold.sf-embed { background: transparent; min-height: 0; padding: 4px 0 8px; overflow: visible; border-radius: 0; }
+.apex-bt__tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 4px 0 12px; }
+.apex-bt__tiles > div { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--bt-line); display: grid; gap: 4px; }
+.apex-bt__tiles small { color: var(--bt-muted); letter-spacing: .1em; font-weight: 800; font-size: 10px; text-transform: uppercase; }
+.apex-bt__tiles b { font-size: 15px; overflow-wrap: anywhere; }
+.apex-bt__params > summary { cursor: pointer; font-weight: 800; letter-spacing: .06em; color: var(--bt-muted); padding: 6px 0; }

@@ -209,7 +209,7 @@ export function Hexagon({ positions }: { positions: CrowdPosition[] }) {
 
 // ---------- the scanner dial ----------
 
-export type DialMarket = { symbol: string; best: Cell | undefined; eligible: boolean; significant: boolean; quarantined: boolean };
+export type DialMarket = { symbol: string; best: Pick<Cell, 'score'> | undefined; eligible: boolean; significant: boolean; quarantined: boolean };
 
 export function Radar({
     markets,
