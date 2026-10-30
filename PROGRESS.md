@@ -162,3 +162,9 @@ Not done / unverified:
 - [ ] A full Brain refresh costs ~150 ms for 10 markets x 4 contracts every 8 s on the main thread; move to a worker if the page feels janky.
 
 Next: demo run, read the ledger after 100+ trades, then prune methods that read "Worse than not entering".
+
+## Sixfold win-streak guard
+- New `sixfold/streak-guard.ts` + settings `winStreakGate` (on), `winStreak` (6), `lossAbort` (1). The contract about to be bought (recovery barrier after a loss) must have won on each of the market's last N ticks (Over 2 -> WWWWWW). Checked on every tick, for every entry mode, including the instant-buy path.
+- A market with too many losses in its last 10 (expected losses + `lossAbort`) is dropped, and the scanner skips it; it first prefers markets already part-way into a run of wins, then any non-aborted market.
+- With the guard on, the old "wait for a losing digit" setups do not apply (the streak is the entry); Brain digits, recovery gates and Meter floors still apply on top.
+- Tests: streak-guard.spec.ts, two runner tests.

@@ -70,6 +70,14 @@ export type SixfoldSettings = {
      */
     meterFloor: number;
     meterFloorRecovery: number;
+    /**
+     * Win-streak guard: never buy while losing digits are appearing. The contract about to be bought must have won on each of
+     * the market's last `winStreak` ticks, and a market with too many losses in its last 10 (`lossAbort` above what that
+     * contract expects) is dropped for one that is building up wins.
+     */
+    winStreakGate: boolean;
+    winStreak: number;
+    lossAbort: number;
     /** After a loss, ask for a higher score on the next trade (fades if nothing qualifies). */
     pickyAfterLoss: boolean;
     /** How long an armed contract waits for its entry digit before it is dropped. */
@@ -113,6 +121,9 @@ export const DEFAULT_SETTINGS: SixfoldSettings = {
     meterPatience: 90,
     meterFloor: 50,
     meterFloorRecovery: 52,
+    winStreakGate: true,
+    winStreak: 6,
+    lossAbort: 1,
     pickyAfterLoss: true,
     waitSeconds: 45,
     margin: 0.05,
@@ -163,6 +174,9 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         meterPatience: Math.trunc(num(s.meterPatience, d.meterPatience, 10, 600)),
         meterFloor: Math.trunc(num(s.meterFloor, d.meterFloor, 0, 100)),
         meterFloorRecovery: Math.trunc(num(s.meterFloorRecovery, d.meterFloorRecovery, 0, 100)),
+        winStreakGate: typeof s.winStreakGate === 'boolean' ? s.winStreakGate : d.winStreakGate,
+        winStreak: Math.trunc(num(s.winStreak, d.winStreak, 2, 10)),
+        lossAbort: Math.trunc(num(s.lossAbort, d.lossAbort, 0, 4)),
         lossShield: typeof s.lossShield === 'boolean' ? s.lossShield : d.lossShield,
         restTrades: Math.trunc(num(s.restTrades, d.restTrades, 1, 10)),
         pickyAfterLoss: typeof s.pickyAfterLoss === 'boolean' ? s.pickyAfterLoss : d.pickyAfterLoss,

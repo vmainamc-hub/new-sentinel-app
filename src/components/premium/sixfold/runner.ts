@@ -11,6 +11,7 @@ import { contract_stages } from '@/constants/contract-stage';
 import type { RunnerStores, StoreWatcher } from '@/pages/sentinel-ai/sentinel-ai-runner';
 import { describeTradeFailure } from '@/utils/trade-errors';
 import { formGateOk, smartEntryDigits } from './entry';
+import { streakRead } from './streak-guard';
 import { type FeedMode, type FeedSnapshot, marketName } from './feed';
 import {
     applyResult,
@@ -401,7 +402,11 @@ export class SixfoldRunner {
             const verdict = cell
                 ? eligibility(cell, this.settings.selectivity, Math.max(0, this.pickyBump(now) + (call?.bump ?? 0) - ARMED_HYSTERESIS))
                 : null;
-            if (cell && call && !call.allow) {
+            const streak = cell && this.settings.winStreakGate ? this.streakOf(cell.symbol, cell) : null;
+            if (cell && streak?.abort) {
+                this.addLog('info', `${this.armed.label} on ${this.armed.name} dropped: ${streak.losses} losing digits in the last 10 (limit ${streak.abortAt}).`);
+                this.armed = null;
+            } else if (cell && call && !call.allow) {
                 this.addLog('info', `${this.armed.label} on ${this.armed.name} dropped: ${call.note}.`);
                 this.armed = null;
             } else if (!cell || !verdict?.ok) {
@@ -426,7 +431,9 @@ export class SixfoldRunner {
     handleFeedTick(symbol: string, digit: number) {
         if (!this.running || this.tradeInFlight || !this.armed || this.armed.symbol !== symbol) return;
         if (this.io.now() < this.cooldownUntil) return;
-        if (this.settings.entry !== 'ANY' && !this.brainGoverns() && !this.armed.entryDigits.includes(digit)) return;
+        // With the streak guard on, the winning streak IS the entry: the old "wait for a losing digit" setups do not apply.
+        if (!this.settings.winStreakGate && this.settings.entry !== 'ANY' && !this.brainGoverns() && !this.armed.entryDigits.includes(digit)) return;
+        if (!this.streakFresh(symbol)) return;
         if (!this.recoveryFormOk(symbol)) return;
         if (!this.brainOk(symbol)) return;
         if (!this.meterFresh(symbol)) return;
@@ -441,20 +448,29 @@ export class SixfoldRunner {
             else this.blocked.delete(key);
         });
         const skipSymbols = new Set<string>([...this.quarantined, ...this.restedSymbols(now)]);
-        const pick = pickBest(
-            this.scan,
-            this.settings.selectivity,
-            { mode: this.scanMode() },
-            { symbols: skipSymbols, keys: skipKeys },
-            this.pickyBump(now),
-            this.settings.meterGuide
-                ? {
-                      bump: cell => this.meterFor(cell, now).bump,
-                      rank: cell => this.meterFor(cell, now).rank,
-                      veto: cell => !this.meterFor(cell, now).allow,
-                  }
-                : undefined
-        );
+        const guarded = this.settings.winStreakGate;
+        const choose = (building: boolean) =>
+            pickBest(
+                this.scan!,
+                this.settings.selectivity,
+                { mode: this.scanMode() },
+                { symbols: skipSymbols, keys: skipKeys },
+                this.pickyBump(now),
+                this.settings.meterGuide || guarded
+                    ? {
+                          bump: cell => (this.settings.meterGuide ? this.meterFor(cell, now).bump : 0),
+                          rank: cell => (this.settings.meterGuide ? this.meterFor(cell, now).rank : 0),
+                          veto: cell => {
+                              if (this.settings.meterGuide && !this.meterFor(cell, now).allow) return true;
+                              if (!guarded) return false;
+                              const read = this.streakOf(cell.symbol, cell);
+                              // Never a market that is losing; first choice is one already part-way into a run of wins.
+                              return read.abort || (building && read.run < Math.ceil(this.settings.winStreak / 2));
+                          },
+                      }
+                    : undefined
+            );
+        const pick = guarded ? (choose(true) ?? choose(false)) : choose(false);
         if (!pick) return;
         const { cell } = pick;
         this.armed = {
@@ -496,7 +512,7 @@ export class SixfoldRunner {
         );
         if (this.settings.entry === 'ANY' || this.brainGoverns()) {
             const digit = this.io.feed.getLastDigit(cell.symbol);
-            if (digit !== null && this.recoveryFormOk(cell.symbol) && this.brainOk(cell.symbol) && this.meterFresh(cell.symbol)) void this.execute(digit);
+            if (digit !== null && this.streakFresh(cell.symbol) && this.recoveryFormOk(cell.symbol) && this.brainOk(cell.symbol) && this.meterFresh(cell.symbol)) void this.execute(digit);
         }
     }
 
@@ -570,6 +586,32 @@ export class SixfoldRunner {
         if (!traded) return false;
         const plan = this.armed?.plan ?? fallbackPlan(this.brainStrict());
         return planFires(plan, findCell(this.brain, symbol, traded), this.io.feed.getLiveSeries()[symbol] ?? [], traded);
+    }
+
+    private streakOf(symbol: string, cell: Cell) {
+        const traded = tradeContract(cell.contract, this.session.consecutiveLosses, this.settings).contract;
+        return streakRead(this.io.feed.getLiveSeries()[symbol] ?? [], traded, this.settings.winStreak, this.settings.lossAbort);
+    }
+
+    /**
+     * Win-streak guard, read afresh on every tick. Buys only inside a run of wins for the contract that would be bought (the
+     * recovery barrier after a loss). A market that has printed too many losses lately is dropped so the bot can look at one
+     * that is building up wins.
+     */
+    private streakFresh(symbol: string): boolean {
+        if (!this.settings.winStreakGate || !this.armed || !this.scan) return true;
+        const cell = this.scan.cells.find(c => c.symbol === symbol && c.key === this.armed!.cellKey);
+        if (!cell) return true;
+        const read = this.streakOf(symbol, cell);
+        if (read.abort) {
+            const armed = this.armed;
+            this.armed = null;
+            this.addLog('info', `${armed.label} on ${armed.name} dropped: ${read.losses} losing digits in the last 10 (limit ${read.abortAt}). Looking for a market building wins.`);
+            this.armBest(this.io.now());
+            this.emit();
+            return false;
+        }
+        return read.ok;
     }
 
     private isRecovering(): boolean {

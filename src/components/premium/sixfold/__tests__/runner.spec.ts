@@ -73,7 +73,7 @@ function harness(over: Partial<SixfoldSettings> = {}, io: Partial<RunnerIO> = {}
         currency: () => 'USD',
         afterStop: () => {},
         now: () => t,
-        loadSettings: () => ({ ...DEFAULT_SETTINGS, entry: 'SMART', markets: ['P', 'Q'], selectivity: 'strict', lossShield: false, pickyAfterLoss: false, meterGuide: false, ...over }),
+        loadSettings: () => ({ ...DEFAULT_SETTINGS, entry: 'SMART', markets: ['P', 'Q'], selectivity: 'strict', lossShield: false, pickyAfterLoss: false, meterGuide: false, winStreakGate: false, ...over }),
         saveSettings: () => {},
         ...io,
     });
@@ -357,6 +357,22 @@ describe('SixfoldRunner', () => {
         const s = h.runner.getSnapshot().settings;
         expect(s.entry).toBe('BRAIN');
         expect(s.recoveryEntry).toBe('BRAIN');
+    });
+
+    it('win-streak guard does not buy while the market is not on a run of wins', async () => {
+        // The planted market alternates 1,7: Over 2 never wins more than one tick in a row.
+        const h = harness({ entry: 'ANY', markets: ['P'], winStreakGate: true, winStreak: 4 });
+        h.runner.start();
+        await flush();
+        expect(h.calls.buy).toHaveLength(0);
+    });
+
+    it('win-streak guard buys once the market has run 4 wins in a row', async () => {
+        const h = harness({ entry: 'ANY', markets: ['P'], winStreakGate: true, winStreak: 4 });
+        h.series.P.push(7, 3, 8, 5);
+        h.runner.start();
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
     });
 
     it('asks the feed to connect when it is not live and gives up after waiting', () => {

@@ -406,6 +406,20 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                         <Num label='Rest for (trades)' value={s.restTrades} onCommit={n => set({ restTrades: n })} hint='doubles after 2 losses there' />
                     </div>
                 )}
+                <Switch
+                    on={s.winStreakGate}
+                    onChange={v => set({ winStreakGate: v })}
+                    title='Win-streak guard'
+                    sub='Buy only inside a run of wins, never while losses are appearing'
+                />
+                {s.winStreakGate && (
+                    <div className='sf-sub'>
+                        <div className='sf-grid3'>
+                            <Num label='Wins in a row' value={s.winStreak} onCommit={n => set({ winStreak: n })} hint='2–10 · all must win for the contract bought' />
+                            <Num label='Drop market at +losses' value={s.lossAbort} onCommit={n => set({ lossAbort: n })} hint='0–4 above expected losses in the last 10' />
+                        </div>
+                    </div>
+                )}
                 <Switch on={s.pickyAfterLoss} onChange={v => set({ pickyAfterLoss: v })} title='Pickier after a loss' sub='Ask for a higher score next' />
                 <Switch
                     on={s.meterGuide}
@@ -493,7 +507,7 @@ function ScannerTab({ sx, openContract }: { sx: ReturnType<typeof useSixfold>; o
                     )}
                     <div className={`sf-phase t-${phase.tone}`}>
                         {sx.armed
-                            ? `${sx.armed.label} · score ${sx.armed.score} · ${s.entry === 'ANY' ? 'buying now' : sx.armed.plan ? 'waiting for its entry plan' : `waiting for digit ${sx.armed.entryDigits.join(' / ')}`}`
+                            ? `${sx.armed.label} · score ${sx.armed.score} · ${s.winStreakGate ? `waiting for ${s.winStreak} wins in a row` : s.entry === 'ANY' ? 'buying now' : sx.armed.plan ? 'waiting for its entry plan' : `waiting for digit ${sx.armed.entryDigits.join(' / ')}`}`
                             : sx.running
                               ? sx.phase === 'connecting'
                                   ? 'Connecting to the market feed…'
