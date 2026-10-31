@@ -7,7 +7,9 @@ import { ALL_MARKETS, SIXFOLD_MARKETS, SIXFOLD_SYMBOLS } from './markets';
 
 /** The ten markets Sixfold tracks (the market chips on its page). Vanguard's wider list lives in markets.ts. */
 export const MARKETS = SIXFOLD_MARKETS;
-export const marketName = (symbol: string) => ALL_MARKETS.find(m => m[0] === symbol)?.[1] ?? symbol;
+/** Markets added at run time (discovered from Deriv). Names only. */
+const extraNames = new Map<string, string>();
+export const marketName = (symbol: string) => ALL_MARKETS.find(m => m[0] === symbol)?.[1] ?? extraNames.get(symbol) ?? symbol;
 
 export const MAX_TICKS = 2000;
 
@@ -170,6 +172,31 @@ export class SixfoldFeed {
     };
     getUnavailable = (): string[] => [...this.unavailable];
     isLive = () => this.mode === 'live' && this.status === 'live';
+    getSymbols = (): string[] => [...this.symbols];
+    /**
+     * Track more markets on the SAME socket (no second connection): subscribed at once when live, otherwise on the next
+     * connect. Returns the symbols that were new.
+     */
+    addMarkets = (pairs: ReadonlyArray<readonly [string, string]>): string[] => {
+        const added: string[] = [];
+        for (const [symbol, name] of pairs) {
+            if (!symbol || this.symbols.includes(symbol)) continue;
+            this.symbols = [...this.symbols, symbol];
+            extraNames.set(symbol, name);
+            added.push(symbol);
+        }
+        const ws = this.socket;
+        if (ws && this.status === 'live') {
+            for (const symbol of added) {
+                try {
+                    ws.send(JSON.stringify({ ticks_history: symbol, end: 'latest', count: MAX_TICKS, style: 'ticks', subscribe: 1, req_id: this.symbols.indexOf(symbol) + 1 }));
+                } catch {
+                    /* it is subscribed on the next connect */
+                }
+            }
+        }
+        return added;
+    };
     getMode = () => this.mode;
     getStatus = () => this.status;
     onTick = (cb: (symbol: string, digit: number) => void) => {

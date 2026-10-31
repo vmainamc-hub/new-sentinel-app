@@ -28,7 +28,8 @@ Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main onl
 - [x] Live Execution UI: "AUTO" market option, directions filter, evidence-only toggle, pick card with next-best.
 - Honest note: default (evidence-only OFF) trades the best-ranked market even without proven edge. On random digits no market is expected to beat chance; evidence-only ON will mostly wait.
 - 45 Apex Intel tests pass under bun. Still no `npm run build` here (registry unreachable).
-- Next: market discovery (active_symbols), registry + Strategy Lab + Library, agents + AI Intelligence tab.
+- [x] Market discovery: `discovery.ts` (active_symbols, Volatility only, open and not suspended; returns [] on any error so the fixed ten always remain) + `SixfoldFeed.addMarkets` (extra markets on the SAME socket, no second connection; Sixfold's own scans unaffected, its 22-file suite unchanged). Wired in `AiIntelBridge`; market dropdown and scanner list discovered markets. 5 tests. NOT verified live: Deriv's real active_symbols reply shape on the public endpoint (parser accepts `underlying_symbol` or `symbol`).
+- Next: registry + Strategy Lab + Library, agents + AI Intelligence tab.
 
 ## Done
 - [x] Repo cloned, audited, branch created, plan committed.

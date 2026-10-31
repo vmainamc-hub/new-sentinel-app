@@ -7,6 +7,8 @@ import { reaction } from 'mobx';
 import { observer as globalObserver } from '@/external/bot-skeleton';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
+import { sixfoldFeed } from '@/components/premium/sixfold/feed';
+import { discoverVolatilityMarkets } from './discovery';
 import { aiIntelExecutor } from './executor-instance';
 import { useExecutor } from './use-executor';
 
@@ -14,6 +16,25 @@ const AiIntelBridge = () => {
     const store = useStore();
     const { isAuthorized } = useApiBase();
     const snapshot = useExecutor();
+
+    // Once the shared feed is live, ask Deriv which Volatility indices exist and track any beyond Sixfold's ten.
+    useEffect(() => {
+        let started = false;
+        let cancelled = false;
+        const check = () => {
+            if (started || !sixfoldFeed.isLive()) return;
+            started = true;
+            void discoverVolatilityMarkets().then(found => {
+                if (!cancelled && found.length) sixfoldFeed.addMarkets(found);
+            });
+        };
+        check();
+        const off = sixfoldFeed.subscribe(check);
+        return () => {
+            cancelled = true;
+            off();
+        };
+    }, []);
 
     useEffect(() => {
         if (!store) return undefined;

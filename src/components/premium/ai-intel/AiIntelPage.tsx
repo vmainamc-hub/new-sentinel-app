@@ -288,7 +288,7 @@ export default function AiIntelPage() {
                             </select>
                         </label>
                         <small>
-                            {monitored} markets · feed carries the 10 Volatility indices Sixfold tracks
+                            {monitored} markets · Volatility indices discovered from Deriv, plus Sixfold's ten
                         </small>
                     </div>
                     {sortedViews.length === 0 ? <div className='ai-empty'>No market data yet. {live ? 'Waiting for the first ticks…' : 'Connect the feed.'}</div> : null}

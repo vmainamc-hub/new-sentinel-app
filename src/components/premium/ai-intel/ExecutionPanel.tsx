@@ -1,6 +1,7 @@
 // APEX INTEL: Live Execution and Trade History. Real trades: they go to your connected Deriv account.
 import { useEffect, useState } from 'react';
-import { MARKETS, marketName } from '@/components/premium/sixfold/feed';
+import { marketName, sixfoldFeed } from '@/components/premium/sixfold/feed';
+import { useFeed } from '@/components/premium/sixfold/use-feed';
 import { AUTO_MARKET, type ExecConfig, type ExecTrade, MIN_STAKE } from './executor';
 import { aiIntelExecutor } from './executor-instance';
 import { useExecutor } from './use-executor';
@@ -35,6 +36,7 @@ function NumField({ label, value, onCommit, min, step = 1, disabled, hint }: { l
 
 export function ExecutionPanel() {
     const s = useExecutor();
+    useFeed(); // re-render when discovery adds markets
     const c = s.config;
     const locked = s.running;
     const set = (patch: Partial<ExecConfig>) => aiIntelExecutor.configure(patch);
@@ -112,9 +114,9 @@ export function ExecutionPanel() {
                         Market
                         <select value={c.market} disabled={locked} onChange={e => set({ market: e.target.value })}>
                             <option value={AUTO_MARKET}>AUTO: the tool picks market, direction and entry</option>
-                            {MARKETS.map(([sym, name]) => (
+                            {sixfoldFeed.getSymbols().map(sym => (
                                 <option key={sym} value={sym}>
-                                    {name}
+                                    {marketName(sym)}
                                 </option>
                             ))}
                         </select>
