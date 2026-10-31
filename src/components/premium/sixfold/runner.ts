@@ -8,7 +8,6 @@
 // It is a singleton service (not tied to the page), so a session keeps running while you look at other tabs.
 // All I/O is injected, which keeps it unit-testable.
 import { contract_stages } from '@/constants/contract-stage';
-import type { RunnerStores, StoreWatcher } from './stores';
 import { describeTradeFailure } from '@/utils/trade-errors';
 import { type Contract, contractKey, winningDigits, winProbability } from './bot';
 import { formGateOk, smartEntryDigits } from './entry';
@@ -33,6 +32,7 @@ import { losingSidePressure, multiWindowGate, multiWindowHealth, pressureGate, w
 import { computeRegime, regimeCell, type RegimeSummary } from './regime';
 import { type Cell, eligibility, pickBest, scanMarkets,type ScanResult } from './scanner';
 import { mulberry32, profitMultiple } from './stats';
+import type { RunnerStores, StoreWatcher } from './stores';
 import { streakRead } from './streak-guard';
 import { freshVh, vhAfterReal, vhAfterVirtual, type VhConfig, type VhState } from './virtual-hook';
 
@@ -142,6 +142,8 @@ export type SixfoldSnapshot = {
     /** The Entry Brain's latest replay of every market, or null when it has not been needed yet. */
     brain: BrainReport | null;
     virtualHook: VirtualHookStatus;
+    /** Where every contract of the latest scan stood (see ScanFunnel). Null before the first scan. */
+    funnel: ScanFunnel | null;
 };
 
 export type VirtualHookStatus = {
@@ -165,6 +167,28 @@ export type VirtualHookStatus = {
 type VirtualOpen = { id: number; symbol: string; contract: Contract; stake: number; remaining: number; at: number };
 const VIRTUAL_ID_BASE = 9_000_000_000_000;
 const VIRTUAL_TIMEOUT_MS = 120_000;
+
+/** Where every contract of the latest scan stood on the way to a trade: the answer to "why is nothing being bought?". */
+export type ScanFunnel = {
+    at: number;
+    /** Every market x contract the scan scored. */
+    cells: number;
+    /** Contracts the runner can buy (not quarantined). */
+    tradable: number;
+    resting: number;
+    /** Refused by the pressure / multi-window / streak guards. */
+    guarded: number;
+    /** Refused by the Meter guide (a loss cluster or a Meter floor). */
+    meterVeto: number;
+    /** Refused by the engine overlay (Sentinel AI / Fusion do not back it). */
+    overlayVeto: number;
+    /** Allowed by everything above but the score is under the bar it needs. */
+    belowBar: number;
+    /** Clear to be armed. */
+    eligible: number;
+    /** Most common reasons, normalised, with how many contracts each stopped. */
+    reasons: Array<{ reason: string; count: number }>;
+};
 
 export type RunnerIO = {
     feed: {
@@ -215,6 +239,7 @@ export class SixfoldRunner {
     private rng: () => number;
     private scanAt = 0;
     private queue: SixfoldSnapshot['queue'] = [];
+    private funnel: ScanFunnel | null = null;
     private tradeInFlight = false;
     private settling = false;
     private cooldownUntil = 0;
@@ -922,7 +947,69 @@ export class SixfoldRunner {
                 const e = eligibility(cell, this.settings.selectivity, bump + call.bump);
                 return { cell, ok: e.ok, reason: e.ok && call.bump > 0 ? `${e.reason}; ${call.note}` : e.reason };
             });
+        this.funnel = this.buildFunnel(now, rested, bump);
         this.scheduleEmit();
+    }
+
+    /** Walks EVERY scanned contract through the same checks the pick uses and counts where each one stops. */
+    private buildFunnel(now: number, rested: Set<string>, bump: number): ScanFunnel | null {
+        const scan = this.scan;
+        if (!scan) return null;
+        const f: ScanFunnel = {
+            at: scan.at,
+            cells: scan.cells.length,
+            tradable: 0,
+            resting: 0,
+            guarded: 0,
+            meterVeto: 0,
+            overlayVeto: 0,
+            belowBar: 0,
+            eligible: 0,
+            reasons: [],
+        };
+        const tally = new Map<string, number>();
+        const note = (reason: string) => {
+            const key = reason.replace(/[0-9]+(\.[0-9]+)?/g, '#').replace(/\s+/g, ' ').trim();
+            tally.set(key, (tally.get(key) ?? 0) + 1);
+        };
+        for (const cell of scan.cells) {
+            if (!cell.executable || this.quarantined.has(cell.symbol)) continue;
+            f.tradable += 1;
+            if (rested.has(cell.symbol)) {
+                f.resting += 1;
+                note('Resting after a loss on this market');
+                continue;
+            }
+            const guard = this.guards.get(`${cell.symbol}|${cell.key}`) ?? null;
+            if (guard) {
+                f.guarded += 1;
+                note(guard);
+                continue;
+            }
+            const meter = this.meterOnly(cell, now);
+            if (!meter.allow) {
+                f.meterVeto += 1;
+                note(`Meter: ${meter.note}`);
+                continue;
+            }
+            const extra = this.io.overlay?.call(cell, { recovering: this.isRecovering(), now });
+            if (extra && !extra.allow) {
+                f.overlayVeto += 1;
+                note(`Engines: ${extra.note}`);
+                continue;
+            }
+            const e = eligibility(cell, this.settings.selectivity, bump + meter.bump + (extra?.bump ?? 0));
+            if (e.ok) f.eligible += 1;
+            else {
+                f.belowBar += 1;
+                note(e.reason);
+            }
+        }
+        f.reasons = [...tally.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 6)
+            .map(([reason, count]) => ({ reason, count }));
+        return f;
     }
 
     // ---- trade ----
@@ -1353,6 +1440,7 @@ export class SixfoldRunner {
             regime: this.regime,
             meterGuide: this.meterStatus(this.io.now()),
             brain: this.brain,
+            funnel: this.funnel,
             virtualHook: {
                 on: this.settings.virtualHook || this.opening,
                 opening: this.opening,

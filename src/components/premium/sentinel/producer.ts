@@ -74,3 +74,36 @@ export const produceSignals = (ranked: readonly RankedOpportunity[], requireMome
     }
     return out;
 };
+
+export type ProducerStats = {
+    /** Contracts in the engine's whole ranking. */
+    ranked: number;
+    /** Held back by the engine itself (blocked or hard-blocked). */
+    engineBlocked: number;
+    /** Not blocked but too dangerous to be a signal at all. */
+    tooDangerous: number;
+    confirmed: number;
+    building: number;
+    leading: number;
+};
+
+/** Counts the whole ranking by tier (before the per-tier limits), for the "where is it blocked" panel. */
+export const tierStats = (ranked: readonly RankedOpportunity[]): ProducerStats => {
+    const out: ProducerStats = {
+        ranked: ranked.length,
+        engineBlocked: 0,
+        tooDangerous: 0,
+        confirmed: 0,
+        building: 0,
+        leading: 0,
+    };
+    for (const o of ranked) {
+        if (hardBlocked(o)) out.engineBlocked += 1;
+        else {
+            const t = tierOf(o);
+            if (t === null) out.tooDangerous += 1;
+            else out[t] += 1;
+        }
+    }
+    return out;
+};

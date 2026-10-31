@@ -4,7 +4,7 @@ import { bulkFusionSource } from '@/pages/sentinel-ai/sentinel-ai-fusion';
 import { dangerOf, qualityVerdict } from '@/pages/sentinel-ai/sentinel-ai-quality';
 import { toSentinelAiSignal } from '@/pages/sentinel-ai/sentinel-ai-signal';
 import type { Sources } from './overlay';
-import { produceSignals } from './producer';
+import { produceSignals, tierStats } from './producer';
 import type { EngineSettings } from './settings';
 
 const USABLE = ['ENTER NOW', 'ARMED'];
@@ -20,9 +20,17 @@ export const readEngines = (engine: EngineSettings, now: number): Sources => {
               blocked: v.blocked,
           }));
     const sentinel: Sources['sentinel'] = [];
+    let momentumFailed = 0;
+    let qualityFailed = 0;
     for (const { opportunity, tier, blocked } of tiered) {
-        if (blocked) continue; // momentum required and failed
-        if (!qualityVerdict(opportunity, engine).ok) continue;
+        if (blocked) {
+            momentumFailed += 1; // momentum required and failed
+            continue;
+        }
+        if (!qualityVerdict(opportunity, engine).ok) {
+            qualityFailed += 1;
+            continue;
+        }
         const sig = toSentinelAiSignal(opportunity, now);
         const digit = sig.entryDigit;
         sentinel.push({
@@ -52,5 +60,10 @@ export const readEngines = (engine: EngineSettings, now: number): Sources => {
         label: c.label,
         score: c.score,
     }));
-    return { sentinel, fusion, standDown: read.standDown };
+    return {
+        sentinel,
+        fusion,
+        standDown: read.standDown,
+        stats: { producer: sample.ranked ? tierStats(sample.ranked) : null, momentumFailed, qualityFailed },
+    };
 };

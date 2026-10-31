@@ -1,8 +1,9 @@
 // SENTINEL AI (unified): Signal Zone + Sentinel AI + Insight Fusion as one self-running trading tool, in Sixfold's form.
 // The scanner keeps going round the markets; the engines back, veto or ease each contract; the tool buys by itself and every trade
 // shows in the Run Panel and Transactions. All the work is Sixfold's runner with the engine overlay (see overlay.ts).
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import SixfoldPage, { Num, Panel, Seg, Switch } from '../sixfold/SixfoldPage';
+import { describeFunnel, FunnelTally } from './funnel';
 import { sentinelOverlay, sentinelRunner } from './runner-instance';
 import {
     contractsFor,
@@ -149,6 +150,89 @@ const EnginePanel = () => {
     );
 };
 
+const FunnelPanel = () => {
+    const { sx } = useSentinel();
+    const tally = useRef(new FunnelTally());
+    const [, force] = useState(0);
+    const engineFunnel = sentinelOverlay.funnel();
+    const view = useMemo(
+        () => describeFunnel(engineFunnel, sx.funnel, Boolean(sx.armed)),
+        [engineFunnel, sx.funnel, sx.armed]
+    );
+    // One point per scan; the 10-minute summary is re-read every few seconds.
+    useEffect(() => {
+        tally.current.add(sx.funnel, engineFunnel, Date.now());
+    }, [sx.funnel, engineFunnel]);
+    useEffect(() => {
+        const id = window.setInterval(() => force(n => n + 1), 5000);
+        return () => window.clearInterval(id);
+    }, []);
+    const sum = tally.current.summary(Date.now());
+    return (
+        <Panel eyebrow='DIAGNOSIS' title='Where is the signal being blocked?'>
+            <p className={`sf-note ${view.blockedAt ? 'bad' : ''}`}>
+                <b>{view.verdict}</b>
+            </p>
+            <table className='sf-table sf-funnel'>
+                <thead>
+                    <tr>
+                        <th>Step</th>
+                        <th>Alive</th>
+                        <th>What it removed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {view.steps.map(step => (
+                        <tr key={step.key} className={view.blockedAt === step.key ? 'blocked' : ''}>
+                            <td>
+                                <small>{step.side === 'engine' ? 'ENGINES' : 'SCANNER'}</small> {step.label}
+                            </td>
+                            <td>
+                                <b>{step.alive ?? '—'}</b>
+                            </td>
+                            <td>{step.note}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+            <p className='sf-note'>
+                Last 10 minutes: {sum.scans} scans, {sum.scansWithEngineBoard} had an engine-backed contract,{' '}
+                {sum.scansWithEligible} had a contract that cleared every check.
+            </p>
+            {sum.scans > 0 && (
+                <table className='sf-table'>
+                    <thead>
+                        <tr>
+                            <th>Stopped most often by</th>
+                            <th>Contracts stopped</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {sum.stoppedBy.map(row => (
+                            <tr key={row.key}>
+                                <td>{row.label}</td>
+                                <td>{row.count}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
+            {sum.reasons.length > 0 && (
+                <details>
+                    <summary>Exact reasons (last 10 minutes)</summary>
+                    <ul>
+                        {sum.reasons.map(r => (
+                            <li key={r.reason}>
+                                {r.count} × {r.reason}
+                            </li>
+                        ))}
+                    </ul>
+                </details>
+            )}
+        </Panel>
+    );
+};
+
 const ContractNote = () => (
     <div className='sf-field sf-first'>
         <span>Contracts</span>
@@ -171,7 +255,12 @@ const SentinelAiPage = () => {
             brand='SENTINEL'
             brandSub='AI'
             contracts={contracts}
-            topSlot={<EnginePanel />}
+            topSlot={
+                <>
+                    <FunnelPanel />
+                    <EnginePanel />
+                </>
+            }
             contractControls={<ContractNote />}
             footerText={FOOTER}
             className='sentinel-ai-auto'

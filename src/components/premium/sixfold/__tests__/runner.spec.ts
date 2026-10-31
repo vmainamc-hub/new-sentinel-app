@@ -1182,4 +1182,20 @@ describe('SixfoldRunner with an engine overlay', () => {
         await flush();
         expect(h.runner.getSnapshot().session.trades).toBe(1);
     });
+
+    it('records where every scanned contract stopped (the funnel)', () => {
+        const h = harness({}, { overlay: overlay({ call: () => ({ allow: false, bump: 0, rank: 0, note: 'neither engine backs it' }) }) });
+        h.runner.start();
+        const f = h.runner.getSnapshot().funnel!;
+        expect(f.cells).toBeGreaterThan(0);
+        expect(f.overlayVeto).toBe(f.tradable);
+        expect(f.eligible).toBe(0);
+        expect(f.reasons[0]).toEqual({ reason: 'Engines: neither engine backs it', count: f.tradable });
+    });
+
+    it('the funnel counts an eligible contract when nothing refuses it', () => {
+        const h = harness({}, { overlay: overlay() });
+        h.runner.start();
+        expect(h.runner.getSnapshot().funnel!.eligible).toBeGreaterThan(0);
+    });
 });

@@ -6,7 +6,7 @@
 // create an edge on random digits: they describe recent behaviour, and the app says so.
 import type { OverUnderContract } from '../over-under-engine';
 import type { RunnerOverlay } from '../sixfold/overlay';
-import type { SignalTier } from './producer';
+import type { ProducerStats, SignalTier } from './producer';
 import { contractsFor, type EngineSettings } from './settings';
 
 /** What the Sentinel engine says about one contract, already through its quality gates. */
@@ -32,7 +32,31 @@ export type FusionRow = {
     label: string;
     score: number;
 };
-export type Sources = { sentinel: SentinelRead[]; fusion: FusionRow[]; standDown: ReadonlySet<string> };
+/** What the engines' side of the machine did on the latest read: each number is how many contracts survived that step. */
+export type EngineFunnel = {
+    at: number;
+    mode: EngineSettings['mode'];
+    producer: ProducerStats | null;
+    /** Sentinel candidates cut by momentum / by the quality limits, before the board. */
+    momentumFailed: number;
+    qualityFailed: number;
+    /** Sentinel reads that reached the board's input, Fusion's recommendations, and Fusion's stand-downs. */
+    sentinelReads: number;
+    fusionReads: number;
+    standDowns: number;
+    /** Board rows and who backs them. */
+    board: number;
+    boardBoth: number;
+    boardSentinel: number;
+    boardFusion: number;
+    error: string | null;
+};
+export type Sources = {
+    sentinel: SentinelRead[];
+    fusion: FusionRow[];
+    standDown: ReadonlySet<string>;
+    stats?: { producer: ProducerStats | null; momentumFailed: number; qualityFailed: number };
+};
 
 export type BoardRow = {
     key: string;
@@ -95,8 +119,13 @@ export const createSentinelOverlay = (opts: {
     getEngine: () => EngineSettings;
     read: (engine: EngineSettings, now: number) => Sources;
     onBoard?: (rows: BoardRow[]) => void;
-}): RunnerOverlay & { board: () => BoardRow[]; blocked: () => ReadonlySet<string> } => {
+}): RunnerOverlay & {
+    board: () => BoardRow[];
+    blocked: () => ReadonlySet<string>;
+    funnel: () => EngineFunnel | null;
+} => {
     let board: BoardRow[] = [];
+    let funnel: EngineFunnel | null = null;
     let standDown: ReadonlySet<string> = new Set();
     const index = new Map<string, BoardRow>();
     const find = (symbol: string, side: string, param: number) => index.get(keyOf(symbol, sideOf(side), param));
@@ -111,15 +140,46 @@ export const createSentinelOverlay = (opts: {
                 const src = opts.read(engine, now);
                 standDown = src.standDown;
                 board = buildBoard(src, engine);
-            } catch {
+                funnel = {
+                    at: now,
+                    mode: engine.mode,
+                    producer: src.stats?.producer ?? null,
+                    momentumFailed: src.stats?.momentumFailed ?? 0,
+                    qualityFailed: src.stats?.qualityFailed ?? 0,
+                    sentinelReads: src.sentinel.length,
+                    fusionReads: src.fusion.length,
+                    standDowns: src.standDown.size,
+                    board: board.length,
+                    boardBoth: board.filter(r => r.source === 'both').length,
+                    boardSentinel: board.filter(r => r.source === 'sentinel').length,
+                    boardFusion: board.filter(r => r.source === 'fusion').length,
+                    error: null,
+                };
+            } catch (error) {
                 board = []; // an engine failure means no backing: engine-gated modes will not trade
                 standDown = new Set();
+                funnel = {
+                    at: now,
+                    mode: engine.mode,
+                    producer: null,
+                    momentumFailed: 0,
+                    qualityFailed: 0,
+                    sentinelReads: 0,
+                    fusionReads: 0,
+                    standDowns: 0,
+                    board: 0,
+                    boardBoth: 0,
+                    boardSentinel: 0,
+                    boardFusion: 0,
+                    error: error instanceof Error ? error.message : String(error),
+                };
             }
             index.clear();
             for (const row of board) index.set(row.key, row);
             opts.onBoard?.(board);
         },
         board: () => board,
+        funnel: () => funnel,
         blocked: () => standDown,
         call: cell => {
             const mode = opts.getEngine().mode;
@@ -142,7 +202,8 @@ export const createSentinelOverlay = (opts: {
             }
             const both = row.source === 'both';
             // A weaker Sentinel tier asks for a higher bar: more signals never means lower standards for a trade.
-            const tierBump = row.tier === 'confirmed' ? -6 : row.tier === 'building' ? 0 : row.tier === 'leading' ? 4 : 6;
+            const tierBump =
+                row.tier === 'confirmed' ? -6 : row.tier === 'building' ? 0 : row.tier === 'leading' ? 4 : 6;
             const tierText = row.tier ? `Sentinel ${row.tier}` : 'Insight Fusion alone';
             return {
                 allow: true,

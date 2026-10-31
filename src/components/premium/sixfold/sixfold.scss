@@ -1668,3 +1668,22 @@
         }
     }
 }
+
+.sixfold.sentinel-ai-auto {
+    .sf-funnel {
+        tr.blocked td {
+            background: rgba(220, 60, 60, 0.14);
+            font-weight: 600;
+        }
+        small {
+            opacity: 0.6;
+            font-size: 10px;
+            letter-spacing: 0.06em;
+            margin-right: 4px;
+        }
+    }
+    .sf-note.bad {
+        border-left: 3px solid #d44;
+        padding-left: 10px;
+    }
+}
