@@ -50,7 +50,7 @@ export default Engine =>
             if (!symbols.length) return 0;
 
             // Loaded on demand so the trade engine does not depend on the Sentinel engine at import time.
-            const { derivBus } = await import('@/sentinel-engine/lib/deriv/tick-bus');
+            const { derivBus } = await import('@/external/tick-bus/tick-bus');
             this.multi_market_bus = derivBus;
             this.multi_market_symbols = new Set(symbols);
             this.multi_market_release = derivBus.subscribe(symbols);

@@ -1,13 +1,11 @@
-// SENTINEL AI (unified): the app-wide runner. It is Sixfold's runner with the Sentinel + Fusion overlay, its own settings and Run Panel id.
+// SENTINEL AI: the app-wide runner. It is Sixfold's runner with the Pulse overlay, its own settings and Run Panel id.
 import { api_base } from '@/external/bot-skeleton';
-import { sentinelAiEngine } from '@/pages/sentinel-ai/sentinel-ai-engine';
 import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purchase';
-import { bulkFeed } from '../bulk-feed';
 import { sixfoldFeed } from '../sixfold/feed';
 import { SixfoldRunner } from '../sixfold/runner';
 import { createSentinelOverlay } from './overlay';
+import { readPulse } from './pulse';
 import { type EngineSettings, loadEngine, loadTrading, saveEngine, saveTrading } from './settings';
-import { readEngines } from './sources';
 
 let engine: EngineSettings = loadEngine();
 export const getEngineSettings = () => engine;
@@ -18,7 +16,7 @@ export const setEngineSettings = (next: EngineSettings) => {
 
 export const sentinelOverlay = createSentinelOverlay({
     getEngine: () => engine,
-    read: readEngines,
+    read: symbols => readPulse(sixfoldFeed.getSnapshot().series, symbols),
 });
 
 export const sentinelRunner = new SixfoldRunner({
@@ -39,10 +37,10 @@ export const sentinelRunner = new SixfoldRunner({
     overlay: sentinelOverlay,
 });
 
-/** Keeps both engines and the tick feeds alive while the page or a session needs them. Returns the release function. */
+/** Keeps the live tick feed connected while the page is open or a session runs. Returns the release function. */
 export const attachEngines = (): (() => void) => {
-    bulkFeed.start();
-    return sentinelAiEngine.retain();
+    if (sixfoldFeed.getMode() === 'live' && sixfoldFeed.getStatus() === 'offline') sixfoldFeed.connect();
+    return () => undefined;
 };
 
 sixfoldFeed.onTick((symbol, digit) => sentinelRunner.handleFeedTick(symbol, digit));

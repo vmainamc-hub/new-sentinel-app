@@ -1,6 +1,6 @@
-// SENTINEL AI (unified): settings. Two parts, stored apart:
+// SENTINEL AI: settings. Two parts, stored apart:
 //   - the trading settings, which are Sixfold's own (stake, recovery, loss shield, Meter floors...), and
-//   - the engine settings below: how much the Sentinel + Fusion engines must agree, and the quality gates.
+//   - the engine settings below: which Pulse signal strength may trade, and which of the six contracts.
 import type { Contract } from '../sixfold/bot';
 import {
     DEFAULT_SETTINGS as SIXFOLD_DEFAULTS,
@@ -8,38 +8,25 @@ import {
     type SixfoldSettings,
 } from '../sixfold/money';
 
-/** careful: both engines must back the contract. balanced: Sentinel leads, Fusion agreeing eases the bar and standing down vetoes. active: Fusion may lead and the scanner may trade alone, at a higher bar. */
+/** careful: only strong Pulse signals. balanced: strong and steady. active: also watch signals, and the scanner may trade alone at a higher bar. */
 export type EngineMode = 'careful' | 'balanced' | 'active';
 export const ENGINE_MODES: readonly EngineMode[] = ['careful', 'balanced', 'active'];
 
-/** The six propositions both engines speak. */
+/** The six contracts Pulse reads. */
 export const PROPOSITION_KEYS = ['OVER:1', 'OVER:2', 'OVER:3', 'UNDER:8', 'UNDER:7', 'UNDER:6'] as const;
 
 export type EngineSettings = {
     mode: EngineMode;
     /** Propositions that may be traded, e.g. 'OVER:2'. */
     propositions: string[];
-    /** Sentinel quality gates. 0 = off. */
-    minScore: number;
-    maxDanger: number;
-    requireMomentum: boolean;
-    skipBlocked: boolean;
 };
 
 export const DEFAULT_ENGINE: EngineSettings = {
     mode: 'balanced',
     propositions: [...PROPOSITION_KEYS],
-    minScore: 0,
-    maxDanger: 0,
-    requireMomentum: true,
-    skipBlocked: true,
 };
 
-const int = (v: unknown, fallback: number, min: number, max: number) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : fallback;
-};
-
+/** Accepts anything (including settings saved by the old Sentinel / Fusion version) and returns a complete object. */
 export const normalizeEngine = (raw: unknown): EngineSettings => {
     const s = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
     const d = DEFAULT_ENGINE;
@@ -51,15 +38,11 @@ export const normalizeEngine = (raw: unknown): EngineSettings => {
     return {
         mode: ENGINE_MODES.includes(s.mode as EngineMode) ? (s.mode as EngineMode) : d.mode,
         propositions: props,
-        minScore: int(s.minScore, d.minScore, 0, 100),
-        maxDanger: int(s.maxDanger, d.maxDanger, 0, 100),
-        requireMomentum: typeof s.requireMomentum === 'boolean' ? s.requireMomentum : d.requireMomentum,
-        skipBlocked: typeof s.skipBlocked === 'boolean' ? s.skipBlocked : d.skipBlocked,
     };
 };
 
-/** Sixfold's trading defaults, tuned for this tool: the engine's own entry digit is used (SMART learns one when the engine has none). */
-// The engines already read momentum, losing-side pressure and the entry digit, so the hardest Sixfold filters are eased here: the
+/** Sixfold's trading defaults, tuned for this tool: SMART entry learns each market's entry digits from its own recent ticks. */
+// Pulse already reads recent winning rates in four windows and steps a signal down after a run of losses, so the hardest Sixfold filters are eased here: the
 // win-streak guard (which waits for six winning digits in a row, rare enough to stop almost every trade) is off, the pressure
 // gate is a little wider and the Meter floors a little lower. None of this changes the odds of a contract; it only decides how
 // often the machine trades. The Careful preset keeps the stricter pressure gate and Meter floors.
@@ -95,8 +78,8 @@ export const PRESETS: Preset[] = [
     {
         id: 'careful',
         name: 'Careful',
-        blurb: 'Both engines must back a contract, Sentinel at least building. Fewer trades, strict Meter floors.',
-        engine: { mode: 'careful', requireMomentum: true, skipBlocked: true, minScore: 55, maxDanger: 60 },
+        blurb: 'Only strong Pulse signals (all four windows agree). Fewest trades, strict Meter floors.',
+        engine: { mode: 'careful' },
         trading: {
             selectivity: 'strict',
             winStreakGate: false,
@@ -110,8 +93,8 @@ export const PRESETS: Preset[] = [
     {
         id: 'balanced',
         name: 'Balanced',
-        blurb: 'Sentinel leads. Fusion agreeing eases the bar and Fusion standing down vetoes.',
-        engine: { mode: 'balanced', requireMomentum: true, skipBlocked: true, minScore: 0, maxDanger: 0 },
+        blurb: 'Strong and steady Pulse signals. A good rate of signals with a sensible bar.',
+        engine: { mode: 'balanced' },
         trading: {
             selectivity: 'balanced',
             winStreakGate: false,
@@ -125,8 +108,8 @@ export const PRESETS: Preset[] = [
     {
         id: 'active',
         name: 'Active',
-        blurb: 'Fusion may lead and the scanner may trade alone, at a higher bar. More trades, more variance.',
-        engine: { mode: 'active', requireMomentum: false, skipBlocked: true, minScore: 0, maxDanger: 0 },
+        blurb: 'Also watch signals, and the scanner may trade alone at a higher bar. Most trades, most variance.',
+        engine: { mode: 'active' },
         trading: {
             selectivity: 'active',
             winStreakGate: false,

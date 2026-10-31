@@ -1,223 +1,148 @@
-// SENTINEL AI (unified): the engine overlay for the Sixfold runner. Pure apart from the injected `read`.
+// SENTINEL AI: the Pulse overlay for the Sixfold runner. Pure apart from the injected `read`.
 //
-// Each scan, the Sentinel AI engine and Insight Fusion are read once. Every scanner cell then gets a verdict: vetoed when the engines
-// do not back it (per mode) or Fusion stands down on it, an easier bar when both agree, an ordering bonus by combined score, and the
-// engine's own validated entry digit to wait for. The scanner, Meter, loss shield and money rules are Sixfold's. Neither engine can
-// create an edge on random digits: they describe recent behaviour, and the app says so.
-import type { OverUnderContract } from '../over-under-engine';
+// Each scan, Pulse (pulse.ts) reads every market and contract once. Every scanner cell then gets a verdict: vetoed when Pulse has no
+// signal at the strength the mode asks for, an easier bar for a strong signal, a higher bar for a watch signal, and an ordering
+// bonus by Pulse score. The scanner, Meter, loss shield and money rules are Sixfold's. Pulse decides when to look, it cannot create
+// an edge on random digits, and the app says so.
 import type { RunnerOverlay } from '../sixfold/overlay';
-import type { ProducerStats, SignalTier } from './producer';
+import type { PulseRead, PulseSnapshot, PulseTier } from './pulse';
 import { contractsFor, type EngineSettings } from './settings';
-
-/** What the Sentinel engine says about one contract, already through its quality gates. */
-export type SentinelRead = {
-    symbol: string;
-    market: string;
-    contract: OverUnderContract;
-    barrier: number;
-    label: string;
-    score: number;
-    danger: number | null;
-    /** How sure the engine is (see producer.ts). */
-    tier: SignalTier;
-    entryDigit: number | null;
-    /** True when Sentinel's entry digit is validated (ENTER NOW or ARMED). */
-    entryUsable: boolean;
-};
-export type FusionRow = {
-    symbol: string;
-    market: string;
-    contract: OverUnderContract;
-    barrier: number;
-    label: string;
-    score: number;
-};
-/** What the engines' side of the machine did on the latest read: each number is how many contracts survived that step. */
-export type EngineFunnel = {
-    at: number;
-    mode: EngineSettings['mode'];
-    producer: ProducerStats | null;
-    /** Sentinel candidates cut by momentum / by the quality limits, before the board. */
-    momentumFailed: number;
-    qualityFailed: number;
-    /** Sentinel reads that reached the board's input, Fusion's recommendations, and Fusion's stand-downs. */
-    sentinelReads: number;
-    fusionReads: number;
-    standDowns: number;
-    /** Board rows and who backs them. */
-    board: number;
-    boardBoth: number;
-    boardSentinel: number;
-    boardFusion: number;
-    error: string | null;
-};
-export type Sources = {
-    sentinel: SentinelRead[];
-    fusion: FusionRow[];
-    standDown: ReadonlySet<string>;
-    stats?: { producer: ProducerStats | null; momentumFailed: number; qualityFailed: number };
-};
 
 export type BoardRow = {
     key: string;
     symbol: string;
-    market: string;
-    contract: OverUnderContract;
+    contract: 'DIGITOVER' | 'DIGITUNDER';
     barrier: number;
     label: string;
-    source: 'both' | 'sentinel' | 'fusion';
+    tier: PulseTier;
     score: number;
-    tier: SignalTier | null;
-    entryDigit: number | null;
+    /** Windows (of 4) above the fair rate. */
+    agree: number;
 };
 
-export const keyOf = (symbol: string, contract: OverUnderContract, barrier: number) =>
-    `${symbol}|${contract}|${barrier}`;
-const sideOf = (side: string): OverUnderContract => (side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER');
+/** What Pulse did on the latest read: each number is how many contracts survived that step. */
+export type EngineFunnel = {
+    at: number;
+    mode: EngineSettings['mode'];
+    /** Markets with enough ticks, and contracts read. */
+    markets: number;
+    reads: number;
+    /** Contracts per tier (before the mode picks). */
+    strong: number;
+    steady: number;
+    watch: number;
+    none: number;
+    /** Contracts the mode lets onto the board. */
+    board: number;
+    error: string | null;
+};
 
-/** The contracts the engines back right now, restricted to the propositions switched on. Best first. */
-export const buildBoard = (src: Sources, engine: EngineSettings): BoardRow[] => {
+export const keyOf = (symbol: string, side: string, param: number) =>
+    `${symbol}|${side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER'}|${param}`;
+
+/** Tiers each mode accepts. */
+export const ACCEPTED: Record<EngineSettings['mode'], readonly PulseTier[]> = {
+    careful: ['strong'],
+    balanced: ['strong', 'steady'],
+    active: ['strong', 'steady', 'watch'],
+};
+
+const TIER_BUMP: Record<PulseTier, number> = { strong: -6, steady: 0, watch: 4 };
+const TIER_RANK: Record<PulseTier, number> = { strong: 3, steady: 2, watch: 1 };
+
+export const toRow = (r: PulseRead): BoardRow => ({
+    key: keyOf(r.symbol, r.contract.side, r.contract.param),
+    symbol: r.symbol,
+    contract: r.contract.side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER',
+    barrier: r.contract.param,
+    label: `${r.contract.side === 'OVER' ? 'Over' : 'Under'} ${r.contract.param}`,
+    tier: r.tier as PulseTier,
+    score: r.score,
+    agree: r.agree,
+});
+
+/** The contracts the mode lets through, restricted to the propositions switched on. Strongest first. */
+export const buildBoard = (snap: PulseSnapshot, engine: EngineSettings): BoardRow[] => {
     const on = new Set(engine.propositions);
-    const allowed = (c: OverUnderContract, b: number) => on.has(`${c === 'DIGITOVER' ? 'OVER' : 'UNDER'}:${b}`);
-    const rows = new Map<string, BoardRow>();
-    const s = new Map(
-        src.sentinel.filter(x => allowed(x.contract, x.barrier)).map(x => [keyOf(x.symbol, x.contract, x.barrier), x])
-    );
-    const f = new Map(
-        src.fusion.filter(x => allowed(x.contract, x.barrier)).map(x => [keyOf(x.symbol, x.contract, x.barrier), x])
-    );
-    for (const key of new Set([...s.keys(), ...f.keys()])) {
-        const a = s.get(key);
-        const b = f.get(key);
-        // Fusion actively standing down is a veto, except in Active mode where the scanner trades on its own judgement.
-        if (engine.mode !== 'active' && src.standDown.has(key)) continue;
-        if (engine.mode === 'careful' && !(a && b && a.tier !== 'leading')) continue;
-        // Sentinel leads: Insight Fusion alone cannot start a trade unless Active mode is chosen. Fusion agreeing eases the bar,
-        // Fusion standing down vetoes.
-        if (engine.mode === 'balanced' && !a) continue;
-        const base = (a ?? b)!;
-        const scores = [a?.score, b?.score].filter((v): v is number => typeof v === 'number');
-        rows.set(key, {
-            key,
-            symbol: base.symbol,
-            market: base.market,
-            contract: base.contract,
-            barrier: base.barrier,
-            label: base.label,
-            source: a && b ? 'both' : a ? 'sentinel' : 'fusion',
-            score: Math.round((scores.reduce((x, y) => x + y, 0) / Math.max(1, scores.length)) * 10) / 10,
-            tier: a?.tier ?? null,
-            entryDigit: a && a.entryUsable ? a.entryDigit : null,
-        });
-    }
-    return [...rows.values()].sort(
-        (x, y) => Number(y.source === 'both') - Number(x.source === 'both') || y.score - x.score
-    );
+    const ok = new Set<PulseTier>(ACCEPTED[engine.mode]);
+    return snap.reads
+        .filter(r => r.tier && ok.has(r.tier) && on.has(`${r.contract.side}:${r.contract.param}`))
+        .map(toRow)
+        .sort((a, b) => TIER_RANK[b.tier] - TIER_RANK[a.tier] || b.score - a.score);
+};
+
+export const funnelOf = (snap: PulseSnapshot, board: BoardRow[], engine: EngineSettings, now: number): EngineFunnel => {
+    const count = (t: PulseTier) => snap.reads.filter(r => r.tier === t).length;
+    return {
+        at: now,
+        mode: engine.mode,
+        markets: snap.markets,
+        reads: snap.reads.length,
+        strong: count('strong'),
+        steady: count('steady'),
+        watch: count('watch'),
+        none: snap.reads.filter(r => r.tier === null).length,
+        board: board.length,
+        error: null,
+    };
 };
 
 export const createSentinelOverlay = (opts: {
     getEngine: () => EngineSettings;
-    read: (engine: EngineSettings, now: number) => Sources;
-    onBoard?: (rows: BoardRow[]) => void;
-}): RunnerOverlay & {
-    board: () => BoardRow[];
-    blocked: () => ReadonlySet<string>;
-    funnel: () => EngineFunnel | null;
-} => {
+    read: (symbols: readonly string[], engine: EngineSettings) => PulseSnapshot;
+}): RunnerOverlay & { board: () => BoardRow[]; funnel: () => EngineFunnel | null } => {
     let board: BoardRow[] = [];
     let funnel: EngineFunnel | null = null;
-    let standDown: ReadonlySet<string> = new Set();
     const index = new Map<string, BoardRow>();
-    const find = (symbol: string, side: string, param: number) => index.get(keyOf(symbol, sideOf(side), param));
 
     return {
         moduleId: 'sentinel-ai',
         name: 'Sentinel AI',
         contracts: () => contractsFor(opts.getEngine()),
-        refresh: now => {
+        refresh: (now, symbols) => {
             const engine = opts.getEngine();
             try {
-                const src = opts.read(engine, now);
-                standDown = src.standDown;
-                board = buildBoard(src, engine);
-                funnel = {
-                    at: now,
-                    mode: engine.mode,
-                    producer: src.stats?.producer ?? null,
-                    momentumFailed: src.stats?.momentumFailed ?? 0,
-                    qualityFailed: src.stats?.qualityFailed ?? 0,
-                    sentinelReads: src.sentinel.length,
-                    fusionReads: src.fusion.length,
-                    standDowns: src.standDown.size,
-                    board: board.length,
-                    boardBoth: board.filter(r => r.source === 'both').length,
-                    boardSentinel: board.filter(r => r.source === 'sentinel').length,
-                    boardFusion: board.filter(r => r.source === 'fusion').length,
-                    error: null,
-                };
+                const snap = opts.read(symbols, engine);
+                board = buildBoard(snap, engine);
+                funnel = funnelOf(snap, board, engine, now);
             } catch (error) {
-                board = []; // an engine failure means no backing: engine-gated modes will not trade
-                standDown = new Set();
+                board = []; // a failed read backs nothing, so nothing trades on a guess
                 funnel = {
                     at: now,
                     mode: engine.mode,
-                    producer: null,
-                    momentumFailed: 0,
-                    qualityFailed: 0,
-                    sentinelReads: 0,
-                    fusionReads: 0,
-                    standDowns: 0,
+                    markets: 0,
+                    reads: 0,
+                    strong: 0,
+                    steady: 0,
+                    watch: 0,
+                    none: 0,
                     board: 0,
-                    boardBoth: 0,
-                    boardSentinel: 0,
-                    boardFusion: 0,
                     error: error instanceof Error ? error.message : String(error),
                 };
             }
             index.clear();
             for (const row of board) index.set(row.key, row);
-            opts.onBoard?.(board);
         },
         board: () => board,
         funnel: () => funnel,
-        blocked: () => standDown,
         call: cell => {
             const mode = opts.getEngine().mode;
-            const row = find(cell.symbol, cell.contract.side, cell.contract.param);
+            const row = index.get(keyOf(cell.symbol, cell.contract.side, cell.contract.param));
             if (!row) {
-                if (mode !== 'active') {
-                    const stood = standDown.has(keyOf(cell.symbol, sideOf(cell.contract.side), cell.contract.param));
-                    return {
-                        allow: false,
-                        bump: 0,
-                        rank: 0,
-                        note: stood
-                            ? 'Insight Fusion stands down'
-                            : mode === 'careful'
-                              ? 'both engines must back it'
-                              : 'Sentinel AI does not back it',
-                    };
-                }
-                return { allow: true, bump: 6, rank: 0, note: 'no engine backs it: higher bar' };
+                if (mode === 'active') return { allow: true, bump: 6, rank: 0, note: 'no Pulse signal: higher bar' };
+                return {
+                    allow: false,
+                    bump: 0,
+                    rank: 0,
+                    note: `no ${mode === 'careful' ? 'strong' : 'strong or steady'} Pulse signal`,
+                };
             }
-            const both = row.source === 'both';
-            // A weaker Sentinel tier asks for a higher bar: more signals never means lower standards for a trade.
-            const tierBump =
-                row.tier === 'confirmed' ? -6 : row.tier === 'building' ? 0 : row.tier === 'leading' ? 4 : 6;
-            const tierText = row.tier ? `Sentinel ${row.tier}` : 'Insight Fusion alone';
             return {
                 allow: true,
-                bump: tierBump + (both ? -6 : 0),
-                rank:
-                    Math.min(10, row.score / 10) +
-                    (both ? 3 : 0) +
-                    (row.tier === 'confirmed' ? 2 : row.tier === 'building' ? 1 : 0),
-                note: both ? `${tierText}, Fusion agrees` : tierText,
+                bump: TIER_BUMP[row.tier],
+                rank: Math.min(10, row.score / 10) + TIER_RANK[row.tier],
+                note: `Pulse ${row.tier} (${row.agree} of 4 windows)`,
             };
-        },
-        entryDigits: cell => {
-            const row = find(cell.symbol, cell.contract.side, cell.contract.param);
-            return row && row.entryDigit !== null ? [row.entryDigit] : null;
         },
     };
 };

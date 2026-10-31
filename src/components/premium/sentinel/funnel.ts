@@ -12,13 +12,11 @@ export type FunnelStep = {
     alive: number | null;
     /** What this step removed, in plain words (empty when it removed nothing). */
     note: string;
-    /** 'engine' steps are about Sentinel / Fusion; 'scanner' steps are about the Sixfold scan and its guards. */
+    /** 'engine' steps are about the Pulse signal engine; 'scanner' steps are about the Sixfold scan and its guards. */
     side: 'engine' | 'scanner';
 };
 
 export type FunnelView = { steps: FunnelStep[]; verdict: string; blockedAt: string | null };
-
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | null, armed: boolean): FunnelView => {
     const steps: FunnelStep[] = [];
@@ -39,55 +37,32 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
         };
     }
 
-    const p = engine.producer;
-    if (p) {
-        push({ key: 'ranked', side: 'engine', label: 'Sentinel engine ranking', alive: p.ranked, note: '' });
-        const live = p.ranked - p.engineBlocked - p.tooDangerous;
-        push({
-            key: 'unblocked',
-            side: 'engine',
-            label: 'Not blocked and not too dangerous',
-            alive: live,
-            note: [
-                p.engineBlocked ? `${p.engineBlocked} blocked by the engine` : '',
-                p.tooDangerous ? `${p.tooDangerous} too dangerous` : '',
-            ]
-                .filter(Boolean)
-                .join(', '),
-        });
-        push({
-            key: 'tiers',
-            side: 'engine',
-            label: 'Sentinel tiers (confirmed / building / leading)',
-            alive: p.confirmed + p.building + p.leading,
-            note: `${p.confirmed} confirmed, ${p.building} building, ${p.leading} leading`,
-        });
-    }
     push({
-        key: 'sentinel',
+        key: 'markets',
         side: 'engine',
-        label: 'Sentinel signals after momentum and quality limits',
-        alive: engine.sentinelReads,
-        note: [
-            engine.momentumFailed ? `${engine.momentumFailed} failed momentum` : '',
-            engine.qualityFailed ? `${engine.qualityFailed} failed the score / danger limits` : '',
-        ]
-            .filter(Boolean)
-            .join(', '),
+        label: 'Markets with enough ticks for Pulse',
+        alive: engine.markets,
+        note: '',
     });
+    push({ key: 'reads', side: 'engine', label: 'Contracts Pulse read', alive: engine.reads, note: '' });
     push({
-        key: 'fusion',
+        key: 'tiers',
         side: 'engine',
-        label: 'Insight Fusion recommendations',
-        alive: engine.fusionReads,
-        note: engine.standDowns ? `${plural(engine.standDowns, 'stand-down')} (vetoes)` : '',
+        label: 'Pulse signals (strong / steady / watch)',
+        alive: engine.strong + engine.steady + engine.watch,
+        note: `${engine.strong} strong, ${engine.steady} steady, ${engine.watch} watch, ${engine.none} no signal`,
     });
     push({
         key: 'board',
         side: 'engine',
-        label: `Engine board (${engine.mode} mode)`,
+        label: `Signals the ${engine.mode} mode accepts`,
         alive: engine.board,
-        note: `${engine.boardBoth} both agree, ${engine.boardSentinel} Sentinel only, ${engine.boardFusion} Fusion only`,
+        note:
+            engine.mode === 'careful'
+                ? 'strong only'
+                : engine.mode === 'balanced'
+                  ? 'strong and steady'
+                  : 'strong, steady and watch',
     });
 
     if (scan) {
@@ -129,9 +104,9 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
         push({
             key: 'engines',
             side: 'scanner',
-            label: 'Backed by the engines (mode rules)',
+            label: 'Backed by a Pulse signal (mode rules)',
             alive: afterEngines,
-            note: scan.overlayVeto ? `${scan.overlayVeto} not backed, or Fusion stood down` : '',
+            note: scan.overlayVeto ? `${scan.overlayVeto} without a Pulse signal` : '',
         });
         push({
             key: 'bar',
@@ -159,9 +134,7 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
         });
     }
 
-    const firstEmpty = steps.find(
-        s => s.alive === 0 && s.key !== 'armed' && !(s.key === 'fusion' && engine.mode !== 'active')
-    );
+    const firstEmpty = steps.find(s => s.alive === 0 && s.key !== 'armed');
     if (!firstEmpty) {
         const last = steps[steps.length - 1];
         return {
@@ -175,22 +148,17 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
         };
     }
     const why: Record<string, string> = {
-        ranked: 'The Sentinel engine has no analysed markets. Its feed may still be warming up or disconnected.',
-        unblocked:
-            'The engine holds back every contract (blocked or too dangerous). Nothing for Sentinel to say right now.',
-        tiers: 'Sentinel has no contract in any tier.',
-        sentinel:
-            'Every Sentinel signal was cut by the momentum or score / danger limits. Loosen Require momentum or the limits.',
-        board:
-            engine.mode === 'balanced' || engine.mode === 'careful'
-                ? 'The engine board is empty: no contract passes the mode rules (Sentinel must back it).'
-                : 'The engine board is empty.',
+        markets:
+            'No market has enough ticks yet (Pulse needs 300). The live feed may still be connecting or warming up.',
+        reads: 'Pulse has no contract to read. Switch on at least one contract.',
+        tiers: 'Pulse sees no signal on any market: no contract is winning above its fair share in enough time windows.',
+        board: 'Pulse has signals, but none strong enough for this mode. Try a looser style (Balanced or Active).',
         tradable: 'Every contract is quarantined.',
         resting: 'Every market is resting after a loss.',
         guards: 'The losing-side pressure, multi-window or winning-side guards refuse every contract. Check which one in the step note and loosen or switch it off.',
         streak: 'The win-streak guard drops every contract that cleared the checks.',
         meter: 'The Meter guide refuses every contract (a loss cluster or a Meter floor).',
-        engines: 'The engines back nothing the scanner can trade.',
+        engines: 'Pulse backs nothing the scanner can trade.',
         bar: 'Contracts get through every check but none scores high enough for the bar it needs.',
     };
     return {
@@ -225,9 +193,9 @@ export class FunnelTally {
         return {
             scans: pts.length,
             scansWithEligible: pts.filter(p => p.scan.eligible > 0).length,
-            scansWithEngineBoard: pts.filter(p => (p.engine?.board ?? 0) > 0).length,
+            scansWithBoard: pts.filter(p => (p.engine?.board ?? 0) > 0).length,
             stoppedBy: [
-                { key: 'engines', label: 'Engines did not back it', count: sum(s => s.overlayVeto) },
+                { key: 'engines', label: 'No Pulse signal', count: sum(s => s.overlayVeto) },
                 { key: 'meter', label: 'Meter guide', count: sum(s => s.meterVeto) },
                 { key: 'guards', label: 'Pressure / window / winning-side guards', count: sum(s => s.guarded) },
                 { key: 'resting', label: 'Resting after a loss', count: sum(s => s.resting) },

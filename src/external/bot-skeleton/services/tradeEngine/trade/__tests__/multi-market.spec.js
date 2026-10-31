@@ -31,7 +31,7 @@ const mockBus = {
         return d.slice(d.length - skip - window, d.length - skip).filter(x => wanted.includes(x)).length;
     },
 };
-jest.mock('@/sentinel-engine/lib/deriv/tick-bus', () => ({ derivBus: mockBus }), { virtual: true });
+jest.mock('@/external/tick-bus/tick-bus', () => ({ derivBus: mockBus }), { virtual: true });
 
 import MultiMarket, { normalizeMarkets } from '../MultiMarket';
 import VirtualHook from '../VirtualHook';

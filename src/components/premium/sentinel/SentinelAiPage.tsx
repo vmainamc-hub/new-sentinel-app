@@ -1,8 +1,9 @@
-// SENTINEL AI (unified): Signal Zone + Sentinel AI + Insight Fusion as one self-running trading tool, in Sixfold's form.
-// The scanner keeps going round the markets; the engines back, veto or ease each contract; the tool buys by itself and every trade
-// shows in the Run Panel and Transactions. All the work is Sixfold's runner with the engine overlay (see overlay.ts).
+// SENTINEL AI: a self-running trading tool in Sixfold's form, driven by the Pulse signal engine.
+// The scanner keeps going round the markets, Pulse says which contracts have been winning above their fair share and how strongly,
+// and the tool buys by itself. Every trade shows in the Run Panel and Transactions. All the work is Sixfold's runner with the Pulse
+// overlay (see overlay.ts and pulse.ts).
 import { useEffect, useMemo, useRef, useState } from 'react';
-import SixfoldPage, { Num, Panel, Seg, Switch } from '../sixfold/SixfoldPage';
+import SixfoldPage, { Panel, Seg } from '../sixfold/SixfoldPage';
 import { describeFunnel, FunnelTally } from './funnel';
 import { sentinelOverlay, sentinelRunner } from './runner-instance';
 import {
@@ -16,13 +17,11 @@ import {
 import { useSentinel } from './use-sentinel';
 
 const MODE_TEXT: Record<EngineMode, string> = {
-    careful: 'Both engines (Sentinel AI and Insight Fusion) must back a contract. Fewest trades.',
+    careful: 'Only strong Pulse signals: all four time windows are above the fair rate. Fewest trades.',
     balanced:
-        'Sentinel AI leads: it must back the contract. Insight Fusion agreeing makes the bar easier; Fusion standing down stops the trade.',
-    active: 'Insight Fusion may lead and the scanner may trade alone, at a higher bar. Most trades, most variance.',
+        'Strong and steady Pulse signals (at least three windows above fair). A good rate of signals with a sensible bar.',
+    active: 'Also watch signals, and the scanner may trade with no signal at a higher bar. Most trades, most variance.',
 };
-
-const sourceText = (s: string) => (s === 'both' ? 'Both agree' : s === 'sentinel' ? 'Sentinel AI' : 'Insight Fusion');
 
 const EnginePanel = () => {
     const { sx, engine, update } = useSentinel();
@@ -41,7 +40,12 @@ const EnginePanel = () => {
     };
     return (
         <>
-            <Panel eyebrow='ENGINES' title='How Sentinel AI decides'>
+            <Panel eyebrow='PULSE' title='How Pulse decides'>
+                <p className='sf-note'>
+                    Pulse reads each market's last 1000, 300, 100 and 30 ticks and asks, for each contract, in how many
+                    of those windows it has been winning more than its fair share. More windows agreeing means a
+                    stronger signal. It decides when to look; it cannot make a random digit more likely.
+                </p>
                 <div className='sf-field sf-first'>
                     <span>Style</span>
                     <div className='sf-presets'>
@@ -60,9 +64,9 @@ const EnginePanel = () => {
                     </div>
                 </div>
                 <div className='sf-field'>
-                    <span>Agreement</span>
+                    <span>Signal strength</span>
                     <Seg<EngineMode>
-                        label='Agreement'
+                        label='Signal strength'
                         value={engine.mode}
                         onChange={mode => update({ mode })}
                         options={ENGINE_MODES.map(m => [m, m[0].toUpperCase() + m.slice(1)] as const)}
@@ -86,38 +90,12 @@ const EnginePanel = () => {
                     </div>
                     <small>After a loss, recovery trades use the recovery barriers in the settings below.</small>
                 </div>
-                <div className='sf-grid2'>
-                    <Num
-                        label='Min score'
-                        value={engine.minScore}
-                        onCommit={n => update({ minScore: n })}
-                        hint='Sentinel score, 0 = off'
-                    />
-                    <Num
-                        label='Max danger'
-                        value={engine.maxDanger}
-                        onCommit={n => update({ maxDanger: n })}
-                        hint='0 = off'
-                    />
-                </div>
-                <Switch
-                    on={engine.requireMomentum}
-                    onChange={v => update({ requireMomentum: v })}
-                    title='Require momentum'
-                    sub='Skip signals the recent digits do not favour'
-                />
-                <Switch
-                    on={engine.skipBlocked}
-                    onChange={v => update({ skipBlocked: v })}
-                    title='Skip blocked signals'
-                    sub='Never trade what the engine itself blocked'
-                />
             </Panel>
-            <Panel eyebrow='ENGINE BOARD' title={`Backed right now (${board.length})`}>
+            <Panel eyebrow='PULSE BOARD' title={`Signals right now (${board.length})`}>
                 {board.length === 0 ? (
                     <p className='sf-note'>
-                        No contract is backed at the moment. The scanner keeps going round and the engines are re-read
-                        on every scan.
+                        No contract has a signal the {engine.mode} mode accepts at the moment. The scanner keeps going
+                        round and Pulse is re-read on every scan.
                     </p>
                 ) : (
                     <table className='sf-table'>
@@ -125,20 +103,18 @@ const EnginePanel = () => {
                             <tr>
                                 <th>Market</th>
                                 <th>Contract</th>
-                                <th>Backed by</th>
-                                <th>Sentinel</th>
-                                <th>Entry digit</th>
+                                <th>Signal</th>
+                                <th>Windows above fair</th>
                                 <th>Score</th>
                             </tr>
                         </thead>
                         <tbody>
                             {board.slice(0, 12).map(c => (
                                 <tr key={c.key}>
-                                    <td>{c.market}</td>
+                                    <td>{c.symbol}</td>
                                     <td>{c.label}</td>
-                                    <td>{sourceText(c.source)}</td>
-                                    <td>{c.tier ?? '—'}</td>
-                                    <td>{c.entryDigit ?? 'learned'}</td>
+                                    <td>{c.tier}</td>
+                                    <td>{c.agree} of 4</td>
                                     <td>{c.score}</td>
                                 </tr>
                             ))}
@@ -185,7 +161,7 @@ const FunnelPanel = () => {
                     {view.steps.map(step => (
                         <tr key={step.key} className={view.blockedAt === step.key ? 'blocked' : ''}>
                             <td>
-                                <small>{step.side === 'engine' ? 'ENGINES' : 'SCANNER'}</small> {step.label}
+                                <small>{step.side === 'engine' ? 'PULSE' : 'SCANNER'}</small> {step.label}
                             </td>
                             <td>
                                 <b>{step.alive ?? '—'}</b>
@@ -196,7 +172,7 @@ const FunnelPanel = () => {
                 </tbody>
             </table>
             <p className='sf-note'>
-                Last 10 minutes: {sum.scans} scans, {sum.scansWithEngineBoard} had an engine-backed contract,{' '}
+                Last 10 minutes: {sum.scans} scans, {sum.scansWithBoard} had a Pulse signal the mode accepts,{' '}
                 {sum.scansWithEligible} had a contract that cleared every check.
             </p>
             {sum.scans > 0 && (
@@ -237,14 +213,14 @@ const ContractNote = () => (
     <div className='sf-field sf-first'>
         <span>Contracts</span>
         <small>
-            Chosen by the engines (see above): the six Over 1/2/3 and Under 8/7/6 propositions, on the market the
-            scanner finds best.
+            Chosen by Pulse (see above): the six Over 1/2/3 and Under 8/7/6 contracts, on the market the scanner finds
+            best.
         </small>
     </div>
 );
 
 const FOOTER =
-    'Sentinel AI combines a digit scanner with two analysis engines. They describe recent digit behaviour; Deriv digits are generated randomly, so they cannot create an edge, and every contract carries a payout margin: over many trades the expected result is a loss, whatever is picked. Martingale-style recovery makes each loss bigger. Test on a demo account first. Not financial advice.';
+    'Pulse reads recent digit behaviour. Deriv digits are generated randomly, so a contract that has been winning is not more likely to win next, and every contract carries a payout margin: over many trades the expected result is a loss, whatever is picked. Martingale-style recovery makes each loss bigger. Test on a demo account first. Not financial advice.';
 
 const SentinelAiPage = () => {
     const { engine } = useSentinel();

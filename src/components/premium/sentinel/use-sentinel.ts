@@ -3,7 +3,7 @@ import { useSixfold } from '../sixfold/use-sixfold';
 import { attachEngines, getEngineSettings, sentinelRunner, setEngineSettings } from './runner-instance';
 import type { EngineSettings } from './settings';
 
-/** React view of the Sentinel AI runner; keeps both engines running while the page is open. */
+/** React view of the Sentinel AI runner; keeps the live feed connected while the page is open. */
 export function useSentinel() {
     const sx = useSixfold(true, sentinelRunner);
     useEffect(() => attachEngines(), []);
