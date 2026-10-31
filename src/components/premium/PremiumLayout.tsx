@@ -69,6 +69,7 @@ const SentinelAiPage = lazy(() => import('./sentinel/SentinelAiPage'));
 const SentinelAiBridge = lazy(() => import('./sentinel/SentinelAiBridge'));
 // Sixfold carries its own simulator and crowd model, so it also loads on demand.
 const SixfoldPage = lazy(() => import('./sixfold/SixfoldPage'));
+const AiIntelPage = lazy(() => import('./ai-intel/AiIntelPage'));
 // Its runner trades on its own, so the bridge stays mounted on every tab (Run Panel hand-off, Stop sync, session-drop stop).
 const SixfoldBridge = lazy(() => import('./sixfold/sixfold-bridge'));
 const DTraderPage = lazy(() => import('./dtrader/DTraderPage'));
@@ -76,7 +77,7 @@ const DTraderPage = lazy(() => import('./dtrader/DTraderPage'));
 const validSections: PremiumSection[] = [
     'dashboard', 'bot_ideas', 'quick_bot', 'bot_builder', 'free_bots', 'signal_ai', 'auto_trader', 'sentinel_ai',
     'manual_trading', 'bulk_trader', 'batch_trader', 'copy_trading', 'speedbot', 'calculator', 'pro_ai', 'analysis_tools',
-    'analysis_hub', 'charts', 'tradingview', 'dtrader', 'ai_bots', 'digits_analysis', 'sixfold',
+    'analysis_hub', 'charts', 'tradingview', 'dtrader', 'ai_bots', 'digits_analysis', 'sixfold', 'ai_intel',
 ];
 
 const sectionFromHash = (hash: string): PremiumSection => {
@@ -239,6 +240,7 @@ const PremiumLayout = observer(() => {
             case 'ai_bots': return <AIBotsPage />;
             case 'digits_analysis': return <DigitsAnalysisPage openBotBuilder={openBotBuilder} />;
             case 'sixfold': return <Suspense fallback={<PremiumLoader />}><SixfoldPage /></Suspense>;
+            case 'ai_intel': return <Suspense fallback={<PremiumLoader />}><AiIntelPage /></Suspense>;
             default: return null;
         }
     };

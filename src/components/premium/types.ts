@@ -21,4 +21,5 @@ export type PremiumSection =
     | 'dtrader'
     | 'ai_bots'
     | 'digits_analysis'
-    | 'sixfold';
+    | 'sixfold'
+    | 'ai_intel';

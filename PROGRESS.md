@@ -12,22 +12,24 @@ Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main onl
 
 ## Plan (stages; each ships tested before the next)
 1. [x] Core types + Sixfold-compatible simulator (`ai-intel/sim.ts`) + 12 tests, incl. spec example 1,5,2,6,3 and exact parity with Sixfold `walkForward` on 4000 pseudo-random digits (ANY/SETUP, OVER 2/UNDER 7, durations 1/2/3/5)
-2. [ ] Stats engines: distribution (chi-square, binomial, Wilson, Bayes), sequence, regime (CUSUM), cross-market, multiple-testing
-3. [ ] Scanner adapter over sixfoldFeed (+ active_symbols discovery, freshness)
+2. [~] Stats: DONE `analysis.ts` (chi-square uniformity, exact binomial, Wilson, rolling windows, CUSUM + shift-test regime, BH false-discovery control, market x direction x method scan) with tests. NOT done: Bayesian estimates, transition matrices/runs/Markov, cross-market correlation
+3. [~] Scanner: DONE reads the shared `sixfoldFeed` (no 2nd socket), freshness, eligibility. NOT done: active_symbols market discovery (still Sixfold's 10 fixed Volatility indices), reconnection tests
 4. [ ] Strategy registry + versioning + lifecycle (EXPERIMENTAL→…→RETIRED, promote/rollback) + IndexedDB persistence
 5. [ ] Strategy lab: candidate generation, walk-forward train/validate split, overfit checks
 6. [ ] Competition engine (min samples, CI, stability, decay)
 7. [ ] Agents + Chief agent (structured decisions, NO TRADE default)
 8. [ ] Execution governance (modes, limits, idempotency, kill switch) wired to buyContractForUi — disabled by default
-9. [ ] UI: 10 sections, tab wiring, nav
+9. [~] UI: tab 'Apex Intel' is in the main nav (`ai_intel`); Overview, Live Scanner, Virtual Competition work on live data; the other 7 sections are shown disabled labelled 'soon'
 10. [ ] Build, full test run, merge to main
 
 ## Done
 - [x] Repo cloned, audited, branch created, plan committed.
+- [x] Apex Intel tab wired into the app (types, PremiumLayout, header icon, nav catalog, apex-sentinel domain nav); site-config validators pass.
 - [x] Stage 1: `sim.ts` (SimStream, SimBook, simulate) + `__tests__/sim.spec.ts` — 12/12 pass under bun's jest-compatible runner.
 
 ## Not done / next
-- Stages 2-10 (stats engines next).
+- Next: strategy registry + persistence (IndexedDB), then Strategy Lab (CUSTOM/SMART candidates with train/validation split), then agents/AI Intelligence tab, then execution governance.
+- Apex Intel page has NOT been opened in a browser or built (no npm here): it transpiles, validators pass, sim+analysis are strict-typed. First thing on a networked machine: `npm ci && npm run build && npm test`, then open the Apex Intel tab.
 - BLOCKED here: `npm ci` (registry.npmjs.org does not resolve in this sandbox; it is on the proxy's no-proxy list, so I did not override it). So `npm run build`, repo jest/eslint and type-check have NOT run. Tests run with `bun test`; pure-TS modules only (no React) until a networked machine can run `npm ci && npm run type-check && npm test && npm run build`.
 - Existing Sixfold suite under bun: 206 pass, 1 fail + 1 error (both 'react/jsx-runtime' missing from FreeBotsPage import, identical without my changes).
 - Nothing pushed; main untouched.

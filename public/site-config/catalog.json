@@ -28,6 +28,10 @@
       "label": "Sixfold"
     },
     {
+      "id": "ai_intel",
+      "label": "Apex Intel"
+    },
+    {
       "id": "manual_trading",
       "label": "DTrader"
     },
@@ -76,6 +80,7 @@
       "auto_trader",
       "sentinel_ai",
       "sixfold",
+      "ai_intel",
       "manual_trading",
       "tradingview",
       "bulk_trader",
