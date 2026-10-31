@@ -11,7 +11,7 @@ Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main onl
 - AI: no LLM integration exists. Plan: the 10 "agents" are deterministic statistical/ML modules; an optional LLM explanation boundary (Netlify function, key via env) added last, off by default.
 
 ## Plan (stages; each ships tested before the next)
-1. [ ] Core types + Sixfold-compatible simulator (`sim.ts`) + tests (spec example 1,5,2,6,3)
+1. [x] Core types + Sixfold-compatible simulator (`ai-intel/sim.ts`) + 12 tests, incl. spec example 1,5,2,6,3 and exact parity with Sixfold `walkForward` on 4000 pseudo-random digits (ANY/SETUP, OVER 2/UNDER 7, durations 1/2/3/5)
 2. [ ] Stats engines: distribution (chi-square, binomial, Wilson, Bayes), sequence, regime (CUSUM), cross-market, multiple-testing
 3. [ ] Scanner adapter over sixfoldFeed (+ active_symbols discovery, freshness)
 4. [ ] Strategy registry + versioning + lifecycle (EXPERIMENTAL→…→RETIRED, promote/rollback) + IndexedDB persistence
@@ -23,10 +23,14 @@ Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main onl
 10. [ ] Build, full test run, merge to main
 
 ## Done
-- [x] Repo cloned, audited, branch created.
+- [x] Repo cloned, audited, branch created, plan committed.
+- [x] Stage 1: `sim.ts` (SimStream, SimBook, simulate) + `__tests__/sim.spec.ts` — 12/12 pass under bun's jest-compatible runner.
 
 ## Not done / next
-- Everything in the plan above. Next: stage 1.
+- Stages 2-10 (stats engines next).
+- BLOCKED here: `npm ci` (registry.npmjs.org does not resolve in this sandbox; it is on the proxy's no-proxy list, so I did not override it). So `npm run build`, repo jest/eslint and type-check have NOT run. Tests run with `bun test`; pure-TS modules only (no React) until a networked machine can run `npm ci && npm run type-check && npm test && npm run build`.
+- Existing Sixfold suite under bun: 206 pass, 1 fail + 1 error (both 'react/jsx-runtime' missing from FreeBotsPage import, identical without my changes).
+- Nothing pushed; main untouched.
 
 ---
 
