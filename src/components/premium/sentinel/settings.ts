@@ -8,7 +8,7 @@ import {
     type SixfoldSettings,
 } from '../sixfold/money';
 
-/** careful: both engines must back the contract. balanced: either engine backs it (both = easier bar). active: the scanner may trade alone at a higher bar. */
+/** careful: both engines must back the contract. balanced: Sentinel leads, Fusion agreeing eases the bar and standing down vetoes. active: Fusion may lead and the scanner may trade alone, at a higher bar. */
 export type EngineMode = 'careful' | 'balanced' | 'active';
 export const ENGINE_MODES: readonly EngineMode[] = ['careful', 'balanced', 'active'];
 
@@ -84,7 +84,7 @@ export const PRESETS: Preset[] = [
     {
         id: 'careful',
         name: 'Careful',
-        blurb: 'Both engines must back a contract. Fewer trades, strict Meter floors.',
+        blurb: 'Both engines must back a contract, Sentinel at least building. Fewer trades, strict Meter floors.',
         engine: { mode: 'careful', requireMomentum: true, skipBlocked: true, minScore: 55, maxDanger: 60 },
         trading: {
             selectivity: 'strict',
@@ -97,7 +97,7 @@ export const PRESETS: Preset[] = [
     {
         id: 'balanced',
         name: 'Balanced',
-        blurb: 'Either engine can back a contract; both agreeing eases the bar.',
+        blurb: 'Sentinel leads. Fusion agreeing eases the bar and Fusion standing down vetoes.',
         engine: { mode: 'balanced', requireMomentum: true, skipBlocked: true, minScore: 0, maxDanger: 0 },
         trading: {
             selectivity: 'balanced',
@@ -110,7 +110,7 @@ export const PRESETS: Preset[] = [
     {
         id: 'active',
         name: 'Active',
-        blurb: 'The scanner may trade alone at a higher bar. More trades, more variance.',
+        blurb: 'Fusion may lead and the scanner may trade alone, at a higher bar. More trades, more variance.',
         engine: { mode: 'active', requireMomentum: false, skipBlocked: true, minScore: 0, maxDanger: 0 },
         trading: {
             selectivity: 'active',

@@ -6,6 +6,7 @@
 // create an edge on random digits: they describe recent behaviour, and the app says so.
 import type { OverUnderContract } from '../over-under-engine';
 import type { RunnerOverlay } from '../sixfold/overlay';
+import type { SignalTier } from './producer';
 import { contractsFor, type EngineSettings } from './settings';
 
 /** What the Sentinel engine says about one contract, already through its quality gates. */
@@ -17,6 +18,8 @@ export type SentinelRead = {
     label: string;
     score: number;
     danger: number | null;
+    /** How sure the engine is (see producer.ts). */
+    tier: SignalTier;
     entryDigit: number | null;
     /** True when Sentinel's entry digit is validated (ENTER NOW or ARMED). */
     entryUsable: boolean;
@@ -40,6 +43,7 @@ export type BoardRow = {
     label: string;
     source: 'both' | 'sentinel' | 'fusion';
     score: number;
+    tier: SignalTier | null;
     entryDigit: number | null;
 };
 
@@ -63,7 +67,10 @@ export const buildBoard = (src: Sources, engine: EngineSettings): BoardRow[] => 
         const b = f.get(key);
         // Fusion actively standing down is a veto, except in Active mode where the scanner trades on its own judgement.
         if (engine.mode !== 'active' && src.standDown.has(key)) continue;
-        if (engine.mode === 'careful' && !(a && b)) continue;
+        if (engine.mode === 'careful' && !(a && b && a.tier !== 'leading')) continue;
+        // Sentinel leads: Insight Fusion alone cannot start a trade unless Active mode is chosen. Fusion agreeing eases the bar,
+        // Fusion standing down vetoes.
+        if (engine.mode === 'balanced' && !a) continue;
         const base = (a ?? b)!;
         const scores = [a?.score, b?.score].filter((v): v is number => typeof v === 'number');
         rows.set(key, {
@@ -75,6 +82,7 @@ export const buildBoard = (src: Sources, engine: EngineSettings): BoardRow[] => 
             label: base.label,
             source: a && b ? 'both' : a ? 'sentinel' : 'fusion',
             score: Math.round((scores.reduce((x, y) => x + y, 0) / Math.max(1, scores.length)) * 10) / 10,
+            tier: a?.tier ?? null,
             entryDigit: a && a.entryUsable ? a.entryDigit : null,
         });
     }
@@ -127,21 +135,23 @@ export const createSentinelOverlay = (opts: {
                             ? 'Insight Fusion stands down'
                             : mode === 'careful'
                               ? 'both engines must back it'
-                              : 'neither engine backs it',
+                              : 'Sentinel AI does not back it',
                     };
                 }
                 return { allow: true, bump: 6, rank: 0, note: 'no engine backs it: higher bar' };
             }
             const both = row.source === 'both';
+            // A weaker Sentinel tier asks for a higher bar: more signals never means lower standards for a trade.
+            const tierBump = row.tier === 'confirmed' ? -6 : row.tier === 'building' ? 0 : row.tier === 'leading' ? 4 : 6;
+            const tierText = row.tier ? `Sentinel ${row.tier}` : 'Insight Fusion alone';
             return {
                 allow: true,
-                bump: both ? -8 : 0,
-                rank: Math.min(10, row.score / 10) + (both ? 3 : 0),
-                note: both
-                    ? 'both engines agree'
-                    : row.source === 'sentinel'
-                      ? 'Sentinel AI backs it'
-                      : 'Insight Fusion backs it',
+                bump: tierBump + (both ? -6 : 0),
+                rank:
+                    Math.min(10, row.score / 10) +
+                    (both ? 3 : 0) +
+                    (row.tier === 'confirmed' ? 2 : row.tier === 'building' ? 1 : 0),
+                note: both ? `${tierText}, Fusion agrees` : tierText,
             };
         },
         entryDigits: cell => {

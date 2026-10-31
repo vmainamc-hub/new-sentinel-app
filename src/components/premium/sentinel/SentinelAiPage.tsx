@@ -16,8 +16,9 @@ import { useSentinel } from './use-sentinel';
 
 const MODE_TEXT: Record<EngineMode, string> = {
     careful: 'Both engines (Sentinel AI and Insight Fusion) must back a contract. Fewest trades.',
-    balanced: 'Either engine can back a contract. Both agreeing makes the bar easier.',
-    active: 'The scanner may trade alone, at a higher bar. Most trades, most variance.',
+    balanced:
+        'Sentinel AI leads: it must back the contract. Insight Fusion agreeing makes the bar easier; Fusion standing down stops the trade.',
+    active: 'Insight Fusion may lead and the scanner may trade alone, at a higher bar. Most trades, most variance.',
 };
 
 const sourceText = (s: string) => (s === 'both' ? 'Both agree' : s === 'sentinel' ? 'Sentinel AI' : 'Insight Fusion');
@@ -124,6 +125,7 @@ const EnginePanel = () => {
                                 <th>Market</th>
                                 <th>Contract</th>
                                 <th>Backed by</th>
+                                <th>Sentinel</th>
                                 <th>Entry digit</th>
                                 <th>Score</th>
                             </tr>
@@ -134,6 +136,7 @@ const EnginePanel = () => {
                                     <td>{c.market}</td>
                                     <td>{c.label}</td>
                                     <td>{sourceText(c.source)}</td>
+                                    <td>{c.tier ?? '—'}</td>
                                     <td>{c.entryDigit ?? 'learned'}</td>
                                     <td>{c.score}</td>
                                 </tr>

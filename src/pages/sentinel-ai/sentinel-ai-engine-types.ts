@@ -18,6 +18,8 @@ export type EngineSample = {
     surfaced: RankedOpportunity | null;
     /** Every surface-vetted candidate with its momentum result, in rank order. Optional for simple engines. */
     vetted?: VettedCandidate[];
+    /** The engine's whole ranking (best first) before surface vetting, for tiered signal production. Optional for simple engines. */
+    ranked?: RankedOpportunity[];
 };
 
 export type SampleOptions = {

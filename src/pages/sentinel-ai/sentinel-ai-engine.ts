@@ -3,12 +3,12 @@
 // This file only READS the engine. Signal production is never altered: it uses the same
 // apexCore → rankOpportunities → surfaceVetRank (+ the separate momentum gate) chain the Forge used, minus the audible alert.
 import { api_base } from '@/external/bot-skeleton';
-import { apexCore, APEX_UNIVERSE } from '@/sentinel-engine/lib/apex/core';
+import { APEX_UNIVERSE,apexCore } from '@/sentinel-engine/lib/apex/core';
 import { DEFAULT_SCAN_OPTIONS, globalDanger, rankOpportunities } from '@/sentinel-engine/lib/apex/scan';
 import { surfaceVetRank } from '@/sentinel-engine/lib/apex/surface-vetting';
 import { derivBus } from '@/sentinel-engine/lib/deriv/tick-bus';
 import { selectTradable } from '@/sentinel-engine/lib/momentum/momentum-gate';
-import type { SentinelAiEngine, EngineSample, SampleOptions, SignalExclusion, VettedCandidate } from './sentinel-ai-engine-types';
+import type { EngineSample, SampleOptions, SentinelAiEngine, SignalExclusion, VettedCandidate } from './sentinel-ai-engine-types';
 import type { EngineInfo } from './sentinel-ai-types';
 
 // Same fail-safe thresholds the Forge used, so "no signal" can be told apart from "cannot see".
@@ -218,6 +218,7 @@ class RealSentinelAiEngine implements SentinelAiEngine {
             },
             surfaced,
             vetted,
+            ranked: eligible,
         };
     }
 

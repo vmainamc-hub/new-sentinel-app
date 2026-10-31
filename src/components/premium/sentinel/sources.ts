@@ -4,15 +4,23 @@ import { bulkFusionSource } from '@/pages/sentinel-ai/sentinel-ai-fusion';
 import { dangerOf, qualityVerdict } from '@/pages/sentinel-ai/sentinel-ai-quality';
 import { toSentinelAiSignal } from '@/pages/sentinel-ai/sentinel-ai-signal';
 import type { Sources } from './overlay';
+import { produceSignals } from './producer';
 import type { EngineSettings } from './settings';
 
 const USABLE = ['ENTER NOW', 'ARMED'];
 
 export const readEngines = (engine: EngineSettings, now: number): Sources => {
     const sample = sentinelAiEngine.sample(undefined, { requireMomentum: engine.requireMomentum });
-    const vetted = sample.vetted ?? [];
+    // The engine's whole ranking, in tiers (see producer.ts): Sentinel speaks every so often, not only on a four-way coincidence.
+    const tiered = sample.ranked
+        ? produceSignals(sample.ranked, engine.requireMomentum)
+        : (sample.vetted ?? []).map(v => ({
+              opportunity: v.opportunity,
+              tier: 'confirmed' as const,
+              blocked: v.blocked,
+          }));
     const sentinel: Sources['sentinel'] = [];
-    for (const { opportunity, blocked } of vetted) {
+    for (const { opportunity, tier, blocked } of tiered) {
         if (blocked) continue; // momentum required and failed
         if (!qualityVerdict(opportunity, engine).ok) continue;
         const sig = toSentinelAiSignal(opportunity, now);
@@ -25,6 +33,7 @@ export const readEngines = (engine: EngineSettings, now: number): Sources => {
             label: sig.label,
             score: sig.score,
             danger: dangerOf(opportunity),
+            tier,
             entryDigit: digit,
             entryUsable:
                 digit !== null &&
