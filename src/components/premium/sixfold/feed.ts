@@ -3,29 +3,27 @@
 // page and the Auto runner, so scanning continues on any tab.
 import { DERIV_WS_URL } from '@/lib/deriv-ws';
 import { digitFromQuote, parseDigitsText } from './engine';
+import { ALL_MARKETS, SIXFOLD_MARKETS, SIXFOLD_SYMBOLS } from './markets';
 
-export const MARKETS: ReadonlyArray<readonly [string, string]> = [
-    ['1HZ10V', 'Volatility 10 (1s)'],
-    ['1HZ25V', 'Volatility 25 (1s)'],
-    ['1HZ50V', 'Volatility 50 (1s)'],
-    ['1HZ75V', 'Volatility 75 (1s)'],
-    ['1HZ100V', 'Volatility 100 (1s)'],
-    ['R_10', 'Volatility 10'],
-    ['R_25', 'Volatility 25'],
-    ['R_50', 'Volatility 50'],
-    ['R_75', 'Volatility 75'],
-    ['R_100', 'Volatility 100'],
-];
-export const marketName = (symbol: string) => MARKETS.find(m => m[0] === symbol)?.[1] ?? symbol;
+/** The ten markets Sixfold tracks (the market chips on its page). Vanguard's wider list lives in markets.ts. */
+export const MARKETS = SIXFOLD_MARKETS;
+export const marketName = (symbol: string) => ALL_MARKETS.find(m => m[0] === symbol)?.[1] ?? symbol;
 
 export const MAX_TICKS = 2000;
 
-/** Seconds between ticks that Deriv documents for a market: 1 for the 1s indices, 2 for the plain volatility indices. */
-export const expectedTickSeconds = (symbol: string): number => (symbol.startsWith('1HZ') ? 1 : 2);
+/**
+ * Seconds between ticks that Deriv documents for a market: 1 for the 1s indices, 2 for the plain volatility indices.
+ * null when no rate is documented (the Jump indices): the measured rate is then simply shown, never judged.
+ */
+export const expectedTickSeconds = (symbol: string): number | null => {
+    if (symbol.startsWith('1HZ')) return 1;
+    if (symbol.startsWith('R_')) return 2;
+    return null;
+};
 
 export type FeedTelemetry = {
     symbol: string;
-    expected: number;
+    expected: number | null;
     /** Median seconds between the last ticks, read from Deriv's own tick clock (null until 3 ticks). */
     measured: number | null;
     /** Ticks that arrived in the last 60 seconds. */
@@ -68,10 +66,12 @@ export type FeedStatus = 'offline' | 'connecting' | 'live' | 'error';
 export type Series = Record<string, number[]>;
 export type FeedSnapshot = { mode: FeedMode; status: FeedStatus; error: string; series: Series; version: number };
 
-export const SYMBOLS = MARKETS.map(m => m[0]);
+export const SYMBOLS = SIXFOLD_SYMBOLS;
 
-/** Short label for the radar and the heat grid: "V10", "V25 1s" ... */
+/** Short label for the radar and the heat grid: "V10", "V25·1s", "J50" ... */
 export const shortName = (symbol: string): string => {
+    const jump = /^JD(\d+)$/.exec(symbol);
+    if (jump) return `J${jump[1]}`;
     const m = /^(?:1HZ|R_)?(\d+)V?$/.exec(symbol);
     const n = m?.[1] ?? symbol;
     return symbol.startsWith('1HZ') ? `V${n}·1s` : `V${n}`;
@@ -100,6 +100,11 @@ export class SixfoldFeed {
     private lastTick: Record<string, number> = {};
     private tel: Record<string, Tel> = {};
     private foreign = 0;
+    /** Contract types Deriv says each market offers (from `contracts_for`). A market missing here is simply not known yet. */
+    private offered: Record<string, Set<string>> = {};
+    private askedOffers = new Set<string>();
+    /** Markets Deriv refused to stream (unknown symbol, not available to this account). They are left out, never guessed at. */
+    private unavailable = new Set<string>();
     private socket: SocketLike | null = null;
     private generation = 0;
     private attempts = 0;
@@ -112,7 +117,9 @@ export class SixfoldFeed {
 
     constructor(
         private makeSocket: (url: string) => SocketLike = url => new WebSocket(url) as unknown as SocketLike,
-        private now: () => number = () => Date.now()
+        private now: () => number = () => Date.now(),
+        /** The markets this feed streams. Sixfold's ten by default; Vanguard passes the full list. */
+        private symbols: readonly string[] = SYMBOLS
     ) {
         this.snap = { mode: this.mode, status: this.status, error: '', series: this.copyAll(), version: 0 };
     }
@@ -132,7 +139,7 @@ export class SixfoldFeed {
     /** How each market's ticks are actually arriving: measured rate against Deriv's documented rate. */
     getTelemetry = (): FeedTelemetry[] => {
         const now = this.now();
-        return SYMBOLS.map(symbol => {
+        return this.symbols.map(symbol => {
             const t = this.tel[symbol];
             const gaps: number[] = [];
             if (t) for (let i = 1; i < t.epochs.length; i++) gaps.push(t.epochs[i] - t.epochs[i - 1]);
@@ -153,6 +160,15 @@ export class SixfoldFeed {
     };
     /** Deriv's epoch (seconds) of the latest accepted tick for a market. */
     getLastEpoch = (symbol: string): number | null => this.tel[symbol]?.epochs.at(-1) ?? null;
+    /**
+     * Does Deriv offer this contract type (e.g. DIGITOVER) on this market? null = not known (yet), so callers should not
+     * block on it; Deriv's own refusal at purchase time is the safety net for that case.
+     */
+    isOffered = (symbol: string, contractType: string): boolean | null => {
+        const o = this.offered[symbol];
+        return o ? o.has(contractType) : null;
+    };
+    getUnavailable = (): string[] => [...this.unavailable];
     isLive = () => this.mode === 'live' && this.status === 'live';
     getMode = () => this.mode;
     getStatus = () => this.status;
@@ -178,6 +194,9 @@ export class SixfoldFeed {
         this.error = '';
         this.tel = {};
         this.foreign = 0;
+        this.offered = {};
+        this.askedOffers.clear();
+        this.unavailable.clear();
         this.replaceAll({});
         this.attempts = 0;
         this.setStatus('connecting');
@@ -296,7 +315,7 @@ export class SixfoldFeed {
             this.attempts = 0;
             this.error = '';
             this.setStatus('live');
-            SYMBOLS.forEach((symbol, i) =>
+            this.symbols.forEach((symbol, i) =>
                 ws.send(
                     JSON.stringify({
                         ticks_history: symbol,
@@ -321,6 +340,17 @@ export class SixfoldFeed {
         };
     }
 
+    /** Once per market and connection, right after its ticks start arriving: which contract types does Deriv offer on it? */
+    private askWhatIsOffered(symbol: string) {
+        if (this.askedOffers.has(symbol) || !this.socket) return;
+        this.askedOffers.add(symbol);
+        try {
+            this.socket.send(JSON.stringify({ contracts_for: symbol, req_id: 1000 + this.symbols.indexOf(symbol) }));
+        } catch {
+            /* offers stay unknown; purchase-time refusals still protect the session */
+        }
+    }
+
     private onMessage(mine: number, raw: string) {
         if (mine !== this.generation) return;
         let msg: Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -330,13 +360,33 @@ export class SixfoldFeed {
             return;
         }
         if (msg.error) {
+            const asked: unknown = msg.echo_req?.ticks_history ?? msg.echo_req?.contracts_for;
+            if (typeof asked === 'string' && this.symbols.includes(asked)) {
+                // An error about ONE market must not look like the whole feed failing. A market that cannot be streamed is
+                // left out; a failed offers lookup just leaves that market's offers unknown.
+                if (msg.echo_req?.ticks_history) {
+                    this.unavailable.add(asked);
+                    this.publish();
+                }
+                return;
+            }
             this.error = msg.error.message ?? 'Deriv returned an error.';
+            this.publish();
+            return;
+        }
+        if (msg.msg_type === 'contracts_for') {
+            const symbol: unknown = msg.echo_req?.contracts_for;
+            const list: unknown = msg.contracts_for?.available;
+            if (typeof symbol !== 'string' || !this.symbols.includes(symbol) || !Array.isArray(list)) return;
+            this.offered[symbol] = new Set(list.map((c: { contract_type?: unknown }) => String(c?.contract_type ?? '')).filter(Boolean));
             this.publish();
             return;
         }
         if (msg.msg_type === 'history' && msg.history?.prices) {
             const symbol: string | undefined = msg.echo_req?.ticks_history;
-            if (!symbol || !SYMBOLS.includes(symbol)) return;
+            if (!symbol || !this.symbols.includes(symbol)) return;
+            this.unavailable.delete(symbol);
+            this.askWhatIsOffered(symbol);
             const prices: number[] = msg.history.prices.map(Number);
             const places = pipDecimals(msg.pip_size) ?? inferDecimals(prices);
             this.decimals[symbol] = places;
@@ -351,7 +401,7 @@ export class SixfoldFeed {
         if (msg.msg_type === 'tick' && msg.tick?.symbol) {
             const symbol: string = msg.tick.symbol;
             // Each tick belongs to exactly the market it names. Anything else is ignored rather than guessed at.
-            if (!SYMBOLS.includes(symbol)) {
+            if (!this.symbols.includes(symbol)) {
                 this.foreign += 1;
                 return;
             }

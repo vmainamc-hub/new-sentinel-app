@@ -1,7 +1,10 @@
 // SIXFOLD AUTO: the autonomous runner.
 //
-// Press Run and Sixfold scans every market, arms the best eligible contract, waits for its entry digit, buys, waits for
-// the result, then goes looking again, one trade at a time, across all markets. It owns the Run Panel session the same
+// Press Run and Sixfold scans every market and buys one contract at a time, across all markets. Two ways of choosing it:
+//   FIRST (default): every contract that passes the rules on every market is watched at once, and the first one to show its
+//                    entry is bought. More markets means more chances, with exactly the same rules.
+//   BEST:            the single highest-scoring contract is armed and only its entry is waited for.
+// Either way it then waits for the result and goes looking again. It owns the Run Panel session the same
 // way Auto Trades and Sentinel AI do: every purchase and settlement is pushed to the transactions / run-panel / summary
 // stores, so the trades show in the general transactions area, and the Run Panel's own Stop button ends the session.
 //
@@ -17,6 +20,7 @@ import { climateOf, IDLE_STATUS, type MeterCall, meterCall, type MeterStatus } f
 import {
     applyResult,
     applyWriteOff,
+    DEFAULT_SETTINGS,
     DERIV_CONTRACT_TYPE,
     freshSession,
     normalizeSettings,
@@ -30,7 +34,7 @@ import {
 import { type RunnerOverlay, type TradeNotice } from './overlay';
 import { losingSidePressure, multiWindowGate, multiWindowHealth, pressureGate, winningSideGate, winningSidePressure } from './pressure';
 import { computeRegime, regimeCell, type RegimeSummary } from './regime';
-import { type Cell, eligibility, pickBest, scanMarkets,type ScanResult } from './scanner';
+import { type Cell, eligibility, type OffersFn, type Pick, pickBest, rankedPicks, type ScanResult, scanMarkets } from './scanner';
 import { mulberry32, profitMultiple } from './stats';
 import type { RunnerStores, StoreWatcher } from './stores';
 import { streakRead } from './streak-guard';
@@ -65,12 +69,14 @@ const COLD_AT_BUY_BLOCK_MS = 10_000;
 const FRESH_TICK_MS = 5_000;
 /** Give up waiting for the feed to come up after this long. */
 const FEED_WAIT_MS = 25_000;
+/** The watchlist is announced in the log at most this often, so a changing list does not flood it. */
+const WATCH_LOG_MS = 20_000;
 /** Minimum ticks a market needs before it is scanned for trading. */
 export const MIN_TICKS = 300;
 
 type Loose = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-export type Phase = 'idle' | 'connecting' | 'scanning' | 'armed' | 'buying' | 'settling' | 'cooling';
+export type Phase = 'idle' | 'connecting' | 'scanning' | 'watching' | 'armed' | 'buying' | 'settling' | 'cooling';
 
 export type Armed = {
     symbol: string;
@@ -120,6 +126,8 @@ export type SixfoldSnapshot = {
     session: SessionStats;
     settings: SixfoldSettings;
     armed: Armed | null;
+    /** First-to-qualify mode: every contract being watched for its entry right now, best score first. */
+    watching: Armed[];
     scan: ScanResult | null;
     /** Best candidates with the reason each is or is not eligible. */
     queue: Array<{ cell: Cell; ok: boolean; reason: string }>;
@@ -131,6 +139,8 @@ export type SixfoldSnapshot = {
     /** Markets that have enough ticks to be scanned. */
     readyMarkets: number;
     quarantined: string[];
+    /** Markets Deriv would not stream; they are left out of every scan. */
+    unavailable: string[];
     /** Markets resting after a loss, with the trades left before they return. */
     resting: Array<{ symbol: string; name: string; tradesLeft: number }>;
     /** Extra score currently asked for because of the latest loss. */
@@ -144,6 +154,33 @@ export type SixfoldSnapshot = {
     virtualHook: VirtualHookStatus;
     /** Where every contract of the latest scan stood (see ScanFunnel). Null before the first scan. */
     funnel: ScanFunnel | null;
+    /** The rules engine's reading of every market, or null when this runner uses the scanner. */
+    rules: { rows: RuleRow[]; paper: boolean; paperLosses: number; paperNeeded: number; paperPending: string | null } | null;
+};
+
+/** One market's reading by a rules engine (Vanguard's bot rules): the checks, and the first thing still missing. */
+export type RuleRow = {
+    symbol: string;
+    name: string;
+    ready: boolean;
+    score: number | null;
+    checks: Array<{ key: string; label: string; ok: boolean }>;
+    entry: boolean;
+    waitingOn: string;
+    lastDigit: number | null;
+};
+export type RuleOutcome = { enter: boolean; events: string[] };
+/**
+ * An external signal source. When one is supplied, it - not the scanner - decides when a market is bought: it sees every tick of
+ * every market and answers "enter now" or not. Everything after that (which contract, the stake, the buy, the result, the limits,
+ * one trade at a time, stale-tick and refusal handling) is this runner's, exactly as in Sixfold.
+ */
+export type RulesEngine = {
+    reset: () => void;
+    onTick: (symbol: string, series: readonly number[], ctx: { live: boolean; idle: boolean; prediction: number; now: number }) => RuleOutcome;
+    onResult: (won: boolean) => void;
+    board: (symbols: readonly string[], nameOf: (symbol: string) => string) => RuleRow[];
+    paperState: () => { paper: boolean; losses: number; needed: number; pending: string | null };
 };
 
 export type VirtualHookStatus = {
@@ -207,7 +244,18 @@ export type RunnerIO = {
         isLive: () => boolean;
         getSnapshot: () => FeedSnapshot;
         connect: () => void;
+        /** Does Deriv offer this contract type on this market? null = not known yet. */
+        isOffered?: (symbol: string, contractType: string) => boolean | null;
+        getUnavailable?: () => string[];
     };
+    /** Run Panel module id. Each tool has its own, so two tools can never trade at once. Default: 'sixfold'. */
+    moduleId?: string;
+    /** Display name used in messages. Default: Sixfold. */
+    name?: string;
+    /** The defaults this runner normalises its settings against. Default: Sixfold's. */
+    defaults?: SixfoldSettings;
+    /** Optional external signal source (Vanguard's bot rules). Without it the runner scans and arms as Sixfold always has. */
+    rules?: RulesEngine;
     buy: (args: { parameters: Loose; price: number }) => Promise<{
         buy_price: number;
         contract_id: number;
@@ -241,6 +289,10 @@ export class SixfoldRunner {
     private runToken = 0;
     private session: SessionStats;
     private armed: Armed | null = null;
+    /** First-to-qualify mode: contracts being watched for their entry, keyed `symbol|contract`. */
+    private watch = new Map<string, Armed>();
+    private watchSig = '';
+    private watchLogAt = 0;
     private scan: ScanResult | null = null;
     private brain: BrainReport | null = null;
     private brainAt = 0;
@@ -290,8 +342,11 @@ export class SixfoldRunner {
     /** What was armed and bought for each open trade, kept for the overlay's settle notice. */
     private notices = new Map<number, TradeNotice>();
 
+    private readonly defaults: SixfoldSettings;
+
     constructor(private io: RunnerIO) {
-        this.settings = normalizeSettings(io.loadSettings());
+        this.defaults = io.defaults ?? DEFAULT_SETTINGS;
+        this.settings = normalizeSettings(io.loadSettings(), this.defaults);
         this.session = freshSession(this.settings);
         this.rng = mulberry32(Math.floor(io.now()) ^ 0x9e3779b9);
         this.snap = this.build();
@@ -313,10 +368,10 @@ export class SixfoldRunner {
     isRunning = () => this.running;
 
     private get moduleId() {
-        return this.io.overlay?.moduleId ?? MODULE_ID;
+        return this.io.moduleId ?? this.io.overlay?.moduleId ?? MODULE_ID;
     }
     private get name() {
-        return this.io.overlay?.name ?? 'Sixfold';
+        return this.io.overlay?.name ?? this.io.name ?? 'Sixfold';
     }
     /** The contracts scanned and traded: the overlay's, or the Over / Under switched on in the settings. */
     private contractList(): Contract[] {
@@ -337,7 +392,13 @@ export class SixfoldRunner {
     };
 
     updateSettings(patch: Partial<SixfoldSettings>) {
-        this.settings = normalizeSettings({ ...this.settings, ...patch });
+        const before = this.settings.execution;
+        this.settings = normalizeSettings({ ...this.settings, ...patch }, this.defaults);
+        if (this.settings.execution !== before) {
+            this.watch.clear();
+            this.watchSig = '';
+            if (!this.tradeInFlight) this.armed = null;
+        }
         this.io.saveSettings(this.settings);
         if (!this.running) this.session = freshSession(this.settings);
         else if (this.session.consecutiveLosses === 0) {
@@ -399,11 +460,14 @@ export class SixfoldRunner {
         this.lastResultAt = 0;
         this.meterSince = this.io.now();
         this.armed = null;
+        this.watch.clear();
+        this.watchSig = '';
         this.session = freshSession(this.settings);
         this.runToken += 1;
         this.running = true;
         this.waitingSince = this.io.now();
-        this.addLog('info', this.opening ? 'Run pressed: scanning every market. The first trade is a paper trade; real trading starts after its first win.' : 'Run pressed: scanning every market.');
+        this.io.rules?.reset();
+        this.addLog('info', this.io.rules ? 'Run pressed: watching every market for the bot rules.' : this.opening ? 'Run pressed: scanning every market. The first trade is a paper trade; real trading starts after its first win.' : 'Run pressed: scanning every market.');
 
         try {
             run_panel.setIsRunning(true);
@@ -442,6 +506,7 @@ export class SixfoldRunner {
         this.settling = false;
         this.virtualOpen = null;
         this.armed = null;
+        this.watch.clear();
         this.aborts.forEach(c => c.abort());
         this.aborts.clear();
         this.disposeStoreWatch?.();
@@ -474,7 +539,10 @@ export class SixfoldRunner {
     tick() {
         const now = this.io.now();
         if (!this.running) {
-            if (this.retainCount > 0) this.refreshScan();
+            if (this.retainCount > 0) {
+                this.refreshScan();
+                if (this.io.rules) this.emit(); // keep the rules board live before Run is pressed
+            }
             return;
         }
         if (!this.io.isAuthorized()) return this.stop('Disconnected from Deriv');
@@ -496,7 +564,20 @@ export class SixfoldRunner {
         }
         this.waitingSince = now;
         this.refreshScan();
+        if (this.io.rules) {
+            // The rules engine decides on every tick (handleRules); there is nothing to arm or watch here.
+            this.emit();
+            return;
+        }
         if (this.tradeInFlight || now < this.cooldownUntil || !this.scan) return;
+
+        if (this.settings.execution === 'FIRST') {
+            this.armed = null; // nothing is singled out ahead of time: every qualifying contract is watched
+            this.refreshWatch(now);
+            this.emit();
+            return;
+        }
+        if (this.watch.size) this.watch.clear(); // switched back to best-score: no leftover watchers
 
         // Expire an armed contract that never saw its entry digit.
         if (this.armed && now >= this.armed.expiresAt) {
@@ -544,6 +625,8 @@ export class SixfoldRunner {
             if (this.virtualOpen.symbol === symbol) this.virtualTick(digit);
             return;
         }
+        if (this.io.rules) return this.handleRules(symbol, digit);
+        if (this.settings.execution === 'FIRST') return this.handleFirstToQualify(symbol, digit);
         if (!this.running || this.tradeInFlight || !this.armed || this.armed.symbol !== symbol) return;
         if (this.io.now() < this.cooldownUntil) return;
         // With the streak guard on, the winning streak IS the entry: the old "wait for a losing digit" setups do not apply.
@@ -590,22 +673,7 @@ export class SixfoldRunner {
         const pick = guarded ? (choose(true) ?? choose(false)) : choose(false);
         if (!pick) return;
         const { cell } = pick;
-        this.armed = {
-            symbol: cell.symbol,
-            name: marketName(cell.symbol),
-            label: cell.label,
-            score: cell.score,
-            edgePts: cell.edgePts,
-            significant: cell.significant,
-            entryDigits: this.scanMode() === 'ANY' ? [] : this.entryDigitsFor(cell.symbol, cell, pick.entryDigits),
-            why: pick.why,
-            since: now,
-            expiresAt: now + this.settings.waitSeconds * 1000,
-            cellKey: cell.key,
-            plan: null,
-            planTried: [],
-            planAt: now,
-        };
+        this.armed = this.buildArmed(pick, now);
         if (this.brainGoverns()) this.assignPlan(now);
         const planned = this.armed?.plan ?? null;
         const entry = planned
@@ -630,6 +698,165 @@ export class SixfoldRunner {
         if (this.settings.entry === 'ANY' || this.brainGoverns()) {
             const digit = this.io.feed.getLastDigit(cell.symbol);
             if (digit !== null && this.seenTick.has(cell.symbol) && this.streakFresh(cell.symbol) && this.recoveryFormOk(cell.symbol) && this.brainOk(cell.symbol) && this.meterFresh(cell.symbol) && !this.freshGuardBlocks(cell.symbol)) void this.execute(digit);
+        }
+    }
+
+    /**
+     * Rules-engine mode: every tick of every market goes to the engine. When it says "enter", the contract is bought the way
+     * Sixfold buys anything: the same execute() with its stale-tick check, stake sizing, recovery contract, limits and refusals.
+     */
+    private handleRules(symbol: string, digit: number) {
+        const rules = this.io.rules;
+        if (!rules || !this.settings.markets.includes(symbol)) return;
+        const series = this.io.feed.getLiveSeries()[symbol];
+        if (!series) return;
+        const now = this.io.now();
+        const base: Contract = { side: 'UNDER', param: this.settings.primaryUnder };
+        const key = contractKey(base);
+        const refused = (this.blocked.get(`${symbol}|${key}`) ?? 0) > now || this.quarantined.has(symbol);
+        const idle = this.running && !this.tradeInFlight && now >= this.cooldownUntil && !refused;
+        // The contract that will really be bought decides the paper prediction too: Under 6 while recovering, Under 7 otherwise.
+        const prediction = tradeContract(base, this.session.consecutiveLosses, this.settings).contract.param;
+        const out = rules.onTick(symbol, series, { live: this.running, idle, prediction, now });
+        out.events.forEach(text => this.addLog('info', text));
+        if (!out.enter) {
+            if (out.events.length) this.emit();
+            return;
+        }
+        const cell = this.scan?.cells.find(c => c.symbol === symbol && c.key === key && c.executable);
+        if (!cell) return; // Deriv does not offer it here, or it is not scanned yet: nothing is bought on a guess
+        const label = cell.label;
+        this.armed = {
+            symbol,
+            name: marketName(symbol),
+            label,
+            score: 100,
+            edgePts: cell.edgePts,
+            significant: false,
+            entryDigits: [],
+            why: 'The bot rules are all met',
+            since: now,
+            expiresAt: now + 60_000,
+            cellKey: cell.key,
+            plan: null,
+            planTried: [],
+            planAt: now,
+        };
+        this.addLog('pick', `Bot rules met on ${marketName(symbol)}: buying ${label}.`);
+        void this.execute(digit);
+        // execute() claims the trade synchronously; if it declined (stale tick) nothing stays armed.
+        if (!this.tradeInFlight) this.armed = null;
+    }
+
+    /** The armed record for a picked contract (not yet armed: the caller decides where it lives). */
+    private buildArmed(pick: Pick, now: number): Armed {
+        const { cell } = pick;
+        return {
+            symbol: cell.symbol,
+            name: marketName(cell.symbol),
+            label: cell.label,
+            score: cell.score,
+            edgePts: cell.edgePts,
+            significant: cell.significant,
+            entryDigits: this.scanMode() === 'ANY' ? [] : this.entryDigitsFor(cell.symbol, cell, pick.entryDigits),
+            why: pick.why,
+            since: now,
+            expiresAt: now + this.settings.waitSeconds * 1000,
+            cellKey: cell.key,
+            plan: null,
+            planTried: [],
+            planAt: now,
+        };
+    }
+
+    /** Runs `fn` with `armed` temporarily standing in as the armed contract, so the per-contract helpers can be reused. */
+    private withArmed(armed: Armed, fn: () => void): Armed {
+        const previous = this.armed;
+        this.armed = armed;
+        try {
+            fn();
+            return this.armed ?? armed;
+        } finally {
+            this.armed = previous;
+        }
+    }
+
+    /**
+     * FIRST mode: rebuild the watchlist from the scan. A contract stays on it while it passes the same rules `pickBest` uses
+     * (with the same small hysteresis the single armed contract gets), and keeps its entry plan while it does.
+     */
+    private refreshWatch(now: number) {
+        if (!this.scan) return;
+        const skipKeys = new Set<string>();
+        this.blocked.forEach((until, key) => {
+            if (until > now) skipKeys.add(key);
+            else this.blocked.delete(key);
+        });
+        const skipSymbols = new Set<string>([...this.quarantined, ...this.restedSymbols(now)]);
+        const meterOn = this.settings.meterGuide;
+        const keyOf = (c: Cell) => `${c.symbol}|${c.key}`;
+        const picks = rankedPicks(
+            this.scan,
+            this.settings.selectivity,
+            { mode: this.scanMode() },
+            { symbols: skipSymbols, keys: skipKeys },
+            this.pickyBump(now),
+            {
+                bump: cell => (meterOn ? this.meterFor(cell, now).bump : 0) - (this.watch.has(keyOf(cell)) ? ARMED_HYSTERESIS : 0),
+                rank: cell => (meterOn ? this.meterFor(cell, now).rank : 0),
+                veto: cell => meterOn && !this.meterFor(cell, now).allow,
+            }
+        );
+        const next = new Map<string, Armed>();
+        for (const pick of picks) {
+            const key = keyOf(pick.cell);
+            const prev = this.watch.get(key);
+            let armed: Armed = prev
+                ? {
+                      ...prev,
+                      score: pick.cell.score,
+                      edgePts: pick.cell.edgePts,
+                      significant: pick.cell.significant,
+                      entryDigits: this.scanMode() === 'ANY' ? [] : this.entryDigitsFor(prev.symbol, pick.cell, prev.entryDigits),
+                  }
+                : this.buildArmed(pick, now);
+            if (this.brainGoverns()) {
+                armed = this.withArmed(armed, () => (armed.plan ? this.maybeRotatePlan(now, true) : this.assignPlan(now)));
+            }
+            next.set(key, armed);
+        }
+        this.watch = next;
+        const sig = [...next.keys()].sort().join(',');
+        if (sig !== this.watchSig) {
+            this.watchSig = sig;
+            if (next.size > 0 && now - this.watchLogAt >= WATCH_LOG_MS) {
+                this.watchLogAt = now;
+                const markets = new Set([...next.values()].map(a => a.symbol)).size;
+                this.addLog('pick', `Watching ${next.size} contract${next.size === 1 ? '' : 's'} on ${markets} market${markets === 1 ? '' : 's'}: the first to show its entry is bought.`);
+            }
+        }
+    }
+
+    /**
+     * FIRST mode: a tick on `symbol` is offered to every contract watched there (best score first). The first one whose entry
+     * condition holds, and that still passes the last-look checks, is bought. One trade at a time, across all markets.
+     */
+    private handleFirstToQualify(symbol: string, digit: number) {
+        if (!this.running || this.tradeInFlight || this.io.now() < this.cooldownUntil || this.watch.size === 0) return;
+        const candidates = [...this.watch.values()].filter(a => a.symbol === symbol).sort((a, b) => b.score - a.score);
+        for (const candidate of candidates) {
+            this.armed = candidate;
+            const entryOk = this.settings.entry === 'ANY' || this.brainGoverns() || candidate.entryDigits.includes(digit);
+            if (!entryOk || !this.recoveryFormOk(symbol) || !this.brainOk(symbol) || !this.meterFresh(symbol)) {
+                this.armed = null; // (meterFresh already blocked and cleared a contract that went cold)
+                continue;
+            }
+            const stillWatched = this.armed;
+            void this.execute(digit);
+            // execute() claims the trade synchronously; if it declined (stale tick, unknown contract) nobody is armed.
+            if (!this.tradeInFlight) this.armed = null;
+            else if (stillWatched) this.addLog('info', `${stillWatched.label} on ${stillWatched.name} was first to qualify.`);
+            return;
         }
     }
 
@@ -690,7 +917,7 @@ export class SixfoldRunner {
     }
 
     /** A plan that has not fired for a third of the wait window gives way to the next best, up to PLAN_ROTATIONS times. */
-    private maybeRotatePlan(now: number) {
+    private maybeRotatePlan(now: number, quiet = false) {
         const armed = this.armed;
         if (!armed || !armed.plan || !this.brainGoverns()) return;
         if (armed.planTried.length > PLAN_ROTATIONS) return;
@@ -698,7 +925,7 @@ export class SixfoldRunner {
         const old = armed.plan;
         this.assignPlan(now);
         const next = this.armed?.plan;
-        if (next && next.arm !== old.arm) this.addLog('info', `Entry plan "${old.label}" did not fire on ${armed.name}; trying "${next.label}".`);
+        if (!quiet && next && next.arm !== old.arm) this.addLog('info', `Entry plan "${old.label}" did not fire on ${armed.name}; trying "${next.label}".`);
     }
 
     /** The Brain's gate: the chosen plan must fire on the latest tick (and, in recovery, the AI model must agree). */
@@ -912,12 +1139,19 @@ export class SixfoldRunner {
         const series = this.io.feed.getLiveSeries();
         const symbols = this.settings.markets.filter(s => (series[s]?.length ?? 0) >= MIN_TICKS);
         this.io.overlay?.refresh?.(now, symbols);
+        // A contract only counts as executable where Deriv offers it. "Not known yet" is allowed: Deriv's own refusal at
+        // purchase time (skipArmed) then takes that market out, so nothing is ever bought on a guess.
+        const offers: OffersFn = (symbol, contract) => {
+            const type = DERIV_CONTRACT_TYPE[contract.side];
+            return type ? (this.io.feed.isOffered?.(symbol, type) ?? true) : true;
+        };
         this.scan = scanMarkets(
             series,
             symbols,
             { duration: this.settings.duration, entry: { mode: this.scanMode() }, margin: this.settings.margin },
             now,
-            this.contractList()
+            this.contractList(),
+            offers
         );
         this.scanAt = now;
         if (this.settings.entry === 'BRAIN' || this.settings.recoveryEntry === 'BRAIN' || this.retainCount > 0) {
@@ -1341,6 +1575,7 @@ export class SixfoldRunner {
         const start = Number(settled.entry_tick_time ?? settled.entry_spot_time ?? settled.date_start);
         if (triggerEpoch === null || !Number.isFinite(start) || start <= 0) return;
         const secs = expectedTickSeconds(armed.symbol);
+        if (secs === null) return;
         const late = Math.max(0, Math.round((start - triggerEpoch) / secs) - 1);
         if (late > 0) {
             this.addLog('warn', `${armed.label} on ${armed.name} started ${late} tick${late > 1 ? 's' : ''} after the trigger tick (${start - triggerEpoch}s later): the purchase was slower than the market's tick.`);
@@ -1388,6 +1623,8 @@ export class SixfoldRunner {
         this.tradeInFlight = false;
         this.settling = false;
         this.armed = null;
+        this.watch.clear(); // re-read after the result: the loss shield, the bump and the Meter may have changed what is allowed
+        this.watchSig = '';
         this.cooldownUntil = this.io.now() + COOLDOWN_MS;
         const trade = this.trades.find(t => t.contractId === contractId);
         const notice = this.notices.get(contractId);
@@ -1404,6 +1641,7 @@ export class SixfoldRunner {
             if (trade) trade.status = 'unconfirmed';
         } else {
             this.session = applyResult(this.session, profit, this.settings);
+            this.io.rules?.onResult(profit >= 0);
             this.lastResultAt = this.io.now();
             this.meterSince = this.lastResultAt;
             this.scanAt = 0; // the next scan reads the contracts that will be bought after this result
@@ -1440,7 +1678,9 @@ export class SixfoldRunner {
         if (!this.io.feed.isLive()) return 'connecting';
         if (this.tradeInFlight) return this.settling ? 'settling' : 'buying';
         if (this.io.now() < this.cooldownUntil) return 'cooling';
-        return this.armed ? 'armed' : 'scanning';
+        if (this.armed) return 'armed';
+        if (this.io.rules) return 'watching';
+        return this.watch.size > 0 ? 'watching' : 'scanning';
     }
 
     private build(): SixfoldSnapshot {
@@ -1452,6 +1692,7 @@ export class SixfoldRunner {
             session: this.session,
             settings: this.settings,
             armed: this.armed,
+            watching: [...this.watch.values()].sort((a, b) => b.score - a.score),
             scan: this.scan,
             queue: this.queue,
             trades: this.trades,
@@ -1461,6 +1702,7 @@ export class SixfoldRunner {
             feed: { mode: f.mode, status: f.status, error: f.error },
             readyMarkets: this.settings.markets.filter(s => (series[s]?.length ?? 0) >= MIN_TICKS).length,
             quarantined: [...this.quarantined],
+            unavailable: this.io.feed.getUnavailable?.() ?? [],
             resting: [...this.restedSymbols(this.io.now())].map(symbol => ({
                 symbol,
                 name: marketName(symbol),
@@ -1485,6 +1727,18 @@ export class SixfoldRunner {
                 fixedCount: this.settings.vhFixedCount,
                 paper: this.paper,
             },
+            rules: this.io.rules
+                ? (() => {
+                      const p = this.io.rules.paperState();
+                      return {
+                          rows: this.io.rules.board(this.settings.markets, marketName),
+                          paper: p.paper,
+                          paperLosses: p.losses,
+                          paperNeeded: p.needed,
+                          paperPending: p.pending,
+                      };
+                  })()
+                : null,
         };
     }
 

@@ -58,6 +58,7 @@ const PHASE_TEXT: Record<Phase, { title: string; sub: string; tone: 'idle' | 'sc
     idle: { title: 'READY', sub: 'Press Run', tone: 'idle' },
     connecting: { title: 'CONNECTING', sub: 'Market feed', tone: 'warn' },
     scanning: { title: 'SCANNING', sub: 'All markets', tone: 'scan' },
+    watching: { title: 'WATCHING', sub: 'Every market', tone: 'armed' },
     armed: { title: 'ARMED', sub: 'Waiting for entry', tone: 'armed' },
     buying: { title: 'BUYING', sub: 'Placing contract', tone: 'trade' },
     settling: { title: 'IN TRADE', sub: 'Awaiting result', tone: 'trade' },

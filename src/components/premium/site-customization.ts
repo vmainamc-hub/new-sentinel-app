@@ -23,6 +23,7 @@ export const NAVIGATION_CATALOG: Array<{ id: PremiumSection; label: string; requ
     { id: 'auto_trader', label: 'Auto Trades' },
     { id: 'sentinel_ai', label: 'Sentinel AI' },
     { id: 'sixfold', label: 'Sixfold' },
+    { id: 'vanguard', label: 'Vanguard' },
     { id: 'ai_intel', label: 'Apex Intel' },
     { id: 'manual_trading', label: 'DTrader' },
     { id: 'tradingview', label: 'TradingView' },

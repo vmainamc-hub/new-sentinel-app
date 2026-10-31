@@ -76,6 +76,8 @@ function harness(over: Partial<SixfoldSettings> = {}, io: Partial<RunnerIO> = {}
         now: () => t,
         loadSettings: () => ({
             ...DEFAULT_SETTINGS,
+            // These specs describe best-score mode (one armed contract); first-to-qualify mode has its own specs in execution.spec.ts.
+            execution: 'BEST',
             entry: 'SMART',
             markets: ['P', 'Q'],
             selectivity: 'strict',

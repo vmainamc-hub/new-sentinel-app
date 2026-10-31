@@ -2,10 +2,17 @@
 import type { RecoveryEntry } from './entry';
 import type { VhMode } from './virtual-hook';
 import { type Contract, contractLabel, isValidContract, profitMultiple, winProbability } from './bot';
+import { SIXFOLD_SYMBOLS } from './markets';
 
 export type Selectivity = 'strict' | 'balanced' | 'active';
 export type RecoverySizing = 'PAYOUT' | 'MULTIPLIER';
 export type EntryRule = 'BRAIN' | 'SMART' | 'SETUP' | 'ANY';
+/**
+ * How a market gets chosen to trade. FIRST watches every contract that passes the rules on every market at once and buys on
+ * whichever shows its entry first. BEST arms the single highest-scoring contract and waits only for that one. The rules a
+ * contract must pass are identical in both; only who is allowed to wait for an entry differs.
+ */
+export type ExecutionMode = 'FIRST' | 'BEST';
 
 export type SixfoldSettings = {
     /** The two contracts Sixfold trades. Over <primaryOver> and Under <primaryUnder>; either can be switched off. */
@@ -108,6 +115,12 @@ export type SixfoldSettings = {
     margin: number;
     /** Markets Sixfold may trade. */
     markets: string[];
+    execution: ExecutionMode;
+    /** Vanguard (bot rules): paper-trade each signal first, and only buy for real after `virtualLosses` paper losses. */
+    virtualMode: boolean;
+    virtualLosses: number;
+    /** Vanguard (bot rules): how many of each digit group must be moving the right way for the psychology gate. */
+    gateMin: number;
 };
 
 export const MIN_STAKE = 0.35;
@@ -160,7 +173,12 @@ export const DEFAULT_SETTINGS: SixfoldSettings = {
     pickyAfterLoss: true,
     waitSeconds: 45,
     margin: 0.05,
-    markets: ['1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
+    markets: [...SIXFOLD_SYMBOLS],
+    // Sixfold arms the single best contract. Vanguard is the tool that watches every market and fires on the first to qualify.
+    execution: 'BEST',
+    virtualMode: true,
+    virtualLosses: 2,
+    gateMin: 1,
 };
 
 const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
@@ -170,8 +188,8 @@ const num = (value: unknown, fallback: number, min: number, max: number) => {
 };
 
 /** Brings any stored / typed value back into a safe range. */
-export function normalizeSettings(input: Partial<SixfoldSettings> | null | undefined): SixfoldSettings {
-    const d = DEFAULT_SETTINGS;
+export function normalizeSettings(input: Partial<SixfoldSettings> | null | undefined, defaults: SixfoldSettings = DEFAULT_SETTINGS): SixfoldSettings {
+    const d = defaults;
     const s = input ?? {};
     return {
         useOver: typeof s.useOver === 'boolean' ? s.useOver : d.useOver,
@@ -227,6 +245,10 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         waitSeconds: Math.trunc(num(s.waitSeconds, d.waitSeconds, 5, 600)),
         margin: num(s.margin, d.margin, 0.01, 0.2),
         markets: Array.isArray(s.markets) && s.markets.length ? s.markets.filter(m => typeof m === 'string') : d.markets,
+        execution: s.execution === 'BEST' || s.execution === 'FIRST' ? s.execution : d.execution,
+        virtualMode: typeof s.virtualMode === 'boolean' ? s.virtualMode : d.virtualMode,
+        virtualLosses: Math.round(num(s.virtualLosses, d.virtualLosses, 1, 10)),
+        gateMin: Math.round(num(s.gateMin, d.gateMin, 1, 3)),
     };
 }
 

@@ -168,6 +168,172 @@ Done (src/components/premium/sixfold, 64 unit tests pass, strict `tsc` clean, dr
 - [x] Recovery entry gate (off by default): while recovering, also wait until the market's last K ticks would all have won (After wins), lost (After losses), or lost K times and then won once (Loss → win) for the contract being bought. Lab 'Entry test' panel pools every market's live ticks and tests, with p-values, whether either run-based entry changes the next result versus any tick. On random digits it should show nothing; the panel exists so the live data decides.
 - [x] Market Meter (`regime.ts`, `meter-ui.tsx`): every market x contract is scored tick by tick as win/loss and read as Loss cluster / Normal / Winning / Turning (30-tick z-score, current loss run, loss-run-then-wins). A gauge and a Run / Wait / Hold off verdict sit above the Scanner; the Meter tab shows each market's last 24 results, a clustering test (do wins and losses clump, FDR-corrected) and a track record that replays history and compares the next result after cold vs non-cold states. Optional Meter gate (off by default) skips contracts in a loss cluster while running.
 - [x] Per-market ticks: the feed ignores ticks for markets it does not track, drops repeats / out-of-order ticks using Deriv's tick epoch, and records each market's measured tick gap (1s indices vs 2s plain indices). The Meter is computed from the published ticks with a per-market cache, so a market's strip changes only when its own ticks arrive. Meter tab has a Feed check table (Deriv says vs measured, ticks in the last 60s, repeats dropped). Squares now show the digit; session trades show entry -> exit digit.
+- [x] **Vanguard: the Under 7 Psychology bot's entry rules on every market, bought through Sixfold's execution** (`premium/vanguard/`, small reusable hooks in `sixfold/`). Sixfold is unchanged in behaviour (its ten markets, best-score, its own settings; its page differs from before only by six `export`s and one phase label). Vanguard is its own menu entry with its own feed (20 markets: the ten Sixfold markets, Volatility 15/30/90/150/250 (1s) and the Jump indices), runner, module id (`vanguard`, so it never trades alongside Sixfold or Auto Trades), settings key (`vanguard.settings.v1`) and Transactions label. `vanguard/bot-rules.ts` is a port of the bot's Blockly logic (windows of 10/30/5/5 ticks, pressure and momentum per digit and per group, the 12-point regime score, Pressure Signal, Attack Veto, Winning Active, Digit 8 threat, the psychology gate, last digit <= 6) evaluated on each market's own digits, plus the bot's paper mode (two paper losses before a real trade, a real win returns to paper). It was checked against the real bot: the bot XML (V4, run unchanged in an offline interpreter) and the port made the same entry decision on all 7,500 ticks of three recorded streams (216 entries, 0 mismatches); the recorded decisions are in `bot-rules.spec.ts`. The runner takes an optional `rules` engine: every tick of every market goes to it and, on "enter", the existing `execute()` buys (Under 7, Under 6 + recovery stake after a loss, Sixfold stake sizing and caps, one trade at a time, stale-tick, refusal and unknown-outcome handling, take profit / stop loss / loss-streak stop). Defaults: stake/TP/SL are Sixfold's (not the bot's placeholders of 3 / 1 / 1, which would stop after one trade), recovery stake sized to win back 50% of the open loss (the bot's split of 2) with Sixfold's step and streak-budget caps, psychology gate at 1 (the bot's 2 let almost nothing through; selectable). The 1000-digit loop in the bot is not ported: nothing reads it. The Entry Authorized latch is not ported: before_purchase re-checks the same conditions on the same tick, so it adds nothing. 215 Sixfold-module tests pass under a tsx shim (including the engine-vs-bot golden test and trade-flow tests); strict `tsc` shows no new errors in the touched files. Also present but not used by Vanguard's page: an optional scanner-based "first to qualify" execution mode in the runner (Sixfold keeps Best score).
+- [ ] Unverified against the live Deriv API: that `contracts_for` is answered on the public options endpoint in the shape assumed (`contracts_for.available[].contract_type`), which digit contracts the Jump indices and 1HZ150V/250V offer, and the Jump indices' tick rate. Until `contracts_for` answers, offers are treated as unknown (allowed); a market Deriv refuses at purchase is taken out.
+- [ ] Vanguard is not run against live Deriv or built with `npm run build` here; the first Netlify build is the compile check.
+
+Not done / unverified:
+- [ ] `npm run build`, repo jest/eslint, SCSS compile (registry blocked here) - check the Netlify deploy.
+- [ ] Live run on a demo account in each mode.
+- [ ] Under recovery default barrier 6 is a guess; change it if you want another.
+
+Next: run demo, tune defaults, then real account.
+
+- [x] Fix: Touch-once now honours recovery digits (waits for the side's recovery digit after a loss, martingale stake kept). 86 tests pass.
+
+## Signal quality + Jump 100 (latest)
+Done (100 Sentinel AI tests pass):
+- [x] Root cause of the score-0 trade: the engine's surface rule (psychology / rising losers / group threat / sweep) never checks score or the `blocked` flag, so an engine-blocked candidate (score 0) can surface. Engine left untouched; a gate now runs in `sentinel-ai-quality.ts` before the engine's surfacing rule, so a rejected candidate never hides the next-best one.
+- [x] Signal quality settings (card "Signal quality"): minimum score (default 70 = engine's own opportunity threshold), maximum danger (default 45 = engine's safety boundary), skip engine-blocked (default on), 0 = off. Live-editable.
+- [x] A signal that turns bad while waiting is dropped (outcome Skipped); a Touch-once run pauses (state "HELD") until the market qualifies again.
+- [x] Score and danger shown on the signal; the page lists how many candidates are filtered out and why.
+- [x] Jump 100: `excludedMarkets` setting, default `JD100` (editable). Any market Deriv refuses twice in a session is quarantined until the next Run.
+
+Not done / unverified:
+- [ ] The real Deriv error for Jump 100 could not be reproduced here (no Deriv access). If you re-enable it, send the exact message shown under the signal and we can repair it properly.
+- [ ] Score/danger defaults may be too strict or loose in live use; tune on a demo account.
+
+- [x] Touch-once is no longer ended by Max trades (nor Runs per signal). Its own stops: target profit, stop loss, max losses in a row, Stop. The other two modes keep Max trades / Runs per signal. 103 tests pass.
+
+- [x] Pressing Run on a signal that is already waiting now trades it: while not running, a signal stays fresh as long as the engine keeps surfacing it, and its wait window restarts at Run. A digit that printed before Run does not count. 108 tests pass.
+
+- [x] Score mismatch fix: a waiting signal that fails the score/danger gate is now HELD at once (never traded, reason shown) and dropped only after 5s of staying bad; the drop note is informational and clears when another signal takes over (it used to stay as a red error). 110 tests pass.
+
+## Alignment pass (latest)
+- [x] The signal card now always shows the engine's LIVE score/danger for the signal (previously it could keep stale figures while the gate judged newer ones, so "score 65" on screen vs "score 35 dropped" in the note).
+- [x] A waiting signal is paused/dropped only when CLEARLY out of bounds (10 points past the score/danger limit, or engine-blocked) for 5s; dips around a limit are ignored. New signals are still admitted strictly at the limits.
+- [x] Touch-once: after the touch, quality never pauses or drops it; no "runs" wording; if Deriv refuses the touched market it carries on with the next signal without a new touch. Only target profit, stop loss, max losses in a row and Stop end it.
+- 113 tests pass. Still unverified: full build / live run (registry blocked here).
+
+## Momentum gate + signal outcome log (latest)
+Done:
+- [x] New standalone momentum engine in `src/sentinel-engine/lib/momentum/` (`momentum-separation.ts`, `momentum-gate.ts`, tests, README). No existing engine file was edited (not surface-vetting.ts, scan.ts, price-action-psychology.ts).
+- [x] `sentinel-ai-engine.ts` now calls `surfaceVetRank(eligible)` then `selectTradable(vetted, { requireMomentum })`. With the switch off this equals the old `selectSurfacedOpportunity(eligible)` (first vetted candidate, same order).
+- [x] Setting `requireMomentum` (DEFAULT ON, localStorage with try/catch). UI: switch with plain one-line explanation, momentum verdict + blockers on the current signal, "Momentum blocked N of the last 40 surfaced signals" line. Momentum holds a signal that is still waiting for its entry; it never pauses a trade in flight or a Touch-once run that already touched its entry.
+- [x] Signal outcome log (paper outcomes, no trades): one record per surfaced signal (key symbol+contract+barrier, re-logged only after it has been gone 3 s), outcome = last digit of the first tick strictly after the decision tick, unresolved after 30 s, 5000-record cap, localStorage key `sentinel_ai_signal_log_v1`, summary by signal type and momentum pass vs fail (Wilson 95%, break-even p0/0.955, "too few signals to judge" under 300), Download CSV, Clear log with confirmation. Read-only: failures never reach the engine or runner.
+- Momentum is a filter on signal COUNT; it is not described anywhere as improving win rate. Use the log to find out.
+
+Not done / unverified:
+- [ ] `npm run build`, repo jest/eslint (registry blocked here); tests ran under bun.
+- [ ] No live or demo run; nothing was traded.
+- Logged candidates are the ones left after Sentinel AI's own quality/exclusion filters (`surfaceVetRank(eligible)`), not the engine's unfiltered list.
+
+## Multi-market Ultemate profit bot v3 (user-supplied patch)
+- Done: engine mixin `MultiMarket` (watch markets, read digits of any market, trade on a chosen market), 5 new Bot Builder blocks + toolbox entries, Virtual Hook settles on the traded market, tick-bus pip-size/digit-count/age readers.
+- Done: bot added to Free Bots as #103 (`apex-library-ultemate-profit-bot-v3-multimarket-70`).
+- Not tested here: jest specs (jest/rxjs not installed in this container), and no live run. Only the pure MultiMarket logic was checked under bun.
+- Known (from the author's guide): "Maximum session loss" does not trigger (session profit is hard-wired to 0, inherited from v2). Run on demo first.
+- Next: run `npm test` locally, then try the bot on a demo account.
+
+## Ultemate profit bot v4 (heat-ranked), Free Bot 104
+- Done: copy of v3 where, among markets that ALREADY signal, the one with the lowest "heat" is traded (heat = losing digits 6/7/8/9 in the last 20 ticks + 2 x the last 3 ticks); score only breaks ties. No signal is gated. Settings in INITIALIZATION: Loss digits, Heat window, Recent window, Recent weight, Heat ranking enabled (0 = v3 behaviour).
+- Checked in an XML interpreter simulation (6 seeds x 400 ticks x 10 markets): signals identical to v3 on every tick, heat-off identical to v3, chosen market always the minimum-heat qualifier. Not run live. Digits on synthetic indices are random, so no change in long-run win rate is claimed.
+- Still open: v3/v4 "Maximum session loss" never triggers (session profit stuck at 0).
+
+## Ultemate profit bot v5 (transition ranking), Free Bot 105
+- Done: v4 plus a "Transition score" procedure, evaluated only for markets that already signal. It adds: loss-digit cooling per window (10/24/40/60), hot-to-cold hand-off per window, per-digit cooling (window 24, hot count 3), fast (6) under slow (40) average. Rank = heat - Transition weight x score; lowest rank is traded, score breaks ties. Transition weight 0 = v4. Nothing is blocked.
+- Checked in the XML interpreter (6 seeds x 400 ticks x 10 markets): signals identical to v3 on every tick, weight 0 identical to v4, the bot's transition score equals an independent Python reference, chosen market always has the minimum rank. Not run live; no claim of a higher win rate (digits are random).
+- Next: backtest v3/v4/v5 on recorded real ticks if the user supplies a CSV; fix the broken session loss cap.
+
+## Sixfold Auto (autonomous scanner + trader)
+Done (src/components/premium/sixfold, 64 unit tests pass, strict `tsc` clean, driven end-to-end in headless Chromium with a fake Deriv socket):
+- [x] Press **Run** on the Sixfold page: it scans every market for the two primary contracts only (Over 2 and Under 7 by default, switchable, barriers editable), arms the best eligible one, waits for its entry digit, buys, waits for the result, then looks again. One trade at a time, across all markets. It no longer loads or drives a bot.
+- [x] Trades go through `buyContractForUi` / `streamContractUntilSettled` and are pushed to the transactions / Run Panel / summary stores (same hand-off as Sentinel AI), so they show in the general Transactions area. The Run Panel's Stop ends the session.
+- [x] Money rules: stake, TP, SL, martingale (multiplier, max steps, max stake), recovery barrier (Over 3 / Under 6 by default), loss-streak stop, max trades. Pure functions in `money.ts`.
+- [x] Safety: never trades a market whose last tick is stale; a Deriv-refused contract is skipped and a market refused twice is taken out for the session; a purchase with an unknown outcome stops the session (never retried); a dropped Deriv session stops it.
+- [x] Analysis: Benjamini-Hochberg false-discovery control across all scanned cells (`scanner.ts`), digit uniformity (chi-square), digit-to-next-digit dependence (chi-square 9x9), runs test, calibration of Sixfold's own labels against what happened next, 1,000-session bankroll Monte Carlo using the runner's own money rules (`analysis.ts`), Sentinel AI agreement badge (`agree.ts`).
+- [x] UI: scanner dial + Run/Stop, settings panel, candidate queue, activity log, market x contract heat map, equity and rolling win-rate charts, six-trader hexagon, digit and transition heat maps. Light and dark themes; phone layout.
+- [x] The market feed is now one app-wide singleton (`feed.ts`) with reconnect and a stale-stream watchdog, so scanning continues on any tab. `sixfold-bridge.tsx` is mounted in `PremiumLayout`.
+- [x] Primary-contract restriction: Sixfold never trades Over 7 / Under 1-3 etc. Recovery after a loss is Over 3 / Under 6 (on by default). New Contracts control in Scanner; Board shows just the two contracts. Tests assert every buy is Over 2 / Under 7 (or recovery 3 / 6).
+- [x] Loss shield (a market that loses is rested for N other trades, doubling after 2 losses there, max 5 min), adaptive entry (`entry.ts`: entry digits learned from the armed market's own ticks, recomputed while waiting, the digit that just lost is skipped next time), and pickier-after-a-loss (+10 score that fades over 150 s). Controls in Scanner; resting markets shown on the dial.
+- [x] Safer recovery: payout-sized stakes (each stake sized so one win pays back a chosen % of what is owed; part-recoveries keep the rest owed), a streak budget (when the next stake would push the open loss past N x base stake, the loss is accepted and the stake restarts at base), and a live 'if you lose 5 in a row' cost readout with the win rate / streak chance of the recovery barrier. The Lab's bankroll simulation uses the same rules. Default is payout-sized, 50%, budget 10x; the old x multiplier is still there.
+- [x] Recovery entry gate (off by default): while recovering, also wait until the market's last K ticks would all have won (After wins), lost (After losses), or lost K times and then won once (Loss → win) for the contract being bought. Lab 'Entry test' panel pools every market's live ticks and tests, with p-values, whether either run-based entry changes the next result versus any tick. On random digits it should show nothing; the panel exists so the live data decides.
+- [x] Market Meter (`regime.ts`, `meter-ui.tsx`): every market x contract is scored tick by tick as win/loss and read as Loss cluster / Normal / Winning / Turning (30-tick z-score, current loss run, loss-run-then-wins). A gauge and a Run / Wait / Hold off verdict sit above the Scanner; the Meter tab shows each market's last 24 results, a clustering test (do wins and losses clump, FDR-corrected) and a track record that replays history and compares the next result after cold vs non-cold states. Optional Meter gate (off by default) skips contracts in a loss cluster while running.
+- [x] Per-market ticks: the feed ignores ticks for markets it does not track, drops repeats / out-of-order ticks using Deriv's tick epoch, and records each market's measured tick gap (1s indices vs 2s plain indices). The Meter is computed from the published ticks with a per-market cache, so a market's strip changes only when its own ticks arrive. Meter tab has a Feed check table (Deriv says vs measured, ticks in the last 60s, repeats dropped). Squares now show the digit; session trades show entry -> exit digit.
+- [x] **Vanguard: a separate execution tool across every market** (`premium/vanguard/`, plus reusable pieces in `sixfold/`). Sixfold itself is unchanged (its ten markets, best-score execution, its own settings). Vanguard has its own menu entry, feed, runner, module id (`vanguard`, so it can never trade alongside Sixfold or Auto Trades), settings key (`vanguard.settings.v1`) and Transactions source label. It scans 20 markets: the ten Sixfold markets plus Volatility 15/30/90/150/250 (1s) and the Jump indices (JD10/25/50/75/100), and uses Sixfold's scanner screen and rules unchanged. Execution is **first to qualify** by default: every contract passing the same eligibility rules is watched at once and the first to show its entry (entry digit, Entry Brain plan, recovery form, Meter last-look) is bought; **best score** is a switch on its page. One trade at a time, same stale-tick / refusal / unknown-outcome safety. The feed asks Deriv `contracts_for` per market and a contract Deriv does not offer there is not executable; unknown = allowed (Deriv's refusal at purchase quarantines the market). A market Deriv will not stream is left out without raising a feed error. Reusable changes in `sixfold/`: `markets.ts`, feed takes a symbol list, runner takes `moduleId`/`defaults`, `ScannerTab` is exported and takes a `tool`, `rankedPicks`/`offers` in the scanner, `execution` setting. 190 Sixfold tests pass under a tsx shim (28 new in `execution.spec.ts`); strict `tsc` shows no new errors in the touched files.
+- [ ] Unverified against the live Deriv API: that `contracts_for` is answered on the public options endpoint in the shape assumed (`contracts_for.available[].contract_type`), which digit contracts the Jump indices and 1HZ150V/250V actually offer, and the Jump indices' tick rate. Until `contracts_for` answers, offers are treated as unknown (allowed).
+- [ ] Vanguard's Meter tab and Lab are not duplicated: its page is the scanner screen plus the Meter strip. Sixfold's tabs stay on Sixfold.
+
+Not done / unverified:
+- [ ] `npm run build`, repo jest/eslint, SCSS compile (registry blocked here) - check the Netlify deploy.
+- [ ] Live run on a demo account in each mode.
+- [ ] Under recovery default barrier 6 is a guess; change it if you want another.
+
+Next: run demo, tune defaults, then real account.
+
+- [x] Fix: Touch-once now honours recovery digits (waits for the side's recovery digit after a loss, martingale stake kept). 86 tests pass.
+
+## Signal quality + Jump 100 (latest)
+Done (100 Sentinel AI tests pass):
+- [x] Root cause of the score-0 trade: the engine's surface rule (psychology / rising losers / group threat / sweep) never checks score or the `blocked` flag, so an engine-blocked candidate (score 0) can surface. Engine left untouched; a gate now runs in `sentinel-ai-quality.ts` before the engine's surfacing rule, so a rejected candidate never hides the next-best one.
+- [x] Signal quality settings (card "Signal quality"): minimum score (default 70 = engine's own opportunity threshold), maximum danger (default 45 = engine's safety boundary), skip engine-blocked (default on), 0 = off. Live-editable.
+- [x] A signal that turns bad while waiting is dropped (outcome Skipped); a Touch-once run pauses (state "HELD") until the market qualifies again.
+- [x] Score and danger shown on the signal; the page lists how many candidates are filtered out and why.
+- [x] Jump 100: `excludedMarkets` setting, default `JD100` (editable). Any market Deriv refuses twice in a session is quarantined until the next Run.
+
+Not done / unverified:
+- [ ] The real Deriv error for Jump 100 could not be reproduced here (no Deriv access). If you re-enable it, send the exact message shown under the signal and we can repair it properly.
+- [ ] Score/danger defaults may be too strict or loose in live use; tune on a demo account.
+
+- [x] Touch-once is no longer ended by Max trades (nor Runs per signal). Its own stops: target profit, stop loss, max losses in a row, Stop. The other two modes keep Max trades / Runs per signal. 103 tests pass.
+
+- [x] Pressing Run on a signal that is already waiting now trades it: while not running, a signal stays fresh as long as the engine keeps surfacing it, and its wait window restarts at Run. A digit that printed before Run does not count. 108 tests pass.
+
+- [x] Score mismatch fix: a waiting signal that fails the score/danger gate is now HELD at once (never traded, reason shown) and dropped only after 5s of staying bad; the drop note is informational and clears when another signal takes over (it used to stay as a red error). 110 tests pass.
+
+## Alignment pass (latest)
+- [x] The signal card now always shows the engine's LIVE score/danger for the signal (previously it could keep stale figures while the gate judged newer ones, so "score 65" on screen vs "score 35 dropped" in the note).
+- [x] A waiting signal is paused/dropped only when CLEARLY out of bounds (10 points past the score/danger limit, or engine-blocked) for 5s; dips around a limit are ignored. New signals are still admitted strictly at the limits.
+- [x] Touch-once: after the touch, quality never pauses or drops it; no "runs" wording; if Deriv refuses the touched market it carries on with the next signal without a new touch. Only target profit, stop loss, max losses in a row and Stop end it.
+- 113 tests pass. Still unverified: full build / live run (registry blocked here).
+
+## Momentum gate + signal outcome log (latest)
+Done:
+- [x] New standalone momentum engine in `src/sentinel-engine/lib/momentum/` (`momentum-separation.ts`, `momentum-gate.ts`, tests, README). No existing engine file was edited (not surface-vetting.ts, scan.ts, price-action-psychology.ts).
+- [x] `sentinel-ai-engine.ts` now calls `surfaceVetRank(eligible)` then `selectTradable(vetted, { requireMomentum })`. With the switch off this equals the old `selectSurfacedOpportunity(eligible)` (first vetted candidate, same order).
+- [x] Setting `requireMomentum` (DEFAULT ON, localStorage with try/catch). UI: switch with plain one-line explanation, momentum verdict + blockers on the current signal, "Momentum blocked N of the last 40 surfaced signals" line. Momentum holds a signal that is still waiting for its entry; it never pauses a trade in flight or a Touch-once run that already touched its entry.
+- [x] Signal outcome log (paper outcomes, no trades): one record per surfaced signal (key symbol+contract+barrier, re-logged only after it has been gone 3 s), outcome = last digit of the first tick strictly after the decision tick, unresolved after 30 s, 5000-record cap, localStorage key `sentinel_ai_signal_log_v1`, summary by signal type and momentum pass vs fail (Wilson 95%, break-even p0/0.955, "too few signals to judge" under 300), Download CSV, Clear log with confirmation. Read-only: failures never reach the engine or runner.
+- Momentum is a filter on signal COUNT; it is not described anywhere as improving win rate. Use the log to find out.
+
+Not done / unverified:
+- [ ] `npm run build`, repo jest/eslint (registry blocked here); tests ran under bun.
+- [ ] No live or demo run; nothing was traded.
+- Logged candidates are the ones left after Sentinel AI's own quality/exclusion filters (`surfaceVetRank(eligible)`), not the engine's unfiltered list.
+
+## Multi-market Ultemate profit bot v3 (user-supplied patch)
+- Done: engine mixin `MultiMarket` (watch markets, read digits of any market, trade on a chosen market), 5 new Bot Builder blocks + toolbox entries, Virtual Hook settles on the traded market, tick-bus pip-size/digit-count/age readers.
+- Done: bot added to Free Bots as #103 (`apex-library-ultemate-profit-bot-v3-multimarket-70`).
+- Not tested here: jest specs (jest/rxjs not installed in this container), and no live run. Only the pure MultiMarket logic was checked under bun.
+- Known (from the author's guide): "Maximum session loss" does not trigger (session profit is hard-wired to 0, inherited from v2). Run on demo first.
+- Next: run `npm test` locally, then try the bot on a demo account.
+
+## Ultemate profit bot v4 (heat-ranked), Free Bot 104
+- Done: copy of v3 where, among markets that ALREADY signal, the one with the lowest "heat" is traded (heat = losing digits 6/7/8/9 in the last 20 ticks + 2 x the last 3 ticks); score only breaks ties. No signal is gated. Settings in INITIALIZATION: Loss digits, Heat window, Recent window, Recent weight, Heat ranking enabled (0 = v3 behaviour).
+- Checked in an XML interpreter simulation (6 seeds x 400 ticks x 10 markets): signals identical to v3 on every tick, heat-off identical to v3, chosen market always the minimum-heat qualifier. Not run live. Digits on synthetic indices are random, so no change in long-run win rate is claimed.
+- Still open: v3/v4 "Maximum session loss" never triggers (session profit stuck at 0).
+
+## Ultemate profit bot v5 (transition ranking), Free Bot 105
+- Done: v4 plus a "Transition score" procedure, evaluated only for markets that already signal. It adds: loss-digit cooling per window (10/24/40/60), hot-to-cold hand-off per window, per-digit cooling (window 24, hot count 3), fast (6) under slow (40) average. Rank = heat - Transition weight x score; lowest rank is traded, score breaks ties. Transition weight 0 = v4. Nothing is blocked.
+- Checked in the XML interpreter (6 seeds x 400 ticks x 10 markets): signals identical to v3 on every tick, weight 0 identical to v4, the bot's transition score equals an independent Python reference, chosen market always has the minimum rank. Not run live; no claim of a higher win rate (digits are random).
+- Next: backtest v3/v4/v5 on recorded real ticks if the user supplies a CSV; fix the broken session loss cap.
+
+## Sixfold Auto (autonomous scanner + trader)
+Done (src/components/premium/sixfold, 64 unit tests pass, strict `tsc` clean, driven end-to-end in headless Chromium with a fake Deriv socket):
+- [x] Press **Run** on the Sixfold page: it scans every market for the two primary contracts only (Over 2 and Under 7 by default, switchable, barriers editable), arms the best eligible one, waits for its entry digit, buys, waits for the result, then looks again. One trade at a time, across all markets. It no longer loads or drives a bot.
+- [x] Trades go through `buyContractForUi` / `streamContractUntilSettled` and are pushed to the transactions / Run Panel / summary stores (same hand-off as Sentinel AI), so they show in the general Transactions area. The Run Panel's Stop ends the session.
+- [x] Money rules: stake, TP, SL, martingale (multiplier, max steps, max stake), recovery barrier (Over 3 / Under 6 by default), loss-streak stop, max trades. Pure functions in `money.ts`.
+- [x] Safety: never trades a market whose last tick is stale; a Deriv-refused contract is skipped and a market refused twice is taken out for the session; a purchase with an unknown outcome stops the session (never retried); a dropped Deriv session stops it.
+- [x] Analysis: Benjamini-Hochberg false-discovery control across all scanned cells (`scanner.ts`), digit uniformity (chi-square), digit-to-next-digit dependence (chi-square 9x9), runs test, calibration of Sixfold's own labels against what happened next, 1,000-session bankroll Monte Carlo using the runner's own money rules (`analysis.ts`), Sentinel AI agreement badge (`agree.ts`).
+- [x] UI: scanner dial + Run/Stop, settings panel, candidate queue, activity log, market x contract heat map, equity and rolling win-rate charts, six-trader hexagon, digit and transition heat maps. Light and dark themes; phone layout.
+- [x] The market feed is now one app-wide singleton (`feed.ts`) with reconnect and a stale-stream watchdog, so scanning continues on any tab. `sixfold-bridge.tsx` is mounted in `PremiumLayout`.
+- [x] Primary-contract restriction: Sixfold never trades Over 7 / Under 1-3 etc. Recovery after a loss is Over 3 / Under 6 (on by default). New Contracts control in Scanner; Board shows just the two contracts. Tests assert every buy is Over 2 / Under 7 (or recovery 3 / 6).
+- [x] Loss shield (a market that loses is rested for N other trades, doubling after 2 losses there, max 5 min), adaptive entry (`entry.ts`: entry digits learned from the armed market's own ticks, recomputed while waiting, the digit that just lost is skipped next time), and pickier-after-a-loss (+10 score that fades over 150 s). Controls in Scanner; resting markets shown on the dial.
+- [x] Safer recovery: payout-sized stakes (each stake sized so one win pays back a chosen % of what is owed; part-recoveries keep the rest owed), a streak budget (when the next stake would push the open loss past N x base stake, the loss is accepted and the stake restarts at base), and a live 'if you lose 5 in a row' cost readout with the win rate / streak chance of the recovery barrier. The Lab's bankroll simulation uses the same rules. Default is payout-sized, 50%, budget 10x; the old x multiplier is still there.
+- [x] Recovery entry gate (off by default): while recovering, also wait until the market's last K ticks would all have won (After wins), lost (After losses), or lost K times and then won once (Loss → win) for the contract being bought. Lab 'Entry test' panel pools every market's live ticks and tests, with p-values, whether either run-based entry changes the next result versus any tick. On random digits it should show nothing; the panel exists so the live data decides.
+- [x] Market Meter (`regime.ts`, `meter-ui.tsx`): every market x contract is scored tick by tick as win/loss and read as Loss cluster / Normal / Winning / Turning (30-tick z-score, current loss run, loss-run-then-wins). A gauge and a Run / Wait / Hold off verdict sit above the Scanner; the Meter tab shows each market's last 24 results, a clustering test (do wins and losses clump, FDR-corrected) and a track record that replays history and compares the next result after cold vs non-cold states. Optional Meter gate (off by default) skips contracts in a loss cluster while running.
+- [x] Per-market ticks: the feed ignores ticks for markets it does not track, drops repeats / out-of-order ticks using Deriv's tick epoch, and records each market's measured tick gap (1s indices vs 2s plain indices). The Meter is computed from the published ticks with a per-market cache, so a market's strip changes only when its own ticks arrive. Meter tab has a Feed check table (Deriv says vs measured, ticks in the last 60s, repeats dropped). Squares now show the digit; session trades show entry -> exit digit.
+- [x] **More markets + first-to-qualify execution** (`markets.ts`, `feed.ts`, `scanner.ts`, `runner.ts`, `money.ts`, page). Sixfold now tracks 20 markets: the original ten Volatility indices plus Volatility 15/30/90/150/250 (1s) and the Jump indices (JD10/25/50/75/100). New setting **Execution** (default *First to qualify*): every contract that passes the same eligibility rules is kept on a watchlist on every market at once and the first to show its entry (entry digit, Entry Brain plan, recovery form, Meter last-look) is bought; *Best score* keeps the old single-armed behaviour. Same rules, one trade at a time, same stale-tick / refusal / unknown-outcome safety. The feed asks Deriv `contracts_for` per market and a contract Deriv does not offer there is not executable; unknown = allowed (Deriv's refusal at purchase quarantines the market). A market Deriv will not stream is left out without raising a feed error. Saved settings get the new markets once (markets you turned off stay off). 26 new tests (`execution.spec.ts`); the older runner specs are pinned to Best score. 188 Sixfold tests pass under a tsx shim; strict `tsc` shows no new errors in the touched files.
+- [ ] Unverified against the live Deriv API: that `contracts_for` is answered on the public options endpoint in the shape assumed (`contracts_for.available[].contract_type`), which digit contracts the Jump indices and 1HZ150V/250V actually offer, and the Jump indices' tick rate. Until `contracts_for` answers, offers are treated as unknown (allowed).
 
 Not done / unverified:
 - [ ] `npm ci`, `npm run build`, repo `jest` / `eslint` / `prettier`, and the SCSS compile were not run (registry blocked in the session). Run `npm ci && npm run type-check && npm test && npm run build` first.

@@ -91,12 +91,16 @@ export function scoreCell(a: Assessment): { score: number; zEdge: number | null 
     return { score: Math.round(100 * (0.55 * s1 + 0.2 * s2 + 0.1 * s3 + 0.15 * s4)), zEdge };
 }
 
+/** Does Deriv offer this contract on this market? Unknown counts as offered; Deriv's refusal at purchase is the safety net. */
+export type OffersFn = (symbol: string, contract: Contract) => boolean;
+
 export function scanMarkets(
     series: Record<string, readonly number[]>,
     symbols: readonly string[],
     bot: BotConfig,
     now = Date.now(),
-    contracts: readonly Contract[] = SCAN_CONTRACTS
+    contracts: readonly Contract[] = SCAN_CONTRACTS,
+    offers?: OffersFn
 ): ScanResult {
     const raw: Array<Omit<Cell, 'qValue' | 'significant'>> = [];
     for (const symbol of symbols) {
@@ -120,7 +124,7 @@ export function scanMarkets(
                 zEdge,
                 pValue: tested ? binomialUpperP(w.wins, w.n, winProbability(contract)) : null,
                 score,
-                executable: isExecutable(contract),
+                executable: isExecutable(contract) && (offers ? offers(symbol, contract) : true),
             });
         }
     }
@@ -165,7 +169,7 @@ export function eligibility(cell: Cell, selectivity: Selectivity, bump = 0): Eli
     // outside engine agreeing with the scan counts for something. The states below (trap, hostile, warming) are never eased.
     const need = (base: number) => Math.min(95, base + Math.max(-MAX_EASE, bump));
     const a = cell.assessment;
-    if (!cell.executable) return { ok: false, reason: 'Sixfold cannot execute this contract type' };
+    if (!cell.executable) return { ok: false, reason: 'Cannot be executed here (Deriv does not offer this contract on this market)' };
     if (a.state === 'WARMING') return { ok: false, reason: 'Too few simulated trades yet' };
     if (a.state === 'TRAP') return { ok: false, reason: 'Trap: it looked good, then delivered the opposite' };
     if (a.state === 'HOSTILE') return { ok: false, reason: 'Hostile: running well below its normal rate' };
@@ -196,37 +200,48 @@ export type PickAdjust = {
     veto?: (cell: Cell) => boolean;
 };
 
-/** Highest-scoring eligible cell, skipping markets / contracts the caller has taken out. */
-export function pickBest(
+type PickSkip = { symbols?: ReadonlySet<string>; keys?: ReadonlySet<string> };
+
+/**
+ * Every eligible cell, best first (rank, then edge; equal cells keep scan order). This is the one place the eligibility rules
+ * are applied, so "best score first" and "first to qualify" can never disagree about what is allowed to be traded.
+ */
+export function rankedPicks(
     scan: ScanResult,
     selectivity: Selectivity,
     entry: { mode: 'SETUP' | 'ANY' },
-    skip: { symbols?: ReadonlySet<string>; keys?: ReadonlySet<string> } = {},
+    skip: PickSkip = {},
     bump = 0,
     adjust?: PickAdjust
-): Pick | null {
-    let best: Pick | null = null;
-    let bestRank = -Infinity;
+): Pick[] {
+    const out: Array<Pick & { rank: number }> = [];
     for (const cell of scan.cells) {
         if (skip.symbols?.has(cell.symbol) || skip.keys?.has(`${cell.symbol}|${cell.key}`)) continue;
         if (adjust?.veto?.(cell)) continue;
         const e = eligibility(cell, selectivity, bump + (adjust?.bump?.(cell) ?? 0));
         if (!e.ok) continue;
-        const rank = cell.score + (adjust?.rank?.(cell) ?? 0);
-        const better =
-            !best ||
-            rank > bestRank ||
-            (rank === bestRank && (cell.edgePts ?? -99) > (best.cell.edgePts ?? -99));
-        if (better) {
-            bestRank = rank;
-            best = {
-                cell,
-                why: e.reason,
-                entryDigits: entry.mode === 'ANY' ? [] : [...entryDigitsFor(cell.contract, { mode: 'SETUP' })],
-            };
-        }
+        out.push({
+            cell,
+            why: e.reason,
+            entryDigits: entry.mode === 'ANY' ? [] : [...entryDigitsFor(cell.contract, { mode: 'SETUP' })],
+            rank: cell.score + (adjust?.rank?.(cell) ?? 0),
+        });
     }
-    return best;
+    // Array.prototype.sort is stable, so equal cells stay in scan order, exactly as the single-best search always chose.
+    out.sort((a, b) => b.rank - a.rank || (b.cell.edgePts ?? -99) - (a.cell.edgePts ?? -99));
+    return out.map(({ rank: _rank, ...pick }) => pick);
+}
+
+/** Highest-scoring eligible cell, skipping markets / contracts the caller has taken out. */
+export function pickBest(
+    scan: ScanResult,
+    selectivity: Selectivity,
+    entry: { mode: 'SETUP' | 'ANY' },
+    skip: PickSkip = {},
+    bump = 0,
+    adjust?: PickAdjust
+): Pick | null {
+    return rankedPicks(scan, selectivity, entry, skip, bump, adjust)[0] ?? null;
 }
 
 /** Best cell per market (any contract), for the radar and the board ordering. */

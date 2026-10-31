@@ -62,17 +62,19 @@ function useTelemetry(): Record<string, FeedTelemetry> {
 
 const rateText = (t: FeedTelemetry | undefined, symbol: string) => {
     const expected = expectedTickSeconds(symbol);
-    if (!t || t.measured === null) return `ticks every ~${expected}s`;
+    if (!t || t.measured === null) return expected === null ? 'waiting for ticks' : `ticks every ~${expected}s`;
     return `ticks every ${t.measured.toFixed(t.measured % 1 ? 1 : 0)}s`;
 };
 
 function feedStatus(t: FeedTelemetry | undefined): { ok: boolean; text: string } {
     if (!t || (t.accepted + t.dropped === 0 && t.measured === null)) return { ok: false, text: 'No ticks yet' };
-    if (t.measured !== null && Math.abs(t.measured - t.expected) > t.expected * 0.3) {
+    // A market with no documented rate (the Jump indices) is never judged against one; it is only checked for going quiet.
+    if (t.expected !== null && t.measured !== null && Math.abs(t.measured - t.expected) > t.expected * 0.3) {
         return { ok: false, text: t.measured < t.expected ? 'Faster than Deriv documents' : 'Slower than Deriv documents' };
     }
-    if (t.ageSeconds !== null && t.ageSeconds > t.expected * 8) return { ok: false, text: 'Gone quiet' };
-    return { ok: true, text: 'Matches Deriv' };
+    const pace = t.expected ?? t.measured ?? 2;
+    if (t.ageSeconds !== null && t.ageSeconds > pace * 8) return { ok: false, text: 'Gone quiet' };
+    return { ok: true, text: t.expected === null ? 'Streaming' : 'Matches Deriv' };
 }
 
 /** A compact bar above the Scanner: should you press Run? */
@@ -235,7 +237,7 @@ export function MeterTab({
                         return (
                             <div className='tr' key={symbol}>
                                 <span>{shortName(symbol)}</span>
-                                <span>every {expectedTickSeconds(symbol)}s</span>
+                                <span>{expectedTickSeconds(symbol) === null ? 'not documented' : `every ${expectedTickSeconds(symbol)}s`}</span>
                                 <span>{t?.measured == null ? '—' : `every ${t.measured.toFixed(t.measured % 1 ? 1 : 0)}s`}</span>
                                 <span>{t ? `${t.lastMinute} ticks` : '—'}</span>
                                 <span>{t?.dropped ?? 0}</span>

@@ -73,12 +73,16 @@ const AiIntelPage = lazy(() => import('./ai-intel/AiIntelPage'));
 const AiIntelBridge = lazy(() => import('./ai-intel/AiIntelBridge'));
 // Its runner trades on its own, so the bridge stays mounted on every tab (Run Panel hand-off, Stop sync, session-drop stop).
 const SixfoldBridge = lazy(() => import('./sixfold/sixfold-bridge'));
+// Vanguard: one execution tool across every market (Volatility, 1s Volatility and Jump indices). Its runner trades on its own too,
+// so its bridge is mounted on every tab as well.
+const VanguardPage = lazy(() => import('./vanguard/VanguardPage'));
+const VanguardBridge = lazy(() => import('./vanguard/vanguard-bridge'));
 const DTraderPage = lazy(() => import('./dtrader/DTraderPage'));
 
 const validSections: PremiumSection[] = [
     'dashboard', 'bot_ideas', 'quick_bot', 'bot_builder', 'free_bots', 'signal_ai', 'auto_trader', 'sentinel_ai',
     'manual_trading', 'bulk_trader', 'batch_trader', 'copy_trading', 'speedbot', 'calculator', 'pro_ai', 'analysis_tools',
-    'analysis_hub', 'charts', 'tradingview', 'dtrader', 'ai_bots', 'digits_analysis', 'sixfold', 'ai_intel',
+    'analysis_hub', 'charts', 'tradingview', 'dtrader', 'ai_bots', 'digits_analysis', 'sixfold', 'vanguard', 'ai_intel',
 ];
 
 const sectionFromHash = (hash: string): PremiumSection => {
@@ -241,6 +245,7 @@ const PremiumLayout = observer(() => {
             case 'ai_bots': return <AIBotsPage />;
             case 'digits_analysis': return <DigitsAnalysisPage openBotBuilder={openBotBuilder} />;
             case 'sixfold': return <Suspense fallback={<PremiumLoader />}><SixfoldPage /></Suspense>;
+            case 'vanguard': return <Suspense fallback={<PremiumLoader />}><VanguardPage /></Suspense>;
             case 'ai_intel': return <Suspense fallback={<PremiumLoader />}><AiIntelPage /></Suspense>;
             default: return null;
         }
@@ -263,6 +268,7 @@ const PremiumLayout = observer(() => {
         <GlobalContractBridge />
         <Suspense fallback={null}><SentinelAiBridge /></Suspense>
         <Suspense fallback={null}><SixfoldBridge /></Suspense>
+        <Suspense fallback={null}><VanguardBridge /></Suspense>
         <Suspense fallback={null}><AiIntelBridge /></Suspense>
         <PremiumHeader active={section} navigation={customization.navigation} onChange={changeSection} />
         <main className='prodb-premium-content'>
