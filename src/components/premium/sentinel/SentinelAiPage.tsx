@@ -218,7 +218,7 @@ const FunnelPanel = () => {
                 </table>
             )}
             {sum.reasons.length > 0 && (
-                <details>
+                <details open>
                     <summary>Exact reasons (last 10 minutes)</summary>
                     <ul>
                         {sum.reasons.map(r => (

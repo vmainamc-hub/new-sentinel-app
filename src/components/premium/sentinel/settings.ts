@@ -59,8 +59,19 @@ export const normalizeEngine = (raw: unknown): EngineSettings => {
 };
 
 /** Sixfold's trading defaults, tuned for this tool: the engine's own entry digit is used (SMART learns one when the engine has none). */
+// The engines already read momentum, losing-side pressure and the entry digit, so the hardest Sixfold filters are eased here: the
+// win-streak guard (which waits for six winning digits in a row, rare enough to stop almost every trade) is off, the pressure
+// gate is a little wider and the Meter floors a little lower. None of this changes the odds of a contract; it only decides how
+// often the machine trades. The Careful preset keeps the stricter pressure gate and Meter floors.
+export const SENTINEL_GATES: Partial<SixfoldSettings> = {
+    winStreakGate: false,
+    pressureMax: 45,
+    meterFloor: 45,
+    meterFloorRecovery: 48,
+};
 export const DEFAULT_TRADING: SixfoldSettings = normalizeTrading({
     ...SIXFOLD_DEFAULTS,
+    ...SENTINEL_GATES,
     entry: 'SMART',
     selectivity: 'balanced',
 });
@@ -88,6 +99,8 @@ export const PRESETS: Preset[] = [
         engine: { mode: 'careful', requireMomentum: true, skipBlocked: true, minScore: 55, maxDanger: 60 },
         trading: {
             selectivity: 'strict',
+            winStreakGate: false,
+            pressureMax: 35,
             meterFloor: 55,
             meterFloorRecovery: 58,
             lossShield: true,
@@ -101,8 +114,10 @@ export const PRESETS: Preset[] = [
         engine: { mode: 'balanced', requireMomentum: true, skipBlocked: true, minScore: 0, maxDanger: 0 },
         trading: {
             selectivity: 'balanced',
-            meterFloor: 50,
-            meterFloorRecovery: 52,
+            winStreakGate: false,
+            pressureMax: 45,
+            meterFloor: 45,
+            meterFloorRecovery: 48,
             lossShield: true,
             pickyAfterLoss: true,
         },
@@ -114,8 +129,10 @@ export const PRESETS: Preset[] = [
         engine: { mode: 'active', requireMomentum: false, skipBlocked: true, minScore: 0, maxDanger: 0 },
         trading: {
             selectivity: 'active',
-            meterFloor: 45,
-            meterFloorRecovery: 48,
+            winStreakGate: false,
+            pressureMax: 55,
+            meterFloor: 40,
+            meterFloorRecovery: 44,
             lossShield: true,
             pickyAfterLoss: true,
         },
@@ -125,10 +142,21 @@ export const PRESETS: Preset[] = [
 const TRADING_KEY = 'sentinelai.auto.settings.v1';
 const ENGINE_KEY = 'sentinelai.auto.engine.v1';
 
+const GATES_MIGRATION_KEY = 'sentinelai.auto.gates.v1';
+
 export const loadTrading = (): SixfoldSettings => {
     try {
         const raw = window.localStorage.getItem(TRADING_KEY);
-        return normalizeTradingSettings(raw ? JSON.parse(raw) : null);
+        const stored = raw ? JSON.parse(raw) : null;
+        // One time only: settings saved before the gate changes above take the new gate values; later choices are respected.
+        if (stored && !window.localStorage.getItem(GATES_MIGRATION_KEY)) {
+            window.localStorage.setItem(GATES_MIGRATION_KEY, '1');
+            const migrated = normalizeTradingSettings({ ...stored, ...SENTINEL_GATES });
+            saveTrading(migrated);
+            return migrated;
+        }
+        window.localStorage.setItem(GATES_MIGRATION_KEY, '1');
+        return normalizeTradingSettings(stored);
     } catch {
         return DEFAULT_TRADING;
     }
