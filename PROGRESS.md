@@ -30,7 +30,8 @@ Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main onl
 - 45 Apex Intel tests pass under bun. Still no `npm run build` here (registry unreachable).
 - [x] Market discovery: `discovery.ts` (active_symbols, Volatility only, open and not suspended; returns [] on any error so the fixed ten always remain) + `SixfoldFeed.addMarkets` (extra markets on the SAME socket, no second connection; Sixfold's own scans unaffected, its 22-file suite unchanged). Wired in `AiIntelBridge`; market dropdown and scanner list discovered markets. 5 tests. NOT verified live: Deriv's real active_symbols reply shape on the public endpoint (parser accepts `underlying_symbol` or `symbol`).
 - [x] Strategy engine (logic): `rules.ts` (serializable rules: trigger digits + condition on preceding ticks), `lab.ts` (evolutionary search on TRAIN only, finalists tested ONCE on held-out VALIDATION, exact binomial + BH correction, overfit/degradation check, seeded/deterministic, start/pause/resume/stop), `registry.ts` (immutable rules, versions, lifecycle EXPERIMENTAL->UNDER_VALIDATION->APPROVED->ACTIVE->SUSPENDED->RETIRED, audit trail, rollback, lab can never approve/activate, monitor can only suspend), picker + executor trade ACTIVE strategies (rule must hold on live history). 22 new tests; lab finds a planted pattern and validates it, and finds nothing on fair random digits.
-- Next: Strategy Lab + Library screens, then agents + AI Intelligence tab.
+- [x] Strategy Lab + Strategy Library screens (`StrategyPanels.tsx`, tabs enabled): start/pause/resume/stop, config, progress, finalists with train vs unseen stats, approve/activate/suspend/retire/rollback, per-strategy audit history, override confirm. Transpiles; NOT render-tested (React not installed here).
+- Next: agents + forward monitor + AI Intelligence tab.
 
 ## Done
 - [x] Repo cloned, audited, branch created, plan committed.

@@ -555,3 +555,103 @@
         border-bottom: 1px solid var(--line);
     }
 }
+
+// Strategy Lab and Library
+.ai-intel {
+    .ai-info.warn {
+        border-color: rgba(244, 191, 105, 0.4);
+    }
+    .ai-chip-btn {
+        font-size: 11px;
+        padding: 4px 9px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        color: var(--muted);
+        cursor: pointer;
+        &.on {
+            color: var(--text);
+            border-color: var(--accent);
+        }
+    }
+    .ai-lab-results,
+    .ai-strats {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 10px;
+    }
+    .ai-lab-row {
+        display: grid;
+        grid-template-columns: minmax(220px, 2fr) 1fr 1.4fr 1fr;
+        gap: 10px;
+        align-items: center;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--red);
+        border-radius: 10px;
+        padding: 10px 12px;
+        &.pass {
+            border-left-color: var(--green);
+        }
+        b {
+            display: block;
+        }
+        @media (max-width: 760px) {
+            grid-template-columns: 1fr;
+        }
+    }
+    .ai-strat {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        &.st-active {
+            border-color: rgba(79, 214, 154, 0.5);
+        }
+        &.st-retired {
+            opacity: 0.7;
+        }
+    }
+    .ai-strat-h {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        b,
+        small {
+            display: block;
+        }
+    }
+    .ai-chip.st-active,
+    .ai-chip.st-approved {
+        background: rgba(79, 214, 154, 0.14);
+        color: var(--green);
+    }
+    .ai-chip.st-suspended,
+    .ai-chip.st-under_validation {
+        background: rgba(244, 191, 105, 0.14);
+        color: var(--amber);
+    }
+    .ai-chip.st-retired {
+        background: rgba(131, 151, 174, 0.14);
+        color: var(--muted);
+    }
+    .ai-strat-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 4px;
+    }
+    .ai-history {
+        margin: 4px 0 0;
+        padding-left: 18px;
+        font-size: 12px;
+        color: var(--muted);
+        li {
+            margin-bottom: 3px;
+        }
+    }
+}
