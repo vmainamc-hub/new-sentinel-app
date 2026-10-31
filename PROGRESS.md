@@ -1,3 +1,35 @@
+# AI Over/Under Intelligence ("AI Intel") — progress
+
+Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main only after build + tests pass; main auto-deploys to Netlify). Module dir: `src/components/premium/ai-intel/`.
+
+## Audit findings (real repo, commit e361ede)
+- Stack: React 18 + TS, rsbuild, jest (`npm test`), MobX stores, SCSS. Premium tabs lazy-loaded in `PremiumLayout.tsx` (`case 'sixfold'` pattern); nav catalog in `public/site-config/*`.
+- Sixfold simulation rules live in `entry-lab.ts` `walkForward` (trigger at i, exit at i+duration, next trigger search resumes at exit+1, one contract at a time, decisions use only past ticks) and `runner.ts` `virtualTick`/`executeVirtual` (win = `winningDigits(contract)`). `virtual-hook.ts` is the Virtual Hook state machine, NOT the simulator. Entry modes in `bot.ts`: ANY, SETUP, SMART, CUSTOM (explicit digit set), plus BRAIN (entry-brain.ts). Tests: entry-lab.spec, runner.spec exist.
+- Feed: `sixfoldFeed` (feed.ts) is the app-wide singleton on Deriv public WS, 10 hardcoded markets (1HZ10-100V, R_10-100), `onTick(symbol, digit)` listener. Reuse it; no second tick socket. Gap: market list is hardcoded, spec wants API-discovered (active_symbols) with that list as fallback.
+- Execution: `buyContractForUi` + `streamContractUntilSettled` (`src/utils/trade-purchase.ts`) with the existing authorised Deriv session and Run Panel stores (`runner-instance.ts` shows wiring). Reuse; no tokens in new code.
+- Storage: no server DB. Netlify has only `oauth-token.mjs`. `localforage` is a dependency, so persistence = IndexedDB client-side. Server-side DB is NOT available without new infra — documented limitation.
+- AI: no LLM integration exists. Plan: the 10 "agents" are deterministic statistical/ML modules; an optional LLM explanation boundary (Netlify function, key via env) added last, off by default.
+
+## Plan (stages; each ships tested before the next)
+1. [ ] Core types + Sixfold-compatible simulator (`sim.ts`) + tests (spec example 1,5,2,6,3)
+2. [ ] Stats engines: distribution (chi-square, binomial, Wilson, Bayes), sequence, regime (CUSUM), cross-market, multiple-testing
+3. [ ] Scanner adapter over sixfoldFeed (+ active_symbols discovery, freshness)
+4. [ ] Strategy registry + versioning + lifecycle (EXPERIMENTAL→…→RETIRED, promote/rollback) + IndexedDB persistence
+5. [ ] Strategy lab: candidate generation, walk-forward train/validate split, overfit checks
+6. [ ] Competition engine (min samples, CI, stability, decay)
+7. [ ] Agents + Chief agent (structured decisions, NO TRADE default)
+8. [ ] Execution governance (modes, limits, idempotency, kill switch) wired to buyContractForUi — disabled by default
+9. [ ] UI: 10 sections, tab wiring, nav
+10. [ ] Build, full test run, merge to main
+
+## Done
+- [x] Repo cloned, audited, branch created.
+
+## Not done / next
+- Everything in the plan above. Next: stage 1.
+
+---
+
 # Sentinel AI integration — progress
 
 ## Signal Zone + Sentinel AI merged into one machine (latest)
