@@ -18,9 +18,11 @@ import {
     type Row,
     scanRows,
 } from './analysis';
+import { ExecutionPanel, HistoryPanel } from './ExecutionPanel';
+import { useExecutor } from './use-executor';
 import './ai-intel.scss';
 
-type TabId = 'overview' | 'scanner' | 'competition';
+type TabId = 'overview' | 'scanner' | 'competition' | 'exec' | 'history';
 
 const TABS: Array<{ id: TabId | string; label: string; ready: boolean }> = [
     { id: 'overview', label: 'Overview', ready: true },
@@ -28,9 +30,9 @@ const TABS: Array<{ id: TabId | string; label: string; ready: boolean }> = [
     { id: 'competition', label: 'Virtual Competition', ready: true },
     { id: 'ai', label: 'AI Intelligence', ready: false },
     { id: 'lab', label: 'Strategy Lab', ready: false },
-    { id: 'exec', label: 'Live Execution', ready: false },
+    { id: 'exec', label: 'Live Execution', ready: true },
     { id: 'library', label: 'Strategy Library', ready: false },
-    { id: 'history', label: 'Trade History', ready: false },
+    { id: 'history', label: 'Trade History', ready: true },
     { id: 'perf', label: 'Performance', ready: false },
     { id: 'settings', label: 'Settings', ready: false },
 ];
@@ -109,6 +111,7 @@ function DirectionCell({ d }: { d: DirectionReport }) {
 
 export default function AiIntelPage() {
     const feed = useFeed();
+    const exec = useExecutor();
     const [tab, setTab] = useState<TabId>('overview');
     const [duration, setDuration] = useState(1);
     const [open, setOpen] = useState<string | null>(null);
@@ -258,8 +261,11 @@ export default function AiIntelPage() {
                     </div>
                     <div className='ai-card'>
                         <h3>Execution</h3>
-                        <strong>Off</strong>
-                        <small>No live trading is wired to Apex Intel yet.</small>
+                        <strong>{exec.running ? (exec.config.mode === 'AUTO' ? 'AUTO running' : 'Assisted running') : 'Stopped'}</strong>
+                        <small>
+                            {exec.session.trades} trades this session · P/L {exec.session.pnl >= 0 ? '+' : ''}
+                            {exec.session.pnl.toFixed(2)}
+                        </small>
                     </div>
                     <div className='ai-card wide'>
                         <h3>How to read this</h3>
@@ -344,6 +350,9 @@ export default function AiIntelPage() {
                     </div>
                 </section>
             )}
+
+            {tab === 'exec' && <ExecutionPanel />}
+            {tab === 'history' && <HistoryPanel />}
 
             {tab === 'competition' && (
                 <section>

@@ -18,7 +18,7 @@ Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main onl
 5. [ ] Strategy lab: candidate generation, walk-forward train/validate split, overfit checks
 6. [ ] Competition engine (min samples, CI, stability, decay)
 7. [ ] Agents + Chief agent (structured decisions, NO TRADE default)
-8. [ ] Execution governance (modes, limits, idempotency, kill switch) wired to buyContractForUi — disabled by default
+8. [~] Execution: DONE `executor.ts` + bridge + Live Execution/Trade History tabs. Real OVER 2 / UNDER 7 trades via `buyContractForUi`/`streamContractUntilSettled` (same path as Sixfold/Auto Trades, shows on Run Panel). Entry SETUP/ANY/CUSTOM, martingale recovery + optional recovery barrier, max stake, stop loss, target profit, max trades, ASSISTED (confirm each) or AUTO (needs explicit authorisation tick), instant STOP, no retry on unknown purchase, one contract at a time, stale-feed refusal. 17 tests with a fake Deriv. NOT done: reconciliation of an open contract after a page reload, concurrent contracts, AI-selected entries, live-account verification
 9. [~] UI: tab 'Apex Intel' is in the main nav (`ai_intel`); Overview, Live Scanner, Virtual Competition work on live data; the other 7 sections are shown disabled labelled 'soon'
 10. [ ] Build, full test run, merge to main
 
@@ -28,6 +28,7 @@ Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main onl
 - [x] Stage 1: `sim.ts` (SimStream, SimBook, simulate) + `__tests__/sim.spec.ts` — 12/12 pass under bun's jest-compatible runner.
 
 ## Not done / next
+- Execution has NEVER been run against real Deriv from here. Test on a DEMO account first.
 - Next: strategy registry + persistence (IndexedDB), then Strategy Lab (CUSTOM/SMART candidates with train/validation split), then agents/AI Intelligence tab, then execution governance.
 - Apex Intel page has NOT been opened in a browser or built (no npm here): it transpiles, validators pass, sim+analysis are strict-typed. First thing on a networked machine: `npm ci && npm run build && npm test`, then open the Apex Intel tab.
 - BLOCKED here: `npm ci` (registry.npmjs.org does not resolve in this sandbox; it is on the proxy's no-proxy list, so I did not override it). So `npm run build`, repo jest/eslint and type-check have NOT run. Tests run with `bun test`; pure-TS modules only (no React) until a networked machine can run `npm ci && npm run type-check && npm test && npm run build`.

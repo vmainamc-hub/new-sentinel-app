@@ -392,3 +392,166 @@
         }
     }
 }
+
+.ai-intel {
+    .ai-warn {
+        background: rgba(244, 191, 105, 0.1);
+        border: 1px solid rgba(244, 191, 105, 0.4);
+        color: var(--amber);
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-size: 13px;
+        margin-bottom: 12px;
+        line-height: 1.45;
+    }
+    .ai-info {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        padding: 8px 12px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        font-size: 13px;
+    }
+    .ai-live,
+    .ai-proposal {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--panel);
+        border: 1px solid rgba(93, 224, 192, 0.4);
+        border-radius: 12px;
+        padding: 12px 14px;
+        margin-bottom: 12px;
+        > div {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            flex: 1;
+        }
+    }
+    .ai-proposal {
+        border-color: rgba(232, 184, 74, 0.6);
+    }
+    .ai-btn.stop {
+        background: #c0392b;
+        border-color: #c0392b;
+        color: #fff;
+        font-weight: 700;
+    }
+    .ai-btn.big {
+        padding: 12px;
+        width: 100%;
+        margin-top: 6px;
+    }
+    .ai-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+    .ai-why {
+        color: var(--amber);
+        margin-top: 4px;
+    }
+    .ai-field input {
+        background: var(--panel-2);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 6px 8px;
+        width: 100%;
+    }
+    .ai-check {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        font-size: 13px;
+        &.warn {
+            color: var(--amber);
+        }
+    }
+    .ai-two {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    .ai-digits {
+        display: grid;
+        grid-template-columns: repeat(10, 1fr);
+        gap: 4px;
+        button {
+            background: var(--panel-2);
+            color: var(--muted);
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 6px 0;
+            cursor: pointer;
+            &.on {
+                background: var(--accent);
+                color: #1a1405;
+                border-color: var(--accent);
+            }
+        }
+    }
+    .ai-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 10px;
+        margin: 14px 0;
+        > div {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        b {
+            font-size: 18px;
+        }
+        .pos {
+            color: var(--green);
+        }
+        .neg {
+            color: var(--red);
+        }
+    }
+    .ai-two-col {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 12px;
+    }
+    .ai-log,
+    .ai-trades {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 12.5px;
+        li.win,
+        li.won {
+            color: var(--green);
+        }
+        li.loss,
+        li.lost {
+            color: var(--red);
+        }
+        li.warn,
+        li.unconfirmed {
+            color: var(--amber);
+        }
+        time {
+            color: var(--muted);
+            margin-right: 6px;
+        }
+    }
+    .ai-trades li {
+        display: grid;
+        grid-template-columns: 80px 1fr 60px 70px;
+        gap: 8px;
+        padding: 4px 0;
+        border-bottom: 1px solid var(--line);
+    }
+}

@@ -70,6 +70,7 @@ const SentinelAiBridge = lazy(() => import('./sentinel/SentinelAiBridge'));
 // Sixfold carries its own simulator and crowd model, so it also loads on demand.
 const SixfoldPage = lazy(() => import('./sixfold/SixfoldPage'));
 const AiIntelPage = lazy(() => import('./ai-intel/AiIntelPage'));
+const AiIntelBridge = lazy(() => import('./ai-intel/AiIntelBridge'));
 // Its runner trades on its own, so the bridge stays mounted on every tab (Run Panel hand-off, Stop sync, session-drop stop).
 const SixfoldBridge = lazy(() => import('./sixfold/sixfold-bridge'));
 const DTraderPage = lazy(() => import('./dtrader/DTraderPage'));
@@ -262,6 +263,7 @@ const PremiumLayout = observer(() => {
         <GlobalContractBridge />
         <Suspense fallback={null}><SentinelAiBridge /></Suspense>
         <Suspense fallback={null}><SixfoldBridge /></Suspense>
+        <Suspense fallback={null}><AiIntelBridge /></Suspense>
         <PremiumHeader active={section} navigation={customization.navigation} onChange={changeSection} />
         <main className='prodb-premium-content'>
             {!isBotBuilder && renderSection()}
