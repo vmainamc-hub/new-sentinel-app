@@ -13,10 +13,13 @@
 // if you switch it on, the contract moves to the recovery barrier. A multiplier makes the next win recover earlier
 // losses but also makes a long losing run cost much more; the max-stake and stop-loss limits exist for that reason.
 import { type Contract, losingDigits } from '@/components/premium/sixfold/bot';
+import { type Pick, type PickDirection, type PickOptions } from './picker';
 import { OVER_2, UNDER_7 } from './sim';
 
 export type Direction = 'OVER_2' | 'UNDER_7';
 export type ExecEntry = 'SETUP' | 'ANY' | 'CUSTOM';
+/** Market value that lets the executor choose the market, direction and entry itself. */
+export const AUTO_MARKET = 'AUTO';
 /** AUTO buys by itself on every qualifying tick. ASSISTED prepares the contract and waits for your click. */
 export type ExecMode = 'ASSISTED' | 'AUTO';
 
@@ -47,6 +50,8 @@ export type ExecConfig = {
     targetProfit: number;
     /** Stop after this many trades (0 = off). */
     maxTrades: number;
+    /** Used when market is AUTO. */
+    pick: { evidenceOnly: boolean; directions: 'BOTH' | PickDirection };
     mode: ExecMode;
     /** AUTO needs this to be true: the person has read and accepted that it trades without asking. */
     autoAuthorised: boolean;
@@ -64,6 +69,7 @@ export const DEFAULT_EXEC: ExecConfig = {
     stopLoss: 20,
     targetProfit: 10,
     maxTrades: 0,
+    pick: { evidenceOnly: false, directions: 'BOTH' },
     mode: 'ASSISTED',
     autoAuthorised: false,
 };
@@ -75,6 +81,9 @@ export const PROPOSAL_TTL_MS = 3_000;
 const COOLDOWN_MS = 300;
 const MAX_REJECTIONS_IN_A_ROW = 3;
 const HISTORY_LIMIT = 500;
+/** AUTO market: how often the choice is reviewed, and how much better a rival must be (in win-rate points) to replace it. */
+export const PICK_EVERY_MS = 4_000;
+export const PICK_SWITCH_MARGIN = 0.02;
 
 const clampInt = (x: unknown, lo: number, hi: number, fallback: number) => {
     const n = Math.trunc(Number(x));
@@ -107,6 +116,10 @@ export function normalizeExec(raw: Partial<ExecConfig> | null | undefined): Exec
         stopLoss: money(Math.max(0, num(r.stopLoss, d.stopLoss))),
         targetProfit: money(Math.max(0, num(r.targetProfit, d.targetProfit))),
         maxTrades: clampInt(r.maxTrades, 0, 100000, d.maxTrades),
+        pick: {
+            evidenceOnly: Boolean(r.pick?.evidenceOnly),
+            directions: r.pick?.directions === 'OVER_2' || r.pick?.directions === 'UNDER_7' ? r.pick.directions : 'BOTH',
+        },
         mode: r.mode === 'AUTO' ? 'AUTO' : 'ASSISTED',
         autoAuthorised: Boolean(r.autoAuthorised),
     };
@@ -171,6 +184,11 @@ export type ExecSnapshot = {
     stopMessage: string | null;
     /** What would be bought next, shown even while waiting. */
     next: { label: string; stake: number; recovery: boolean; triggers: number[] } | null;
+    /** AUTO market: what the picker chose and the next best alternatives, or null while nothing qualifies. */
+    selected: Pick | null;
+    candidates: Pick[];
+    /** Why nothing is selected (AUTO only). */
+    pickNote: string | null;
 };
 
 type Loose = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -207,6 +225,8 @@ export type ExecIO = {
     lastTickAt: (symbol: string) => number | null;
     isFeedLive: () => boolean;
     connectFeed: () => void;
+    /** AUTO market: rank every market / direction / entry from the live feed. */
+    pick?: (opts: PickOptions) => Pick[];
     describeFailure: (e: unknown) => { kind: string; message: string; outcomeUnknown: boolean };
     afterStop?: () => void;
     load: () => Partial<ExecConfig> | null;
@@ -244,6 +264,10 @@ export class AiIntelExecutor {
     private listeners = new Set<() => void>();
     private snap: ExecSnapshot;
     private seq = 0;
+    private selected: Pick | null = null;
+    private candidates: Pick[] = [];
+    private lastPickAt = 0;
+    private pickNote: string | null = null;
     private disposeWatch: (() => void) | null = null;
     private watch: ((on: (runPanelRunning: boolean, active: string | null) => void) => () => void) | null = null;
 
@@ -272,8 +296,44 @@ export class AiIntelExecutor {
         this.emit();
     }
 
+    /** The configuration the next trade actually uses: in AUTO market the picker's market, direction and entry. */
+    private eff(): ExecConfig {
+        if (this.cfg.market !== AUTO_MARKET) return this.cfg;
+        const s = this.selected;
+        if (!s) return this.cfg;
+        return { ...this.cfg, market: s.market, direction: s.direction, entry: s.entry, customDigits: s.customDigits.length ? s.customDigits : this.cfg.customDigits };
+    }
+
+    /** Review the AUTO choice. Never while a contract is open or a signal is waiting for confirmation. */
+    private review(now: number, force = false) {
+        if (this.cfg.market !== AUTO_MARKET || !this.io.pick) return;
+        if (this.inFlight || this.proposal) return;
+        if (!force && this.selected && now - this.lastPickAt < PICK_EVERY_MS) return;
+        if (!force && !this.selected && now - this.lastPickAt < 1000) return;
+        this.lastPickAt = now;
+        const ranked = this.io.pick({ duration: this.cfg.duration, evidenceOnly: this.cfg.pick.evidenceOnly, directions: this.cfg.pick.directions });
+        this.candidates = ranked.slice(0, 5);
+        const best = ranked[0] ?? null;
+        const cur = this.selected ? ranked.find(r => r.key === this.selected!.key) ?? null : null;
+        let next: Pick | null = this.selected;
+        if (!best) next = null;
+        else if (!cur || best.score - cur.score >= PICK_SWITCH_MARGIN) next = best;
+        else next = cur; // keep the current one, refreshed with its latest numbers
+        if (!next && this.selected) this.addLog('info', 'Auto-pick: nothing qualifies right now, waiting.');
+        if (next && (!this.selected || this.selected.key !== next.key)) {
+            this.addLog('info', `Auto-pick: ${next.label} on ${next.market}. ${next.reason}.`);
+        }
+        this.selected = next;
+        this.pickNote = next
+            ? null
+            : this.cfg.pick.evidenceOnly
+              ? 'No market beats chance after false-discovery control yet. Waiting (this is the normal result on random digits).'
+              : 'Waiting for fresh data: a market needs 300+ recent ticks and a non-unstable regime.';
+        this.emit();
+    }
+
     private build(): ExecSnapshot {
-        const n = nextTrade(this.cfg, this.losses);
+        const n = nextTrade(this.eff(), this.losses);
         return {
             running: this.running,
             phase: this.phase,
@@ -285,7 +345,10 @@ export class AiIntelExecutor {
             log: this.log.slice(0, 60),
             lastError: this.lastError,
             stopMessage: this.stopMessage,
-            next: { label: labelOf(n.contract), stake: n.stake, recovery: n.recovery, triggers: [...triggerSet(this.cfg, n.contract)] },
+            next: { label: labelOf(n.contract), stake: n.stake, recovery: n.recovery, triggers: [...triggerSet(this.eff(), n.contract)] },
+            selected: this.selected,
+            candidates: this.candidates,
+            pickNote: this.pickNote,
         };
     }
 
@@ -305,7 +368,8 @@ export class AiIntelExecutor {
         if (!this.io.isAuthorized()) return 'Please log in to your Deriv account before trading.';
         if (c.stake < MIN_STAKE) return `Stake must be at least ${MIN_STAKE.toFixed(2)}.`;
         if (c.maxStake < c.stake) return 'Max stake is below the stake.';
-        if (c.entry === 'CUSTOM' && c.customDigits.length === 0) return 'Pick at least one entry digit for CUSTOM.';
+        if (c.market === AUTO_MARKET && !this.io.pick) return 'Auto-pick is not available in this build.';
+        if (c.market !== AUTO_MARKET && c.entry === 'CUSTOM' && c.customDigits.length === 0) return 'Pick at least one entry digit for CUSTOM.';
         if (c.mode === 'AUTO' && !c.autoAuthorised) return 'AUTO needs your explicit authorisation: tick the box that says it trades without asking.';
         if (c.stopLoss === 0 && c.maxTrades === 0 && c.targetProfit === 0) return 'Set at least one limit: stop loss, target profit or max trades.';
         return null;
@@ -334,6 +398,10 @@ export class AiIntelExecutor {
         this.inFlight = false;
         this.session = { trades: 0, wins: 0, losses: 0, pnl: 0 };
         this.runToken += 1;
+        this.selected = null;
+        this.candidates = [];
+        this.pickNote = null;
+        this.lastPickAt = 0;
         this.running = true;
         this.phase = 'waiting';
         try {
@@ -357,10 +425,10 @@ export class AiIntelExecutor {
             this.addLog('info', 'Connecting to the live market feed.');
             this.io.connectFeed();
         }
-        const n = nextTrade(this.cfg, 0);
+        const n = nextTrade(this.eff(), 0);
         this.addLog(
             'info',
-            `Started: ${labelOf(n.contract)} on ${this.cfg.market}, stake ${n.stake.toFixed(2)}, entry ${this.cfg.entry}, ${this.cfg.mode === 'AUTO' ? 'AUTO (buys by itself)' : 'ASSISTED (you confirm each trade)'}.`
+            `Started: ${this.cfg.market === AUTO_MARKET ? 'AUTO market (the tool picks market, direction and entry)' : `${labelOf(n.contract)} on ${this.cfg.market}`}, stake ${n.stake.toFixed(2)}, entry ${this.cfg.entry}, ${this.cfg.mode === 'AUTO' ? 'AUTO (buys by itself)' : 'ASSISTED (you confirm each trade)'}.`
         );
         this.emit();
     }
@@ -411,8 +479,11 @@ export class AiIntelExecutor {
 
     /** Every live tick of every market. Only the configured market matters. */
     handleTick(symbol: string, digit: number) {
-        if (!this.running || symbol !== this.cfg.market) return;
+        if (!this.running) return;
         const now = this.io.now();
+        this.review(now);
+        const e = this.eff();
+        if (symbol !== e.market || (this.cfg.market === AUTO_MARKET && !this.selected)) return;
         if (this.proposal && now > this.proposal.expiresAt) {
             this.addLog('info', `Dropped the ${this.proposal.label} signal: not confirmed in time, the trigger tick is stale.`);
             this.proposal = null;
@@ -421,8 +492,8 @@ export class AiIntelExecutor {
         }
         if (this.inFlight || this.proposal || now < this.cooldownUntil) return;
         if (this.limitReached()) return;
-        const n = nextTrade(this.cfg, this.losses);
-        if (!triggerSet(this.cfg, n.contract).has(digit)) return;
+        const n = nextTrade(e, this.losses);
+        if (!triggerSet(e, n.contract).has(digit)) return;
         const check = this.stakeCheck(n.stake);
         if (check) return this.stop(check);
         const label = labelOf(n.contract);
@@ -496,7 +567,7 @@ export class AiIntelExecutor {
 
     private async execute(p: Proposal) {
         if (!this.running || this.inFlight) return;
-        const symbol = this.cfg.market;
+        const symbol = this.eff().market;
         const lastTick = this.io.lastTickAt(symbol);
         if (!this.io.isAuthorized()) return this.stop('Stopped: disconnected from Deriv.');
         if (lastTick === null || this.io.now() - lastTick > FRESH_TICK_MS) {
@@ -635,5 +706,6 @@ export class AiIntelExecutor {
         this.persistTrades();
         this.emit();
         if (this.running) this.limitReached();
+        if (this.running) this.review(this.io.now(), true);
     }
 }

@@ -314,3 +314,92 @@ describe('ASSISTED execution', () => {
         expect(h.ex.getSnapshot().proposal).toBeNull();
     });
 });
+
+describe('AUTO market (the tool picks market, direction and entry)', () => {
+    const pickOf = (market: string, direction: 'OVER_2' | 'UNDER_7', score = 0.05, entry: 'SETUP' | 'ANY' | 'CUSTOM' = 'SETUP', customDigits: number[] = []) => ({
+        key: `${market}|${direction}|${entry}`, market, direction, entry, customDigits, strategyId: null, label: `${direction} ${entry}`, score,
+        trades: 100, rate: 0.7, significant: true, q: 0.01, regime: 'STABLE' as const, reason: 'test',
+    });
+
+    it('trades the picked market and direction only, ignoring other markets', async () => {
+        const ranked = [pickOf('R_50', 'UNDER_7')];
+        const h = harness({ market: 'AUTO' }, { pick: () => ranked });
+        h.ex.start();
+        h.tick(8, 'R_10'); // not the picked market
+        expect(h.buys).toHaveLength(0);
+        h.tick(8, 'R_50'); // UNDER 7 SETUP trigger is 7-9
+        await flush();
+        expect(h.buys).toHaveLength(1);
+        expect(h.buys[0].parameters).toMatchObject({ symbol: 'R_50', contract_type: 'DIGITUNDER', barrier: '7' });
+        expect(h.ex.getSnapshot().selected?.market).toBe('R_50');
+    });
+
+    it('waits while nothing qualifies, then trades once something does', async () => {
+        let ranked: any[] = [];
+        const h = harness({ market: 'AUTO' }, { pick: () => ranked });
+        h.ex.start();
+        h.tick(1, 'R_10');
+        expect(h.buys).toHaveLength(0);
+        expect(h.ex.getSnapshot().selected).toBeNull();
+        expect(h.ex.getSnapshot().pickNote).toBeTruthy();
+        ranked = [pickOf('R_25', 'OVER_2')];
+        h.advance(2000);
+        h.tick(0, 'R_25');
+        await flush();
+        expect(h.buys).toHaveLength(1);
+        expect(h.buys[0].parameters).toMatchObject({ symbol: 'R_25', contract_type: 'DIGITOVER', barrier: '2' });
+    });
+
+    it('does not switch away for a marginally better rival, but does for a clearly better one', async () => {
+        let ranked = [pickOf('R_25', 'OVER_2', 0.06), pickOf('R_10', 'OVER_2', 0.05)];
+        const h = harness({ market: 'AUTO' }, { pick: () => ranked });
+        h.ex.start();
+        h.tick(5, 'R_10');
+        expect(h.ex.getSnapshot().selected?.market).toBe('R_25'); // first pick is the best
+        ranked = [pickOf('R_10', 'OVER_2', 0.07), pickOf('R_25', 'OVER_2', 0.06)];
+        h.advance(5000);
+        h.tick(5, 'R_10');
+        expect(h.ex.getSnapshot().selected?.market).toBe('R_25'); // +0.01 is under the margin
+        ranked = [pickOf('R_10', 'OVER_2', 0.12), pickOf('R_25', 'OVER_2', 0.06)];
+        h.advance(5000);
+        h.tick(5, 'R_10');
+        expect(h.ex.getSnapshot().selected?.market).toBe('R_10');
+    });
+
+    it('never switches while a contract is open, and recovery stake still doubles across picks', async () => {
+        let ranked = [pickOf('R_10', 'OVER_2', 0.05)];
+        const h = harness({ market: 'AUTO' }, { pick: () => ranked });
+        h.ex.start();
+        h.tick(0, 'R_10');
+        await flush();
+        expect(h.buys).toHaveLength(1);
+        ranked = [pickOf('R_75', 'UNDER_7', 0.5)];
+        h.advance(6000);
+        h.tick(9, 'R_75'); // contract open: no switch, no second order
+        expect(h.ex.getSnapshot().selected?.market).toBe('R_10');
+        expect(h.buys).toHaveLength(1);
+        await h.lose(0);
+        h.advance(6000);
+        h.tick(9, 'R_75'); // now free: switched to the better pick, stake doubled for recovery
+        await flush();
+        expect(h.buys).toHaveLength(2);
+        expect(h.buys[1].parameters).toMatchObject({ symbol: 'R_75', amount: 2 });
+    });
+
+    it('CUSTOM picks use the strategy digits as the trigger', async () => {
+        const h = harness({ market: 'AUTO' }, { pick: () => [pickOf('R_10', 'OVER_2', 0.05, 'CUSTOM', [4])] });
+        h.ex.start();
+        h.tick(1, 'R_10');
+        expect(h.buys).toHaveLength(0);
+        h.tick(4, 'R_10');
+        await flush();
+        expect(h.buys).toHaveLength(1);
+    });
+
+    it('refuses to start AUTO market without a picker', () => {
+        const h = harness({ market: 'AUTO' });
+        h.ex.start();
+        expect(h.ex.getSnapshot().running).toBe(false);
+        expect(h.ex.getSnapshot().lastError).toMatch(/Auto-pick/);
+    });
+});

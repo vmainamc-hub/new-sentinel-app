@@ -4,6 +4,8 @@ import { api_base } from '@/external/bot-skeleton';
 import { sixfoldFeed } from '@/components/premium/sixfold/feed';
 import { describeTradeFailure } from '@/utils/trade-errors';
 import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purchase';
+import { rankPicks } from './picker';
+import { getCandidates } from './candidates';
 import { AiIntelExecutor, type ExecConfig, type ExecTrade } from './executor';
 
 const CONFIG_KEY = 'apex_intel_exec_v1';
@@ -33,6 +35,7 @@ export const aiIntelExecutor = new AiIntelExecutor({
     lastTickAt: symbol => sixfoldFeed.getLastTickAt(symbol),
     isFeedLive: () => sixfoldFeed.isLive(),
     connectFeed: () => sixfoldFeed.connect(),
+    pick: opts => rankPicks(sixfoldFeed.getLiveSeries(), symbol => sixfoldFeed.getLastTickAt(symbol), Date.now(), { ...opts, candidates: getCandidates() }),
     describeFailure: error => describeTradeFailure(error),
     afterStop: () => {
         const base = api_base as { is_stopping?: boolean; setIsRunning?: (value: boolean) => void };

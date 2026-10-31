@@ -1,7 +1,7 @@
 // APEX INTEL: Live Execution and Trade History. Real trades: they go to your connected Deriv account.
 import { useEffect, useState } from 'react';
 import { MARKETS, marketName } from '@/components/premium/sixfold/feed';
-import { type ExecConfig, type ExecTrade, MIN_STAKE } from './executor';
+import { AUTO_MARKET, type ExecConfig, type ExecTrade, MIN_STAKE } from './executor';
 import { aiIntelExecutor } from './executor-instance';
 import { useExecutor } from './use-executor';
 
@@ -40,6 +40,8 @@ export function ExecutionPanel() {
     const set = (patch: Partial<ExecConfig>) => aiIntelExecutor.configure(patch);
     const setRec = (patch: Partial<ExecConfig['recovery']>) => aiIntelExecutor.configure({ recovery: { ...c.recovery, ...patch } });
     const blocker = s.running ? null : aiIntelExecutor.startBlocker();
+    const auto = c.market === AUTO_MARKET;
+    const where = auto ? (s.selected ? `${marketName(s.selected.market)} · ${s.selected.label}` : 'AUTO: no market picked yet') : marketName(c.market);
 
     return (
         <section className='ai-exec'>
@@ -52,7 +54,7 @@ export function ExecutionPanel() {
                     <div>
                         <strong>{s.phase === 'waiting' ? 'Waiting for an entry digit' : s.phase === 'ready' ? 'Signal ready: confirm to buy' : s.phase === 'buying' ? 'Buying…' : 'Contract open'}</strong>
                         <small>
-                            {marketName(c.market)} · next {s.next?.label} at {s.next?.stake.toFixed(2)}
+                            {where} · next {s.next?.label} at {s.next?.stake.toFixed(2)}
                             {s.next?.recovery ? ' (recovery)' : ''} · enters on digit {s.next?.triggers.join(' ')}
                         </small>
                     </div>
@@ -69,7 +71,7 @@ export function ExecutionPanel() {
                             {s.proposal.recovery ? ` · recovery step ${s.proposal.step}` : ''}
                         </b>
                         <small>
-                            Stake {s.proposal.stake.toFixed(2)} on {marketName(c.market)} · entry digit {s.proposal.triggerDigit} · {c.duration} tick{c.duration > 1 ? 's' : ''}
+                            Stake {s.proposal.stake.toFixed(2)} on {auto && s.selected ? marketName(s.selected.market) : marketName(c.market)} · entry digit {s.proposal.triggerDigit} · {c.duration} tick{c.duration > 1 ? 's' : ''}
                         </small>
                     </div>
                     <button className='ai-btn primary' onClick={() => aiIntelExecutor.confirmProposal()}>
@@ -83,12 +85,33 @@ export function ExecutionPanel() {
             {s.lastError && !s.running ? <div className='ai-error'>{s.lastError}</div> : null}
             {s.stopMessage && !s.running ? <div className='ai-info'>{s.stopMessage}</div> : null}
 
+            {auto && s.running && (
+                <div className='ai-card wide'>
+                    <h3>Auto-pick</h3>
+                    {s.selected ? (
+                        <>
+                            <strong>
+                                {marketName(s.selected.market)} · {s.selected.label}
+                            </strong>
+                            <small>{s.selected.reason}. Regime: {s.selected.regime.toLowerCase().replace('_', ' ')}. Reviewed every few seconds; never changed while a contract is open.</small>
+                        </>
+                    ) : (
+                        <small>{s.pickNote ?? 'Choosing…'}</small>
+                    )}
+                    {s.candidates.length > 1 && (
+                        <small>
+                            Next best: {s.candidates.slice(1, 4).map(p => `${marketName(p.market)} ${p.label}`).join(' · ')}
+                        </small>
+                    )}
+                </div>
+            )}
             <div className='ai-grid'>
                 <div className='ai-card'>
                     <h3>Contract</h3>
                     <label className='ai-field'>
                         Market
                         <select value={c.market} disabled={locked} onChange={e => set({ market: e.target.value })}>
+                            <option value={AUTO_MARKET}>AUTO: the tool picks market, direction and entry</option>
                             {MARKETS.map(([sym, name]) => (
                                 <option key={sym} value={sym}>
                                     {name}
@@ -96,6 +119,26 @@ export function ExecutionPanel() {
                             ))}
                         </select>
                     </label>
+                    {auto && (
+                        <>
+                            <label className='ai-field'>
+                                Directions to consider
+                                <select value={c.pick.directions} disabled={locked} onChange={e => set({ pick: { ...c.pick, directions: e.target.value as ExecConfig['pick']['directions'] } })}>
+                                    <option value='BOTH'>OVER 2 and UNDER 7</option>
+                                    <option value='OVER_2'>OVER 2 only</option>
+                                    <option value='UNDER_7'>UNDER 7 only</option>
+                                </select>
+                            </label>
+                            <label className='ai-check'>
+                                <input type='checkbox' checked={c.pick.evidenceOnly} disabled={locked} onChange={e => set({ pick: { ...c.pick, evidenceOnly: e.target.checked } })} />
+                                Only trade when a market beats chance after false-discovery control (usually waits on random digits)
+                            </label>
+                            <small>
+                                Off: it trades the best-ranked fresh market even without proven edge. The ranking uses the lower bound of the win-rate interval, so a lucky short run cannot lead.
+                            </small>
+                        </>
+                    )}
+                    {!auto && (<>
                     <label className='ai-field'>
                         Direction
                         <select value={c.direction} disabled={locked} onChange={e => set({ direction: e.target.value as ExecConfig['direction'] })}>
@@ -125,6 +168,7 @@ export function ExecutionPanel() {
                             ))}
                         </div>
                     )}
+                    </>)}
                     <NumField label='Contract length (ticks)' value={c.duration} min={1} disabled={locked} onCommit={n => set({ duration: n })} />
                 </div>
 

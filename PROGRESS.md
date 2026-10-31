@@ -22,6 +22,14 @@ Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main onl
 9. [~] UI: tab 'Apex Intel' is in the main nav (`ai_intel`); Overview, Live Scanner, Virtual Competition work on live data; the other 7 sections are shown disabled labelled 'soon'
 10. [ ] Build, full test run, merge to main
 
+## Update (latest): AUTO market runner
+- [x] `picker.ts`: ranks every fresh market x direction x entry (SETUP/ANY/CUSTOM strategies) by the LOWER bound of the win-rate interval; `evidenceOnly` mode requires BH-significance. 4 tests.
+- [x] Executor: market `AUTO` = tool picks market/direction/entry (reviewed every 4 s, switch only if +2 pts better, never while a contract is open or a signal awaits confirmation); recovery stake keeps doubling across picks; all limits unchanged. 6 tests.
+- [x] Live Execution UI: "AUTO" market option, directions filter, evidence-only toggle, pick card with next-best.
+- Honest note: default (evidence-only OFF) trades the best-ranked market even without proven edge. On random digits no market is expected to beat chance; evidence-only ON will mostly wait.
+- 45 Apex Intel tests pass under bun. Still no `npm run build` here (registry unreachable).
+- Next: market discovery (active_symbols), registry + Strategy Lab + Library, agents + AI Intelligence tab.
+
 ## Done
 - [x] Repo cloned, audited, branch created, plan committed.
 - [x] Apex Intel tab wired into the app (types, PremiumLayout, header icon, nav catalog, apex-sentinel domain nav); site-config validators pass.
