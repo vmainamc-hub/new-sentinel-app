@@ -176,16 +176,24 @@ export type ScanFunnel = {
     /** Contracts the runner can buy (not quarantined). */
     tradable: number;
     resting: number;
-    /** Refused by the pressure / multi-window / streak guards. */
+    /** Refused by the losing-side pressure / multi-window / winning-side guards, in total and by guard. */
     guarded: number;
+    guardedPressure: number;
+    guardedWindow: number;
+    guardedWinning: number;
     /** Refused by the Meter guide (a loss cluster or a Meter floor). */
     meterVeto: number;
     /** Refused by the engine overlay (Sentinel AI / Fusion do not back it). */
     overlayVeto: number;
     /** Allowed by everything above but the score is under the bar it needs. */
     belowBar: number;
-    /** Clear to be armed. */
+    /** Clear of every check above. */
     eligible: number;
+    /** Of the eligible: dropped by the win-streak guard (too many losses lately), and ready to buy now (a full run of wins). */
+    streakDropped: number;
+    streakReady: number;
+    /** The win-streak guard is switched on. */
+    streakGate: boolean;
     /** Most common reasons, normalised, with how many contracts each stopped. */
     reasons: Array<{ reason: string; count: number }>;
 };
@@ -835,20 +843,25 @@ export class SixfoldRunner {
 
     /** Evaluate the contract that will actually be bought, including the recovery barrier after a loss. */
     private guardReason(digits: readonly number[], primary: Contract): string | null {
+        return this.guardCheck(digits, primary)?.reason ?? null;
+    }
+
+    /** Which guard refuses this contract (the first that does), and why. */
+    private guardCheck(digits: readonly number[], primary: Contract): { kind: 'pressure' | 'window' | 'winning'; reason: string } | null {
         const { pressureGate: pressureOn, multiWindowGate: windowsOn, pressureMax, winPressureGate: winOn, winPressureMin } = this.settings;
         if (!pressureOn && !windowsOn && !winOn) return null;
         const traded = tradeContract(primary, this.session.consecutiveLosses, this.settings).contract;
         if (pressureOn) {
             const g = pressureGate(losingSidePressure(digits, traded), pressureMax);
-            if (!g.ok) return g.reason;
+            if (!g.ok) return { kind: 'pressure', reason: g.reason };
         }
         if (windowsOn) {
             const g = multiWindowGate(multiWindowHealth(digits, traded));
-            if (!g.ok) return g.reason;
+            if (!g.ok) return { kind: 'window', reason: g.reason };
         }
         if (winOn) {
             const g = winningSideGate(winningSidePressure(digits, traded, winPressureMin));
-            if (!g.ok) return g.reason;
+            if (!g.ok) return { kind: 'winning', reason: g.reason };
         }
         return null;
     }
@@ -961,10 +974,16 @@ export class SixfoldRunner {
             tradable: 0,
             resting: 0,
             guarded: 0,
+            guardedPressure: 0,
+            guardedWindow: 0,
+            guardedWinning: 0,
             meterVeto: 0,
             overlayVeto: 0,
             belowBar: 0,
             eligible: 0,
+            streakDropped: 0,
+            streakReady: 0,
+            streakGate: this.settings.winStreakGate,
             reasons: [],
         };
         const tally = new Map<string, number>();
@@ -980,10 +999,13 @@ export class SixfoldRunner {
                 note('Resting after a loss on this market');
                 continue;
             }
-            const guard = this.guards.get(`${cell.symbol}|${cell.key}`) ?? null;
-            if (guard) {
+            const check = this.guardCheck(this.io.feed.getLiveSeries()[cell.symbol] ?? [], cell.contract);
+            if (check) {
                 f.guarded += 1;
-                note(guard);
+                if (check.kind === 'pressure') f.guardedPressure += 1;
+                else if (check.kind === 'window') f.guardedWindow += 1;
+                else f.guardedWinning += 1;
+                note(check.reason);
                 continue;
             }
             const meter = this.meterOnly(cell, now);
@@ -999,8 +1021,16 @@ export class SixfoldRunner {
                 continue;
             }
             const e = eligibility(cell, this.settings.selectivity, bump + meter.bump + (extra?.bump ?? 0));
-            if (e.ok) f.eligible += 1;
-            else {
+            if (e.ok) {
+                f.eligible += 1;
+                if (this.settings.winStreakGate) {
+                    const read = this.streakOf(cell.symbol, cell);
+                    if (read.abort) {
+                        f.streakDropped += 1;
+                        note('Win-streak guard: too many losses in the last 10 ticks');
+                    } else if (read.ok) f.streakReady += 1;
+                }
+            } else {
                 f.belowBar += 1;
                 note(e.reason);
             }

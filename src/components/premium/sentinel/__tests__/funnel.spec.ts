@@ -22,6 +22,12 @@ const engine = (patch: Partial<EngineFunnel> = {}): EngineFunnel => ({
 const scan = (patch: Partial<ScanFunnel> = {}): ScanFunnel => ({
     at: 1,
     cells: 60,
+    guardedPressure: 0,
+    guardedWindow: 0,
+    guardedWinning: 0,
+    streakDropped: 0,
+    streakReady: 0,
+    streakGate: false,
     tradable: 60,
     resting: 0,
     guarded: 0,
@@ -73,13 +79,30 @@ describe('describeFunnel', () => {
         expect(describeFunnel(engine(), scan(), false).blockedAt).toBeNull();
         expect(describeFunnel(engine(), scan(), true).verdict).toMatch(/armed/i);
     });
+    it('splits the guard refusals by guard', () => {
+        const v = describeFunnel(
+            engine(),
+            scan({ guarded: 56, guardedPressure: 40, guardedWindow: 10, guardedWinning: 6, eligible: 0 }),
+            false
+        );
+        const note = v.steps.find(s => s.key === 'guards')?.note ?? '';
+        expect(note).toMatch(/40 losing-side pressure, 10 multi-window, 6 winning-side/);
+    });
+    it('blames the win-streak guard when it drops every contract that cleared the score bar', () => {
+        const v = describeFunnel(engine(), scan({ eligible: 3, streakDropped: 3, streakGate: true }), false);
+        expect(v.blockedAt).toBe('streak');
+        expect(v.steps.find(s => s.key === 'streak')?.note).toMatch(/3 dropped/);
+    });
+    it('says the win-streak guard is off when it is', () => {
+        expect(describeFunnel(engine(), scan(), false).steps.find(s => s.key === 'streak')?.note).toBe('off');
+    });
     it('counts alive contracts down the scanner steps', () => {
         const v = describeFunnel(
             engine(),
             scan({ resting: 6, guarded: 4, meterVeto: 10, overlayVeto: 30, belowBar: 6, eligible: 4 }),
             false
         );
-        expect(v.steps.filter(s => s.side === 'scanner').map(s => s.alive)).toEqual([60, 60, 54, 50, 40, 10, 4, 0]);
+        expect(v.steps.filter(s => s.side === 'scanner').map(s => s.alive)).toEqual([60, 60, 54, 50, 40, 10, 4, 4, 0]);
     });
 });
 

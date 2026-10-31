@@ -111,9 +111,11 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
         push({
             key: 'guards',
             side: 'scanner',
-            label: 'Past the pressure / window / streak guards',
+            label: 'Past the pressure / window / winning-side guards',
             alive: afterGuard,
-            note: scan.guarded ? `${scan.guarded} refused` : '',
+            note: scan.guarded
+                ? `${scan.guarded} refused: ${scan.guardedPressure} losing-side pressure, ${scan.guardedWindow} multi-window, ${scan.guardedWinning} winning-side`
+                : '',
         });
         const afterMeter = afterGuard - scan.meterVeto;
         push({
@@ -137,6 +139,16 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
             label: 'Scanner score clears the bar',
             alive: scan.eligible,
             note: scan.belowBar ? `${scan.belowBar} under the score they need` : '',
+        });
+        const afterStreak = scan.eligible - scan.streakDropped;
+        push({
+            key: 'streak',
+            side: 'scanner',
+            label: 'Past the win-streak guard',
+            alive: afterStreak,
+            note: scan.streakGate
+                ? `ON: ${scan.streakDropped} dropped for losing digits lately, ${scan.streakReady} have their run of wins now, the rest wait for one`
+                : 'off',
         });
         push({
             key: 'armed',
@@ -175,7 +187,8 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
                 : 'The engine board is empty.',
         tradable: 'Every contract is quarantined.',
         resting: 'Every market is resting after a loss.',
-        guards: 'The pressure, window or streak guards refuse every contract.',
+        guards: 'The losing-side pressure, multi-window or winning-side guards refuse every contract. Check which one in the step note and loosen or switch it off.',
+        streak: 'The win-streak guard drops every contract that cleared the checks.',
         meter: 'The Meter guide refuses every contract (a loss cluster or a Meter floor).',
         engines: 'The engines back nothing the scanner can trade.',
         bar: 'Contracts get through every check but none scores high enough for the bar it needs.',
@@ -216,7 +229,7 @@ export class FunnelTally {
             stoppedBy: [
                 { key: 'engines', label: 'Engines did not back it', count: sum(s => s.overlayVeto) },
                 { key: 'meter', label: 'Meter guide', count: sum(s => s.meterVeto) },
-                { key: 'guards', label: 'Pressure / window / streak guards', count: sum(s => s.guarded) },
+                { key: 'guards', label: 'Pressure / window / winning-side guards', count: sum(s => s.guarded) },
                 { key: 'resting', label: 'Resting after a loss', count: sum(s => s.resting) },
                 { key: 'bar', label: 'Score under the bar', count: sum(s => s.belowBar) },
             ].sort((a, b) => b.count - a.count),
