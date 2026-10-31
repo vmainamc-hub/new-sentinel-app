@@ -403,3 +403,32 @@ describe('AUTO market (the tool picks market, direction and entry)', () => {
         expect(h.ex.getSnapshot().lastError).toMatch(/Auto-pick/);
     });
 });
+
+describe('AUTO market with a SMART strategy', () => {
+    const smart = {
+        key: 'R_10|OVER_2|SMART|s@v1', market: 'R_10', direction: 'OVER_2' as const, entry: 'SMART' as const, customDigits: [], rule: { digits: [4], prev: { kind: 'ALL_WIN' as const, k: 2 } },
+        strategyId: 's@v1', label: 'S', score: 0.1, trades: 100, rate: 0.8, significant: true, q: 0.01, regime: 'STABLE' as const, reason: 'test',
+    };
+    it('buys only when the digit AND the rule on the recent ticks both hold', async () => {
+        let hist: number[] = [];
+        const h = harness({ market: 'AUTO' }, { pick: () => [smart], history: () => hist });
+        h.ex.start();
+        hist = [1, 6, 4]; // 1 loses OVER 2: rule fails
+        h.tick(4);
+        expect(h.buys).toHaveLength(0);
+        hist = [5, 6, 3]; // wrong digit
+        h.tick(3);
+        expect(h.buys).toHaveLength(0);
+        hist = [5, 6, 4];
+        h.tick(4);
+        await flush();
+        expect(h.buys).toHaveLength(1);
+        expect(h.buys[0].parameters).toMatchObject({ symbol: 'R_10', contract_type: 'DIGITOVER', barrier: '2' });
+    });
+    it('does not trade a SMART pick when no history is available', () => {
+        const h = harness({ market: 'AUTO' }, { pick: () => [smart] });
+        h.ex.start();
+        h.tick(4);
+        expect(h.buys).toHaveLength(0);
+    });
+});

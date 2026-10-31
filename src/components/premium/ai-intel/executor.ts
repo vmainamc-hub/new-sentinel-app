@@ -13,7 +13,8 @@
 // if you switch it on, the contract moves to the recovery barrier. A multiplier makes the next win recover earlier
 // losses but also makes a long losing run cost much more; the max-stake and stop-loss limits exist for that reason.
 import { type Contract, losingDigits } from '@/components/premium/sixfold/bot';
-import { type Pick, type PickDirection, type PickOptions } from './picker';
+import { compileRule } from './rules';
+import { contractOf, type Pick, type PickDirection, type PickOptions } from './picker';
 import { OVER_2, UNDER_7 } from './sim';
 
 export type Direction = 'OVER_2' | 'UNDER_7';
@@ -227,6 +228,8 @@ export type ExecIO = {
     connectFeed: () => void;
     /** AUTO market: rank every market / direction / entry from the live feed. */
     pick?: (opts: PickOptions) => Pick[];
+    /** Recent digits of a market (current tick included), for SMART strategy rules. */
+    history?: (symbol: string) => readonly number[];
     describeFailure: (e: unknown) => { kind: string; message: string; outcomeUnknown: boolean };
     afterStop?: () => void;
     load: () => Partial<ExecConfig> | null;
@@ -301,7 +304,8 @@ export class AiIntelExecutor {
         if (this.cfg.market !== AUTO_MARKET) return this.cfg;
         const s = this.selected;
         if (!s) return this.cfg;
-        return { ...this.cfg, market: s.market, direction: s.direction, entry: s.entry, customDigits: s.customDigits.length ? s.customDigits : this.cfg.customDigits };
+        const digits = s.rule ? s.rule.digits : s.customDigits;
+        return { ...this.cfg, market: s.market, direction: s.direction, entry: s.entry === 'SMART' ? 'CUSTOM' : s.entry, customDigits: digits.length ? digits : this.cfg.customDigits };
     }
 
     /** Review the AUTO choice. Never while a contract is open or a signal is waiting for confirmation. */
@@ -494,6 +498,11 @@ export class AiIntelExecutor {
         if (this.limitReached()) return;
         const n = nextTrade(e, this.losses);
         if (!triggerSet(e, n.contract).has(digit)) return;
+        // A SMART strategy also needs its rule to hold on the recent ticks (current tick included). No history: no trade.
+        if (this.cfg.market === AUTO_MARKET && this.selected?.rule) {
+            const hist = this.io.history?.(symbol);
+            if (!hist || !compileRule(this.selected.rule, contractOf(this.selected.direction))(hist)) return;
+        }
         const check = this.stakeCheck(n.stake);
         if (check) return this.stop(check);
         const label = labelOf(n.contract);

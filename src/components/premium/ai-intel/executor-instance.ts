@@ -6,6 +6,7 @@ import { describeTradeFailure } from '@/utils/trade-errors';
 import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purchase';
 import { rankPicks } from './picker';
 import { getCandidates } from './candidates';
+import './registry-instance'; // sets the candidate provider (baseline + ACTIVE strategies)
 import { AiIntelExecutor, type ExecConfig, type ExecTrade } from './executor';
 
 const CONFIG_KEY = 'apex_intel_exec_v1';
@@ -35,6 +36,7 @@ export const aiIntelExecutor = new AiIntelExecutor({
     lastTickAt: symbol => sixfoldFeed.getLastTickAt(symbol),
     isFeedLive: () => sixfoldFeed.isLive(),
     connectFeed: () => sixfoldFeed.connect(),
+    history: symbol => sixfoldFeed.getLiveSeries()[symbol],
     pick: opts => rankPicks(sixfoldFeed.getLiveSeries(), symbol => sixfoldFeed.getLastTickAt(symbol), Date.now(), { ...opts, candidates: getCandidates() }),
     describeFailure: error => describeTradeFailure(error),
     afterStop: () => {

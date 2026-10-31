@@ -10,16 +10,21 @@
 import { bhAdjust } from '@/components/premium/sixfold/stats';
 import { classifyRegime, entryStats, FDR_Q, MIN_TICKS_FOR_REGIME, MIN_TRADES, type Regime } from './analysis';
 import { type Contract } from '@/components/premium/sixfold/bot';
+import { compileRule, type RuleSpec } from './rules';
 import { OVER_2, simulate, tally, ticksFromDigits, UNDER_7 } from './sim';
 
 export type PickDirection = 'OVER_2' | 'UNDER_7';
-export type PickEntry = 'SETUP' | 'ANY' | 'CUSTOM';
+export type PickEntry = 'SETUP' | 'ANY' | 'CUSTOM' | 'SMART';
 
 export type Candidate = {
     direction: PickDirection;
     entry: PickEntry;
     /** CUSTOM only. */
     digits?: readonly number[];
+    /** SMART only: a generated rule from the strategy registry. */
+    rule?: RuleSpec;
+    /** Contract length the strategy was validated for; skipped when the run uses another. */
+    duration?: number;
     /** Set when the candidate comes from an approved strategy in the registry. */
     strategyId?: string;
     strategyLabel?: string;
@@ -48,6 +53,7 @@ export type Pick = {
     direction: PickDirection;
     entry: PickEntry;
     customDigits: number[];
+    rule: RuleSpec | null;
     strategyId: string | null;
     label: string;
     /** Lower bound of the 95% win-rate interval minus the contract's chance level (fraction, may be negative). */
@@ -83,6 +89,8 @@ export function rankPicks(
         for (const cand of candidates) {
             if (opts.directions !== 'BOTH' && cand.direction !== opts.directions) continue;
             if (cand.markets && !cand.markets.includes(market)) continue;
+            if (cand.duration !== undefined && cand.duration !== opts.duration) continue;
+            if (cand.entry === 'SMART' && !cand.rule) continue;
             const contract = contractOf(cand.direction);
             const regime = classifyRegime(digits, contract).regime;
             if (regime === 'UNSTABLE' || regime === 'INSUFFICIENT_DATA') continue;
@@ -93,7 +101,15 @@ export function rankPicks(
             let lo: number | null;
             let pValue: number | null;
             let baseline: number;
-            if (cand.entry === 'CUSTOM') {
+            if (cand.entry === 'SMART') {
+                const sim = simulate(ticksFromDigits(digits), contract, { method: 'SMART', trigger: compileRule(cand.rule as RuleSpec, contract) }, opts.duration);
+                const t = tally(sim.trades);
+                baseline = entryStats(digits, contract, 'ANY', opts.duration).baseline;
+                trades = t.trades;
+                wins = t.wins;
+                lo = trades ? wilsonLo(wins, trades) : null;
+                pValue = trades ? binomP(wins, trades, baseline) : null;
+            } else if (cand.entry === 'CUSTOM') {
                 const sim = simulate(ticksFromDigits(digits), contract, { method: 'CUSTOM', digits: custom }, opts.duration);
                 const t = tally(sim.trades);
                 const s = entryStats(digits, contract, 'ANY', opts.duration); // baseline + same CI/p machinery
@@ -122,6 +138,7 @@ export function rankPicks(
                     direction: cand.direction,
                     entry: cand.entry,
                     customDigits: custom,
+                    rule: cand.entry === 'SMART' ? (cand.rule as RuleSpec) : null,
                     strategyId: cand.strategyId ?? null,
                     label: `${labelDir} · ${cand.strategyLabel ?? cand.entry}`,
                     score: enough ? score : score - 0.5,
