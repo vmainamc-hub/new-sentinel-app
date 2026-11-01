@@ -8,6 +8,7 @@ import { Num, Stat, Switch } from '../sixfold/SixfoldPage';
 import { useFeed } from '../sixfold/use-feed';
 import type { Phase } from '../sixfold/runner';
 import { DEFAULT_SETTINGS } from '../sixfold/money';
+import SignalConditions, { MartingaleFields, VirtualHookFields } from '../sixfold/SignalConditions';
 import { describeFunnel } from './funnel';
 import { sentinelOverlay, sentinelRunner } from './runner-instance';
 import { type EngineSettings, PRESETS, PROPOSITION_KEYS } from './settings';
@@ -134,12 +135,7 @@ const SentinelAiPage = () => {
                     </div>
 
                     <Switch on={s.martingale} onChange={v => set({ martingale: v })} title='Martingale' sub='' />
-                    {s.martingale && (
-                        <div className='sf-grid2 sn-nums'>
-                            <Num label='Max steps' value={s.maxSteps} onCommit={n => set({ maxSteps: n })} hint='0 = no limit' />
-                            <Num label='Max stake' value={s.maxStake} onCommit={n => set({ maxStake: n })} hint='0 = no cap' />
-                        </div>
-                    )}
+                    {s.martingale && <MartingaleFields s={s} set={set} />}
 
                     <div className='sn-label'>Contracts</div>
                     <div className='sn-chips'>
@@ -199,8 +195,9 @@ const SentinelAiPage = () => {
                                     <Num label='Under' value={s.recoveryUnder} onCommit={n => set({ recoveryUnder: n })} />
                                 </div>
                             )}
-                            <Switch on={s.lossShield} onChange={v => set({ lossShield: v })} title='Loss shield' sub='' />
                             <Switch on={s.virtualHook} onChange={v => set({ virtualHook: v })} title='Virtual hook' sub='' />
+                            {s.virtualHook && <VirtualHookFields s={s} set={set} />}
+                            <SignalConditions s={s} set={set} />
                             <div className='sn-label'>Markets ({s.markets.length})</div>
                             <div className='sn-chips'>
                                 {MARKETS.map(([sym]) => (
