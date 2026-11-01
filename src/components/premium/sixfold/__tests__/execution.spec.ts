@@ -335,6 +335,26 @@ describe('SixfoldRunner: first to qualify', () => {
         expect(h.runner.getSnapshot().session.trades).toBe(1);
     });
 
+    it('win-streak guard: never buys while the market is not on a run of winning digits', async () => {
+        // A and B alternate 1,7, so Over 2 never has more than one win in a row.
+        const h = harness({ entry: 'ANY', winStreakGate: true, winStreak: 3 });
+        h.runner.start();
+        h.runner.handleFeedTick('A', 3);
+        h.runner.handleFeedTick('B', 3);
+        await flush();
+        expect(h.calls.buy).toHaveLength(0);
+    });
+
+    it('win-streak guard: buys once the market has printed the required run of winning digits', async () => {
+        const h = harness({ entry: 'ANY', winStreakGate: true, winStreak: 3 });
+        h.runner.start();
+        h.series.A.push(7, 3, 8); // Over 2 wins on all three
+        h.runner.handleFeedTick('A', 8);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+        expect(h.calls.buy[0].parameters.symbol).toBe('A');
+    });
+
     it('any-tick entry buys on the first tick of any watched market', async () => {
         const h = harness({ entry: 'ANY' });
         h.runner.start();

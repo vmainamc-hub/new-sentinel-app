@@ -891,7 +891,9 @@ export class SixfoldRunner {
         for (const candidate of candidates) {
             this.armed = candidate;
             const entryOk = this.settings.entry === 'ANY' || this.brainGoverns() || candidate.entryDigits.includes(digit);
-            if (!entryOk || !this.recoveryFormOk(symbol) || !this.brainOk(symbol) || !this.meterFresh(symbol)) {
+            // The win-streak guard holds here too: never buy while the market is not on a run of winning digits.
+            const streakOk = !this.settings.winStreakGate || this.streakHolds(symbol, candidate.cellKey);
+            if (!entryOk || !streakOk || !this.recoveryFormOk(symbol) || !this.brainOk(symbol) || !this.meterFresh(symbol)) {
                 this.armed = null; // (meterFresh already blocked and cleared a contract that went cold)
                 continue;
             }
@@ -1005,6 +1007,12 @@ export class SixfoldRunner {
             return false;
         }
         return read.ok;
+    }
+
+    /** True when the latest digits of `symbol` are a long enough run of wins for the contract that would be bought. No side effects. */
+    private streakHolds(symbol: string, cellKey: string): boolean {
+        const cell = this.scan?.cells.find(c => c.symbol === symbol && c.key === cellKey);
+        return cell ? this.streakOf(symbol, cell).ok : false;
     }
 
     private isRecovering(): boolean {

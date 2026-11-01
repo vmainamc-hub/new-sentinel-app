@@ -7,11 +7,10 @@ import { marketName, MARKETS, shortName } from '../sixfold/feed';
 import { Num, Seg, Stat, Switch } from '../sixfold/SixfoldPage';
 import { useFeed } from '../sixfold/use-feed';
 import type { Phase } from '../sixfold/runner';
-import { DEFAULT_SETTINGS } from '../sixfold/money';
 import SignalConditions, { MartingaleFields, VirtualHookFields } from '../sixfold/SignalConditions';
 import { describeFunnel } from './funnel';
 import { sentinelOverlay, sentinelRunner } from './runner-instance';
-import { type EngineSettings, PRESETS, PROPOSITION_KEYS, type SignalSource } from './settings';
+import { DEFAULT_TRADING, type EngineSettings, PRESETS, PROPOSITION_KEYS, type SignalSource } from './settings';
 import { useSentinel } from './use-sentinel';
 import './sentinel-simple.scss';
 
@@ -139,6 +138,15 @@ const SentinelAiPage = () => {
                         ]}
                     />
 
+                    <div className='sn-nums'>
+                        <Num
+                            label='Green digits before buying'
+                            value={s.winStreak}
+                            onCommit={n => set({ winStreak: n, winStreakGate: true })}
+                            hint='2–10 · it never buys in a red run'
+                        />
+                    </div>
+
                     <div className='sf-grid3 sn-nums'>
                         <Num label='Stake' value={s.stake} onCommit={n => set({ stake: n })} />
                         <Num label='Take profit' value={s.takeProfit} onCommit={n => set({ takeProfit: n })} hint='0 = off' />
@@ -208,7 +216,7 @@ const SentinelAiPage = () => {
                             )}
                             <Switch on={s.virtualHook} onChange={v => set({ virtualHook: v })} title='Virtual hook' sub='' />
                             {s.virtualHook && <VirtualHookFields s={s} set={set} />}
-                            <SignalConditions s={s} set={set} />
+                            <SignalConditions s={s} set={set} streakAlwaysOn />
                             <div className='sn-label'>Markets ({s.markets.length})</div>
                             <div className='sn-chips'>
                                 {MARKETS.map(([sym]) => (
@@ -227,7 +235,7 @@ const SentinelAiPage = () => {
                             <button
                                 type='button'
                                 className='sf-btn subtle'
-                                onClick={() => set({ ...DEFAULT_SETTINGS })}
+                                onClick={() => set({ ...DEFAULT_TRADING })}
                                 disabled={sx.running}
                             >
                                 Reset to defaults

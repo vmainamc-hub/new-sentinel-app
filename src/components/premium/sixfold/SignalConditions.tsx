@@ -6,6 +6,10 @@ import { Num, Seg, Switch } from './SixfoldPage';
 import type { VhMode } from './virtual-hook';
 
 type Props = { s: SixfoldSettings; set: (patch: Partial<SixfoldSettings>) => void };
+type ConditionProps = Props & {
+    /** The win-streak guard cannot be switched off (Sentinel AI): show its numbers without the switch. */
+    streakAlwaysOn?: boolean;
+};
 
 /** Everything under the Martingale switch. */
 export const MartingaleFields = ({ s, set }: Props) => (
@@ -55,7 +59,7 @@ export const VirtualHookFields = ({ s, set }: Props) => (
     </div>
 );
 
-const SignalConditions = ({ s, set }: Props) => {
+const SignalConditions = ({ s, set, streakAlwaysOn = false }: ConditionProps) => {
     const [open, setOpen] = useState(false);
     return (
         <div className='sn-conditions'>
@@ -65,8 +69,12 @@ const SignalConditions = ({ s, set }: Props) => {
             {open && (
                 <div className='sn-morebody'>
                     <div className='sn-label'>Entry gates</div>
-                    <Switch on={s.winStreakGate} onChange={v => set({ winStreakGate: v })} title='Win-streak guard' sub='' />
-                    {s.winStreakGate && (
+                    {streakAlwaysOn ? (
+                        <div className='sn-label'>Win-streak guard (always on)</div>
+                    ) : (
+                        <Switch on={s.winStreakGate} onChange={v => set({ winStreakGate: v })} title='Win-streak guard' sub='' />
+                    )}
+                    {(streakAlwaysOn || s.winStreakGate) && (
                         <div className='sf-grid2 sn-nums'>
                             <Num label='Wins in a row' value={s.winStreak} onCommit={n => set({ winStreak: n })} hint='2–10' />
                             <Num label='Drop market at +losses' value={s.lossAbort} onCommit={n => set({ lossAbort: n })} hint='0–4' />

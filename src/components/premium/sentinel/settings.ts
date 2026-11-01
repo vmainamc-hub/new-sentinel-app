@@ -49,12 +49,14 @@ export const normalizeEngine = (raw: unknown): EngineSettings => {
 };
 
 /** Sixfold's trading defaults, tuned for this tool: SMART entry learns each market's entry digits from its own recent ticks. */
-// Pulse already reads recent winning rates in four windows and steps a signal down after a run of losses, so the hardest Sixfold filters are eased here: the
-// win-streak guard (which waits for six winning digits in a row, rare enough to stop almost every trade) is off, the pressure
-// gate is a little wider and the Meter floors a little lower. None of this changes the odds of a contract; it only decides how
-// often the machine trades. The Careful preset keeps the stricter pressure gate and Meter floors.
+// The win-streak guard is MANDATORY here: Sentinel buys only while the market's latest digits are a run of winning ("green") digits
+// for the contract it is about to buy, never in a red run. The run needed is 3 by default (Sixfold's own default of 6 stops almost
+// every trade). Pulse and Digits Analysis already decide where to look; the pressure gate and Meter floors are a little wider
+// than Sixfold's. None of this changes the odds of a contract; it only decides when it buys.
+export const GREENS_DEFAULT = 3;
 export const SENTINEL_GATES: Partial<SixfoldSettings> = {
-    winStreakGate: false,
+    winStreakGate: true,
+    winStreak: GREENS_DEFAULT,
     pressureMax: 45,
     meterFloor: 45,
     meterFloorRecovery: 48,
@@ -65,8 +67,9 @@ export const DEFAULT_TRADING: SixfoldSettings = normalizeTrading({
     entry: 'SMART',
     selectivity: 'balanced',
 });
+/** Whatever was saved, the win-streak guard is always on: Sentinel never buys inside a run of red digits. */
 export const normalizeTradingSettings = (raw: Partial<SixfoldSettings> | null | undefined): SixfoldSettings =>
-    normalizeTrading({ ...DEFAULT_TRADING, ...(raw ?? {}) });
+    normalizeTrading({ ...DEFAULT_TRADING, ...(raw ?? {}), winStreakGate: true });
 
 export const contractsFor = (engine: Pick<EngineSettings, 'propositions'>): Contract[] =>
     engine.propositions.map(p => {
@@ -89,7 +92,8 @@ export const PRESETS: Preset[] = [
         engine: { mode: 'careful' },
         trading: {
             selectivity: 'strict',
-            winStreakGate: false,
+            winStreakGate: true,
+            winStreak: 4,
             pressureMax: 35,
             meterFloor: 55,
             meterFloorRecovery: 58,
@@ -104,7 +108,8 @@ export const PRESETS: Preset[] = [
         engine: { mode: 'balanced' },
         trading: {
             selectivity: 'balanced',
-            winStreakGate: false,
+            winStreakGate: true,
+            winStreak: 3,
             pressureMax: 45,
             meterFloor: 45,
             meterFloorRecovery: 48,
@@ -119,7 +124,8 @@ export const PRESETS: Preset[] = [
         engine: { mode: 'active' },
         trading: {
             selectivity: 'active',
-            winStreakGate: false,
+            winStreakGate: true,
+            winStreak: 2,
             pressureMax: 55,
             meterFloor: 40,
             meterFloorRecovery: 44,
@@ -133,19 +139,27 @@ const TRADING_KEY = 'sentinelai.auto.settings.v1';
 const ENGINE_KEY = 'sentinelai.auto.engine.v1';
 
 const GATES_MIGRATION_KEY = 'sentinelai.auto.gates.v1';
+const GREENS_MIGRATION_KEY = 'sentinelai.auto.greens.v1';
 
 export const loadTrading = (): SixfoldSettings => {
     try {
         const raw = window.localStorage.getItem(TRADING_KEY);
         const stored = raw ? JSON.parse(raw) : null;
-        // One time only: settings saved before the gate changes above take the new gate values; later choices are respected.
-        if (stored && !window.localStorage.getItem(GATES_MIGRATION_KEY)) {
-            window.localStorage.setItem(GATES_MIGRATION_KEY, '1');
-            const migrated = normalizeTradingSettings({ ...stored, ...SENTINEL_GATES });
+        const gatesDone = Boolean(window.localStorage.getItem(GATES_MIGRATION_KEY));
+        const greensDone = Boolean(window.localStorage.getItem(GREENS_MIGRATION_KEY));
+        window.localStorage.setItem(GATES_MIGRATION_KEY, '1');
+        window.localStorage.setItem(GREENS_MIGRATION_KEY, '1');
+        // One time each: settings saved before a gate change take the new values; later choices are respected.
+        // Settings saved before the green-digits rule had the guard off with a run of 6: they move to the new rule (3 greens).
+        if (stored && (!gatesDone || !greensDone)) {
+            const migrated = normalizeTradingSettings({
+                ...stored,
+                ...(gatesDone ? {} : SENTINEL_GATES),
+                ...(greensDone ? {} : { winStreakGate: true, winStreak: GREENS_DEFAULT }),
+            });
             saveTrading(migrated);
             return migrated;
         }
-        window.localStorage.setItem(GATES_MIGRATION_KEY, '1');
         return normalizeTradingSettings(stored);
     } catch {
         return DEFAULT_TRADING;
