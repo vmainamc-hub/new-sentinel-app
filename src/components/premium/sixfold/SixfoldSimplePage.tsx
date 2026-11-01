@@ -8,7 +8,7 @@ import { marketName, MARKETS, shortName, sixfoldFeed } from './feed';
 import { type EntryRule, DEFAULT_SETTINGS, type Selectivity } from './money';
 import type { Phase } from './runner';
 import { sixfoldRunner } from './runner-instance';
-import SignalConditions from './SignalConditions';
+import SignalConditions, { MartingaleFields, VirtualHookFields } from './SignalConditions';
 import { Num, Seg, Stat, Switch } from './SixfoldPage';
 import { useFeed } from './use-feed';
 import { useSixfold } from './use-sixfold';
@@ -119,12 +119,7 @@ const SixfoldSimplePage = () => {
                     </div>
 
                     <Switch on={s.martingale} onChange={v => set({ martingale: v })} title='Martingale' sub='' />
-                    {s.martingale && (
-                        <div className='sf-grid2 sn-nums'>
-                            <Num label='Max steps' value={s.maxSteps} onCommit={n => set({ maxSteps: n })} hint='0 = no limit' />
-                            <Num label='Max stake' value={s.maxStake} onCommit={n => set({ maxStake: n })} hint='0 = no cap' />
-                        </div>
-                    )}
+                    {s.martingale && <MartingaleFields s={s} set={set} />}
 
                     <div className='sn-label'>Selectivity</div>
                     <Seg<Selectivity>
@@ -192,6 +187,8 @@ const SixfoldSimplePage = () => {
                                     <Num label='Under' value={s.recoveryUnder} onCommit={n => set({ recoveryUnder: n })} />
                                 </div>
                             )}
+                            <Switch on={s.virtualHook} onChange={v => set({ virtualHook: v })} title='Virtual hook' sub='' />
+                            {s.virtualHook && <VirtualHookFields s={s} set={set} />}
                             <SignalConditions s={s} set={set} />
                             <div className='sf-grid3 sn-nums'>
                                 <Num label='Length (ticks)' value={s.duration} onCommit={n => set({ duration: n })} />

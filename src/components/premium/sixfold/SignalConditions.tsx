@@ -7,6 +7,54 @@ import type { VhMode } from './virtual-hook';
 
 type Props = { s: SixfoldSettings; set: (patch: Partial<SixfoldSettings>) => void };
 
+/** Everything under the Martingale switch. */
+export const MartingaleFields = ({ s, set }: Props) => (
+    <div className='sn-sub'>
+        <Seg<RecoverySizing>
+            label='Recovery sizing'
+            value={s.recoverySizing}
+            onChange={v => set({ recoverySizing: v })}
+            options={[
+                ['PAYOUT', 'Payout-sized'],
+                ['MULTIPLIER', 'Multiplier'],
+            ]}
+        />
+        <div className='sf-grid2 sn-nums'>
+            {s.recoverySizing === 'PAYOUT' ? (
+                <Num label='Win back (%)' value={s.recoverShare} onCommit={n => set({ recoverShare: n })} hint='of what is owed' />
+            ) : (
+                <Num label='Multiplier' value={s.multiplier} onCommit={n => set({ multiplier: n })} />
+            )}
+            <Num label='Max steps' value={s.maxSteps} onCommit={n => set({ maxSteps: n })} hint='0 = no limit' />
+            <Num label='Streak budget (× stake)' value={s.streakBudget} onCommit={n => set({ streakBudget: n })} hint='0 = off' />
+            <Num label='Max stake' value={s.maxStake} onCommit={n => set({ maxStake: n })} hint='0 = no cap' />
+        </div>
+    </div>
+);
+
+/** Everything under the Virtual hook switch. */
+export const VirtualHookFields = ({ s, set }: Props) => (
+    <div className='sn-sub'>
+        <Seg<VhMode>
+            label='Virtual hook mode'
+            value={s.vhMode}
+            onChange={v => set({ vhMode: v })}
+            options={[
+                ['STREAK', 'Until paper wins'],
+                ['FIXED', 'Fixed paper trades'],
+            ]}
+        />
+        <div className='sf-grid2 sn-nums'>
+            <Num label='Go virtual after losses' value={s.vhEnterLosses} onCommit={n => set({ vhEnterLosses: n })} hint='real losses in a row' />
+            {s.vhMode === 'STREAK' ? (
+                <Num label='Back to real after wins' value={s.vhReturnWins} onCommit={n => set({ vhReturnWins: n })} hint='paper wins in a row' />
+            ) : (
+                <Num label='Paper trades' value={s.vhFixedCount} onCommit={n => set({ vhFixedCount: n })} hint='then back to real' />
+            )}
+        </div>
+    </div>
+);
+
 const SignalConditions = ({ s, set }: Props) => {
     const [open, setOpen] = useState(false);
     return (
@@ -48,27 +96,6 @@ const SignalConditions = ({ s, set }: Props) => {
                     <Switch on={s.pickyAfterLoss} onChange={v => set({ pickyAfterLoss: v })} title='Pickier after a loss' sub='' />
 
                     <div className='sn-label'>Recovery</div>
-                    {s.martingale && (
-                        <>
-                            <Seg<RecoverySizing>
-                                label='Recovery sizing'
-                                value={s.recoverySizing}
-                                onChange={v => set({ recoverySizing: v })}
-                                options={[
-                                    ['PAYOUT', 'Payout-sized'],
-                                    ['MULTIPLIER', 'Multiplier'],
-                                ]}
-                            />
-                            <div className='sf-grid2 sn-nums'>
-                                {s.recoverySizing === 'PAYOUT' ? (
-                                    <Num label='Win back (%)' value={s.recoverShare} onCommit={n => set({ recoverShare: n })} />
-                                ) : (
-                                    <Num label='Multiplier' value={s.multiplier} onCommit={n => set({ multiplier: n })} />
-                                )}
-                                <Num label='Streak budget (× stake)' value={s.streakBudget} onCommit={n => set({ streakBudget: n })} hint='0 = off' />
-                            </div>
-                        </>
-                    )}
                     <Seg<RecoveryEntry>
                         label='Recovery entry'
                         value={s.recoveryEntry}
@@ -87,7 +114,7 @@ const SignalConditions = ({ s, set }: Props) => {
                         </div>
                     )}
 
-                    <div className='sn-label'>Loss shield and virtual hook</div>
+                    <div className='sn-label'>Loss shield</div>
                     <Switch on={s.lossShield} onChange={v => set({ lossShield: v })} title='Loss shield' sub='' />
                     {s.lossShield && (
                         <div className='sn-nums'>
@@ -95,28 +122,6 @@ const SignalConditions = ({ s, set }: Props) => {
                         </div>
                     )}
                     <Switch on={s.vhOpening} onChange={v => set({ vhOpening: v })} title='Open every run on paper' sub='' />
-                    <Switch on={s.virtualHook} onChange={v => set({ virtualHook: v })} title='Virtual hook' sub='' />
-                    {s.virtualHook && (
-                        <>
-                            <Seg<VhMode>
-                                label='Virtual hook mode'
-                                value={s.vhMode}
-                                onChange={v => set({ vhMode: v })}
-                                options={[
-                                    ['STREAK', 'Until paper wins'],
-                                    ['FIXED', 'Fixed paper trades'],
-                                ]}
-                            />
-                            <div className='sf-grid2 sn-nums'>
-                                <Num label='Go virtual after losses' value={s.vhEnterLosses} onCommit={n => set({ vhEnterLosses: n })} />
-                                {s.vhMode === 'STREAK' ? (
-                                    <Num label='Back to real after wins' value={s.vhReturnWins} onCommit={n => set({ vhReturnWins: n })} />
-                                ) : (
-                                    <Num label='Paper trades' value={s.vhFixedCount} onCommit={n => set({ vhFixedCount: n })} />
-                                )}
-                            </div>
-                        </>
-                    )}
                 </div>
             )}
         </div>
