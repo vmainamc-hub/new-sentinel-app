@@ -1136,7 +1136,8 @@ export class SixfoldRunner {
         if (!pressureOn && !windowsOn && !winOn) return null;
         const traded = tradeContract(primary, this.session.consecutiveLosses, this.settings).contract;
         if (pressureOn) {
-            const g = pressureGate(losingSidePressure(digits, traded), pressureMax, strictPressure);
+            // Strict: normally at most one losing digit may be climbing; after a loss (recovery) none may be.
+            const g = pressureGate(losingSidePressure(digits, traded), pressureMax, strictPressure, this.session.consecutiveLosses > 0 ? 0 : 1);
             if (!g.ok) return { kind: 'pressure', reason: g.reason };
         }
         if (windowsOn) {

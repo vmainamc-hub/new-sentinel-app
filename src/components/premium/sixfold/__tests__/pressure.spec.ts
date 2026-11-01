@@ -202,9 +202,12 @@ describe('strict pressure', () => {
     it('passes a climbing losing digit under the ceiling normally, but not when strict', () => {
         const { p } = climbing();
         expect(pressureGate(p, 45).ok).toBe(true);
-        const strict = pressureGate(p, 45, true);
+        const strict = pressureGate(p, 45, true, 0);
         expect(strict.ok).toBe(false);
         expect(strict.reason).toMatch(/climbing/);
+        // normally one climbing digit is tolerated, two are not
+        expect(pressureGate(p, 45, true).ok).toBe(p.risingCount <= 1);
+        expect(pressureGate({ ...p, risingCount: 2 }, 45, true).ok).toBe(false);
     });
     it('strict changes nothing when no losing digit is climbing', () => {
         const calm = losingSidePressure(

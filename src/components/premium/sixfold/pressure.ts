@@ -57,7 +57,11 @@ const stateOf = (index: number): PressureState =>
     index >= 72 ? 'HOSTILE' : index >= 50 ? 'PRESSURED' : index >= 28 ? 'BUILDING' : 'CALM';
 
 const verdictOf = (state: PressureState, rising: number): PressureVerdict =>
-    state === 'HOSTILE' && rising >= 2 ? 'SUPPRESS' : state === 'HOSTILE' || state === 'PRESSURED' ? 'CAUTION' : 'CLEAR';
+    state === 'HOSTILE' && rising >= 2
+        ? 'SUPPRESS'
+        : state === 'HOSTILE' || state === 'PRESSURED'
+          ? 'CAUTION'
+          : 'CLEAR';
 
 const neutral = (fairPct: number, reason: string): LosingSidePressure => ({
     measurable: false,
@@ -144,14 +148,23 @@ export type GateResult = { ok: boolean; reason: string };
 
 /**
  * Pressure gate: the losing side must be quiet enough. A SUPPRESS verdict always blocks, whatever the ceiling. With `strict`, no
- * losing digit may be climbing either.
+ * more than `allowRising` losing digits (default 1; 0 in recovery) may be climbing either.
  * Not measurable yet (too few ticks) passes, because the scanner already needs its own history before it arms anything.
  */
-export function pressureGate(p: LosingSidePressure, max = DEFAULT_PRESSURE_MAX, strict = false): GateResult {
+export function pressureGate(
+    p: LosingSidePressure,
+    max = DEFAULT_PRESSURE_MAX,
+    strict = false,
+    allowRising = 1
+): GateResult {
     if (!p.measurable) return { ok: true, reason: p.reason };
     if (p.verdict === 'SUPPRESS') return { ok: false, reason: `Losing side hostile and broad: ${p.reason}` };
-    // Strict: the losing digits must be easing, so none of them may be climbing across the windows.
-    if (strict && p.risingCount > 0) return { ok: false, reason: `${p.risingCount} losing digit${p.risingCount > 1 ? 's are' : ' is'} still climbing, not easing: ${p.reason}` };
+    // Strict: the losing digits must be easing, so no more than `allowRising` of them may be climbing across the windows.
+    if (strict && p.risingCount > allowRising)
+        return {
+            ok: false,
+            reason: `${p.risingCount} losing digit${p.risingCount > 1 ? 's are' : ' is'} still climbing, not easing: ${p.reason}`,
+        };
     if (p.index > max) return { ok: false, reason: `Losing-side pressure ${p.index} is above ${max}: ${p.reason}` };
     return { ok: true, reason: p.reason };
 }
@@ -182,7 +195,15 @@ export function winningSidePressure(series: readonly number[], contract: Contrac
     const winners = winningDigits(contract);
     const fair = winners.length / 10;
     if (series.length < MIN_PRESSURE_TICKS || winners.length === 0 || winners.length === 10) {
-        return { measurable: false, state: 'DORMANT', groupPct: [], fairPct: fair * 100, ratePp: 0, steps: [], reason: `Needs ${MIN_PRESSURE_TICKS} ticks to read the winning side.` };
+        return {
+            measurable: false,
+            state: 'DORMANT',
+            groupPct: [],
+            fairPct: fair * 100,
+            ratePp: 0,
+            steps: [],
+            reason: `Needs ${MIN_PRESSURE_TICKS} ticks to read the winning side.`,
+        };
     }
     const win = new Set(winners);
     const share = (w: number) => {
@@ -195,15 +216,31 @@ export function winningSidePressure(series: readonly number[], contract: Contrac
     const ratePp = (g[3] - g[0]) * 100;
     const up = steps.filter(t => t >= FLAT_PP).length;
     const down = steps.filter(t => t <= -FLAT_PP).length;
-    const state: WinningSideState = ratePp >= minRisePp && up >= 2 && g[3] >= fair ? 'RISING' : ratePp <= -minRisePp && down >= 2 ? 'FALLING' : 'DORMANT';
+    const state: WinningSideState =
+        ratePp >= minRisePp && up >= 2 && g[3] >= fair
+            ? 'RISING'
+            : ratePp <= -minRisePp && down >= 2
+              ? 'FALLING'
+              : 'DORMANT';
     const text = `Winning digits ${winners.join('/')} at ${g.map(x => `${(x * 100).toFixed(0)}%`).join(' > ')} over the last 120 / 60 / 30 / 15 ticks (fair ${(fair * 100).toFixed(0)}%)`;
-    return { measurable: true, state, groupPct: g.map(x => x * 100), fairPct: fair * 100, ratePp, steps, reason: `${text}, ${state.toLowerCase()} (${ratePp >= 0 ? '+' : ''}${ratePp.toFixed(1)}pp).` };
+    return {
+        measurable: true,
+        state,
+        groupPct: g.map(x => x * 100),
+        fairPct: fair * 100,
+        ratePp,
+        steps,
+        reason: `${text}, ${state.toLowerCase()} (${ratePp >= 0 ? '+' : ''}${ratePp.toFixed(1)}pp).`,
+    };
 }
 
 /** Winning-side gate: the winning side must be visibly gaining across the windows, not dormant. Too few ticks passes. */
 export function winningSideGate(p: WinningSidePressure): GateResult {
     if (!p.measurable || p.state === 'RISING') return { ok: true, reason: p.reason };
-    return { ok: false, reason: `Winning side ${p.state === 'FALLING' ? 'falling' : 'dormant'}, not building: ${p.reason}` };
+    return {
+        ok: false,
+        reason: `Winning side ${p.state === 'FALLING' ? 'falling' : 'dormant'}, not building: ${p.reason}`,
+    };
 }
 
 // ---------- multi-window health ----------
@@ -233,7 +270,13 @@ export type MultiWindowHealth = {
 export function multiWindowHealth(series: readonly number[], contract: Contract): MultiWindowHealth {
     const p = winProbability(contract);
     if (series.length < MIN_HEALTH_TICKS) {
-        return { verdict: 'LOADING', rows: [], normal: p, above: 0, reason: `Needs ${MIN_HEALTH_TICKS} ticks to compare windows.` };
+        return {
+            verdict: 'LOADING',
+            rows: [],
+            normal: p,
+            above: 0,
+            reason: `Needs ${MIN_HEALTH_TICKS} ticks to compare windows.`,
+        };
     }
     const win = new Set(winningDigits(contract));
     const rows: WindowRow[] = HEALTH_WINDOWS.map(window => {
