@@ -488,7 +488,8 @@ export class SixfoldRunner {
         this.brainAt = 0;
         this.guards = new Map();
         this.seenTick.clear();
-        this.opening = this.settings.vhOpening;
+        // Vanguard (bot rules): with the Virtual Hook on, every Run opens on paper and goes real after its first paper win.
+        this.opening = this.settings.vhOpening || (Boolean(this.io.rules) && this.settings.virtualHook);
         this.vh = this.opening ? { virtual: true, realLosses: 0, virtualWins: 0, virtualDone: 0 } : freshVh();
         this.virtualOpen = null;
         this.paper = { trades: 0, wins: 0, pnl: 0 };

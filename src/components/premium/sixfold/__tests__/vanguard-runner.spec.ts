@@ -219,14 +219,35 @@ describe('Vanguard: Virtual Hook on top of the bot rules', () => {
         h.profits(-1); // the first real trade loses
         h.runner.start();
         h.script.enter.A = 'UNDER';
+        const step = async (digit: number) => {
+            h.advance(1500);
+            h.runner.handleFeedTick('A', digit);
+            await flush();
+        };
+        await step(3); // opening paper trade
+        await step(1); // settles as a paper win: real trading starts
+        await step(3); // real trade, which loses
+        expect(h.calls.buy).toHaveLength(1);
+        await step(3);
+        expect(h.calls.buy).toHaveLength(1); // the next signal is a paper trade: nothing more bought
+        expect(h.runner.getSnapshot().virtualHook.virtual).toBe(true);
+    });
+
+    it('with the hook on, a Run opens on paper and goes real after the first paper win', async () => {
+        const h = harness({ virtualHook: true });
+        h.runner.start();
+        h.script.enter.A = 'UNDER';
         h.runner.handleFeedTick('A', 3);
         await flush();
-        expect(h.calls.buy).toHaveLength(1);
+        expect(h.calls.buy).toHaveLength(0); // the first signal is a paper trade
+        expect(h.runner.getSnapshot().virtualHook).toMatchObject({ on: true, virtual: true, opening: true });
+        h.advance(1500);
+        h.runner.handleFeedTick('A', 1); // the next tick settles it: digit 1 is below 7, a paper win
+        await flush();
         h.advance(1500);
         h.runner.handleFeedTick('A', 3);
         await flush();
-        expect(h.calls.buy).toHaveLength(1); // the second signal is a paper trade: nothing bought
-        expect(h.runner.getSnapshot().virtualHook.virtual).toBe(true);
+        expect(h.calls.buy).toHaveLength(1); // now real
     });
 
     it('is off by default, so the bot rules alone decide', async () => {
