@@ -1164,6 +1164,16 @@ describe('SixfoldRunner with an engine overlay', () => {
         expect(h.runner.getSnapshot().armed).toBeNull();
     });
 
+    it('the last look inside the buy step also refuses, whatever route led there', async () => {
+        let calls = 0;
+        const h = harness({}, { overlay: overlay({ guard: () => (++calls <= 1 ? { ok: true, note: 'fine' } : { ok: false, note: 'digit 8 is building' }) }) });
+        h.runner.start();
+        h.runner.handleFeedTick('P', 1); // first read (brainOk) passes, the last look inside execute reads again and refuses
+        await flush();
+        expect(h.calls.buy).toHaveLength(0);
+        expect(h.runner.getSnapshot().armed).toBeNull();
+    });
+
     it('a passing guard lets the trade go through as before', async () => {
         const h = harness({}, { overlay: overlay({ guard: () => ({ ok: true, note: '' }) }) });
         h.runner.start();

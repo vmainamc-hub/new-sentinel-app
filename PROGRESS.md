@@ -437,3 +437,4 @@ Not done / unverified: Jest could not run here (registry blocked); checked by ty
 - [x] Specs: special-digits.spec.ts, runner.spec.ts (guard). Same 6 settings-spec failures as before this change.
 - Measured on 200k random digits: Over passes ~32% of moments, Under ~23%. It waits, it does not stop for good. Thresholds are constants at the top of the file.
 - Not done: Vanguard, Sixfold and Apex Intel (Sentinel AI first, as asked). Not run against live Deriv.
+- [x] Last look inside the buy step (`lastLook` in `execute`): the special-digit rule is read once more for the contract about to be bought, so every route to a real-money buy passes it. Each passing trade logs "Special-digit check passed on <market>: digit counts"; a refusal logs "not bought: reason".

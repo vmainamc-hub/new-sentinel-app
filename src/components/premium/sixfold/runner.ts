@@ -1008,6 +1008,31 @@ export class SixfoldRunner {
         return false;
     }
 
+    /**
+     * The overlay's mandatory hold, read one last time inside the buy step for the contract about to be bought. Every route to a
+     * real-money buy passes here, so no path can skip it. On a pass the digit counts are written to the log, so each trade shows
+     * what the rule saw. On a refusal nothing is bought and the contract rests briefly.
+     */
+    private lastLook(armed: Armed, traded: Contract): boolean {
+        const guard = this.io.overlay?.guard;
+        if (!guard) return true;
+        let verdict: { ok: boolean; note: string };
+        try {
+            verdict = guard(armed.symbol, traded, this.io.feed.getLiveSeries()[armed.symbol] ?? []);
+        } catch {
+            verdict = { ok: false, note: 'the rule could not be read' };
+        }
+        if (verdict.ok) {
+            this.addLog('info', `Special-digit check passed on ${armed.name}: ${verdict.note}.`);
+            return true;
+        }
+        this.blocked.set(`${armed.symbol}|${armed.cellKey}`, this.io.now() + OVERLAY_HOLD_BLOCK_MS);
+        this.armed = null;
+        this.addLog('warn', `${armed.label} on ${armed.name} not bought: ${verdict.note}.`);
+        this.emit();
+        return false;
+    }
+
     /** The Brain's gate: the chosen plan must fire on the latest tick (and, in recovery, the AI model must agree). */
     private brainOk(symbol: string): boolean {
         if (!this.overlayHolds(symbol)) return false;
@@ -1434,6 +1459,7 @@ export class SixfoldRunner {
         const tickAgeMs = this.io.now() - lastTick;
         const token = this.runToken;
         const bought = tradeContract(cell.contract, this.session.consecutiveLosses, this.settings);
+        if (!this.lastLook(armed, bought.contract)) return;
         const sized = stakeFor(this.session, bought.contract, this.settings);
         const stake = sized.stake;
         if (sized.writeOff) {
