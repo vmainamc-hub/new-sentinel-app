@@ -8,6 +8,7 @@ import { marketName, MARKETS, shortName, sixfoldFeed } from './feed';
 import { type EntryRule, DEFAULT_SETTINGS, type Selectivity } from './money';
 import type { Phase } from './runner';
 import { sixfoldRunner } from './runner-instance';
+import SignalConditions from './SignalConditions';
 import { Num, Seg, Stat, Switch } from './SixfoldPage';
 import { useFeed } from './use-feed';
 import { useSixfold } from './use-sixfold';
@@ -191,8 +192,7 @@ const SixfoldSimplePage = () => {
                                     <Num label='Under' value={s.recoveryUnder} onCommit={n => set({ recoveryUnder: n })} />
                                 </div>
                             )}
-                            <Switch on={s.lossShield} onChange={v => set({ lossShield: v })} title='Loss shield' sub='' />
-                            <Switch on={s.virtualHook} onChange={v => set({ virtualHook: v })} title='Virtual hook' sub='' />
+                            <SignalConditions s={s} set={set} />
                             <div className='sf-grid3 sn-nums'>
                                 <Num label='Length (ticks)' value={s.duration} onCommit={n => set({ duration: n })} />
                                 <Num label='Wait (s)' value={s.waitSeconds} onCommit={n => set({ waitSeconds: n })} hint='for entry' />
