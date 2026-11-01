@@ -83,7 +83,8 @@
 
 .apex-bt__ring span small { display: block; font-size: 11px; color: var(--bt-muted); font-weight: 700; }
 
-.apex-bt__ring.is-current { outline: 2px solid rgba(232, 184, 74, .7); outline-offset: 2px; }
+.apex-bt__rings { padding-top: 16px; }
+.apex-bt__ring.is-current::after { content: ''; position: absolute; left: 50%; top: -15px; transform: translateX(-50%); border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 12px solid #e8b84a; filter: drop-shadow(0 0 4px rgba(232, 184, 74, .6)); }
 
 .apex-bt__strip { display: flex; justify-content: center; gap: 6px; margin-bottom: 18px; }
 
@@ -216,7 +217,7 @@
     .apex-bt { padding: 14px 12px 70px; }
     .apex-bt__grid2,
     .apex-bt__sides { grid-template-columns: 1fr; }
-    .apex-bt__rings { grid-template-columns: repeat(5, minmax(0, 1fr)); row-gap: 12px; }
+    .apex-bt__rings { grid-template-columns: repeat(5, minmax(0, 1fr)); row-gap: 24px; }
     .apex-bt__tick strong { font-size: 34px; }
     .apex-bt__side { min-height: 96px; touch-action: manipulation; }
 }
