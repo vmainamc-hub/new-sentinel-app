@@ -39,6 +39,15 @@ Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main onl
 - NOT verified: `npm run build`, type-check, eslint, any React render, any live Deriv run (registry unreachable here). Run first on a networked machine: `npm ci && npm run build && npm test`, then try a DEMO account.
 - Expect NO TRADE most of the time: Deriv digits are random, so nothing should pass validation; recovery stakes raise losses.
 
+## Rework: multi-market trading screen (latest)
+- [x] Executor now scans ALL markets at once: a board of the best entry per market (top 6, rebuilt every 2 s) and buys whichever market's entry fires first. One contract at a time. No single-market setting any more (markets can be switched off under More settings).
+- [x] Recovery: after ANY loss (Over 2 or Under 7) the next trade is Over 3 or Under 6, whichever is more viable on the market showing its entry (`rankRecovery`: simulator + lower-bound score, fixed-digit or any-tick entry), at stake x multiplier per loss; a win goes back to Over 2 / Under 7. Max steps and stop loss still stop the run.
+- [x] Virtual Hook ported from Sixfold (same state machine): paper trades after N real losses, settle on the market's real ticks, back to real after M paper wins (or fixed count); optional "open every run on paper". Paper rows show in Transactions as Virtual and never touch session P/L, stake or limits.
+- [x] New screen `TradePanel.tsx`, built from Sixfold's own controls: Run/Stop, status, P/L, Over 2 / Under 7, stake, take profit, stop loss, recovery, virtual hook, "Trade automatically"; best entries now; latest trades; More settings (entry, length, max trades, proven-edge-only, hook details, markets, activity log). Removed from settings: max stake (implied by multiplier x steps), per-market choice, recovery barrier fields.
+- [x] Nothing removed: Overview, Live Scanner, Virtual Competition, AI Intelligence, Strategy Lab, Strategy Library and Trade History are under the Insights switch. Forward monitor, lab, Chief and market discovery keep running in the background.
+- Tests: 359 pass across Apex Intel + Sixfold + Vanguard (1 fail + 1 error are the old FreeBotsPage import). Still no build, render or live run here.
+- Note: all markets score close to chance on random digits, so the "best" entry is a ranking, not an edge; the 'Only proven edge' switch makes it wait instead.
+
 ## Done
 - [x] Repo cloned, audited, branch created, plan committed.
 - [x] Apex Intel tab wired into the app (types, PremiumLayout, header icon, nav catalog, apex-sentinel domain nav); site-config validators pass.

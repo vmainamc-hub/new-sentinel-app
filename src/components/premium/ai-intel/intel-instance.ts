@@ -74,7 +74,7 @@ class IntelService {
             strategies: strategyRegistry.getSnapshot(),
             forward: forwardMonitor.getSnapshot(),
             lab: { state: lab.state, note: lab.note, results: lab.results.length, passed: lab.results.filter(r => r.passed).length },
-            exec: { running: exec.running, trades: exec.session.trades, pnl: exec.session.pnl, market: exec.selected?.market ?? null },
+            exec: { running: exec.running, trades: exec.session.trades, pnl: exec.session.pnl, market: exec.trades.find(t => !t.virtual)?.market ?? null },
             duration: exec.config.duration,
         });
         const last = this.log[0];

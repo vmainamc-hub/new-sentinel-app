@@ -13,6 +13,11 @@ import { type Contract } from '@/components/premium/sixfold/bot';
 import { compileRule, type RuleSpec } from './rules';
 import { OVER_2, simulate, tally, ticksFromDigits, UNDER_7 } from './sim';
 
+export type RecoveryDirection = 'OVER_3' | 'UNDER_6';
+export const OVER_3: Contract = { side: 'OVER', param: 3 };
+export const UNDER_6: Contract = { side: 'UNDER', param: 6 };
+export const recoveryContract = (d: RecoveryDirection): Contract => (d === 'UNDER_6' ? UNDER_6 : OVER_3);
+
 export type PickDirection = 'OVER_2' | 'UNDER_7';
 export type PickEntry = 'SETUP' | 'ANY' | 'CUSTOM' | 'SMART';
 
@@ -43,6 +48,8 @@ export type PickOptions = {
     evidenceOnly: boolean;
     directions: 'BOTH' | PickDirection;
     candidates?: readonly Candidate[];
+    /** Only these entry kinds (default: all). */
+    entries?: readonly PickEntry[];
     minTicks?: number;
     freshMs?: number;
 };
@@ -88,6 +95,7 @@ export function rankPicks(
         if (digits.length < minTicks || at === null || now - at > freshMs) continue;
         for (const cand of candidates) {
             if (opts.directions !== 'BOTH' && cand.direction !== opts.directions) continue;
+            if (opts.entries && !opts.entries.includes(cand.entry)) continue;
             if (cand.markets && !cand.markets.includes(market)) continue;
             if (cand.duration !== undefined && cand.duration !== opts.duration) continue;
             if (cand.entry === 'SMART' && !cand.rule) continue;
@@ -166,6 +174,70 @@ export function rankPicks(
     if (opts.evidenceOnly) out = out.filter(p => p.significant);
     return out.sort((a, b) => Number(b.significant) - Number(a.significant) || b.score - a.score || b.trades - a.trades);
 }
+
+export type RecoveryPick = {
+    key: string;
+    market: string;
+    direction: RecoveryDirection;
+    entry: 'SETUP' | 'ANY';
+    label: string;
+    /** Lower bound of the 95% win-rate interval minus the contract's chance level (fraction, may be negative). */
+    score: number;
+    trades: number;
+    rate: number | null;
+    regime: Regime;
+    reason: string;
+};
+
+/**
+ * Which recovery contract is more viable on each market right now: Over 3 or Under 6 (each wins 60% of fair digits), each
+ * with a SETUP or ANY entry, measured by the same simulator and the same conservative score as the main picks. Best first.
+ */
+export function rankRecovery(
+    series: Readonly<Record<string, readonly number[]>>,
+    lastTickAt: (market: string) => number | null,
+    now: number,
+    opts: { duration: number; entries?: readonly PickEntry[]; minTicks?: number; freshMs?: number }
+): RecoveryPick[] {
+    const minTicks = opts.minTicks ?? MIN_TICKS_FOR_REGIME;
+    const freshMs = opts.freshMs ?? 5000;
+    const out: RecoveryPick[] = [];
+    for (const market of Object.keys(series)) {
+        const digits = series[market];
+        const at = lastTickAt(market);
+        if (digits.length < minTicks || at === null || now - at > freshMs) continue;
+        for (const direction of ['OVER_3', 'UNDER_6'] as const) {
+            const contract = recoveryContract(direction);
+            const regime = classifyRegime(digits, contract).regime;
+            if (regime === 'UNSTABLE' || regime === 'INSUFFICIENT_DATA') continue;
+            for (const entry of ['SETUP', 'ANY'] as const) {
+                if (opts.entries && !opts.entries.includes(entry)) continue;
+                const s = entryStats(digits, contract, entry, opts.duration);
+                const lo = s.ci ? s.ci.lo : null;
+                const score = lo === null ? -1 : lo - s.baseline;
+                out.push({
+                    key: `${market}|${direction}|${entry}`,
+                    market,
+                    direction,
+                    entry,
+                    label: `${direction === 'UNDER_6' ? 'Under 6' : 'Over 3'} · ${entry === 'SETUP' ? 'fixed digit' : 'any tick'}`,
+                    score: s.enough ? score : score - 0.5,
+                    trades: s.trades,
+                    rate: s.rate,
+                    regime,
+                    reason: s.enough ? `${s.trades} trades, ${((s.rate ?? 0) * 100).toFixed(0)}% won` : `only ${s.trades} trades so far`,
+                });
+            }
+        }
+    }
+    return out.sort((a, b) => b.score - a.score || b.trades - a.trades);
+}
+
+/** The first (best) row of each market from a best-first list. */
+export const bestPerMarket = <T extends { market: string }>(ranked: readonly T[]): T[] => {
+    const seen = new Set<string>();
+    return ranked.filter(r => (seen.has(r.market) ? false : (seen.add(r.market), true)));
+};
 
 // Small local helpers so CUSTOM candidates use the same interval and exact tail as the rest of the layer.
 import { binomialUpperP, wilson } from '@/components/premium/sixfold/stats';

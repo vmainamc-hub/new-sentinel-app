@@ -4,7 +4,7 @@ import { api_base } from '@/external/bot-skeleton';
 import { apexFeed, apexSeries } from './feed-source';
 import { describeTradeFailure } from '@/utils/trade-errors';
 import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purchase';
-import { rankPicks } from './picker';
+import { rankPicks, rankRecovery } from './picker';
 import { getCandidates } from './candidates';
 import './registry-instance'; // sets the candidate provider (baseline + ACTIVE strategies)
 import { AiIntelExecutor, type ExecConfig, type ExecTrade } from './executor';
@@ -38,6 +38,7 @@ export const aiIntelExecutor = new AiIntelExecutor({
     connectFeed: () => apexFeed.connect(),
     history: symbol => apexFeed.getLiveSeries()[symbol],
     pick: opts => rankPicks(apexSeries(), symbol => apexFeed.getLastTickAt(symbol), Date.now(), { ...opts, candidates: getCandidates() }),
+    pickRecovery: opts => rankRecovery(apexSeries(), symbol => apexFeed.getLastTickAt(symbol), Date.now(), opts),
     describeFailure: error => describeTradeFailure(error),
     afterStop: () => {
         const base = api_base as { is_stopping?: boolean; setIsRunning?: (value: boolean) => void };

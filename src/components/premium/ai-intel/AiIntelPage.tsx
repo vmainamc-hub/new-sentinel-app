@@ -19,25 +19,25 @@ import {
     type Row,
     scanRows,
 } from './analysis';
-import { ExecutionPanel, HistoryPanel } from './ExecutionPanel';
+import { HistoryPanel } from './ExecutionPanel';
+import { TradePanel } from './TradePanel';
 import { AiIntelligencePanel } from './AiIntelligencePanel';
 import { StrategyLabPanel, StrategyLibraryPanel } from './StrategyPanels';
+import { intelService } from './intel-instance';
 import { useExecutor } from './use-executor';
 import './ai-intel.scss';
 
-type TabId = 'overview' | 'scanner' | 'competition' | 'exec' | 'history' | 'lab' | 'library' | 'ai';
+type TabId = 'overview' | 'scanner' | 'competition' | 'history' | 'lab' | 'library' | 'ai';
 
-const TABS: Array<{ id: TabId | string; label: string; ready: boolean }> = [
-    { id: 'overview', label: 'Overview', ready: true },
-    { id: 'scanner', label: 'Live Scanner', ready: true },
-    { id: 'competition', label: 'Virtual Competition', ready: true },
-    { id: 'ai', label: 'AI Intelligence', ready: true },
-    { id: 'lab', label: 'Strategy Lab', ready: true },
-    { id: 'exec', label: 'Live Execution', ready: true },
-    { id: 'library', label: 'Strategy Library', ready: true },
-    { id: 'history', label: 'Trade History', ready: true },
-    { id: 'perf', label: 'Performance', ready: false },
-    { id: 'settings', label: 'Settings', ready: false },
+// Everything under Insights keeps running in the background whether or not it is open; the first screen is only Trade.
+const TABS: Array<{ id: TabId; label: string }> = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'scanner', label: 'Live Scanner' },
+    { id: 'competition', label: 'Virtual Competition' },
+    { id: 'ai', label: 'AI Intelligence' },
+    { id: 'lab', label: 'Strategy Lab' },
+    { id: 'library', label: 'Strategy Library' },
+    { id: 'history', label: 'Trade History' },
 ];
 
 const STALE_SECONDS = 15;
@@ -116,6 +116,7 @@ export default function AiIntelPage() {
     const feed = useFeedOf(apexFeed);
     const series = useMemo(() => filterSeries(feed.series), [feed.version]); // eslint-disable-line react-hooks/exhaustive-deps
     const exec = useExecutor();
+    const [view, setView] = useState<'trade' | 'insights'>('trade');
     const [tab, setTab] = useState<TabId>('overview');
     const [duration, setDuration] = useState(1);
     const [open, setOpen] = useState<string | null>(null);
@@ -124,6 +125,8 @@ export default function AiIntelPage() {
     const [methodFilter, setMethodFilter] = useState<'ALL' | 'SETUP' | 'ANY'>('ALL');
     const [clock, setClock] = useState(() => Date.now());
 
+    // The Chief's evaluations keep running while Apex Intel is open, on either view.
+    useEffect(() => intelService.retain(), []);
     useEffect(() => {
         if (apexFeed.getMode() === 'live' && apexFeed.getStatus() === 'offline') apexFeed.connect();
         const id = window.setInterval(() => setClock(Date.now()), 1000);
@@ -172,10 +175,19 @@ export default function AiIntelPage() {
                         <p>Over/Under digit intelligence</p>
                     </div>
                 </div>
+                <div className='ai-views' role='tablist' aria-label='Apex Intel'>
+                    <button role='tab' aria-selected={view === 'trade'} className={view === 'trade' ? 'active' : ''} onClick={() => setView('trade')}>
+                        Trade
+                    </button>
+                    <button role='tab' aria-selected={view === 'insights'} className={view === 'insights' ? 'active' : ''} onClick={() => setView('insights')}>
+                        Insights
+                    </button>
+                </div>
                 <div className='ai-top-r'>
                     <span className={`ai-status ${live ? 'on' : feed.status === 'connecting' ? 'wait' : 'off'}`}>
                         {live ? 'Live feed' : feed.status === 'connecting' ? 'Connecting' : feed.status === 'error' ? 'Feed error' : 'Offline'}
                     </span>
+                    {view === 'insights' && (
                     <label className='ai-field'>
                         Contract length
                         <select value={duration} onChange={e => setDuration(Number(e.target.value))}>
@@ -186,6 +198,7 @@ export default function AiIntelPage() {
                             ))}
                         </select>
                     </label>
+                    )}
                     {live || feed.status === 'connecting' ? (
                         <button className='ai-btn' onClick={feed.stop}>
                             Stop feed
@@ -199,22 +212,19 @@ export default function AiIntelPage() {
             </header>
             {feed.error ? <div className='ai-error'>{feed.error}</div> : null}
 
-            <nav className='ai-tabs' aria-label='Apex Intel sections'>
-                {TABS.map(t => (
-                    <button
-                        key={t.id}
-                        className={`${tab === t.id ? 'active' : ''} ${t.ready ? '' : 'soon'}`}
-                        disabled={!t.ready}
-                        title={t.ready ? undefined : 'Not built yet'}
-                        onClick={() => t.ready && setTab(t.id as TabId)}
-                    >
-                        {t.label}
-                        {t.ready ? null : <em>soon</em>}
-                    </button>
-                ))}
-            </nav>
+            {view === 'trade' && <TradePanel />}
 
-            {tab === 'overview' && (
+            {view === 'insights' && (
+                <nav className='ai-tabs' aria-label='Apex Intel insights'>
+                    {TABS.map(t => (
+                        <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>
+                            {t.label}
+                        </button>
+                    ))}
+                </nav>
+            )}
+
+            {view === 'insights' && tab === 'overview' && (
                 <section className='ai-grid'>
                     <div className='ai-card wide verdict'>
                         <h2>What the data says</h2>
@@ -265,7 +275,7 @@ export default function AiIntelPage() {
                     </div>
                     <div className='ai-card'>
                         <h3>Execution</h3>
-                        <strong>{exec.running ? (exec.config.mode === 'AUTO' ? 'AUTO running' : 'Assisted running') : 'Stopped'}</strong>
+                        <strong>{exec.running ? (exec.config.mode === 'AUTO' ? 'Automatic, running' : 'Confirm-each-trade, running') : 'Stopped'}</strong>
                         <small>
                             {exec.session.trades} trades this session · P/L {exec.session.pnl >= 0 ? '+' : ''}
                             {exec.session.pnl.toFixed(2)}
@@ -281,7 +291,7 @@ export default function AiIntelPage() {
                 </section>
             )}
 
-            {tab === 'scanner' && (
+            {view === 'insights' && tab === 'scanner' && (
                 <section>
                     <div className='ai-toolbar'>
                         <label className='ai-field'>
@@ -355,13 +365,12 @@ export default function AiIntelPage() {
                 </section>
             )}
 
-            {tab === 'ai' && <AiIntelligencePanel />}
-            {tab === 'lab' && <StrategyLabPanel />}
-            {tab === 'library' && <StrategyLibraryPanel />}
-            {tab === 'exec' && <ExecutionPanel />}
-            {tab === 'history' && <HistoryPanel />}
+            {view === 'insights' && tab === 'ai' && <AiIntelligencePanel />}
+            {view === 'insights' && tab === 'lab' && <StrategyLabPanel />}
+            {view === 'insights' && tab === 'library' && <StrategyLibraryPanel />}
+            {view === 'insights' && tab === 'history' && <HistoryPanel />}
 
-            {tab === 'competition' && (
+            {view === 'insights' && tab === 'competition' && (
                 <section>
                     <div className='ai-toolbar'>
                         <label className='ai-field'>

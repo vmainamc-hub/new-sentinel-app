@@ -12,23 +12,24 @@
 // Recovery is a staking rule, not a way to change the odds. After a loss the next stake is multiplied (martingale) and,
 // if you switch it on, the contract moves to the recovery barrier. A multiplier makes the next win recover earlier
 // losses but also makes a long losing run cost much more; the max-stake and stop-loss limits exist for that reason.
-import { type Contract, losingDigits } from '@/components/premium/sixfold/bot';
+import { type Contract, losingDigits, winningDigits, winProbability } from '@/components/premium/sixfold/bot';
+import { profitMultiple } from '@/components/premium/sixfold/stats';
+import { freshVh, vhAfterReal, vhAfterVirtual, type VhConfig, type VhMode, type VhState } from '@/components/premium/sixfold/virtual-hook';
 import { compileRule } from './rules';
-import { contractOf, type Pick, type PickDirection, type PickOptions } from './picker';
-import { OVER_2, UNDER_7 } from './sim';
+import { bestPerMarket, contractOf, type Pick, type PickDirection, type PickEntry, type PickOptions, recoveryContract, type RecoveryPick } from './picker';
 
 export type Direction = 'OVER_2' | 'UNDER_7';
-export type ExecEntry = 'SETUP' | 'ANY' | 'CUSTOM';
-/** Market value that lets the executor choose the market, direction and entry itself. */
-export const AUTO_MARKET = 'AUTO';
+/** AUTO: the best of fixed-digit, any-tick and your ACTIVE strategies. */
+export type ExecEntry = 'AUTO' | 'SETUP' | 'ANY';
 /** AUTO buys by itself on every qualifying tick. ASSISTED prepares the contract and waits for your click. */
 export type ExecMode = 'ASSISTED' | 'AUTO';
 
 export type ExecConfig = {
-    market: string;
-    direction: Direction;
+    /** Which primary contracts may be traded: Over 2, Under 7 or both. */
+    directions: 'BOTH' | PickDirection;
     entry: ExecEntry;
-    customDigits: number[];
+    /** Markets left out. Every other fresh market is scanned on every tick. */
+    excluded: string[];
     /** Contract length in ticks (1-10). */
     duration: number;
     stake: number;
@@ -38,39 +39,34 @@ export type ExecConfig = {
         multiplier: number;
         /** After this many consecutive losses the run stops instead of raising the stake again. */
         maxSteps: number;
-        /** Move to the recovery barrier while recovering (OVER side -> overBarrier, UNDER side -> underBarrier). */
-        barrierOn: boolean;
-        overBarrier: number;
-        underBarrier: number;
     };
-    /** Hard cap on any single stake. A stake above it stops the run. */
-    maxStake: number;
     /** Stop when session loss reaches this amount (0 = off). */
     stopLoss: number;
     /** Stop when session profit reaches this amount (0 = off). */
     targetProfit: number;
-    /** Stop after this many trades (0 = off). */
+    /** Stop after this many real trades (0 = off). */
     maxTrades: number;
-    /** Used when market is AUTO. */
-    pick: { evidenceOnly: boolean; directions: 'BOTH' | PickDirection };
+    /** Only trade a market that beats chance after false-discovery control. */
+    evidenceOnly: boolean;
+    /** Sixfold's Virtual Hook: after real losses, trade on paper (no money) until paper wins say go back. */
+    virtualHook: { enabled: boolean; opening: boolean; mode: VhMode; enterLosses: number; returnWins: number; fixedCount: number };
     mode: ExecMode;
     /** AUTO needs this to be true: the person has read and accepted that it trades without asking. */
     autoAuthorised: boolean;
 };
 
 export const DEFAULT_EXEC: ExecConfig = {
-    market: '1HZ100V',
-    direction: 'OVER_2',
-    entry: 'SETUP',
-    customDigits: [0, 1, 2],
+    directions: 'BOTH',
+    entry: 'AUTO',
+    excluded: [],
     duration: 1,
     stake: 1,
-    recovery: { enabled: true, multiplier: 2, maxSteps: 4, barrierOn: false, overBarrier: 3, underBarrier: 6 },
-    maxStake: 20,
+    recovery: { enabled: true, multiplier: 2, maxSteps: 4 },
     stopLoss: 20,
     targetProfit: 10,
     maxTrades: 0,
-    pick: { evidenceOnly: false, directions: 'BOTH' },
+    evidenceOnly: false,
+    virtualHook: { enabled: true, opening: true, mode: 'STREAK', enterLosses: 2, returnWins: 2, fixedCount: 3 },
     mode: 'ASSISTED',
     autoAuthorised: false,
 };
@@ -82,9 +78,14 @@ export const PROPOSAL_TTL_MS = 3_000;
 const COOLDOWN_MS = 300;
 const MAX_REJECTIONS_IN_A_ROW = 3;
 const HISTORY_LIMIT = 500;
-/** AUTO market: how often the choice is reviewed, and how much better a rival must be (in win-rate points) to replace it. */
-export const PICK_EVERY_MS = 4_000;
-export const PICK_SWITCH_MARGIN = 0.02;
+/** How often the live board (best contract and entry of every market) is rebuilt, and how many markets stay on it. */
+export const BOARD_EVERY_MS = 2_000;
+export const BOARD_TOP = 6;
+/** A paper trade with no ticks for this long is dropped. */
+const VIRTUAL_TIMEOUT_MS = 120_000;
+const VIRTUAL_ID_BASE = 8_000_000_000;
+/** Estimated platform margin for paper payouts (Sixfold's default). The real payout comes from Deriv. */
+const PAPER_MARGIN = 0.05;
 
 const clampInt = (x: unknown, lo: number, hi: number, fallback: number) => {
     const n = Math.trunc(Number(x));
@@ -96,57 +97,50 @@ export const money = (x: number) => Math.round(x * 100) / 100;
 export function normalizeExec(raw: Partial<ExecConfig> | null | undefined): ExecConfig {
     const r = raw ?? {};
     const rec: Partial<ExecConfig['recovery']> = r.recovery ?? {};
+    const vh: Partial<ExecConfig['virtualHook']> = r.virtualHook ?? {};
     const d = DEFAULT_EXEC;
-    const digits = Array.isArray(r.customDigits) ? [...new Set(r.customDigits.map(Number).filter(x => Number.isInteger(x) && x >= 0 && x <= 9))] : d.customDigits;
     return {
-        market: typeof r.market === 'string' && r.market ? r.market : d.market,
-        direction: r.direction === 'UNDER_7' ? 'UNDER_7' : 'OVER_2',
-        entry: r.entry === 'ANY' || r.entry === 'CUSTOM' ? r.entry : 'SETUP',
-        customDigits: digits,
+        directions: r.directions === 'OVER_2' || r.directions === 'UNDER_7' ? r.directions : 'BOTH',
+        entry: r.entry === 'SETUP' || r.entry === 'ANY' ? r.entry : 'AUTO',
+        excluded: Array.isArray(r.excluded) ? [...new Set(r.excluded.filter(x => typeof x === 'string' && x))] : [],
         duration: clampInt(r.duration, 1, 10, d.duration),
         stake: money(Math.max(0, num(r.stake, d.stake))),
         recovery: {
             enabled: rec.enabled ?? d.recovery.enabled,
             multiplier: Math.max(1, Math.min(10, num(rec.multiplier, d.recovery.multiplier))),
             maxSteps: clampInt(rec.maxSteps, 1, 12, d.recovery.maxSteps),
-            barrierOn: rec.barrierOn ?? d.recovery.barrierOn,
-            overBarrier: clampInt(rec.overBarrier, 0, 8, d.recovery.overBarrier),
-            underBarrier: clampInt(rec.underBarrier, 1, 9, d.recovery.underBarrier),
         },
-        maxStake: money(Math.max(0, num(r.maxStake, d.maxStake))),
         stopLoss: money(Math.max(0, num(r.stopLoss, d.stopLoss))),
         targetProfit: money(Math.max(0, num(r.targetProfit, d.targetProfit))),
         maxTrades: clampInt(r.maxTrades, 0, 100000, d.maxTrades),
-        pick: {
-            evidenceOnly: Boolean(r.pick?.evidenceOnly),
-            directions: r.pick?.directions === 'OVER_2' || r.pick?.directions === 'UNDER_7' ? r.pick.directions : 'BOTH',
+        evidenceOnly: Boolean(r.evidenceOnly),
+        virtualHook: {
+            enabled: vh.enabled ?? d.virtualHook.enabled,
+            opening: vh.opening ?? d.virtualHook.opening,
+            mode: vh.mode === 'FIXED' ? 'FIXED' : 'STREAK',
+            enterLosses: clampInt(vh.enterLosses, 1, 20, d.virtualHook.enterLosses),
+            returnWins: clampInt(vh.returnWins, 1, 20, d.virtualHook.returnWins),
+            fixedCount: clampInt(vh.fixedCount, 1, 50, d.virtualHook.fixedCount),
         },
         mode: r.mode === 'AUTO' ? 'AUTO' : 'ASSISTED',
         autoAuthorised: Boolean(r.autoAuthorised),
     };
 }
 
-export const primaryContract = (d: Direction): Contract => (d === 'UNDER_7' ? UNDER_7 : OVER_2);
-
-/** The contract for the next trade given consecutive losses, and the stake for it. */
-export function nextTrade(cfg: ExecConfig, consecutiveLosses: number): { contract: Contract; stake: number; recovery: boolean; step: number } {
+/** The stake for the next trade after `consecutiveLosses` real losses, and whether it is a recovery trade. */
+export function nextStake(cfg: ExecConfig, consecutiveLosses: number): { stake: number; recovery: boolean; step: number } {
     const recovering = cfg.recovery.enabled && consecutiveLosses > 0;
-    const primary = primaryContract(cfg.direction);
-    const contract: Contract =
-        recovering && cfg.recovery.barrierOn
-            ? primary.side === 'OVER'
-                ? { side: 'OVER', param: cfg.recovery.overBarrier }
-                : { side: 'UNDER', param: cfg.recovery.underBarrier }
-            : primary;
-    const stake = recovering ? money(cfg.stake * cfg.recovery.multiplier ** consecutiveLosses) : cfg.stake;
-    return { contract, stake, recovery: recovering, step: recovering ? consecutiveLosses : 0 };
+    return { stake: recovering ? money(cfg.stake * cfg.recovery.multiplier ** consecutiveLosses) : cfg.stake, recovery: recovering, step: recovering ? consecutiveLosses : 0 };
 }
 
-/** Digits that arm an entry for this contract. */
-export function triggerSet(cfg: ExecConfig, contract: Contract): ReadonlySet<number> {
-    if (cfg.entry === 'ANY') return new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-    if (cfg.entry === 'CUSTOM') return new Set(cfg.customDigits);
-    return new Set(losingDigits(contract));
+/** Does this digit arm an entry for this pick? SMART strategies also need their rule to hold on `history` (current tick included). */
+export function armsOn(pick: Pick | RecoveryPick, contract: Contract, digit: number, history?: readonly number[]): boolean {
+    if (pick.entry === 'ANY') return true;
+    if (pick.entry === 'SETUP') return losingDigits(contract).includes(digit);
+    const p = pick as Pick;
+    if (!p.rule) return p.customDigits.includes(digit);
+    if (!p.rule.digits.includes(digit)) return false;
+    return history ? compileRule(p.rule, contract)(history) : false;
 }
 
 const DERIV_TYPE: Record<string, string> = { OVER: 'DIGITOVER', UNDER: 'DIGITUNDER' };
@@ -166,11 +160,15 @@ export type ExecTrade = {
     exitDigit: number | null;
     profit: number | null;
     status: 'open' | 'won' | 'lost' | 'unconfirmed';
+    /** A paper trade from the Virtual Hook: no money staked, not counted in the session. */
+    virtual?: boolean;
 };
 
 export type ExecPhase = 'idle' | 'waiting' | 'ready' | 'buying' | 'settling';
 
-export type Proposal = { contract: Contract; label: string; stake: number; recovery: boolean; step: number; triggerDigit: number; expiresAt: number };
+export type Proposal = { market: string; contract: Contract; label: string; stake: number; recovery: boolean; step: number; triggerDigit: number; expiresAt: number };
+
+export type VhStatus = { on: boolean; virtual: boolean; opening: boolean; open: boolean; realLosses: number; virtualWins: number; virtualDone: number };
 
 export type ExecSnapshot = {
     running: boolean;
@@ -179,17 +177,19 @@ export type ExecSnapshot = {
     proposal: Proposal | null;
     consecutiveLosses: number;
     session: { trades: number; wins: number; losses: number; pnl: number };
+    /** Paper trades of the Virtual Hook this run. */
+    paper: { trades: number; wins: number; pnl: number };
+    vh: VhStatus;
     trades: ExecTrade[];
     log: Array<{ at: number; kind: 'info' | 'warn' | 'trade' | 'win' | 'loss'; text: string }>;
     lastError: string | null;
     stopMessage: string | null;
     /** What would be bought next, shown even while waiting. */
-    next: { label: string; stake: number; recovery: boolean; triggers: number[] } | null;
-    /** AUTO market: what the picker chose and the next best alternatives, or null while nothing qualifies. */
-    selected: Pick | null;
-    candidates: Pick[];
-    /** Why nothing is selected (AUTO only). */
-    pickNote: string | null;
+    next: { label: string; stake: number; recovery: boolean; paper: boolean };
+    /** The markets currently showing the best entries: main contract (Over 2 / Under 7) and, after a loss, recovery (Over 3 / Under 6). */
+    board: { primary: Pick[]; recovery: RecoveryPick[] };
+    /** Why nothing is tradable right now, or null. */
+    note: string | null;
 };
 
 type Loose = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -218,6 +218,8 @@ export interface ExecStores {
     };
 }
 
+export type PickRequest = Omit<PickOptions, 'candidates' | 'minTicks' | 'freshMs'>;
+
 export type ExecIO = {
     buy: (a: { parameters: Loose; price: number }) => Promise<{ buy_price: number; contract_id: number; transaction_id: number }>;
     settle: (a: { contractId: number; fallback: Loose; onUpdate: (c: Loose) => void; signal: AbortSignal }) => Promise<Loose>;
@@ -226,8 +228,10 @@ export type ExecIO = {
     lastTickAt: (symbol: string) => number | null;
     isFeedLive: () => boolean;
     connectFeed: () => void;
-    /** AUTO market: rank every market / direction / entry from the live feed. */
-    pick?: (opts: PickOptions) => Pick[];
+    /** Rank every market / direction / entry from the live feed (main contracts). */
+    pick?: (opts: PickRequest) => Pick[];
+    /** Rank Over 3 / Under 6 on every market (recovery contracts). */
+    pickRecovery?: (opts: { duration: number; entries?: readonly PickEntry[] }) => RecoveryPick[];
     /** Recent digits of a market (current tick included), for SMART strategy rules. */
     history?: (symbol: string) => readonly number[];
     describeFailure: (e: unknown) => { kind: string; message: string; outcomeUnknown: boolean };
@@ -246,6 +250,10 @@ const lastDigitOf = (v: unknown): number | null => {
     return m ? Number(m[1]) : null;
 };
 
+type VirtualOpen = { id: number; market: string; contract: Contract; stake: number; remaining: number; at: number };
+
+type Plan = Proposal;
+
 export class AiIntelExecutor {
     readonly moduleId = 'ai_intel';
     private cfg: ExecConfig;
@@ -259,6 +267,11 @@ export class AiIntelExecutor {
     private cooldownUntil = 0;
     private runToken = 0;
     private session = { trades: 0, wins: 0, losses: 0, pnl: 0 };
+    private paper = { trades: 0, wins: 0, pnl: 0 };
+    private vh: VhState = freshVh();
+    private opening = false;
+    private virtualOpen: VirtualOpen | null = null;
+    private virtualCount = 0;
     private trades: ExecTrade[];
     private log: ExecSnapshot['log'] = [];
     private lastError: string | null = null;
@@ -267,10 +280,9 @@ export class AiIntelExecutor {
     private listeners = new Set<() => void>();
     private snap: ExecSnapshot;
     private seq = 0;
-    private selected: Pick | null = null;
-    private candidates: Pick[] = [];
-    private lastPickAt = 0;
-    private pickNote: string | null = null;
+    private board: ExecSnapshot['board'] = { primary: [], recovery: [] };
+    private boardAt = 0;
+    private note: string | null = null;
     private disposeWatch: (() => void) | null = null;
     private watch: ((on: (runPanelRunning: boolean, active: string | null) => void) => () => void) | null = null;
 
@@ -294,50 +306,65 @@ export class AiIntelExecutor {
 
     configure(patch: Partial<ExecConfig>) {
         if (this.running) return; // the running session's rules never change under it
-        this.cfg = normalizeExec({ ...this.cfg, ...patch, recovery: { ...this.cfg.recovery, ...(patch.recovery ?? {}) } });
+        this.cfg = normalizeExec({
+            ...this.cfg,
+            ...patch,
+            recovery: { ...this.cfg.recovery, ...(patch.recovery ?? {}) },
+            virtualHook: { ...this.cfg.virtualHook, ...(patch.virtualHook ?? {}) },
+        });
         this.io.save(this.cfg);
         this.emit();
     }
 
-    /** The configuration the next trade actually uses: in AUTO market the picker's market, direction and entry. */
-    private eff(): ExecConfig {
-        if (this.cfg.market !== AUTO_MARKET) return this.cfg;
-        const s = this.selected;
-        if (!s) return this.cfg;
-        const digits = s.rule ? s.rule.digits : s.customDigits;
-        return { ...this.cfg, market: s.market, direction: s.direction, entry: s.entry === 'SMART' ? 'CUSTOM' : s.entry, customDigits: digits.length ? digits : this.cfg.customDigits };
+    private entryKinds(): PickEntry[] | undefined {
+        return this.cfg.entry === 'AUTO' ? undefined : [this.cfg.entry];
     }
 
-    /** Review the AUTO choice. Never while a contract is open or a signal is waiting for confirmation. */
-    private review(now: number, force = false) {
-        if (this.cfg.market !== AUTO_MARKET || !this.io.pick) return;
-        if (this.inFlight || this.proposal) return;
-        if (!force && this.selected && now - this.lastPickAt < PICK_EVERY_MS) return;
-        if (!force && !this.selected && now - this.lastPickAt < 1000) return;
-        this.lastPickAt = now;
-        const ranked = this.io.pick({ duration: this.cfg.duration, evidenceOnly: this.cfg.pick.evidenceOnly, directions: this.cfg.pick.directions });
-        this.candidates = ranked.slice(0, 5);
-        const best = ranked[0] ?? null;
-        const cur = this.selected ? ranked.find(r => r.key === this.selected!.key) ?? null : null;
-        let next: Pick | null = this.selected;
-        if (!best) next = null;
-        else if (!cur || best.score - cur.score >= PICK_SWITCH_MARGIN) next = best;
-        else next = cur; // keep the current one, refreshed with its latest numbers
-        if (!next && this.selected) this.addLog('info', 'Auto-pick: nothing qualifies right now, waiting.');
-        if (next && (!this.selected || this.selected.key !== next.key)) {
-            this.addLog('info', `Auto-pick: ${next.label} on ${next.market}. ${next.reason}.`);
-        }
-        this.selected = next;
-        this.pickNote = next
+    /** Rebuild the board: the best entry of every fresh market, top few. Never mid-contract (the choice is per tick, not per contract). */
+    private refreshBoard(now: number, force = false) {
+        if (!this.io.pick) return;
+        if (!force && now - this.boardAt < BOARD_EVERY_MS) return;
+        this.boardAt = now;
+        const out = new Set(this.cfg.excluded);
+        const primary = bestPerMarket(this.io.pick({ duration: this.cfg.duration, evidenceOnly: this.cfg.evidenceOnly, directions: this.cfg.directions, entries: this.entryKinds() }).filter(p => !out.has(p.market))).slice(0, BOARD_TOP);
+        const recoveryEntries = this.entryKinds()?.filter((e): e is 'SETUP' | 'ANY' => e === 'SETUP' || e === 'ANY');
+        const recovery =
+            this.cfg.recovery.enabled && this.io.pickRecovery
+                ? bestPerMarket(this.io.pickRecovery({ duration: this.cfg.duration, entries: recoveryEntries }).filter(p => !out.has(p.market))).slice(0, BOARD_TOP)
+                : [];
+        const prevTop = this.board.primary[0]?.key;
+        this.board = { primary, recovery };
+        const recovering = this.cfg.recovery.enabled && this.losses > 0;
+        const active = recovering ? recovery : primary;
+        this.note = active.length
             ? null
-            : this.cfg.pick.evidenceOnly
+            : this.cfg.evidenceOnly && !recovering
               ? 'No market beats chance after false-discovery control yet. Waiting (this is the normal result on random digits).'
               : 'Waiting for fresh data: a market needs 300+ recent ticks and a non-unstable regime.';
+        if (this.running && primary[0] && primary[0].key !== prevTop && !recovering) {
+            this.addLog('info', `Best entry now: ${primary[0].market} · ${primary[0].label}. ${primary[0].reason}.`);
+        }
         this.emit();
     }
 
+    private paperNow(): boolean {
+        return this.cfg.virtualHook.enabled && this.vh.virtual;
+    }
+
+    private vhConfig(): VhConfig {
+        const v = this.cfg.virtualHook;
+        return { enterLosses: v.enterLosses, returnWins: v.returnWins, mode: v.mode, fixedCount: v.fixedCount };
+    }
+
+    private vhReturnText(): string {
+        const v = this.cfg.virtualHook;
+        return v.mode === 'FIXED' ? `${v.fixedCount} paper trades are done` : `${v.returnWins} paper win${v.returnWins > 1 ? 's' : ''} in a row`;
+    }
+
     private build(): ExecSnapshot {
-        const n = nextTrade(this.eff(), this.losses);
+        const recovering = this.cfg.recovery.enabled && this.losses > 0;
+        const n = nextStake(this.cfg, this.losses);
+        const dirs = this.cfg.directions === 'OVER_2' ? 'Over 2' : this.cfg.directions === 'UNDER_7' ? 'Under 7' : 'Over 2 / Under 7';
         return {
             running: this.running,
             phase: this.phase,
@@ -345,14 +372,15 @@ export class AiIntelExecutor {
             proposal: this.proposal,
             consecutiveLosses: this.losses,
             session: { ...this.session },
+            paper: { ...this.paper },
+            vh: { on: this.cfg.virtualHook.enabled, virtual: this.paperNow(), opening: this.opening, open: this.virtualOpen !== null, realLosses: this.vh.realLosses, virtualWins: this.vh.virtualWins, virtualDone: this.vh.virtualDone },
             trades: this.trades.slice(0, 200),
             log: this.log.slice(0, 60),
             lastError: this.lastError,
             stopMessage: this.stopMessage,
-            next: { label: labelOf(n.contract), stake: n.stake, recovery: n.recovery, triggers: [...triggerSet(this.eff(), n.contract)] },
-            selected: this.selected,
-            candidates: this.candidates,
-            pickNote: this.pickNote,
+            next: { label: recovering ? 'Over 3 / Under 6' : dirs, stake: n.stake, recovery: n.recovery, paper: this.paperNow() },
+            board: this.board,
+            note: this.note,
         };
     }
 
@@ -371,11 +399,9 @@ export class AiIntelExecutor {
         if (!this.stores) return 'Apex Intel is still starting. Try again in a moment.';
         if (!this.io.isAuthorized()) return 'Please log in to your Deriv account before trading.';
         if (c.stake < MIN_STAKE) return `Stake must be at least ${MIN_STAKE.toFixed(2)}.`;
-        if (c.maxStake < c.stake) return 'Max stake is below the stake.';
-        if (c.market === AUTO_MARKET && !this.io.pick) return 'Auto-pick is not available in this build.';
-        if (c.market !== AUTO_MARKET && c.entry === 'CUSTOM' && c.customDigits.length === 0) return 'Pick at least one entry digit for CUSTOM.';
-        if (c.mode === 'AUTO' && !c.autoAuthorised) return 'AUTO needs your explicit authorisation: tick the box that says it trades without asking.';
-        if (c.stopLoss === 0 && c.maxTrades === 0 && c.targetProfit === 0) return 'Set at least one limit: stop loss, target profit or max trades.';
+        if (!this.io.pick) return 'Market scanning is not available in this build.';
+        if (c.mode === 'AUTO' && !c.autoAuthorised) return 'Automatic trading needs your explicit authorisation: switch on "Trade automatically".';
+        if (c.stopLoss === 0 && c.maxTrades === 0 && c.targetProfit === 0) return 'Set at least one limit: stop loss, take profit or max trades.';
         return null;
     }
 
@@ -401,11 +427,15 @@ export class AiIntelExecutor {
         this.proposal = null;
         this.inFlight = false;
         this.session = { trades: 0, wins: 0, losses: 0, pnl: 0 };
+        this.paper = { trades: 0, wins: 0, pnl: 0 };
+        // Like Sixfold: with the Virtual Hook on, the run opens on paper and goes real after its first paper win.
+        this.opening = this.cfg.virtualHook.enabled && this.cfg.virtualHook.opening;
+        this.vh = this.opening ? { virtual: true, realLosses: 0, virtualWins: 0, virtualDone: 0 } : freshVh();
+        this.virtualOpen = null;
         this.runToken += 1;
-        this.selected = null;
-        this.candidates = [];
-        this.pickNote = null;
-        this.lastPickAt = 0;
+        this.board = { primary: [], recovery: [] };
+        this.boardAt = 0;
+        this.note = null;
         this.running = true;
         this.phase = 'waiting';
         try {
@@ -429,12 +459,12 @@ export class AiIntelExecutor {
             this.addLog('info', 'Connecting to the live market feed.');
             this.io.connectFeed();
         }
-        const n = nextTrade(this.eff(), 0);
         this.addLog(
             'info',
-            `Started: ${this.cfg.market === AUTO_MARKET ? 'AUTO market (the tool picks market, direction and entry)' : `${labelOf(n.contract)} on ${this.cfg.market}`}, stake ${n.stake.toFixed(2)}, entry ${this.cfg.entry}, ${this.cfg.mode === 'AUTO' ? 'AUTO (buys by itself)' : 'ASSISTED (you confirm each trade)'}.`
+            `Started: scanning all markets for the best entry (${this.cfg.directions === 'BOTH' ? 'Over 2 and Under 7' : this.cfg.directions === 'OVER_2' ? 'Over 2' : 'Under 7'}${this.cfg.recovery.enabled ? ', recovery with Over 3 or Under 6' : ''}), stake ${this.cfg.stake.toFixed(2)}, ${this.cfg.mode === 'AUTO' ? 'automatic' : 'you confirm each trade'}.${this.opening ? ' Opening on paper until the first paper win.' : ''}`
         );
         this.emit();
+        this.refreshBoard(this.io.now(), true);
     }
 
     /** Immediate stop. Always works, also mid-trade: an open contract stays on the account and settles on its own. */
@@ -445,6 +475,7 @@ export class AiIntelExecutor {
         this.phase = 'idle';
         this.proposal = null;
         this.inFlight = false;
+        this.virtualOpen = null;
         this.stopMessage = reason;
         this.aborts.forEach(c => c.abort());
         this.aborts.clear();
@@ -481,37 +512,59 @@ export class AiIntelExecutor {
         this.emit();
     }
 
-    /** Every live tick of every market. Only the configured market matters. */
+    /** What would be bought on this tick of this market, or null. Main contracts normally, Over 3 / Under 6 while recovering. */
+    private plan(symbol: string, digit: number, now: number): Plan | null {
+        const n = nextStake(this.cfg, this.losses);
+        let contract: Contract;
+        if (n.recovery) {
+            const rp = this.board.recovery.find(p => p.market === symbol);
+            if (!rp) return null;
+            contract = recoveryContract(rp.direction);
+            if (!armsOn(rp, contract, digit)) return null;
+        } else {
+            const p = this.board.primary.find(x => x.market === symbol);
+            if (!p) return null;
+            contract = contractOf(p.direction);
+            // A SMART strategy also needs its rule to hold on the recent ticks. No history: no trade.
+            if (!armsOn(p, contract, digit, p.rule ? this.io.history?.(symbol) : undefined)) return null;
+        }
+        return { market: symbol, contract, label: labelOf(contract), stake: n.stake, recovery: n.recovery, step: n.step, triggerDigit: digit, expiresAt: now };
+    }
+
+    /** Every live tick of every market. All markets are watched; the one whose entry fires first among the best is traded. */
     handleTick(symbol: string, digit: number) {
         if (!this.running) return;
         const now = this.io.now();
-        this.review(now);
-        const e = this.eff();
-        if (symbol !== e.market || (this.cfg.market === AUTO_MARKET && !this.selected)) return;
+        if (this.virtualOpen && now - this.virtualOpen.at > VIRTUAL_TIMEOUT_MS) {
+            this.virtualOpen = null;
+            this.addLog('warn', 'A paper trade never settled (no ticks arrived); it was dropped.');
+            this.emit();
+        }
+        if (this.virtualOpen) {
+            // One contract at a time, paper or real. Only its own market's ticks matter, and its settlement tick arms nothing.
+            if (this.virtualOpen.market === symbol) this.virtualTick(digit);
+            return;
+        }
+        this.refreshBoard(now);
         if (this.proposal && now > this.proposal.expiresAt) {
-            this.addLog('info', `Dropped the ${this.proposal.label} signal: not confirmed in time, the trigger tick is stale.`);
+            this.addLog('info', `Dropped the ${this.proposal.label} signal on ${this.proposal.market}: not confirmed in time, the trigger tick is stale.`);
             this.proposal = null;
             this.phase = 'waiting';
             this.emit();
         }
         if (this.inFlight || this.proposal || now < this.cooldownUntil) return;
         if (this.limitReached()) return;
-        const n = nextTrade(e, this.losses);
-        if (!triggerSet(e, n.contract).has(digit)) return;
-        // A SMART strategy also needs its rule to hold on the recent ticks (current tick included). No history: no trade.
-        if (this.cfg.market === AUTO_MARKET && this.selected?.rule) {
-            const hist = this.io.history?.(symbol);
-            if (!hist || !compileRule(this.selected.rule, contractOf(this.selected.direction))(hist)) return;
-        }
-        const check = this.stakeCheck(n.stake);
+        const plan = this.plan(symbol, digit, now);
+        if (!plan) return;
+        if (this.paperNow()) return this.executeVirtual(plan);
+        const check = this.stakeCheck(plan.stake);
         if (check) return this.stop(check);
-        const label = labelOf(n.contract);
         if (this.cfg.mode === 'AUTO') {
-            void this.execute({ contract: n.contract, label, stake: n.stake, recovery: n.recovery, step: n.step, triggerDigit: digit, expiresAt: now });
+            void this.execute(plan);
         } else {
-            this.proposal = { contract: n.contract, label, stake: n.stake, recovery: n.recovery, step: n.step, triggerDigit: digit, expiresAt: now + PROPOSAL_TTL_MS };
+            this.proposal = { ...plan, expiresAt: now + PROPOSAL_TTL_MS };
             this.phase = 'ready';
-            this.addLog('info', `Signal: entry digit ${digit}. ${label}${n.recovery ? ' (recovery)' : ''}, stake ${n.stake.toFixed(2)} is ready. Confirm within ${PROPOSAL_TTL_MS / 1000}s.`);
+            this.addLog('info', `Signal: ${plan.market}, entry digit ${digit}. ${plan.label}${plan.recovery ? ' (recovery)' : ''}, stake ${plan.stake.toFixed(2)} is ready. Confirm within ${PROPOSAL_TTL_MS / 1000}s.`);
             this.emit();
         }
     }
@@ -531,7 +584,6 @@ export class AiIntelExecutor {
     }
 
     private stakeCheck(stake: number): string | null {
-        if (stake > this.cfg.maxStake) return `Stopped: the next stake ${stake.toFixed(2)} is above your max stake ${this.cfg.maxStake.toFixed(2)}.`;
         if (this.cfg.recovery.enabled && this.losses > this.cfg.recovery.maxSteps) return `Stopped: ${this.losses} losses in a row, past your ${this.cfg.recovery.maxSteps} recovery steps.`;
         if (this.cfg.stopLoss > 0 && this.session.pnl - stake < -this.cfg.stopLoss) return `Stopped: another stake of ${stake.toFixed(2)} could take the session loss past your stop loss of ${this.cfg.stopLoss.toFixed(2)}.`;
         return null;
@@ -540,7 +592,7 @@ export class AiIntelExecutor {
     private limitReached(): boolean {
         const c = this.cfg;
         if (c.targetProfit > 0 && this.session.pnl >= c.targetProfit) {
-            this.stop(`Target profit reached (${this.session.pnl.toFixed(2)}).`);
+            this.stop(`Take profit reached (${this.session.pnl.toFixed(2)}).`);
             return true;
         }
         if (c.stopLoss > 0 && this.session.pnl <= -c.stopLoss) {
@@ -566,17 +618,110 @@ export class AiIntelExecutor {
         }
     }
 
+    /** Paper trades show in the Transactions panel as Virtual rows and never reach the Run Panel totals. */
+    private pushVirtual(data: Loose) {
+        try {
+            this.stores?.transactions.pushTransaction({ ...data, is_virtual_hook: 1, run_id: this.stores.run_panel.run_id });
+        } catch {
+            /* optional transactions-panel failures are ignored */
+        }
+    }
+
     private persistTrades() {
         try {
-            this.io.saveTrades?.(this.trades.slice(0, HISTORY_LIMIT));
+            this.io.saveTrades?.(this.trades.filter(t => !t.virtual).slice(0, HISTORY_LIMIT));
         } catch {
             /* storage may be unavailable */
         }
     }
 
+    /** A paper trade: the same pick and entry as a real one, no purchase. It settles on the market's real ticks. */
+    private executeVirtual(p: Plan) {
+        const contractType = DERIV_TYPE[p.contract.side];
+        if (!contractType) return;
+        const id = VIRTUAL_ID_BASE + ++this.virtualCount;
+        const startedAt = Math.floor(this.io.now() / 1000);
+        this.virtualOpen = { id, market: p.market, contract: p.contract, stake: p.stake, remaining: Math.max(1, this.cfg.duration), at: this.io.now() };
+        this.trades = [
+            { id: `v${startedAt}-${++this.seq}`, contractId: id, at: this.io.now(), market: p.market, label: p.label, recovery: p.recovery, step: p.step, stake: p.stake, duration: this.cfg.duration, triggerDigit: p.triggerDigit, exitDigit: null, profit: null, status: 'open', virtual: true },
+            ...this.trades,
+        ].slice(0, HISTORY_LIMIT);
+        this.pushVirtual({
+            display_name: p.market,
+            underlying_symbol: p.market,
+            shortcode: `APEX_INTEL_VIRTUAL_${contractType}_${p.market}`,
+            contract_type: contractType,
+            contract_id: id,
+            currency: this.stores?.client?.currency || 'USD',
+            date_start: startedAt,
+            buy_price: p.stake,
+            barrier: String(p.contract.param),
+            status: 'open',
+            is_sold: 0,
+            profit: 0,
+            transaction_ids: { buy: id },
+        });
+        this.addLog('trade', `Paper ${p.label}${p.recovery ? ' (recovery)' : ''} on ${p.market}: no money staked.`);
+        this.phase = 'settling';
+        this.emit();
+    }
+
+    private virtualTick(digit: number) {
+        const v = this.virtualOpen;
+        if (!v) return;
+        v.remaining -= 1;
+        if (v.remaining > 0) return;
+        this.virtualOpen = null;
+        const won = winningDigits(v.contract).includes(digit);
+        const profit = won ? money(v.stake * profitMultiple(winProbability(v.contract), PAPER_MARGIN)) : -v.stake;
+        const trade = this.trades.find(t => t.contractId === v.id);
+        if (trade) {
+            trade.profit = profit;
+            trade.exitDigit = digit;
+            trade.status = won ? 'won' : 'lost';
+        }
+        this.paper = { trades: this.paper.trades + 1, wins: this.paper.wins + (won ? 1 : 0), pnl: money(this.paper.pnl + profit) };
+        this.pushVirtual({
+            display_name: v.market,
+            underlying_symbol: v.market,
+            contract_type: DERIV_TYPE[v.contract.side],
+            contract_id: v.id,
+            buy_price: v.stake,
+            sell_price: won ? v.stake + profit : 0,
+            barrier: String(v.contract.param),
+            status: won ? 'won' : 'lost',
+            is_sold: 1,
+            is_expired: 1,
+            profit,
+            exit_spot: String(digit),
+            exit_digit: digit,
+            virtual_result: won ? 'win' : 'loss',
+            transaction_ids: { buy: v.id, sell: v.id },
+        });
+        this.addLog(won ? 'win' : 'loss', `Paper ${trade?.label ?? 'contract'} on ${v.market} ${won ? 'won' : 'lost'} (digit ${digit}). No money moved.`);
+        if (this.opening) {
+            // Opening spell: a loss means wait for a win on paper, a win means real trading starts now.
+            if (won) {
+                this.opening = false;
+                this.vh = freshVh();
+                this.addLog('info', 'Opening paper trade won. Real trading starts now.');
+            } else {
+                this.vh = { ...this.vh, virtualDone: this.vh.virtualDone + 1 };
+                this.addLog('info', 'Opening paper trade lost. Staying on paper until one wins.');
+            }
+        } else {
+            const step = vhAfterVirtual(this.vh, won, this.vhConfig());
+            this.vh = step.state;
+            if (step.event === 'returned') this.addLog('info', 'Virtual Hook: the paper trades did it. Back to real money.');
+        }
+        this.cooldownUntil = this.io.now() + COOLDOWN_MS;
+        if (this.running) this.phase = 'waiting';
+        this.emit();
+    }
+
     private async execute(p: Proposal) {
         if (!this.running || this.inFlight) return;
-        const symbol = this.eff().market;
+        const symbol = p.market;
         const lastTick = this.io.lastTickAt(symbol);
         if (!this.io.isAuthorized()) return this.stop('Stopped: disconnected from Deriv.');
         if (lastTick === null || this.io.now() - lastTick > FRESH_TICK_MS) {
@@ -710,11 +855,16 @@ export class AiIntelExecutor {
                 this.session.losses += 1;
                 this.losses += 1;
             }
-            this.addLog(won ? 'win' : 'loss', `${trade.label} ${won ? 'won' : 'lost'} ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}${exitDigit === null ? '' : `, exit digit ${exitDigit}`}. Session ${this.session.pnl >= 0 ? '+' : ''}${this.session.pnl.toFixed(2)}.`);
+            if (this.cfg.virtualHook.enabled) {
+                const step = vhAfterReal(this.vh, won, this.vhConfig());
+                this.vh = step.state;
+                if (step.event === 'entered') this.addLog('info', `Virtual Hook: ${this.vh.realLosses} real loss${this.vh.realLosses > 1 ? 'es' : ''} in a row. Trading on paper (no money) until ${this.vhReturnText()}.`);
+            }
+            this.addLog(won ? 'win' : 'loss', `${trade.label} on ${trade.market} ${won ? 'won' : 'lost'} ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}${exitDigit === null ? '' : `, exit digit ${exitDigit}`}. Session ${this.session.pnl >= 0 ? '+' : ''}${this.session.pnl.toFixed(2)}.`);
         }
         this.persistTrades();
         this.emit();
         if (this.running) this.limitReached();
-        if (this.running) this.review(this.io.now(), true);
+        if (this.running) this.refreshBoard(this.io.now(), true);
     }
 }

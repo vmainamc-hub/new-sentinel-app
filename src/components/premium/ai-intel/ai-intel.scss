@@ -713,3 +713,30 @@
         min-width: 0;
     }
 }
+
+// Trade / Insights switch and the best-entries list
+.ai-intel {
+    .ai-views {
+        display: inline-flex;
+        gap: 4px;
+        padding: 3px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+        button {
+            border: 0;
+            background: transparent;
+            color: var(--muted);
+            padding: 6px 16px;
+            border-radius: 999px;
+            font-weight: 600;
+            cursor: pointer;
+            &.active {
+                background: var(--accent, #3ddc97);
+                color: #07110c;
+            }
+        }
+    }
+    .ai-trade .ai-best li {
+        grid-template-columns: 70px 1fr auto auto;
+    }
+}

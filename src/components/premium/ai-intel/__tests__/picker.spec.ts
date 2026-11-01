@@ -1,5 +1,5 @@
 import { mulberry32 } from '@/components/premium/sixfold/stats';
-import { BASELINE_CANDIDATES, rankPicks } from '../picker';
+import { BASELINE_CANDIDATES, bestPerMarket, rankPicks, rankRecovery } from '../picker';
 
 const fair = (n: number, seed: number) => {
     const r = mulberry32(seed);
@@ -47,5 +47,27 @@ describe('rankPicks', () => {
         });
         expect(custom[0]).toMatchObject({ entry: 'CUSTOM', customDigits: [1], strategyId: 's1' });
         expect(BASELINE_CANDIDATES).toHaveLength(4);
+    });
+});
+
+describe('entries filter, recovery ranking and one row per market', () => {
+    it('the entries filter keeps only the requested entry kinds', () => {
+        const s = { A: fair(3000, 21) };
+        const only = rankPicks(s, fresh, NOW, { ...base, evidenceOnly: false, entries: ['ANY'] });
+        expect(only.length).toBeGreaterThan(0);
+        expect(only.every(p => p.entry === 'ANY')).toBe(true);
+    });
+    it('ranks Over 3 and Under 6 per market and picks the more viable one', () => {
+        // After a 0-3 trigger the next digit is always 9 (wins Over 3, loses Under 6): Over 3 SETUP must lead on that market.
+        const rigged = Array.from({ length: 3000 }, (_, i) => (i % 2 === 0 ? 1 : 9));
+        const ranked = rankRecovery({ A: fair(3000, 31), RIG: rigged }, fresh, NOW, { duration: 1 });
+        const best = bestPerMarket(ranked);
+        expect(best.map(b => b.market).sort()).toEqual(['A', 'RIG']);
+        expect(best.find(b => b.market === 'RIG')).toMatchObject({ direction: 'OVER_3', entry: 'SETUP' });
+        expect(ranked.every(r => r.direction === 'OVER_3' || r.direction === 'UNDER_6')).toBe(true);
+    });
+    it('skips stale and short markets for recovery too', () => {
+        expect(rankRecovery({ A: fair(100, 1) }, fresh, NOW, { duration: 1 })).toHaveLength(0);
+        expect(rankRecovery({ A: fair(3000, 1) }, () => 0, NOW, { duration: 1 })).toHaveLength(0);
     });
 });
