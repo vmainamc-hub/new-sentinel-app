@@ -12,7 +12,7 @@ const STORAGE_KEY = 'vanguard.settings.v1';
  *     (a maximum number of steps and a streak budget), which the bot did not have.
  *   - Stake, take profit and stop loss are Sixfold's defaults, not the bot's placeholders (stake 3 with take profit 1 and stop loss 1
  *     would stop after one trade). Change them on the page.
- *   - Paper mode: the bot starts by paper-trading and goes real after two paper losses; a real win sends it back. It can be switched off.
+ *   - Paper trading: only the Virtual Hook (after real losses in a row, trade on paper until the entries win again). Off by default.
  */
 export const VANGUARD_DEFAULTS: SixfoldSettings = {
     ...DEFAULT_SETTINGS,
@@ -28,7 +28,8 @@ export const VANGUARD_DEFAULTS: SixfoldSettings = {
     martingale: true,
     recoverySizing: 'PAYOUT',
     recoverShare: 50,
-    virtualMode: true,
+    // The bot's own paper mode is gone: the Virtual Hook below is the only paper trading Vanguard has.
+    virtualMode: false,
     virtualLosses: 2,
     gateMin: 1,
     // The bot's own rules decide every entry, and its paper mode is virtualMode above. Sixfold's scanner-side guards and its

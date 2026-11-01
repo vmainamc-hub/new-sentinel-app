@@ -47,10 +47,6 @@ const VanguardPage = () => {
     }, [vx.rules]);
     const ready = rows.filter(r => r.entry).length;
     const contractLabel = (side: 'UNDER' | 'OVER') => (side === 'UNDER' ? `Under ${s.primaryUnder}` : `Over ${s.primaryOver}`);
-    const mode = vx.rules?.paper
-        ? `Paper mode: ${vx.rules.paperLosses}/${vx.rules.paperNeeded} paper losses before a signal is bought for real`
-        : 'Real mode: the next signal is bought';
-
     return (
         <div className='sixfold sf vanguard'>
             <header className='sf-top'>
@@ -66,8 +62,6 @@ const VanguardPage = () => {
                         {vx.lastError ? vx.lastError : vx.stopReason && !vx.running ? vx.stopReason : PHASE[vx.phase] ?? vx.phase}
                     </div>
                     <div className='vg-mode' role='status'>
-                        <span>{s.virtualMode ? mode : 'Paper mode is off: the first signal is bought'}</span>
-                        {vx.rules?.paperPending && <span>Paper trade waiting on {shortName(vx.rules.paperPending)}</span>}
                         <span>{ready === 0 ? 'No market meets every rule right now' : `${ready} contract${ready === 1 ? '' : 's'} meet every rule`}</span>
                     </div>
                     {vx.running && vx.virtualHook.on && (
@@ -141,29 +135,6 @@ const VanguardPage = () => {
                     </div>
                 </Panel>
 
-                <Panel eyebrow='PAPER TRADES' title={vx.rules ? `${vx.rules.paperWon} won, ${vx.rules.paperLost} lost on paper` : 'Paper trades'}>
-                    <p className='sf-muted'>
-                        While paper mode is on, a signal is recorded and settled on the next tick instead of being bought. Paper trades also show in the Transactions
-                        panel as Virtual Win or Virtual Loss, and never count in your real totals.
-                    </p>
-                    {(vx.rules?.paperTrades.length ?? 0) === 0 ? (
-                        <p className='sf-muted'>No paper trades yet.</p>
-                    ) : (
-                        <ul className='sf-trades'>
-                            {vx.rules?.paperTrades.slice(0, 10).map(t => (
-                                <li key={t.id} className={t.status === 'won' ? 'won' : t.status === 'lost' ? 'lost' : 'open'}>
-                                    <b>{marketName(t.symbol)}</b>
-                                    <span>{t.label}</span>
-                                    <span className='dg' title='digit at the signal, then the digit it settled on'>
-                                        <i>{t.entryDigit ?? '·'}</i>→<i className={t.status === 'won' ? 'w' : t.status === 'lost' ? 'l' : ''}>{t.exitDigit ?? '·'}</i>
-                                    </span>
-                                    <em>{t.status === 'open' ? 'waiting' : t.status === 'void' ? 'no tick' : t.status === 'won' ? 'paper win' : 'paper loss'}</em>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </Panel>
-
                 <Panel eyebrow='SETTINGS' title='How it trades'>
                     <p className='sf-muted'>
                         Buys Digits Under {s.primaryUnder} and Over {s.primaryOver}.{' '}
@@ -190,13 +161,6 @@ const VanguardPage = () => {
                         </div>
                     )}
                     <Num label='Stop after losses in a row' value={s.maxConsecutiveLosses} onCommit={n => set({ maxConsecutiveLosses: n })} hint='0 = off' />
-                    <Switch
-                        on={s.virtualMode}
-                        onChange={v => set({ virtualMode: v })}
-                        title='Paper mode first'
-                        sub='Signals are paper-traded until losses happen; a real win sends it back to paper'
-                    />
-                    {s.virtualMode && <Num label='Paper losses before real' value={s.virtualLosses} onCommit={n => set({ virtualLosses: n })} hint='the bot uses 2' />}
                     <Switch
                         on={s.virtualHook}
                         onChange={v => set({ virtualHook: v })}

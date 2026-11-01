@@ -135,7 +135,7 @@ describe('Markets and tool separation', () => {
         expect([VANGUARD_DEFAULTS.martingale, VANGUARD_DEFAULTS.recoverySizing, VANGUARD_DEFAULTS.recoverShare]).toEqual([true, 'PAYOUT', 50]);
         expect(VANGUARD_DEFAULTS.maxSteps).toBe(DEFAULT_SETTINGS.maxSteps);
         expect(VANGUARD_DEFAULTS.streakBudget).toBe(DEFAULT_SETTINGS.streakBudget);
-        expect([VANGUARD_DEFAULTS.virtualMode, VANGUARD_DEFAULTS.virtualLosses, VANGUARD_DEFAULTS.gateMin]).toEqual([true, 2, 1]);
+        expect([VANGUARD_DEFAULTS.virtualMode, VANGUARD_DEFAULTS.virtualLosses, VANGUARD_DEFAULTS.gateMin]).toEqual([false, 2, 1]);
     });
 
     it('names the Jump indices clearly and does not invent a documented tick rate for them', () => {

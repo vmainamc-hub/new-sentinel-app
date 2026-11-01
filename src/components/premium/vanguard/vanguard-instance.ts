@@ -36,7 +36,8 @@ export const vanguardRunner: SixfoldRunner = new SixfoldRunner({
 
 vanguardRules.useConfig(() => {
     const s = vanguardRunner.getSnapshot().settings;
-    return { virtualMode: s.virtualMode, virtualLosses: s.virtualLosses, gateMin: s.gateMin, useUnder: s.useUnder, useOver: s.useOver };
+    // The bot's own paper mode is never on (the Virtual Hook is Vanguard's only paper trading), even if old saved settings say so.
+    return { virtualMode: false, virtualLosses: s.virtualLosses, gateMin: s.gateMin, useUnder: s.useUnder, useOver: s.useOver };
 });
 vanguardFeed.onTick((symbol, digit) => vanguardRunner.handleFeedTick(symbol, digit));
 // The loop is cheap when idle (it returns early unless a session runs or the page asked for live scans).
