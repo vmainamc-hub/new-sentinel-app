@@ -168,7 +168,7 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
         board: `${who} has signals, but none strong enough for this mode. Try a looser style (Balanced or Active).`,
         tradable: 'Every contract is quarantined.',
         resting: 'Every market is resting after a loss.',
-        guards: 'The losing-side pressure, multi-window or winning-side guards refuse every contract. Check which one in the step note and loosen or switch it off.',
+        guards: 'The safety guards are refusing every contract right now: no market has losing digits easing and winning digits rising together. This is the guards working, not a fault. The step note shows which guard refuses most. Trades resume by themselves when a market qualifies.',
         streak: 'The win-streak guard drops every contract that cleared the checks.',
         meter: 'The Meter guide refuses every contract (a loss cluster or a Meter floor).',
         engines: `${who} backs nothing the scanner can trade.`,
