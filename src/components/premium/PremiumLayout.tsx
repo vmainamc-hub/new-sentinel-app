@@ -68,7 +68,7 @@ import './apex-bulk.scss';
 const SentinelAiPage = lazy(() => import('./sentinel/SentinelAiPage'));
 const SentinelAiBridge = lazy(() => import('./sentinel/SentinelAiBridge'));
 // Sixfold carries its own simulator and crowd model, so it also loads on demand.
-const SixfoldPage = lazy(() => import('./sixfold/SixfoldPage'));
+const SixfoldPage = lazy(() => import('./sixfold/SixfoldSimplePage'));
 const AiIntelPage = lazy(() => import('./ai-intel/AiIntelPage'));
 const AiIntelBridge = lazy(() => import('./ai-intel/AiIntelBridge'));
 // Its runner trades on its own, so the bridge stays mounted on every tab (Run Panel hand-off, Stop sync, session-drop stop).
