@@ -7,7 +7,7 @@ const STORAGE_KEY = 'vanguard.settings.v1';
 
 /**
  * Vanguard runs the "Sentinel Under 7 Psychology" bot's entry rules on every market, and buys through Sixfold's trade machinery.
- *   - Contract: Under 7 only, as the bot buys. After a loss: Under 6 (the bot's recovery prediction).
+ *   - Contracts: Under 7 (the bot's own, recovery Under 6) and Over 2 (the same rules mirrored, recovery Over 3).
  *   - Recovery stake: sized so one win pays back half the open loss (the bot's "martingale split 2"), with Sixfold's caps kept
  *     (a maximum number of steps and a streak budget), which the bot did not have.
  *   - Stake, take profit and stop loss are Sixfold's defaults, not the bot's placeholders (stake 3 with take profit 1 and stop loss 1
@@ -18,7 +18,9 @@ export const VANGUARD_DEFAULTS: SixfoldSettings = {
     ...DEFAULT_SETTINGS,
     markets: [...ALL_SYMBOLS],
     execution: 'FIRST',
-    useOver: false,
+    useOver: true,
+    primaryOver: 2,
+    recoveryOver: 3,
     useUnder: true,
     primaryUnder: 7,
     recovery: true,

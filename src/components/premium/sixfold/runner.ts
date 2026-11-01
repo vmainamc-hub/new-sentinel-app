@@ -155,12 +155,23 @@ export type SixfoldSnapshot = {
     /** Where every contract of the latest scan stood (see ScanFunnel). Null before the first scan. */
     funnel: ScanFunnel | null;
     /** The rules engine's reading of every market, or null when this runner uses the scanner. */
-    rules: { rows: RuleRow[]; paper: boolean; paperLosses: number; paperNeeded: number; paperPending: string | null } | null;
+    rules: {
+        rows: RuleRow[];
+        paper: boolean;
+        paperLosses: number;
+        paperNeeded: number;
+        paperPending: string | null;
+        paperTrades: PaperTrade[];
+        paperWon: number;
+        paperLost: number;
+    } | null;
 };
 
 /** One market's reading by a rules engine (Vanguard's bot rules): the checks, and the first thing still missing. */
 export type RuleRow = {
     symbol: string;
+    /** Which contract family this reading is for: Under (the bot's rules) or Over (the same rules mirrored). */
+    side: 'UNDER' | 'OVER';
     name: string;
     ready: boolean;
     score: number | null;
@@ -169,7 +180,20 @@ export type RuleRow = {
     waitingOn: string;
     lastDigit: number | null;
 };
-export type RuleOutcome = { enter: boolean; events: string[] };
+/** A paper trade: a signal that was recorded and resolved on the next tick instead of being bought (the bot's virtual hook). */
+export type PaperTrade = {
+    id: number;
+    symbol: string;
+    side: 'UNDER' | 'OVER';
+    barrier: number;
+    label: string;
+    entryDigit: number | null;
+    exitDigit: number | null;
+    status: 'open' | 'won' | 'lost' | 'void';
+    at: number;
+};
+export type PaperEvent = { phase: 'open' | 'settle'; trade: PaperTrade };
+export type RuleOutcome = { enter: boolean; side?: 'UNDER' | 'OVER'; events: string[]; paper?: PaperEvent[] };
 /**
  * An external signal source. When one is supplied, it - not the scanner - decides when a market is bought: it sees every tick of
  * every market and answers "enter now" or not. Everything after that (which contract, the stake, the buy, the result, the limits,
@@ -177,10 +201,22 @@ export type RuleOutcome = { enter: boolean; events: string[] };
  */
 export type RulesEngine = {
     reset: () => void;
-    onTick: (symbol: string, series: readonly number[], ctx: { live: boolean; idle: boolean; prediction: number; now: number }) => RuleOutcome;
+    onTick: (
+        symbol: string,
+        series: readonly number[],
+        ctx: {
+            live: boolean;
+            idle: boolean;
+            now: number;
+            /** The barrier each side would really trade right now (its recovery barrier while a loss is open). */
+            barriers: Record<'UNDER' | 'OVER', number>;
+            /** Sides Deriv refused on this market, which must not be tried again for a while. */
+            refused: Record<'UNDER' | 'OVER', boolean>;
+        }
+    ) => RuleOutcome;
     onResult: (won: boolean) => void;
     board: (symbols: readonly string[], nameOf: (symbol: string) => string) => RuleRow[];
-    paperState: () => { paper: boolean; losses: number; needed: number; pending: string | null };
+    paperState: () => { paper: boolean; losses: number; needed: number; pending: string | null; trades: PaperTrade[]; won: number; lost: number };
 };
 
 export type VirtualHookStatus = {
@@ -711,18 +747,25 @@ export class SixfoldRunner {
         const series = this.io.feed.getLiveSeries()[symbol];
         if (!series) return;
         const now = this.io.now();
-        const base: Contract = { side: 'UNDER', param: this.settings.primaryUnder };
-        const key = contractKey(base);
-        const refused = (this.blocked.get(`${symbol}|${key}`) ?? 0) > now || this.quarantined.has(symbol);
-        const idle = this.running && !this.tradeInFlight && now >= this.cooldownUntil && !refused;
-        // The contract that will really be bought decides the paper prediction too: Under 6 while recovering, Under 7 otherwise.
-        const prediction = tradeContract(base, this.session.consecutiveLosses, this.settings).contract.param;
-        const out = rules.onTick(symbol, series, { live: this.running, idle, prediction, now });
+        const bases: Record<'UNDER' | 'OVER', Contract> = {
+            UNDER: { side: 'UNDER', param: this.settings.primaryUnder },
+            OVER: { side: 'OVER', param: this.settings.primaryOver },
+        };
+        const refusedOn = (side: 'UNDER' | 'OVER') => (this.blocked.get(`${symbol}|${contractKey(bases[side])}`) ?? 0) > now;
+        const idle = this.running && !this.tradeInFlight && now >= this.cooldownUntil && !this.quarantined.has(symbol);
+        // What would really be bought on each side decides the paper barrier too: the recovery contract while a loss is open.
+        const barriers = {
+            UNDER: tradeContract(bases.UNDER, this.session.consecutiveLosses, this.settings).contract.param,
+            OVER: tradeContract(bases.OVER, this.session.consecutiveLosses, this.settings).contract.param,
+        };
+        const out = rules.onTick(symbol, series, { live: this.running, idle, now, barriers, refused: { UNDER: refusedOn('UNDER'), OVER: refusedOn('OVER') } });
         out.events.forEach(text => this.addLog('info', text));
-        if (!out.enter) {
+        out.paper?.forEach(event => this.publishPaper(event));
+        if (!out.enter || !out.side) {
             if (out.events.length) this.emit();
             return;
         }
+        const key = contractKey(bases[out.side]);
         const cell = this.scan?.cells.find(c => c.symbol === symbol && c.key === key && c.executable);
         if (!cell) return; // Deriv does not offer it here, or it is not scanned yet: nothing is bought on a guess
         const label = cell.label;
@@ -1289,6 +1332,48 @@ export class SixfoldRunner {
         }
     }
 
+    /**
+     * Shows a paper trade in the general Transactions panel the way the bot's virtual hook does: a row marked virtual that settles to
+     * "Virtual Win" or "Virtual Loss", with no stake or profit, and never counted in the real totals. The Run Panel and the summary card
+     * are deliberately left alone, so a paper trade cannot touch a real session's numbers.
+     */
+    private publishPaper({ phase, trade }: PaperEvent) {
+        if (!this.stores) return;
+        const settled = phase === 'settle';
+        const won = trade.status === 'won';
+        const currency = this.io.currency() || this.stores.client?.currency || 'USD';
+        const type = DERIV_CONTRACT_TYPE[trade.side];
+        const data: Loose = {
+            contract_id: trade.id,
+            display_name: trade.symbol,
+            underlying_symbol: trade.symbol,
+            shortcode: `${this.moduleId.toUpperCase()}_PAPER_${type}_${trade.symbol}`,
+            contract_type: type,
+            currency,
+            date_start: Math.floor(trade.at / 1000),
+            is_virtual_hook: 1,
+            is_sold: settled ? 1 : 0,
+            is_expired: settled ? 1 : 0,
+            status: settled ? (won ? 'won' : 'lost') : 'open',
+            virtual_result: settled ? (won ? 'win' : 'loss') : undefined,
+            buy_price: 0,
+            sell_price: 0,
+            payout: 0,
+            bid_price: 0,
+            profit: 0,
+            barrier: String(trade.barrier),
+            entry_spot: trade.entryDigit === null ? undefined : String(trade.entryDigit),
+            exit_spot: settled && trade.exitDigit !== null ? String(trade.exitDigit) : undefined,
+            exit_tick_time: settled ? Math.floor(this.io.now() / 1000) : undefined,
+            transaction_ids: settled ? { buy: trade.id, sell: trade.id } : { buy: trade.id },
+        };
+        try {
+            this.stores.transactions.pushTransaction({ ...data, run_id: this.stores.run_panel.run_id });
+        } catch {
+            /* a display failure must never affect trading */
+        }
+    }
+
     private async execute(entryDigit: number | null) {
         const armed = this.armed;
         if (!armed || this.tradeInFlight || !this.scan) return;
@@ -1736,6 +1821,9 @@ export class SixfoldRunner {
                           paperLosses: p.losses,
                           paperNeeded: p.needed,
                           paperPending: p.pending,
+                          paperTrades: p.trades,
+                          paperWon: p.won,
+                          paperLost: p.lost,
                       };
                   })()
                 : null,

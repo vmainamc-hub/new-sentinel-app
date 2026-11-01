@@ -128,8 +128,10 @@ describe('Markets and tool separation', () => {
         expect(VANGUARD_DEFAULTS.execution).toBe('FIRST');
         expect(ALL_MARKETS.map(m => m[0])).toEqual(ALL_SYMBOLS);
         // the bot's contract and recovery, with Sixfold's own caps on the recovery stake kept
-        expect([VANGUARD_DEFAULTS.useOver, VANGUARD_DEFAULTS.useUnder, VANGUARD_DEFAULTS.primaryUnder]).toEqual([false, true, 7]);
-        expect([VANGUARD_DEFAULTS.recovery, VANGUARD_DEFAULTS.recoveryUnder]).toEqual([true, 6]);
+        // four contracts: Under 7 (recovery Under 6) and the mirrored Over 2 (recovery Over 3)
+        expect([VANGUARD_DEFAULTS.useUnder, VANGUARD_DEFAULTS.primaryUnder, VANGUARD_DEFAULTS.recoveryUnder]).toEqual([true, 7, 6]);
+        expect([VANGUARD_DEFAULTS.useOver, VANGUARD_DEFAULTS.primaryOver, VANGUARD_DEFAULTS.recoveryOver]).toEqual([true, 2, 3]);
+        expect(VANGUARD_DEFAULTS.recovery).toBe(true);
         expect([VANGUARD_DEFAULTS.martingale, VANGUARD_DEFAULTS.recoverySizing, VANGUARD_DEFAULTS.recoverShare]).toEqual([true, 'PAYOUT', 50]);
         expect(VANGUARD_DEFAULTS.maxSteps).toBe(DEFAULT_SETTINGS.maxSteps);
         expect(VANGUARD_DEFAULTS.streakBudget).toBe(DEFAULT_SETTINGS.streakBudget);

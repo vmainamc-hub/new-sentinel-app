@@ -36,7 +36,7 @@ export const vanguardRunner: SixfoldRunner = new SixfoldRunner({
 
 vanguardRules.useConfig(() => {
     const s = vanguardRunner.getSnapshot().settings;
-    return { virtualMode: s.virtualMode, virtualLosses: s.virtualLosses, gateMin: s.gateMin };
+    return { virtualMode: s.virtualMode, virtualLosses: s.virtualLosses, gateMin: s.gateMin, useUnder: s.useUnder, useOver: s.useOver };
 });
 vanguardFeed.onTick((symbol, digit) => vanguardRunner.handleFeedTick(symbol, digit));
 // The loop is cheap when idle (it returns early unless a session runs or the page asked for live scans).

@@ -1,5 +1,5 @@
-// VANGUARD: the "Sentinel Under 7 Psychology" bot's entry rules, run on every market at once. Press Run and Vanguard reads each market's
-// own digits; the first market to meet every rule is bought, through the same trade machinery Sixfold uses (stake, recovery, limits,
+// VANGUARD: the "Sentinel Under 7 Psychology" bot's entry rules (and the same rules mirrored for Over 2), run on every market at once.
+// Press Run and Vanguard reads each market's own digits; the first market and contract to meet every rule is bought, through the same trade machinery Sixfold uses (stake, recovery, limits,
 // one trade at a time, stale-tick and refusal handling). Trades appear in the general Transactions panel.
 import { useEffect, useMemo } from 'react';
 import { marketName, shortName } from '../sixfold/feed';
@@ -45,6 +45,7 @@ const VanguardPage = () => {
         return list.sort((a, b) => Number(b.entry) - Number(a.entry) || Number(b.ready) - Number(a.ready) || (b.score ?? -1) - (a.score ?? -1));
     }, [vx.rules]);
     const ready = rows.filter(r => r.entry).length;
+    const contractLabel = (side: 'UNDER' | 'OVER') => (side === 'UNDER' ? `Under ${s.primaryUnder}` : `Over ${s.primaryOver}`);
     const mode = vx.rules?.paper
         ? `Paper mode: ${vx.rules.paperLosses}/${vx.rules.paperNeeded} paper losses before a signal is bought for real`
         : 'Real mode: the next signal is bought';
@@ -59,14 +60,14 @@ const VanguardPage = () => {
             </header>
 
             <main className='sf-scanner'>
-                <Panel eyebrow='RUN' title='Bot rules on every market'>
+                <Panel eyebrow='RUN' title='Bot rules on every market, both ways'>
                     <div className={`sf-phase t-${vx.running ? 'armed' : 'scan'}`}>
                         {vx.lastError ? vx.lastError : vx.stopReason && !vx.running ? vx.stopReason : PHASE[vx.phase] ?? vx.phase}
                     </div>
                     <div className='vg-mode' role='status'>
                         <span>{s.virtualMode ? mode : 'Paper mode is off: the first signal is bought'}</span>
                         {vx.rules?.paperPending && <span>Paper trade waiting on {shortName(vx.rules.paperPending)}</span>}
-                        <span>{ready === 0 ? 'No market meets every rule right now' : `${ready} market${ready === 1 ? '' : 's'} meet every rule`}</span>
+                        <span>{ready === 0 ? 'No market meets every rule right now' : `${ready} contract${ready === 1 ? '' : 's'} meet every rule`}</span>
                     </div>
                     {vx.running ? (
                         <button className='sf-run stop' onClick={() => vanguardRunner.stop('Stopped by you')}>
@@ -91,12 +92,13 @@ const VanguardPage = () => {
 
                 <Panel eyebrow='RULES BOARD' title='What each market still needs'>
                     <p className='sf-muted'>
-                        Every market is read on its own digits. A trade needs all seven checks to be true on the same tick. The last column shows the first
-                        thing still missing.
+                        Every market is read on its own digits, once for Under {s.primaryUnder} (the bot's rules) and once for Over {s.primaryOver} (the same rules
+                        mirrored). A trade needs all seven checks to be true on the same tick. The last column shows the first thing still missing.
                     </p>
                     <div className='vg-board' role='table' aria-label='Rules board'>
                         <div className='vg-row vg-head' role='row'>
                             <span>Market</span>
+                            <span>Contract</span>
                             <span title='Regime score out of 12'>Score</span>
                             <span className='vg-dots' title='Regime ≥ 10 · Pressure · No veto · Winning · Digit 8 · Last ≤ 6 · Gate'>
                                 Checks
@@ -104,8 +106,9 @@ const VanguardPage = () => {
                             <span>Missing</span>
                         </div>
                         {rows.map(r => (
-                            <div key={r.symbol} className={`vg-row ${r.entry ? 'go' : ''}`} role='row'>
+                            <div key={`${r.symbol}|${r.side}`} className={`vg-row ${r.entry ? 'go' : ''}`} role='row'>
                                 <b title={marketName(r.symbol)}>{shortName(r.symbol)}</b>
+                                <span>{contractLabel(r.side)}</span>
                                 <span className='n'>{r.score === null ? '·' : `${r.score}/12`}</span>
                                 <span className='vg-dots'>
                                     {r.checks.length === 0 ? (
@@ -121,9 +124,33 @@ const VanguardPage = () => {
                     </div>
                 </Panel>
 
+                <Panel eyebrow='PAPER TRADES' title={vx.rules ? `${vx.rules.paperWon} won, ${vx.rules.paperLost} lost on paper` : 'Paper trades'}>
+                    <p className='sf-muted'>
+                        While paper mode is on, a signal is recorded and settled on the next tick instead of being bought. Paper trades also show in the Transactions
+                        panel as Virtual Win or Virtual Loss, and never count in your real totals.
+                    </p>
+                    {(vx.rules?.paperTrades.length ?? 0) === 0 ? (
+                        <p className='sf-muted'>No paper trades yet.</p>
+                    ) : (
+                        <ul className='sf-trades'>
+                            {vx.rules?.paperTrades.slice(0, 10).map(t => (
+                                <li key={t.id} className={t.status === 'won' ? 'won' : t.status === 'lost' ? 'lost' : 'open'}>
+                                    <b>{marketName(t.symbol)}</b>
+                                    <span>{t.label}</span>
+                                    <span className='dg' title='digit at the signal, then the digit it settled on'>
+                                        <i>{t.entryDigit ?? '·'}</i>→<i className={t.status === 'won' ? 'w' : t.status === 'lost' ? 'l' : ''}>{t.exitDigit ?? '·'}</i>
+                                    </span>
+                                    <em>{t.status === 'open' ? 'waiting' : t.status === 'void' ? 'no tick' : t.status === 'won' ? 'paper win' : 'paper loss'}</em>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </Panel>
+
                 <Panel eyebrow='SETTINGS' title='How it trades'>
                     <p className='sf-muted'>
-                        Buys Digits Under {s.primaryUnder}. {s.recovery ? `After a loss it switches to Under ${s.recoveryUnder}` : 'No recovery contract'}
+                        Buys Digits Under {s.primaryUnder} and Over {s.primaryOver}.{' '}
+                        {s.recovery ? `After a loss it switches to Under ${s.recoveryUnder} / Over ${s.recoveryOver}` : 'No recovery contract'}
                         {s.martingale ? `, sized so one win pays back ${s.recoverShare}% of what is owed (capped).` : '.'}
                     </p>
                     <div className='sf-grid3'>
@@ -131,7 +158,12 @@ const VanguardPage = () => {
                         <Num label='TP' value={s.takeProfit} onCommit={n => set({ takeProfit: n })} hint='0 = off' />
                         <Num label='SL' value={s.stopLoss} onCommit={n => set({ stopLoss: n })} hint='0 = off' />
                     </div>
-                    <Switch on={s.recovery} onChange={v => set({ recovery: v })} title='Recovery contract' sub={`Under ${s.recoveryUnder} after a loss`} />
+                    <div className='sf-field'>
+                        <span>Contracts</span>
+                        <Switch on={s.useUnder} onChange={v => set({ useUnder: v })} title={`Under ${s.primaryUnder}`} sub={`The bot's own rules. Recovery: Under ${s.recoveryUnder}`} />
+                        <Switch on={s.useOver} onChange={v => set({ useOver: v })} title={`Over ${s.primaryOver}`} sub={`The same rules mirrored. Recovery: Over ${s.recoveryOver}`} />
+                    </div>
+                    <Switch on={s.recovery} onChange={v => set({ recovery: v })} title='Recovery contract' sub={`Under ${s.recoveryUnder} / Over ${s.recoveryOver} after a loss`} />
                     <Switch on={s.martingale} onChange={v => set({ martingale: v })} title='Recovery stake' sub='Bigger stake after a loss, as the bot does' />
                     {s.martingale && (
                         <div className='sf-grid3'>
@@ -221,7 +253,7 @@ const VanguardPage = () => {
             </main>
 
             <footer className='sf-foot'>
-                Vanguard applies the bot's entry rules to the last 30 digits of each market. Deriv digits are generated randomly, so the rules choose when to
+                Vanguard applies the bot's entry rules (and their mirror for Over {s.primaryOver}) to the last 30 digits of each market. Deriv digits are generated randomly, so the rules choose when to
                 trade, not whether a trade will win, and every contract carries a payout margin: over many trades the expected result is a loss. Watching
                 more markets gives more chances to trade, not better odds on any one trade. A bigger stake after a loss makes each loss bigger and cannot change
                 that. Test on a demo account first. Not financial advice.
