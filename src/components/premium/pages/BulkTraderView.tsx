@@ -150,7 +150,7 @@ const RecommendationBar = ({ rec, watch, onLoadRec, marketsReady, live, locked, 
 // ---------------------------------------------------------------------------------------------------------------------------------
 export type ViewKey = 'signal' | 'auto' | 'stats' | 'log' | 'notes';
 export const VIEW_OPTIONS: ReadonlyArray<readonly [ViewKey, string]> = [
-    ['signal', 'Fusion signal'], ['auto', 'Auto trader'], ['stats', 'Run results'], ['log', 'Logs and tables'], ['notes', 'Notes and switches'],
+    ['signal', 'Fusion signal'], ['auto', 'Auto trader'], ['stats', 'Run results'], ['log', 'Logs and tables'], ['notes', 'Notes and explanations'],
 ];
 export const DEFAULT_VIEW: Record<ViewKey, boolean> = { signal: true, auto: true, stats: true, log: false, notes: false };
 const VIEW_KEY = 'apex.bulk.view.v1';
@@ -421,6 +421,30 @@ const BulkTraderView = (props: BulkViewProps) => {
                     </label>
                 </div>
 
+                <div className='apex-bt__switches'>
+                    <div className='apex-bt__siglock'>
+                        <button type='button' role='switch' aria-checked={props.oneTick.on} className={`apex-bt__switch${props.oneTick.on ? ' is-on' : ''}`} onClick={props.oneTick.onToggle}
+                            title={props.oneTick.on ? 'Only as many trades as fit before the next tick are sent, so they all share one exit digit.' : 'All trades are sent, even if some land on the next tick and settle on a different digit.'}>
+                            <i aria-hidden='true' />
+                            <span>One tick {props.oneTick.on ? 'ON' : 'OFF'}</span>
+                        </button>
+                        {view.notes && <small>{props.oneTick.on
+                            ? 'Only as many trades as fit before the next tick are sent, so they all share one exit digit.'
+                            : 'All trades are sent, even if some land on the next tick and settle on a different digit.'}</small>}
+                    </div>
+                    <div className='apex-bt__siglock'>
+                        <button type='button' role='switch' aria-checked={lock.on} className={`apex-bt__switch${lock.on ? ' is-on' : ''}`} onClick={lock.onToggle}
+                            title={lock.on ? 'Signal lock on: Over/Under open only for a loaded EXECUTE signal' : 'Signal lock off: Over/Under are free with any barrier'}>
+                            <i aria-hidden='true' />
+                            <span>Signal lock {lock.on ? 'ON' : 'OFF'}</span>
+                        </button>
+                        {view.notes && <small>{lock.on
+                            ? 'Over / Under stay locked until a signal is loaded and the engine says EXECUTE. The auto trader always locks them while it is on.'
+                            : 'Over / Under are free: choose any barrier and trade either side at any time. The auto trader still locks them while it is on.'}</small>}
+                    </div>
+                </div>
+                {view.notes && <p className='apex-bt__pickinfo'>{lock.on && lock.note ? lock.note : props.loadedNote}</p>}
+
                 <div className='apex-bt__sides' aria-label='Over and Under'>
                     {sides.map(item => {
                         const open = !lock.on || lock.openSide === item.side;
@@ -466,32 +490,6 @@ const BulkTraderView = (props: BulkViewProps) => {
                     </div>
                 )}
                 {view.stats && props.syncNote && <p className='apex-bt__sync'>{props.syncNote}</p>}
-
-                {view.notes && (
-                    <div className='apex-bt__switches'>
-                        <div className='apex-bt__siglock'>
-                            <button type='button' role='switch' aria-checked={props.oneTick.on} className={`apex-bt__switch${props.oneTick.on ? ' is-on' : ''}`} onClick={props.oneTick.onToggle}
-                                title='Send only as many trades as reach Deriv before the next tick, so they all share one entry tick and one exit digit'>
-                                <i aria-hidden='true' />
-                                <span>One tick {props.oneTick.on ? 'ON' : 'OFF'}</span>
-                            </button>
-                            <small>{props.oneTick.on
-                                ? 'Only as many trades as fit before the next tick are sent, so they all share one exit digit.'
-                                : 'All trades are sent, even if some land on the next tick and settle on a different digit.'}</small>
-                        </div>
-                        <div className='apex-bt__siglock'>
-                            <button type='button' role='switch' aria-checked={lock.on} className={`apex-bt__switch${lock.on ? ' is-on' : ''}`} onClick={lock.onToggle}
-                                title={lock.on ? 'Signal lock on: Over/Under open only for a loaded EXECUTE signal' : 'Signal lock off: Over/Under are free with any barrier'}>
-                                <i aria-hidden='true' />
-                                <span>Signal lock {lock.on ? 'ON' : 'OFF'}</span>
-                            </button>
-                            <small>{lock.on
-                                ? 'Over / Under stay locked until a signal is loaded and the engine says EXECUTE. The auto trader always locks them while it is on.'
-                                : 'Over / Under are free: choose any barrier and trade either side at any time. The auto trader still locks them while it is on.'}</small>
-                        </div>
-                        <p className='apex-bt__pickinfo'>{lock.on && lock.note ? lock.note : props.loadedNote}</p>
-                    </div>
-                )}
 
                 {view.log && log.length > 0 && (
                     <details className='apex-bt__params' open>

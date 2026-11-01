@@ -399,7 +399,7 @@ Next: demo run, confirm the opening paper trade and the first real entry in the 
 ## Bulk Trader consolidation
 - [x] Removed the round "runner" dial from the Bulk Trader. Auto Trader is now a Run/Stop bar with status, Runs, Won / Lost and P/L.
 - [x] All Auto Trader parameters kept with the same labels, folded under "Auto trader parameters". Manual trading unchanged.
-- [x] "View" menu (remembered in the browser) shows or hides: Fusion signal, Auto trader, Run results, Logs and tables, Notes and switches. The live digit distribution and the Over / Under buttons are always shown.
-- [x] Signal lock and One tick switches moved under "Notes and switches" (default hidden; their setting still applies).
+- [x] "View" menu (remembered in the browser) shows or hides: Fusion signal, Auto trader, Run results, Logs and tables, Notes and explanations. The live digit distribution and the Over / Under buttons are always shown.
+- [x] Signal lock and One tick switches stay always visible next to the Over / Under buttons ("Notes and explanations" in View only adds their descriptions).
 
 Not done / unverified: Jest could not run here (registry blocked); checked by type-check and a browser render only. Not run against live Deriv.

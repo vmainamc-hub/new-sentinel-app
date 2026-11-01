@@ -317,3 +317,5 @@
 .apex-bt__legend { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center; margin: 8px 0 4px; font-size: 11px; color: var(--bt-muted); }
 .apex-bt__legend span { display: inline-flex; align-items: center; gap: 5px; }
 .apex-bt__legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.apex-bt__switches { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-start; }
+.apex-bt__switches .apex-bt__siglock { margin-top: 14px; flex: 0 1 auto; }
