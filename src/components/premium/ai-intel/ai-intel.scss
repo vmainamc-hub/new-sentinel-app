@@ -655,3 +655,61 @@
         }
     }
 }
+
+// AI Intelligence
+.ai-intel {
+    .ai-sub {
+        margin: 18px 0 8px;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+    }
+    .ai-decision {
+        border-left: 3px solid var(--amber);
+        &.enter {
+            border-left-color: var(--green);
+        }
+    }
+    .ai-reasons {
+        margin: 4px 0;
+        padding-left: 18px;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .ai-evidence {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 10px;
+        margin-top: 6px;
+        h4 {
+            margin: 0 0 4px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--muted);
+        }
+        p {
+            margin: 0 0 3px;
+            font-size: 12.5px;
+        }
+    }
+    .ai-agent {
+        small {
+            display: block;
+        }
+        &.st-warn strong {
+            color: var(--amber);
+        }
+        &.st-ok strong {
+            color: var(--green);
+        }
+        &.st-idle strong {
+            color: var(--muted);
+        }
+    }
+    .ai-row.rej {
+        grid-template-columns: 110px 160px 1fr;
+        min-width: 0;
+    }
+}

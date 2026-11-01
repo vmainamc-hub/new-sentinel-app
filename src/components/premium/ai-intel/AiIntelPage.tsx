@@ -20,17 +20,18 @@ import {
     scanRows,
 } from './analysis';
 import { ExecutionPanel, HistoryPanel } from './ExecutionPanel';
+import { AiIntelligencePanel } from './AiIntelligencePanel';
 import { StrategyLabPanel, StrategyLibraryPanel } from './StrategyPanels';
 import { useExecutor } from './use-executor';
 import './ai-intel.scss';
 
-type TabId = 'overview' | 'scanner' | 'competition' | 'exec' | 'history' | 'lab' | 'library';
+type TabId = 'overview' | 'scanner' | 'competition' | 'exec' | 'history' | 'lab' | 'library' | 'ai';
 
 const TABS: Array<{ id: TabId | string; label: string; ready: boolean }> = [
     { id: 'overview', label: 'Overview', ready: true },
     { id: 'scanner', label: 'Live Scanner', ready: true },
     { id: 'competition', label: 'Virtual Competition', ready: true },
-    { id: 'ai', label: 'AI Intelligence', ready: false },
+    { id: 'ai', label: 'AI Intelligence', ready: true },
     { id: 'lab', label: 'Strategy Lab', ready: true },
     { id: 'exec', label: 'Live Execution', ready: true },
     { id: 'library', label: 'Strategy Library', ready: true },
@@ -354,6 +355,7 @@ export default function AiIntelPage() {
                 </section>
             )}
 
+            {tab === 'ai' && <AiIntelligencePanel />}
             {tab === 'lab' && <StrategyLabPanel />}
             {tab === 'library' && <StrategyLibraryPanel />}
             {tab === 'exec' && <ExecutionPanel />}

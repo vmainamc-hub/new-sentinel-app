@@ -10,12 +10,15 @@ import { useStore } from '@/hooks/useStore';
 import { apexFeed } from './feed-source';
 import { discoverVolatilityMarkets } from './discovery';
 import { aiIntelExecutor } from './executor-instance';
+import { intelService } from './intel-instance'; // also starts the forward monitor on the shared feed
 import { useExecutor } from './use-executor';
 
 const AiIntelBridge = () => {
     const store = useStore();
     const { isAuthorized } = useApiBase();
     const snapshot = useExecutor();
+    // An AUTO run keeps the intelligence service evaluating on every tab.
+    useEffect(() => (snapshot.running ? intelService.retain() : undefined), [snapshot.running]);
 
     // Once the shared feed is live, ask Deriv which Volatility indices exist and track any beyond Sixfold's ten.
     useEffect(() => {
