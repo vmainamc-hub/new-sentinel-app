@@ -123,6 +123,13 @@
         font: 600 13px Manrope, sans-serif;
         color: var(--text-strong);
     }
+    .sn-sub {
+        display: grid;
+        gap: 10px;
+        margin: 8px 0 4px;
+        padding-left: 12px;
+        border-left: 2px solid var(--line);
+    }
     .sn-morebody {
         display: grid;
         gap: 10px;
