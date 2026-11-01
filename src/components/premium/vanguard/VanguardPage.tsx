@@ -5,6 +5,7 @@ import { useEffect, useMemo } from 'react';
 import { marketName, shortName } from '../sixfold/feed';
 import { ALL_MARKETS } from '../sixfold/markets';
 import type { SixfoldSettings } from '../sixfold/money';
+import type { VhMode } from '../sixfold/virtual-hook';
 import { Num, Panel, Seg, Stat, Switch } from '../sixfold/SixfoldPage';
 import { useFeedOf } from '../sixfold/use-feed';
 import { useRunner } from '../sixfold/use-sixfold';
@@ -69,6 +70,22 @@ const VanguardPage = () => {
                         {vx.rules?.paperPending && <span>Paper trade waiting on {shortName(vx.rules.paperPending)}</span>}
                         <span>{ready === 0 ? 'No market meets every rule right now' : `${ready} contract${ready === 1 ? '' : 's'} meet every rule`}</span>
                     </div>
+                    {vx.running && vx.virtualHook.on && (
+                        <div className='vg-mode' role='status'>
+                            <span>
+                                {vx.virtualHook.virtual
+                                    ? `Virtual hook: paper trades only${vx.virtualHook.open ? ' · one open' : ''}`
+                                    : `Virtual hook: real money · ${vx.virtualHook.realLosses}/${vx.virtualHook.enterLosses} losses to go virtual`}
+                            </span>
+                            {vx.virtualHook.virtual && (
+                                <span>
+                                    {vx.virtualHook.mode === 'STREAK'
+                                        ? `${vx.virtualHook.virtualWins}/${vx.virtualHook.returnWins} paper wins to return`
+                                        : `${vx.virtualHook.virtualDone}/${vx.virtualHook.fixedCount} paper trades`}
+                                </span>
+                            )}
+                        </div>
+                    )}
                     {vx.running ? (
                         <button className='sf-run stop' onClick={() => vanguardRunner.stop('Stopped by you')}>
                             Stop
@@ -180,6 +197,37 @@ const VanguardPage = () => {
                         sub='Signals are paper-traded until losses happen; a real win sends it back to paper'
                     />
                     {s.virtualMode && <Num label='Paper losses before real' value={s.virtualLosses} onCommit={n => set({ virtualLosses: n })} hint='the bot uses 2' />}
+                    <Switch
+                        on={s.virtualHook}
+                        onChange={v => set({ virtualHook: v })}
+                        title='Virtual hook'
+                        sub='After real losses in a row, trade on paper until the entries win again'
+                    />
+                    {s.virtualHook && (
+                        <div className='sf-sub'>
+                            <Seg<VhMode>
+                                label='Virtual hook mode'
+                                value={s.vhMode}
+                                onChange={v => set({ vhMode: v })}
+                                options={[
+                                    ['STREAK', 'Until paper wins'],
+                                    ['FIXED', 'Fixed paper trades'],
+                                ]}
+                            />
+                            <div className='sf-grid3'>
+                                <Num label='Go virtual after losses' value={s.vhEnterLosses} onCommit={n => set({ vhEnterLosses: n })} hint='real losses in a row' />
+                                {s.vhMode === 'STREAK' ? (
+                                    <Num label='Back to real after wins' value={s.vhReturnWins} onCommit={n => set({ vhReturnWins: n })} hint='paper wins in a row' />
+                                ) : (
+                                    <Num label='Paper trades' value={s.vhFixedCount} onCommit={n => set({ vhFixedCount: n })} hint='then back to real' />
+                                )}
+                            </div>
+                            <small>
+                                Works on top of the bot rules: a signal that meets every rule is still the one traded, but while the hook is virtual it is settled on paper and moves no
+                                money. It cannot change the odds of a real trade.
+                            </small>
+                        </div>
+                    )}
                     <div className='sf-field'>
                         <span>Psychology gate</span>
                         <Seg<'1' | '2'>

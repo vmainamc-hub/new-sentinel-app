@@ -213,6 +213,28 @@ describe('Vanguard: bot rules, Sixfold execution', () => {
     });
 });
 
+describe('Vanguard: Virtual Hook on top of the bot rules', () => {
+    it('after the set number of real losses a rules signal is traded on paper, not bought', async () => {
+        const h = harness({ virtualHook: true, vhEnterLosses: 1, vhMode: 'FIXED', vhFixedCount: 1 });
+        h.profits(-1); // the first real trade loses
+        h.runner.start();
+        h.script.enter.A = 'UNDER';
+        h.runner.handleFeedTick('A', 3);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+        h.advance(1500);
+        h.runner.handleFeedTick('A', 3);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1); // the second signal is a paper trade: nothing bought
+        expect(h.runner.getSnapshot().virtualHook.virtual).toBe(true);
+    });
+
+    it('is off by default, so the bot rules alone decide', async () => {
+        const h = harness();
+        expect(h.runner.getSnapshot().settings.virtualHook).toBe(false);
+    });
+});
+
 describe('Vanguard: four contracts', () => {
     it('an Over signal buys Digits Over 2, and its recovery after a loss is Over 3', async () => {
         const h = harness({ useOver: true });
