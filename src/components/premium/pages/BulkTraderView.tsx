@@ -1,10 +1,7 @@
-import type { CSSProperties, RefObject } from 'react';
+import { useState, type CSSProperties, type RefObject } from 'react';
 import { BULK_MARKETS, FREE_BARRIERS, OVER_BARRIERS, UNDER_BARRIERS, hitRate, type Recommendation } from '../over-under-engine';
 import { MAX_BULK_RUNS, exposure, sanitizeBulk, type Tally } from '../bulk-run';
 import type { AutoLogRow } from '../auto-log';
-import { Radar, type DialMarket } from '../sixfold/charts';
-import { shortName } from '../sixfold/feed';
-import '../sixfold/sixfold.scss';
 
 export type LogRow = {
     id: number;
@@ -29,8 +26,6 @@ export type AutoView = {
     armed: boolean; form: AutoForm; runs: number; pnl: number; note: string; maxRuns: number; maxLoss: number; targetProfit: number; account: string;
     mode: string; recovery: boolean; next: string; rule: string; log: AutoLogRow[];
     entry: { need: number; want: string; symbols: string[]; waiting: boolean } | null;
-    /** One entry per market for the scanner dial: Fusion's best verdict there, and the market whose signal the auto trader is watching. */
-    radar: { markets: DialMarket[]; watching: string | null };
 };
 
 /** The signal lock: ON keeps Over/Under shut until the loaded signal reads EXECUTE; OFF leaves both free with any barrier. */
@@ -125,18 +120,44 @@ const RecommendationBar = ({ rec, watch, onLoadRec, marketsReady, live, locked, 
     </section>
 );
 
-const AutoPanel = ({ auto, running, currency, onAutoToggle, onAutoForm, onLogDownload, onLogClear }: Pick<BulkViewProps, 'auto' | 'currency' | 'onAutoToggle' | 'onAutoForm' | 'onLogDownload' | 'onLogClear'> & { running: boolean }) => {
+// ---------------------------------------------------------------------------------------------------------------------------------
+// What the page shows is the trader's choice: every block below can be switched on or off from "View". The choice is remembered.
+// ---------------------------------------------------------------------------------------------------------------------------------
+export type ViewKey = 'signal' | 'auto' | 'stats' | 'log' | 'notes';
+export const VIEW_OPTIONS: ReadonlyArray<readonly [ViewKey, string]> = [
+    ['signal', 'Fusion signal'], ['auto', 'Auto trader'], ['stats', 'Run results'], ['log', 'Logs and tables'], ['notes', 'Notes and switches'],
+];
+export const DEFAULT_VIEW: Record<ViewKey, boolean> = { signal: true, auto: true, stats: true, log: false, notes: false };
+const VIEW_KEY = 'apex.bulk.view.v1';
+const loadView = (): Record<ViewKey, boolean> => {
+    try {
+        const raw = JSON.parse(window.localStorage.getItem(VIEW_KEY) ?? 'null') as Partial<Record<ViewKey, boolean>> | null;
+        return { ...DEFAULT_VIEW, ...Object.fromEntries(Object.entries(raw ?? {}).filter(([k, v]) => k in DEFAULT_VIEW && typeof v === 'boolean')) };
+    } catch { return { ...DEFAULT_VIEW }; }
+};
+const saveView = (view: Record<ViewKey, boolean>) => { try { window.localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch { /* not remembered */ } };
+
+const ViewMenu = ({ view, onChange }: { view: Record<ViewKey, boolean>; onChange: (key: ViewKey, on: boolean) => void }) => (
+    <details className='apex-bt__viewmenu'>
+        <summary>View</summary>
+        <div className='apex-bt__viewlist'>
+            {VIEW_OPTIONS.map(([key, label]) => (
+                <label key={key}><input type='checkbox' checked={view[key]} onChange={event => onChange(key, event.target.checked)} />{label}</label>
+            ))}
+            <button type='button' onClick={() => VIEW_OPTIONS.forEach(([key]) => onChange(key, DEFAULT_VIEW[key]))}>Reset view</button>
+        </div>
+    </details>
+);
+
+const AutoPanel = ({ auto, running, currency, view, onAutoToggle, onAutoForm, onLogDownload, onLogClear }:
+    Pick<BulkViewProps, 'auto' | 'currency' | 'onAutoToggle' | 'onAutoForm' | 'onLogDownload' | 'onLogClear'> & { running: boolean; view: Record<ViewKey, boolean> }) => {
     const f = auto.form;
     const lock = auto.armed;
-    const watchedMarket = auto.armed && auto.radar.watching ? BULK_MARKETS.find(m => m.symbol === auto.radar.watching)?.name ?? auto.radar.watching : null;
-    const tone: 'idle' | 'scan' | 'armed' | 'trade' | 'warn' = !auto.armed ? 'idle' : running ? 'trade' : auto.radar.watching ? 'armed' : 'scan';
-    const centre = !auto.armed ? 'IDLE' : running ? 'RUNNING' : auto.next ? auto.next.split(' at ')[0] : 'SCANNING';
-    const sub = !auto.armed ? `${auto.radar.markets.length} MARKETS` : auto.radar.watching ? shortName(auto.radar.watching) : 'FUSION';
     const phase = !auto.armed
-        ? 'Press Run to scan Fusion signals and trade them automatically'
+        ? 'Off. Run scans Fusion signals and trades them automatically.'
         : running ? 'Run in progress'
             : auto.entry ? (auto.entry.waiting ? `Signal found · waiting for ${auto.entry.need} ${auto.entry.want} ticks` : `Watching for ${auto.entry.need} ${auto.entry.want} ticks`)
-                : auto.radar.watching ? 'Signal found · entering' : 'Waiting for a qualifying Fusion signal';
+                : auto.note;
     const won = auto.log.filter(row => row.result === 'WIN').length;
     const lost = auto.log.filter(row => row.result === 'LOSS').length;
     const field = (label: string, key: keyof AutoForm, mode: 'numeric' | 'decimal' = 'numeric') => (
@@ -144,157 +165,147 @@ const AutoPanel = ({ auto, running, currency, onAutoToggle, onAutoForm, onLogDow
     );
     return (
         <section className={`apex-bt__auto${auto.armed ? ' is-armed' : ''}`} aria-label='Auto trader'>
-            <div className='apex-bt__auto-head'>
-                <div>
-                    <small>AUTO TRADER</small>
-                    <p className={`apex-bt__auto-note${auto.armed ? ' is-on' : ''}`}>{auto.note}</p>
+            <div className='apex-bt__runbar'>
+                <button type='button' className={`apex-bt__run${auto.armed ? ' is-stop' : ''}`} onClick={onAutoToggle} aria-pressed={auto.armed}>
+                    {auto.armed ? 'Stop' : 'Run'}
+                </button>
+                <div className='apex-bt__runinfo'>
+                    <small>AUTO TRADER{auto.armed ? ` · ${auto.mode}` : ''}{auto.account ? ` · ${auto.account}` : ''}</small>
+                    <p className={auto.armed ? 'is-on' : ''}>{phase}</p>
+                    {auto.armed && auto.next && <p className='apex-bt__next'>Next: {auto.next}</p>}
+                </div>
+                <div className='apex-bt__mini'>
+                    <span><small>Runs</small><b>{auto.runs}/{auto.maxRuns}</b></span>
+                    <span><small>Won / Lost</small><b>{won} / {lost}</b></span>
+                    <span><small>P/L</small><b className={auto.pnl >= 0 ? 'is-win' : 'is-loss'}>{auto.pnl.toFixed(2)} {currency}</b></span>
                 </div>
             </div>
 
-            <div className='sixfold sf-embed'>
-                <div className='sf-dial'>
-                    <Radar markets={auto.radar.markets} armedSymbol={auto.armed ? auto.radar.watching : null} running={auto.armed} center={centre} sub={sub} tone={tone} />
-                    <div className='sf-dial-title'>{watchedMarket ? watchedMarket : auto.armed ? 'Scanning all markets' : 'All markets, one scanner'}</div>
-                    <div className={`sf-phase t-${tone}`}>{phase}</div>
-                    <button type='button' className={`sf-run${auto.armed ? ' stop' : ''}`} onClick={onAutoToggle} aria-pressed={auto.armed}>
-                        {auto.armed ? 'Stop' : 'Run'}
-                    </button>
-                </div>
-            </div>
-
-            <div className='apex-bt__tiles'>
-                <div><small>Runs</small><b>{auto.runs}/{auto.maxRuns}</b></div>
-                <div><small>Won / Lost</small><b>{won} / {lost}</b></div>
-                <div><small>Session P/L</small><b className={auto.pnl >= 0 ? 'is-win' : 'is-loss'}>{auto.pnl.toFixed(2)} {currency}</b></div>
-                <div><small>Next run</small><b>{auto.next || '–'}</b></div>
-            </div>
-
-            {auto.armed && (
+            {auto.armed && auto.entry && (
                 <div className='apex-bt__auto-state'>
-                    <span className={`apex-bt__mode${auto.mode === 'NORMAL' ? '' : ' is-recovery'}`}>{auto.mode}</span>
-                    {auto.next && <span className='apex-bt__next'>{auto.next}</span>}
-                    {auto.entry && (
-                        <span className='apex-bt__entry' title='Latest ticks against the barrier of the contract to be traded'>
-                            <small>Entry: last {auto.entry.need} ticks must be {auto.entry.want}</small>
-                            <span className='apex-bt__ticks'>
-                                {auto.entry.symbols.length === 0 && <i>…</i>}
-                                {auto.entry.symbols.map((symbol, index) => <i key={index} className={`is-${symbol === 'O' ? 'over' : symbol === 'U' ? 'under' : 'eq'}`}>{symbol}</i>)}
-                            </span>
+                    <span className='apex-bt__entry' title='Latest ticks against the barrier of the contract to be traded'>
+                        <small>Entry: last {auto.entry.need} ticks must be {auto.entry.want}</small>
+                        <span className='apex-bt__ticks'>
+                            {auto.entry.symbols.length === 0 && <i>…</i>}
+                            {auto.entry.symbols.map((symbol, index) => <i key={index} className={`is-${symbol === 'O' ? 'over' : symbol === 'U' ? 'under' : 'eq'}`}>{symbol}</i>)}
                         </span>
-                    )}
+                    </span>
                 </div>
             )}
 
-            <details className='apex-bt__params' open>
-            <summary>Parameters</summary>
-            <h3>Trigger and limits</h3>
-            <div className='apex-bt__auto-form'>
-                <label>Trade on
-                    <select value={f.grade} disabled={lock} onChange={event => onAutoForm('grade', event.target.value)}>
-                        <option value='EXECUTE'>EXECUTE signals only</option>
-                        <option value='ANY'>EXECUTE + PREPARE</option>
-                    </select>
-                </label>
-                {field('Max auto runs', 'maxRuns')}
-                {field(`Stop at loss (${currency})`, 'maxLoss', 'decimal')}
-                {field(`Target profit (${currency})`, 'targetProfit', 'decimal')}
-                {field('Cooldown (s)', 'cooldownSec')}
-            </div>
-
-            <h3>Entry</h3>
-            <div className='apex-bt__auto-form'>
-                <label>Entry rule
-                    <select value={f.entryMode} disabled={lock} onChange={event => onAutoForm('entryMode', event.target.value)}>
-                        <option value='DYNAMIC'>Dynamic (adapts)</option>
-                        <option value='FIXED'>Fixed</option>
-                    </select>
-                </label>
-                {field(f.entryMode === 'DYNAMIC' ? 'Base entry ticks (0 = off)' : 'Entry ticks (0 = off)', 'entryTicks')}
-                {field(f.entryMode === 'DYNAMIC' ? 'Base wait (s)' : 'Wait for entry (s)', 'entryWaitSec')}
-                <label>Digit pressure check
-                    <select value={f.pressure} disabled={lock} onChange={event => onAutoForm('pressure', event.target.value)}>
-                        <option value='off'>Off</option>
-                        <option value='on'>On</option>
-                    </select>
-                </label>
-            </div>
-            {f.entryMode === 'DYNAMIC' && (
+            <details className='apex-bt__params'>
+                <summary>Auto trader parameters</summary>
+                <h3>Trigger and limits</h3>
                 <div className='apex-bt__auto-form'>
-                    {field('Rest after N losing runs (0 = never)', 'lossPauseAfter')}
-                    {field('Rest for (s)', 'lossPauseSec')}
-                    {field('Skip when danger is at least (0 = off)', 'dangerCeiling')}
+                    <label>Trade on
+                        <select value={f.grade} disabled={lock} onChange={event => onAutoForm('grade', event.target.value)}>
+                            <option value='EXECUTE'>EXECUTE signals only</option>
+                            <option value='ANY'>EXECUTE + PREPARE</option>
+                        </select>
+                    </label>
+                    {field('Max auto runs', 'maxRuns')}
+                    {field(`Stop at loss (${currency})`, 'maxLoss', 'decimal')}
+                    {field(`Target profit (${currency})`, 'targetProfit', 'decimal')}
+                    {field('Cooldown (s)', 'cooldownSec')}
                 </div>
-            )}
-            {auto.rule && <p className='apex-bt__rule'>Entry rule now: {auto.rule}</p>}
 
-            <h3>Recovery and martingale</h3>
-            <div className='apex-bt__auto-form'>
-                <label>Recovery
-                    <select value={f.recovery} disabled={lock} onChange={event => onAutoForm('recovery', event.target.value)}>
-                        <option value='off'>Off</option>
-                        <option value='on'>On</option>
-                    </select>
-                </label>
-                <label>Recovery Over digit
-                    <select value={f.recoveryOver} disabled={lock || f.recovery !== 'on'} onChange={event => onAutoForm('recoveryOver', event.target.value)}>
-                        {[1, 2, 3].map(d => <option key={d} value={d}>Over {d}</option>)}
-                    </select>
-                </label>
-                <label>Recovery Under digit
-                    <select value={f.recoveryUnder} disabled={lock || f.recovery !== 'on'} onChange={event => onAutoForm('recoveryUnder', event.target.value)}>
-                        {[8, 7, 6].map(d => <option key={d} value={d}>Under {d}</option>)}
-                    </select>
-                </label>
-                <label>Martingale ×<input value={f.martingale} disabled={lock || f.recovery !== 'on'} inputMode='decimal' onChange={event => onAutoForm('martingale', event.target.value)} /></label>
-                <label>Max recovery steps<input value={f.maxSteps} disabled={lock || f.recovery !== 'on'} inputMode='numeric' onChange={event => onAutoForm('maxSteps', event.target.value)} /></label>
-                <label>At the limit
-                    <select value={f.onCap} disabled={lock || f.recovery !== 'on'} onChange={event => onAutoForm('onCap', event.target.value)}>
-                        <option value='STOP'>Stop</option>
-                        <option value='RESET'>Reset to normal</option>
-                    </select>
-                </label>
-            </div>
+                <h3>Entry</h3>
+                <div className='apex-bt__auto-form'>
+                    <label>Entry rule
+                        <select value={f.entryMode} disabled={lock} onChange={event => onAutoForm('entryMode', event.target.value)}>
+                            <option value='DYNAMIC'>Dynamic (adapts)</option>
+                            <option value='FIXED'>Fixed</option>
+                        </select>
+                    </label>
+                    {field(f.entryMode === 'DYNAMIC' ? 'Base entry ticks (0 = off)' : 'Entry ticks (0 = off)', 'entryTicks')}
+                    {field(f.entryMode === 'DYNAMIC' ? 'Base wait (s)' : 'Wait for entry (s)', 'entryWaitSec')}
+                    <label>Digit pressure check
+                        <select value={f.pressure} disabled={lock} onChange={event => onAutoForm('pressure', event.target.value)}>
+                            <option value='off'>Off</option>
+                            <option value='on'>On</option>
+                        </select>
+                    </label>
+                </div>
+                {f.entryMode === 'DYNAMIC' && (
+                    <div className='apex-bt__auto-form'>
+                        {field('Rest after N losing runs (0 = never)', 'lossPauseAfter')}
+                        {field('Rest for (s)', 'lossPauseSec')}
+                        {field('Skip when danger is at least (0 = off)', 'dangerCeiling')}
+                    </div>
+                )}
+                {auto.rule && <p className='apex-bt__rule'>Entry rule now: {auto.rule}</p>}
 
+                <h3>Recovery and martingale</h3>
+                <div className='apex-bt__auto-form'>
+                    <label>Recovery
+                        <select value={f.recovery} disabled={lock} onChange={event => onAutoForm('recovery', event.target.value)}>
+                            <option value='off'>Off</option>
+                            <option value='on'>On</option>
+                        </select>
+                    </label>
+                    <label>Recovery Over digit
+                        <select value={f.recoveryOver} disabled={lock || f.recovery !== 'on'} onChange={event => onAutoForm('recoveryOver', event.target.value)}>
+                            {[1, 2, 3].map(d => <option key={d} value={d}>Over {d}</option>)}
+                        </select>
+                    </label>
+                    <label>Recovery Under digit
+                        <select value={f.recoveryUnder} disabled={lock || f.recovery !== 'on'} onChange={event => onAutoForm('recoveryUnder', event.target.value)}>
+                            {[8, 7, 6].map(d => <option key={d} value={d}>Under {d}</option>)}
+                        </select>
+                    </label>
+                    <label>Martingale ×<input value={f.martingale} disabled={lock || f.recovery !== 'on'} inputMode='decimal' onChange={event => onAutoForm('martingale', event.target.value)} /></label>
+                    <label>Max recovery steps<input value={f.maxSteps} disabled={lock || f.recovery !== 'on'} inputMode='numeric' onChange={event => onAutoForm('maxSteps', event.target.value)} /></label>
+                    <label>At the limit
+                        <select value={f.onCap} disabled={lock || f.recovery !== 'on'} onChange={event => onAutoForm('onCap', event.target.value)}>
+                            <option value='STOP'>Stop</option>
+                            <option value='RESET'>Reset to normal</option>
+                        </select>
+                    </label>
+                </div>
+                {view.notes && (
+                    <p className='apex-bt__auto-foot'>
+                        Stops at +{auto.targetProfit.toFixed(2)} or −{auto.maxLoss.toFixed(2)} {currency}. A signal starts the watch; the buy happens when the latest ticks show the side
+                        (O for Over, U for Under against the contract&apos;s barrier). After a losing run with recovery on, the next signal is traded at your recovery digit with the
+                        martingale stake, and a win returns to normal. The deck stake at arming is the base stake. The deck is locked while armed, it stops itself at the limits or if
+                        any purchase fails, and it is always off when the page loads.
+                    </p>
+                )}
             </details>
 
-            <h3>Run log</h3>
-            <div className='apex-bt__log-actions'>
-                <button type='button' onClick={onLogDownload} disabled={auto.log.length === 0}>Download CSV ({auto.log.length})</button>
-                <button type='button' onClick={onLogClear} disabled={auto.log.length === 0 || auto.armed}>Clear</button>
-            </div>
-            {auto.log.length > 0 && (
-                <div className='apex-bt__log-wrap'>
-                    <table className='apex-bt__log'>
-                        <thead><tr><th>Time</th><th>Contract</th><th>Mode</th><th>Entry rule</th><th>Ticks</th><th>Exit digits</th><th>Result</th><th>P/L</th></tr></thead>
-                        <tbody>
-                            {auto.log.slice(0, 8).map(row => (
-                                <tr key={row.id}>
-                                    <td>{new Date(row.at).toLocaleTimeString()}</td><td>{row.contract}</td><td>{row.mode}</td><td>{row.rule}</td>
-                                    <td>{row.pattern || '–'}</td><td>{row.exits || '–'}</td>
-                                    <td className={row.result === 'WIN' ? 'is-win' : row.result === 'LOSS' ? 'is-loss' : ''}>{row.result}</td>
-                                    <td className={row.pnl >= 0 ? 'is-win' : 'is-loss'}>{row.pnl.toFixed(2)}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+            {view.log && (
+                <details className='apex-bt__params' open>
+                    <summary>Auto run log ({auto.log.length})</summary>
+                    <div className='apex-bt__log-actions'>
+                        <button type='button' onClick={onLogDownload} disabled={auto.log.length === 0}>Download CSV ({auto.log.length})</button>
+                        <button type='button' onClick={onLogClear} disabled={auto.log.length === 0 || auto.armed}>Clear</button>
+                    </div>
+                    {auto.log.length > 0 && (
+                        <div className='apex-bt__log-wrap'>
+                            <table className='apex-bt__log'>
+                                <thead><tr><th>Time</th><th>Contract</th><th>Mode</th><th>Entry rule</th><th>Ticks</th><th>Exit digits</th><th>Result</th><th>P/L</th></tr></thead>
+                                <tbody>
+                                    {auto.log.slice(0, 8).map(row => (
+                                        <tr key={row.id}>
+                                            <td>{new Date(row.at).toLocaleTimeString()}</td><td>{row.contract}</td><td>{row.mode}</td><td>{row.rule}</td>
+                                            <td>{row.pattern || '–'}</td><td>{row.exits || '–'}</td>
+                                            <td className={row.result === 'WIN' ? 'is-win' : row.result === 'LOSS' ? 'is-loss' : ''}>{row.result}</td>
+                                            <td className={row.pnl >= 0 ? 'is-win' : 'is-loss'}>{row.pnl.toFixed(2)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </details>
             )}
-
-            <p className='apex-bt__auto-foot'>
-                Runs {auto.runs}/{auto.maxRuns} · Session P/L <b className={auto.pnl >= 0 ? 'is-win' : 'is-loss'}>{auto.pnl.toFixed(2)} {currency}</b>
-                {` · stops at +${auto.targetProfit.toFixed(2)} or −${auto.maxLoss.toFixed(2)}`}
-                {auto.account ? ` · ${auto.account} account` : ''}{running ? ' · run in progress' : ''}
-                <br />
-                A signal starts the watch; the buy happens when the latest ticks show the side (O for Over, U for Under against the contract&apos;s barrier). After a losing run
-                with recovery on, the next signal is traded at your recovery digit with the martingale stake, and a win returns to normal. The deck stake at arming is the base stake.
-                The deck is locked while armed, it stops itself at the limits or if any purchase fails, and it is always off when the page loads.
-            </p>
         </section>
     );
 };
 
 const BulkTraderView = (props: BulkViewProps) => {
     const { symbol, digitPct, form, currency, running, tally, log } = props;
+    const [view, setView] = useState<Record<ViewKey, boolean>>(loadView);
+    const setViewKey = (key: ViewKey, on: boolean) => setView(current => { const next = { ...current, [key]: on }; saveView(next); return next; });
     const params = sanitizeBulk({ stake: Number(form.stake), runs: Number(form.runs), duration: Number(form.duration) });
     const max = Math.max(...digitPct);
     const min = Math.min(...digitPct);
@@ -308,34 +319,40 @@ const BulkTraderView = (props: BulkViewProps) => {
         { side: 0 as const, label: `Over ${over}`, hit: hitRate(digitPct, 'DIGITOVER', over), cls: 'a' },
         { side: 1 as const, label: `Under ${under}`, hit: hitRate(digitPct, 'DIGITUNDER', under), cls: 'b' },
     ];
+    const settled = log.filter(row => row.state === 'won' || row.state === 'lost');
+    const busy = running || props.auto.armed;
 
     return (
         <div className='apex-bt'>
-            <RecommendationBar rec={props.rec} watch={props.watch} onLoadRec={props.onLoadRec} marketsReady={props.marketsReady} live={props.live}
-                locked={props.locked} canLock={props.canLock} onToggleLock={props.onToggleLock} />
+            <div className='apex-bt__top'>
+                <div><small>BULK TRADER</small><h2>Over / Under</h2></div>
+                <div className='apex-bt__topright'>
+                    <span className={`apex-bt__state${running ? ' is-running' : ''}`}>{running ? 'RUNNING' : props.auto.armed ? 'AUTO ON' : 'IDLE'}</span>
+                    <ViewMenu view={view} onChange={setViewKey} />
+                </div>
+            </div>
 
-            <AutoPanel auto={props.auto} running={props.running} currency={currency} onAutoToggle={props.onAutoToggle} onAutoForm={props.onAutoForm} onLogDownload={props.onLogDownload} onLogClear={props.onLogClear} />
+            {view.signal && (
+                <RecommendationBar rec={props.rec} watch={props.watch} onLoadRec={props.onLoadRec} marketsReady={props.marketsReady} live={props.live}
+                    locked={props.locked} canLock={props.canLock} onToggleLock={props.onToggleLock} />
+            )}
+
+            {view.auto && (
+                <AutoPanel auto={props.auto} running={props.running} currency={currency} view={view} onAutoToggle={props.onAutoToggle} onAutoForm={props.onAutoForm}
+                    onLogDownload={props.onLogDownload} onLogClear={props.onLogClear} />
+            )}
 
             <section className='apex-bt__panel' ref={props.traderRef} aria-label='Trading Deck'>
-                <div className='apex-bt__head'>
-                    <div><small>TRADING DECK</small><h2>Over / Under</h2></div>
-                    <div className={`apex-bt__state${running ? ' is-running' : ''}`}>{running ? 'RUNNING' : 'IDLE'}</div>
-                </div>
-
-                <div className='apex-bt__grid2'>
+                <div className='apex-bt__deckhead'>
                     <label>Market
-                        <select value={symbol} disabled={running || props.auto.armed} onChange={event => props.onSymbol(event.target.value)}>
+                        <select value={symbol} disabled={busy} onChange={event => props.onSymbol(event.target.value)}>
                             {BULK_MARKETS.map(item => <option key={item.symbol} value={item.symbol}>{item.name}</option>)}
                         </select>
                     </label>
-                    <label>Trade type
-                        <select value='overunder' disabled><option value='overunder'>Over / Under</option></select>
-                    </label>
-                </div>
-
-                <div className='apex-bt__tick'>
-                    <small>CURRENT TICK</small>
-                    <strong>{props.price !== null ? props.price : '—'}</strong>
+                    <div className='apex-bt__tick'>
+                        <small>CURRENT TICK</small>
+                        <strong>{props.price !== null ? props.price : '—'}</strong>
+                    </div>
                 </div>
 
                 <div className='apex-bt__rings'>
@@ -357,45 +374,22 @@ const BulkTraderView = (props: BulkViewProps) => {
                 </div>
 
                 <div className='apex-bt__form'>
-                    <label>Ticks (duration)<input value={form.duration} disabled={running || props.auto.armed} inputMode='numeric' onChange={props.onForm('duration')} /></label>
-                    <label>Stake ({currency})<input value={form.stake} disabled={running || props.auto.armed} inputMode='decimal' onChange={props.onForm('stake')} /></label>
-                    <label>No. of bulk trades<input value={form.runs} disabled={running || props.auto.armed} inputMode='numeric' onChange={props.onForm('runs')} /></label>
+                    <label>Ticks (duration)<input value={form.duration} disabled={busy} inputMode='numeric' onChange={props.onForm('duration')} /></label>
+                    <label>Stake ({currency})<input value={form.stake} disabled={busy} inputMode='decimal' onChange={props.onForm('stake')} /></label>
+                    <label>No. of bulk trades<input value={form.runs} disabled={busy} inputMode='numeric' onChange={props.onForm('runs')} /></label>
                     <label>Over barrier
-                        <select value={props.overBarrier} disabled={running || props.auto.armed} onChange={event => props.onOverBarrier(event.target.value)}>
+                        <select value={props.overBarrier} disabled={busy} onChange={event => props.onOverBarrier(event.target.value)}>
                             {overList.map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
                     </label>
                     <label>Under barrier
-                        <select value={props.underBarrier} disabled={running || props.auto.armed} onChange={event => props.onUnderBarrier(event.target.value)}>
+                        <select value={props.underBarrier} disabled={busy} onChange={event => props.onUnderBarrier(event.target.value)}>
                             {underList.map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
                     </label>
                 </div>
-            </section>
 
-            <section className='apex-bt__panel apex-bt__lower' aria-label='Over and Under'>
-                <div className='apex-bt__siglock'>
-                    <button type='button' role='switch' aria-checked={props.oneTick.on} className={`apex-bt__switch${props.oneTick.on ? ' is-on' : ''}`} onClick={props.oneTick.onToggle}
-                        title='Send only as many trades as reach Deriv before the next tick, so they all share one entry tick and one exit digit'>
-                        <i aria-hidden='true' />
-                        <span>One tick {props.oneTick.on ? 'ON' : 'OFF'}</span>
-                    </button>
-                    <small>{props.oneTick.on
-                        ? 'Deriv takes the buys of one connection one after another, so a big batch spills onto the next tick and settles on another digit. With this on, only as many trades as fit before the next tick are sent, so they all share one exit digit.'
-                        : 'All trades are sent, even if some land on the next tick and settle on a different digit.'}</small>
-                </div>
-                <div className='apex-bt__siglock'>
-                    <button type='button' role='switch' aria-checked={lock.on} className={`apex-bt__switch${lock.on ? ' is-on' : ''}`} onClick={lock.onToggle}
-                        title={lock.on ? 'Signal lock on: Over/Under open only for a loaded EXECUTE signal' : 'Signal lock off: Over/Under are free with any barrier'}>
-                        <i aria-hidden='true' />
-                        <span>Signal lock {lock.on ? 'ON' : 'OFF'}</span>
-                    </button>
-                    <small>{lock.on
-                        ? 'Over / Under stay locked until a signal is loaded and the engine says EXECUTE. The auto trader always locks them while it is on.'
-                        : 'Over / Under are free: choose any barrier and trade either side at any time. The auto trader still locks them while it is on.'}</small>
-                </div>
-
-                <div className='apex-bt__sides'>
+                <div className='apex-bt__sides' aria-label='Over and Under'>
                     {sides.map(item => {
                         const open = !lock.on || lock.openSide === item.side;
                         const executeTag = lock.on && lock.openSide === item.side;
@@ -407,64 +401,96 @@ const BulkTraderView = (props: BulkViewProps) => {
                                 {!lock.on && props.pickSide === item.side && <em>AI PICK</em>}
                                 <span>{item.label}</span>
                                 <strong>{item.hit.toFixed(1)}%</strong>
-                                <small>{lock.on && !open ? '🔒 locked · waiting for an EXECUTE signal' : `past hit · run ×${params.runs} together`}</small>
+                                <small>{lock.on && !open ? '🔒 locked · waiting for an EXECUTE signal' : `run ×${params.runs} together`}</small>
                             </button>
                         );
                     })}
                 </div>
 
-                <p className='apex-bt__pickinfo'>{lock.on && lock.note ? lock.note : props.loadedNote}</p>
-
-                <div className='apex-bt__status'>
-                    <span>{props.status}</span>
-                    {running && <button type='button' className='apex-bt__stop' onClick={props.onStop}>Stop / Exit</button>}
-                </div>
+                {(props.status || running) && (
+                    <div className='apex-bt__status'>
+                        <span>{props.status}</span>
+                        {running && <button type='button' className='apex-bt__stop' onClick={props.onStop}>Stop / Exit</button>}
+                    </div>
+                )}
                 {props.error && <p className='apex-bt__error' role='alert'>{props.error}</p>}
 
-                <div className='apex-bt__stats'>
-                    <div><small>Exposure</small><strong>{money(exposure(params), currency)}</strong></div>
-                    <div><small>Placed / requested</small><strong>{tally.placed} / {tally.requested || params.runs}</strong></div>
-                    <div><small>Settled · W / L</small><strong>{tally.settled} · {tally.wins} / {tally.losses}</strong></div>
-                    <div><small>Realised P/L</small><strong className={tally.pnl >= 0 ? 'is-win' : 'is-loss'}>{money(tally.pnl, currency)}</strong></div>
-                </div>
-                {props.syncNote && <p className='apex-bt__sync'>{props.syncNote}</p>}
-                {log.some(row => row.state === 'won' || row.state === 'lost') && (
-                    <div className='apex-bt__exits' aria-label='Settlement digits'>
-                        <small>Settlement digits</small>
-                        {log.filter(row => row.state === 'won' || row.state === 'lost').map(row => (
-                            <span key={row.id} className={row.state === 'won' ? 'is-win' : 'is-loss'} title={row.state === 'won' ? 'Won' : 'Lost'}>
-                                {row.exitDigit ?? (row.exitFinal ? '?' : '…')}
+                {view.stats && (
+                    <div className='apex-bt__chips' aria-label='Run results'>
+                        <span><small>Exposure</small><b>{money(exposure(params), currency)}</b></span>
+                        <span><small>Placed</small><b>{tally.placed} / {tally.requested || params.runs}</b></span>
+                        <span><small>W / L</small><b>{tally.wins} / {tally.losses}</b></span>
+                        <span><small>P/L</small><b className={tally.pnl >= 0 ? 'is-win' : 'is-loss'}>{money(tally.pnl, currency)}</b></span>
+                        {settled.length > 0 && (
+                            <span className='apex-bt__exits' aria-label='Settlement digits'>
+                                <small>Exit digits</small>
+                                {settled.slice(0, 12).map(row => (
+                                    <i key={row.id} className={row.state === 'won' ? 'is-win' : 'is-loss'} title={row.state === 'won' ? 'Won' : 'Lost'}>
+                                        {row.exitDigit ?? (row.exitFinal ? '?' : '…')}
+                                    </i>
+                                ))}
                             </span>
-                        ))}
+                        )}
+                    </div>
+                )}
+                {view.stats && props.syncNote && <p className='apex-bt__sync'>{props.syncNote}</p>}
+
+                {view.notes && (
+                    <div className='apex-bt__switches'>
+                        <div className='apex-bt__siglock'>
+                            <button type='button' role='switch' aria-checked={props.oneTick.on} className={`apex-bt__switch${props.oneTick.on ? ' is-on' : ''}`} onClick={props.oneTick.onToggle}
+                                title='Send only as many trades as reach Deriv before the next tick, so they all share one entry tick and one exit digit'>
+                                <i aria-hidden='true' />
+                                <span>One tick {props.oneTick.on ? 'ON' : 'OFF'}</span>
+                            </button>
+                            <small>{props.oneTick.on
+                                ? 'Only as many trades as fit before the next tick are sent, so they all share one exit digit.'
+                                : 'All trades are sent, even if some land on the next tick and settle on a different digit.'}</small>
+                        </div>
+                        <div className='apex-bt__siglock'>
+                            <button type='button' role='switch' aria-checked={lock.on} className={`apex-bt__switch${lock.on ? ' is-on' : ''}`} onClick={lock.onToggle}
+                                title={lock.on ? 'Signal lock on: Over/Under open only for a loaded EXECUTE signal' : 'Signal lock off: Over/Under are free with any barrier'}>
+                                <i aria-hidden='true' />
+                                <span>Signal lock {lock.on ? 'ON' : 'OFF'}</span>
+                            </button>
+                            <small>{lock.on
+                                ? 'Over / Under stay locked until a signal is loaded and the engine says EXECUTE. The auto trader always locks them while it is on.'
+                                : 'Over / Under are free: choose any barrier and trade either side at any time. The auto trader still locks them while it is on.'}</small>
+                        </div>
+                        <p className='apex-bt__pickinfo'>{lock.on && lock.note ? lock.note : props.loadedNote}</p>
                     </div>
                 )}
 
-                {log.length > 0 && (
-                    <div className='apex-bt__tablewrap apex-bt__log'>
-                        <table>
-                            <thead><tr><th>Time</th><th>Trade</th><th>Stake</th><th>Exit digit</th><th>Result</th></tr></thead>
-                            <tbody>
-                                {log.map(row => (
-                                    <tr key={row.id}>
-                                        <td>{row.time}</td><td>{row.label}</td><td>{row.stake.toFixed(2)}</td>
-                                        <td>{row.exitDigit ?? (row.state === 'failed' ? '—' : row.exitFinal ? 'n/a' : '…')}</td>
-                                        <td className={row.state === 'won' ? 'is-win' : row.state === 'open' ? '' : 'is-loss'}>
-                                            {row.state === 'open' ? 'Open…' : row.state === 'failed' ? `Failed: ${row.note ?? ''}` : `${row.profit >= 0 ? '+' : ''}${row.profit.toFixed(2)}`}
-                                        </td>
-
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                {view.log && log.length > 0 && (
+                    <details className='apex-bt__params' open>
+                        <summary>Manual trade log ({log.length})</summary>
+                        <div className='apex-bt__tablewrap apex-bt__log'>
+                            <table>
+                                <thead><tr><th>Time</th><th>Trade</th><th>Stake</th><th>Exit digit</th><th>Result</th></tr></thead>
+                                <tbody>
+                                    {log.map(row => (
+                                        <tr key={row.id}>
+                                            <td>{row.time}</td><td>{row.label}</td><td>{row.stake.toFixed(2)}</td>
+                                            <td>{row.exitDigit ?? (row.state === 'failed' ? '—' : row.exitFinal ? 'n/a' : '…')}</td>
+                                            <td className={row.state === 'won' ? 'is-win' : row.state === 'open' ? '' : 'is-loss'}>
+                                                {row.state === 'open' ? 'Open…' : row.state === 'failed' ? `Failed: ${row.note ?? ''}` : `${row.profit >= 0 ? '+' : ''}${row.profit.toFixed(2)}`}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
                 )}
             </section>
 
-            <p className='apex-bt__foot'>
-                A recommendation is not a trade and not a prediction: pressing Over or Under places up to {MAX_BULK_RUNS} real contracts at once. The engine&apos;s
-                score ranks setups; it is not a win probability. Digit contracts on synthetic indices are random and payouts include Deriv&apos;s margin, so the
-                expected return is negative. Test on a demo account first.
-            </p>
+            {view.notes && (
+                <p className='apex-bt__foot'>
+                    A recommendation is not a trade and not a prediction: pressing Over or Under places up to {MAX_BULK_RUNS} real contracts at once. The engine&apos;s
+                    score ranks setups; it is not a win probability. Digit contracts on synthetic indices are random and payouts include Deriv&apos;s margin, so the
+                    expected return is negative. Test on a demo account first.
+                </p>
+            )}
         </div>
     );
 };
