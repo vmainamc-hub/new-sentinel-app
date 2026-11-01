@@ -185,9 +185,10 @@ export const createSentinelOverlay = (opts: {
                     allow: false,
                     bump: 0,
                     rank: 0,
-                    note: source === 'digits'
-                        ? `not in Digits Analysis's top ${mode === 'careful' ? '1' : '2'} for its pair`
-                        : `no ${mode === 'careful' ? 'strong' : 'strong or steady'} Pulse signal`,
+                    note:
+                        source === 'digits'
+                            ? `not in Digits Analysis's top ${mode === 'careful' ? '1' : '2'} for its pair`
+                            : `no ${mode === 'careful' ? 'strong' : 'strong or steady'} Pulse signal`,
                 };
             }
             return {

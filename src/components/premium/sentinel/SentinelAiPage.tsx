@@ -25,7 +25,12 @@ const PHASE_LABEL: Record<Phase, string> = {
     cooling: 'Looking for the next trade',
 };
 
-const STYLE_TAG: Record<string, string> = { hunter: 'Always a trade', careful: 'Fewest trades', balanced: 'Steady', active: 'Most trades' };
+const STYLE_TAG: Record<string, string> = {
+    hunter: 'Always a trade',
+    careful: 'Fewest trades',
+    balanced: 'Steady',
+    active: 'Most trades',
+};
 
 const money = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(2)}`;
 const contractName = (key: string) => key.replace(':', ' ').replace('OVER', 'Over').replace('UNDER', 'Under');
@@ -149,7 +154,12 @@ const SentinelAiPage = () => {
 
                     <div className='sf-grid3 sn-nums'>
                         <Num label='Stake' value={s.stake} onCommit={n => set({ stake: n })} />
-                        <Num label='Take profit' value={s.takeProfit} onCommit={n => set({ takeProfit: n })} hint='0 = off' />
+                        <Num
+                            label='Take profit'
+                            value={s.takeProfit}
+                            onCommit={n => set({ takeProfit: n })}
+                            hint='0 = off'
+                        />
                         <Num label='Stop loss' value={s.stopLoss} onCommit={n => set({ stopLoss: n })} hint='0 = off' />
                     </div>
 
@@ -194,7 +204,9 @@ const SentinelAiPage = () => {
                                         </i>
                                     </span>
                                     <span>{t.stake.toFixed(2)}</span>
-                                    <em>{t.profit === null ? (t.status === 'open' ? 'open' : '?') : money(t.profit)}</em>
+                                    <em>
+                                        {t.profit === null ? (t.status === 'open' ? 'open' : '?') : money(t.profit)}
+                                    </em>
                                 </li>
                             ))}
                         </ul>
@@ -207,16 +219,30 @@ const SentinelAiPage = () => {
                     </button>
                     {more && (
                         <div className='sn-morebody'>
-                            <Switch on={s.recovery} onChange={v => set({ recovery: v })} title='Recovery barrier' sub='' />
+                            <Switch
+                                on={s.recovery}
+                                onChange={v => set({ recovery: v })}
+                                title='Recovery barrier'
+                                sub=''
+                            />
                             {s.recovery && (
                                 <div className='sf-grid2 sn-nums'>
                                     <Num label='Over' value={s.recoveryOver} onCommit={n => set({ recoveryOver: n })} />
-                                    <Num label='Under' value={s.recoveryUnder} onCommit={n => set({ recoveryUnder: n })} />
+                                    <Num
+                                        label='Under'
+                                        value={s.recoveryUnder}
+                                        onCommit={n => set({ recoveryUnder: n })}
+                                    />
                                 </div>
                             )}
-                            <Switch on={s.virtualHook} onChange={v => set({ virtualHook: v })} title='Virtual hook' sub='' />
+                            <Switch
+                                on={s.virtualHook}
+                                onChange={v => set({ virtualHook: v })}
+                                title='Virtual hook'
+                                sub=''
+                            />
                             {s.virtualHook && <VirtualHookFields s={s} set={set} />}
-                            <SignalConditions s={s} set={set} streakAlwaysOn />
+                            <SignalConditions s={s} set={set} streakAlwaysOn gatesAlwaysOn />
                             <div className='sn-label'>Markets ({s.markets.length})</div>
                             <div className='sn-chips'>
                                 {MARKETS.map(([sym]) => (
@@ -245,8 +271,8 @@ const SentinelAiPage = () => {
                 </section>
 
                 <footer className='sn-foot'>
-                    Digits are random and every contract has a payout margin, so over many trades the expected result is a
-                    loss. Martingale makes losses bigger. Demo account first.
+                    Digits are random and every contract has a payout margin, so over many trades the expected result is
+                    a loss. Martingale makes losses bigger. Demo account first.
                 </footer>
             </main>
         </div>

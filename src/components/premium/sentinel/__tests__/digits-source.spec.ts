@@ -17,7 +17,11 @@ const series = {
     D: stream(100, HIGH), // too few ticks: never read
 };
 const symbols = ['A', 'B', 'C', 'D'];
-const engine = (patch: Partial<EngineSettings> = {}): EngineSettings => ({ ...DEFAULT_ENGINE, source: 'digits', ...patch });
+const engine = (patch: Partial<EngineSettings> = {}): EngineSettings => ({
+    ...DEFAULT_ENGINE,
+    source: 'digits',
+    ...patch,
+});
 
 describe('Digits Analysis as the signal source', () => {
     it('ranks the markets exactly like the Digits Analysis page does', () => {
@@ -31,9 +35,15 @@ describe('Digits Analysis as the signal source', () => {
         );
         const tiered = snap.reads
             .filter(r => r.tier && [2, 7].includes(r.contract.param))
-            .sort((a, b) => ['strong', 'steady', 'watch'].indexOf(a.tier!) - ['strong', 'steady', 'watch'].indexOf(b.tier!));
+            .sort(
+                (a, b) =>
+                    ['strong', 'steady', 'watch'].indexOf(a.tier!) - ['strong', 'steady', 'watch'].indexOf(b.tier!)
+            );
         expect(tiered.map(r => r.symbol)).toEqual(page.map(p => p.symbol));
-        expect(tiered[0].contract).toEqual({ side: page[0].trade.side === 'over' ? 'OVER' : 'UNDER', param: page[0].trade.barrier });
+        expect(tiered[0].contract).toEqual({
+            side: page[0].trade.side === 'over' ? 'OVER' : 'UNDER',
+            param: page[0].trade.barrier,
+        });
     });
 
     it('skips markets with too few ticks', () => {

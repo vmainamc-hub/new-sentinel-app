@@ -1,4 +1,12 @@
-import { DEFAULT_TRADING, HUNTER_TRADING, GREENS_DEFAULT, loadTrading, normalizeTradingSettings, PRESETS, SENTINEL_GATES } from '../settings';
+import {
+    DEFAULT_TRADING,
+    HUNTER_TRADING,
+    GREENS_DEFAULT,
+    loadTrading,
+    normalizeTradingSettings,
+    PRESETS,
+    SENTINEL_GATES,
+} from '../settings';
 
 describe('Sentinel AI trading gates', () => {
     beforeEach(() => window.localStorage.clear());
@@ -49,7 +57,7 @@ describe('Sentinel AI trading gates', () => {
 });
 
 describe('Hunter preset', () => {
-    it('is Over 2 / Under 7 with recovery Over 3 / Under 6, keeps the win-streak guard on and the loss limits', () => {
+    it('is Over 2 / Under 7 with recovery Over 3 / Under 6, every guard on, and the loss limits', () => {
         const hunter = PRESETS.find(p => p.id === 'hunter')!;
         expect(hunter.engine).toMatchObject({ mode: 'hunter', propositions: ['OVER:2', 'UNDER:7'] });
         expect(hunter.trading).toBe(HUNTER_TRADING);
@@ -62,7 +70,47 @@ describe('Hunter preset', () => {
             lossShield: true,
             stopLoss: 10,
             maxConsecutiveLosses: 4,
-            meterFloor: 0,
+            pressureGate: true,
+            multiWindowGate: true,
+            winPressureGate: true,
+            strictPressure: true,
+            meterGuide: true,
+            meterFloor: 45,
+            meterFloorRecovery: 48,
         });
+    });
+});
+
+describe('Sentinel guards cannot be switched off', () => {
+    beforeEach(() => window.localStorage.clear());
+    it('whatever was saved, the pressure, window and Meter guards are on and the floors stay at the minimum', () => {
+        const s = normalizeTradingSettings({
+            pressureGate: false,
+            multiWindowGate: false,
+            winPressureGate: false,
+            strictPressure: false,
+            meterGuide: false,
+            meterFloor: 0,
+            meterFloorRecovery: 0,
+            winStreakGate: false,
+        });
+        expect(s).toMatchObject({
+            pressureGate: true,
+            multiWindowGate: true,
+            winPressureGate: true,
+            strictPressure: true,
+            meterGuide: true,
+            winStreakGate: true,
+            meterFloor: 40,
+            meterFloorRecovery: 44,
+        });
+    });
+    it('every preset keeps them on', () => {
+        for (const p of PRESETS)
+            expect(normalizeTradingSettings(p.trading)).toMatchObject({
+                pressureGate: true,
+                winPressureGate: true,
+                strictPressure: true,
+            });
     });
 });

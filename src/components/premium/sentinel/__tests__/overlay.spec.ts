@@ -21,7 +21,11 @@ const read = (
 const snap = (reads: PulseRead[]): PulseSnapshot => ({ markets: 1, reads });
 const cell = (symbol: string, side: 'OVER' | 'UNDER', param: number) =>
     ({ symbol, contract: { side, param } }) as never;
-const mode = (m: EngineSettings['mode']): EngineSettings => ({ ...DEFAULT_ENGINE, mode: m, propositions: [...PROPOSITION_KEYS] });
+const mode = (m: EngineSettings['mode']): EngineSettings => ({
+    ...DEFAULT_ENGINE,
+    mode: m,
+    propositions: [...PROPOSITION_KEYS],
+});
 
 describe('buildBoard', () => {
     const reads = [
@@ -100,7 +104,11 @@ describe('Hunter mode', () => {
         expect(huntEase(10 * 60_000)).toBe(HUNT_MAX_EASE);
     });
     it('never blocks: no signal only raises the bar a little, a signal eases it', () => {
-        const o = createSentinelOverlay({ getEngine: () => mode('hunter'), read: () => snap([read('A', 'UNDER', 8, 'strong')]), now: () => 0 });
+        const o = createSentinelOverlay({
+            getEngine: () => mode('hunter'),
+            read: () => snap([read('A', 'UNDER', 8, 'strong')]),
+            now: () => 0,
+        });
         o.refresh!(0, ['A']);
         expect(o.call(cell('A', 'OVER', 1), ctx(0))).toMatchObject({ allow: true, bump: 4 });
         expect(o.call(cell('A', 'UNDER', 8), ctx(0))).toMatchObject({ allow: true, bump: -6 });

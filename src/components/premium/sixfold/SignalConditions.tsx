@@ -9,6 +9,8 @@ type Props = { s: SixfoldSettings; set: (patch: Partial<SixfoldSettings>) => voi
 type ConditionProps = Props & {
     /** The win-streak guard cannot be switched off (Sentinel AI): show its numbers without the switch. */
     streakAlwaysOn?: boolean;
+    /** The pressure, window and winning-digit gates cannot be switched off. */
+    gatesAlwaysOn?: boolean;
 };
 
 /** Everything under the Martingale switch. */
@@ -59,7 +61,7 @@ export const VirtualHookFields = ({ s, set }: Props) => (
     </div>
 );
 
-const SignalConditions = ({ s, set, streakAlwaysOn = false }: ConditionProps) => {
+const SignalConditions = ({ s, set, streakAlwaysOn = false, gatesAlwaysOn = false }: ConditionProps) => {
     const [open, setOpen] = useState(false);
     return (
         <div className='sn-conditions'>
@@ -80,21 +82,35 @@ const SignalConditions = ({ s, set, streakAlwaysOn = false }: ConditionProps) =>
                             <Num label='Drop market at +losses' value={s.lossAbort} onCommit={n => set({ lossAbort: n })} hint='0–4' />
                         </div>
                     )}
-                    <Switch on={s.pressureGate} onChange={v => set({ pressureGate: v })} title='Losing-digit pressure gate' sub='' />
-                    {s.pressureGate && (
+                    {gatesAlwaysOn ? (
+                        <div className='sn-label'>Losing digits must be easing, winning digits rising (always on)</div>
+                    ) : (
+                        <Switch on={s.pressureGate} onChange={v => set({ pressureGate: v })} title='Losing-digit pressure gate' sub='' />
+                    )}
+                    {(gatesAlwaysOn || s.pressureGate) && (
                         <div className='sn-nums'>
                             <Num label='Max pressure' value={s.pressureMax} onCommit={n => set({ pressureMax: n })} hint='10–90, lower is stricter' />
                         </div>
                     )}
-                    <Switch on={s.multiWindowGate} onChange={v => set({ multiWindowGate: v })} title='Multi-window gate' sub='' />
-                    <Switch on={s.winPressureGate} onChange={v => set({ winPressureGate: v })} title='Winning-digit pressure gate' sub='' />
-                    {s.winPressureGate && (
+                    {gatesAlwaysOn ? (
+                        <div className='sn-label'>Multi-window gate (always on)</div>
+                    ) : (
+                        <>
+                            <Switch on={s.multiWindowGate} onChange={v => set({ multiWindowGate: v })} title='Multi-window gate' sub='' />
+                            <Switch on={s.winPressureGate} onChange={v => set({ winPressureGate: v })} title='Winning-digit pressure gate' sub='' />
+                        </>
+                    )}
+                    {(gatesAlwaysOn || s.winPressureGate) && (
                         <div className='sn-nums'>
                             <Num label='Min gain (pp)' value={s.winPressureMin} onCommit={n => set({ winPressureMin: n })} hint='1–15' />
                         </div>
                     )}
-                    <Switch on={s.meterGuide} onChange={v => set({ meterGuide: v })} title='Meter guide' sub='' />
-                    {s.meterGuide && (
+                    {gatesAlwaysOn ? (
+                        <div className='sn-label'>Meter guide (always on)</div>
+                    ) : (
+                        <Switch on={s.meterGuide} onChange={v => set({ meterGuide: v })} title='Meter guide' sub='' />
+                    )}
+                    {(gatesAlwaysOn || s.meterGuide) && (
                         <div className='sf-grid3 sn-nums'>
                             <Num label='Meter floor' value={s.meterFloor} onCommit={n => set({ meterFloor: n })} hint='0 = off' />
                             <Num label='Recovery floor' value={s.meterFloorRecovery} onCommit={n => set({ meterFloorRecovery: n })} hint='0 = off' />

@@ -89,6 +89,11 @@ export type SixfoldSettings = {
     /** Smallest gain, latest window over longest, in percentage points. */
     winPressureMin: number;
     /**
+     * Strict pressure: no losing digit of the bought contract may be climbing, and after a loss (recovery) the winning side must
+     * gain one more point than usual. Off for Sixfold.
+     */
+    strictPressure: boolean;
+    /**
      * Win-streak guard: never buy while losing digits are appearing. The contract about to be bought must have won on each of
      * the market's last `winStreak` ticks, and a market with too many losses in its last 10 (`lossAbort` above what that
      * contract expects) is dropped for one that is building up wins.
@@ -161,6 +166,7 @@ export const DEFAULT_SETTINGS: SixfoldSettings = {
     multiWindowGate: true,
     winPressureGate: true,
     winPressureMin: 2,
+    strictPressure: false,
     winStreakGate: true,
     virtualHook: false,
     vhOpening: true,
@@ -230,6 +236,7 @@ export function normalizeSettings(input: Partial<SixfoldSettings> | null | undef
         multiWindowGate: typeof s.multiWindowGate === 'boolean' ? s.multiWindowGate : d.multiWindowGate,
         winPressureGate: typeof s.winPressureGate === 'boolean' ? s.winPressureGate : d.winPressureGate,
         winPressureMin: Math.trunc(num(s.winPressureMin, d.winPressureMin, 1, 15)),
+        strictPressure: typeof s.strictPressure === 'boolean' ? s.strictPressure : d.strictPressure,
         winStreakGate: typeof s.winStreakGate === 'boolean' ? s.winStreakGate : d.winStreakGate,
         winStreak: Math.trunc(num(s.winStreak, d.winStreak, 2, 10)),
         lossAbort: Math.trunc(num(s.lossAbort, d.lossAbort, 0, 4)),

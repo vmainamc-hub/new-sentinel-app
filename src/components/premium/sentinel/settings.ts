@@ -55,8 +55,17 @@ export const normalizeEngine = (raw: unknown): EngineSettings => {
 // every trade). Pulse and Digits Analysis already decide where to look; the pressure gate and Meter floors are a little wider
 // than Sixfold's. None of this changes the odds of a contract; it only decides when it buys.
 export const GREENS_DEFAULT = 3;
-export const SENTINEL_GATES: Partial<SixfoldSettings> = {
+/** The guards that are always on, whatever was saved. */
+export const FORCED_GUARDS: Partial<SixfoldSettings> = {
     winStreakGate: true,
+    pressureGate: true,
+    multiWindowGate: true,
+    winPressureGate: true,
+    strictPressure: true,
+    meterGuide: true,
+};
+export const SENTINEL_GATES: Partial<SixfoldSettings> = {
+    ...FORCED_GUARDS,
     winStreak: GREENS_DEFAULT,
     pressureMax: 45,
     meterFloor: 45,
@@ -68,9 +77,22 @@ export const DEFAULT_TRADING: SixfoldSettings = normalizeTrading({
     entry: 'SMART',
     selectivity: 'balanced',
 });
-/** Whatever was saved, the win-streak guard is always on: Sentinel never buys inside a run of red digits. */
-export const normalizeTradingSettings = (raw: Partial<SixfoldSettings> | null | undefined): SixfoldSettings =>
-    normalizeTrading({ ...DEFAULT_TRADING, ...(raw ?? {}), winStreakGate: true });
+/** The lowest Meter floors Sentinel accepts (the Active style's own). */
+export const MIN_METER_FLOOR = 40;
+export const MIN_METER_FLOOR_RECOVERY = 44;
+/**
+ * Whatever was saved, these guards are always on: Sentinel never buys inside a run of red digits, the losing digits must be
+ * easing (none climbing), the winning digits must be rising (not dormant; one point more after a loss), the contract must be
+ * healthy across the longer windows, and the Meter guide keeps its floors.
+ */
+export const normalizeTradingSettings = (raw: Partial<SixfoldSettings> | null | undefined): SixfoldSettings => {
+    const s = normalizeTrading({ ...DEFAULT_TRADING, ...(raw ?? {}), ...FORCED_GUARDS });
+    return {
+        ...s,
+        meterFloor: Math.max(s.meterFloor, MIN_METER_FLOOR),
+        meterFloorRecovery: Math.max(s.meterFloorRecovery, MIN_METER_FLOOR_RECOVERY),
+    };
+};
 
 export const contractsFor = (engine: Pick<EngineSettings, 'propositions'>): Contract[] =>
     engine.propositions.map(p => {
@@ -87,9 +109,9 @@ export type Preset = {
 };
 /**
  * The Hunter's trading rules: watch every market, take an Over 2 or Under 7 as soon as one is the best of the board, and after a
- * loss look across the whole board again and fire Over 3 or Under 6. The filters that waited for rare moments are off (pressure,
- * windows, Meter floors, paper-first opening); the win-streak guard stays on (two winning digits in a row is enough here), the Meter
- * guide still refuses a contract sitting in a loss cluster, and the loss shield, stop loss and loss limits stay.
+ * loss look across the whole board again and fire Over 3 or Under 6. Only the idle score bar eases; every guard is on and cannot
+ * be switched off: the win-streak guard (two winning digits in a row here), losing digits easing, winning digits rising (one point
+ * more after a loss), the multi-window gate and the Meter floors, with the loss shield, stop loss and loss limits.
  */
 export const HUNTER_TRADING: Partial<SixfoldSettings> = {
     useOver: true,
@@ -103,13 +125,16 @@ export const HUNTER_TRADING: Partial<SixfoldSettings> = {
     entry: 'SMART',
     winStreakGate: true,
     winStreak: 2,
-    pressureGate: false,
-    multiWindowGate: false,
-    winPressureGate: false,
+    pressureGate: true,
+    pressureMax: 45,
+    multiWindowGate: true,
+    winPressureGate: true,
+    strictPressure: true,
+    meterGuide: true,
     virtualHook: false,
     vhOpening: false,
-    meterFloor: 0,
-    meterFloorRecovery: 0,
+    meterFloor: 45,
+    meterFloorRecovery: 48,
     pickyAfterLoss: false,
     lossShield: true,
     restTrades: 1,

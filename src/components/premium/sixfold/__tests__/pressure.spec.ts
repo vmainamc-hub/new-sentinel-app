@@ -28,9 +28,21 @@ describe('losingSidePressure', () => {
 
     it('reads the losing digits of the contract it is given: 0-2 for Over 2, 0-3 for Over 3, 7-9 for Under 7', () => {
         const s = randomDigits(300, 1);
-        expect(losingSidePressure(s, over2).digits.map(d => d.digit).sort()).toEqual([0, 1, 2]);
-        expect(losingSidePressure(s, over3).digits.map(d => d.digit).sort()).toEqual([0, 1, 2, 3]);
-        expect(losingSidePressure(s, under7).digits.map(d => d.digit).sort()).toEqual([7, 8, 9]);
+        expect(
+            losingSidePressure(s, over2)
+                .digits.map(d => d.digit)
+                .sort()
+        ).toEqual([0, 1, 2]);
+        expect(
+            losingSidePressure(s, over3)
+                .digits.map(d => d.digit)
+                .sort()
+        ).toEqual([0, 1, 2, 3]);
+        expect(
+            losingSidePressure(s, under7)
+                .digits.map(d => d.digit)
+                .sort()
+        ).toEqual([7, 8, 9]);
     });
 
     it('stays calm on a fair stream most of the time', () => {
@@ -101,7 +113,7 @@ describe('the gates in the Entry Lab', () => {
         const r = compareGuard(randomDigits(40000, 5150), over3, guard, { warmup: 600 });
         expect(['NO_DIFFERENCE', 'LEANS_BETTER', 'LESS_BAD', 'WORSE']).toContain(r.verdict);
         expect(r.verdict).not.toBe('BETTER');
-        expect(Math.abs((r.diffPts ?? 0))).toBeLessThan(2);
+        expect(Math.abs(r.diffPts ?? 0)).toBeLessThan(2);
     });
 
     it('steer away from hostile stretches in a market that really has them', () => {
@@ -120,8 +132,20 @@ describe('the gates in the Entry Lab', () => {
 describe('winningSidePressure', () => {
     // Over 2 wins on 3-9. Build a stream whose winning share climbs window by window: older ticks mixed, newest all winners.
     const base = randomDigits(200, 4);
-    const climbing = [...base, ...[1, 7, 0, 8, 2, 9, 1, 7, 8, 7, 3, 9, 8, 7, 9, 4, 8, 7, 5, 9, 6, 8, 7, 9, 7, 8, 9, 7, 6, 8, 7, 9, 5, 8, 9, 7, 8, 6, 9, 7, 8, 9, 7, 9, 8, 7, 9]];
-    const falling = [...base.map(() => 8), ...[1, 0, 2, 0, 1, 7, 0, 1, 2, 0, 1, 2, 0, 1, 0, 2, 1, 0, 2, 1, 0, 2, 1, 0, 1, 2, 0, 1, 0, 2, 0, 1, 2, 0, 1, 0, 2, 1, 0, 2, 1, 0, 2, 1, 0, 2, 0]];
+    const climbing = [
+        ...base,
+        ...[
+            1, 7, 0, 8, 2, 9, 1, 7, 8, 7, 3, 9, 8, 7, 9, 4, 8, 7, 5, 9, 6, 8, 7, 9, 7, 8, 9, 7, 6, 8, 7, 9, 5, 8, 9, 7,
+            8, 6, 9, 7, 8, 9, 7, 9, 8, 7, 9,
+        ],
+    ];
+    const falling = [
+        ...base.map(() => 8),
+        ...[
+            1, 0, 2, 0, 1, 7, 0, 1, 2, 0, 1, 2, 0, 1, 0, 2, 1, 0, 2, 1, 0, 2, 1, 0, 1, 2, 0, 1, 0, 2, 0, 1, 2, 0, 1, 0,
+            2, 1, 0, 2, 1, 0, 2, 1, 0, 2, 0,
+        ],
+    ];
 
     it('is not measurable on a short history and then passes the gate', () => {
         const p = winningSidePressure([7, 8, 9], over2);
@@ -159,5 +183,34 @@ describe('winningSidePressure', () => {
         const strict = winningSidePressure(climbing, over2, 60).state;
         expect(loose).toBe('RISING');
         expect(strict).not.toBe('RISING');
+    });
+});
+
+describe('strict pressure', () => {
+    const over2 = { side: 'OVER', param: 2 } as const;
+    // A random market whose losing digits are climbing a little but not enough to trip the ceiling.
+    const climbing = () => {
+        let seed = 7;
+        const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
+        for (let tries = 0; tries < 5000; tries++) {
+            const s = Array.from({ length: 130 }, () => Math.floor(rnd() * 10));
+            const p = losingSidePressure(s, over2);
+            if (p.measurable && p.risingCount > 0 && p.index <= 45 && p.verdict !== 'SUPPRESS') return { s, p };
+        }
+        throw new Error('no sample found');
+    };
+    it('passes a climbing losing digit under the ceiling normally, but not when strict', () => {
+        const { p } = climbing();
+        expect(pressureGate(p, 45).ok).toBe(true);
+        const strict = pressureGate(p, 45, true);
+        expect(strict.ok).toBe(false);
+        expect(strict.reason).toMatch(/climbing/);
+    });
+    it('strict changes nothing when no losing digit is climbing', () => {
+        const calm = losingSidePressure(
+            Array.from({ length: 130 }, (_, i) => (i * 7) % 10),
+            over2
+        );
+        expect(pressureGate(calm, 45, true).ok).toBe(pressureGate(calm, 45).ok || calm.risingCount === 0);
     });
 });

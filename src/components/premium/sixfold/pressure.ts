@@ -143,12 +143,15 @@ export const DEFAULT_PRESSURE_MAX = 35;
 export type GateResult = { ok: boolean; reason: string };
 
 /**
- * Pressure gate: the losing side must be quiet enough. A SUPPRESS verdict always blocks, whatever the ceiling.
+ * Pressure gate: the losing side must be quiet enough. A SUPPRESS verdict always blocks, whatever the ceiling. With `strict`, no
+ * losing digit may be climbing either.
  * Not measurable yet (too few ticks) passes, because the scanner already needs its own history before it arms anything.
  */
-export function pressureGate(p: LosingSidePressure, max = DEFAULT_PRESSURE_MAX): GateResult {
+export function pressureGate(p: LosingSidePressure, max = DEFAULT_PRESSURE_MAX, strict = false): GateResult {
     if (!p.measurable) return { ok: true, reason: p.reason };
     if (p.verdict === 'SUPPRESS') return { ok: false, reason: `Losing side hostile and broad: ${p.reason}` };
+    // Strict: the losing digits must be easing, so none of them may be climbing across the windows.
+    if (strict && p.risingCount > 0) return { ok: false, reason: `${p.risingCount} losing digit${p.risingCount > 1 ? 's are' : ' is'} still climbing, not easing: ${p.reason}` };
     if (p.index > max) return { ok: false, reason: `Losing-side pressure ${p.index} is above ${max}: ${p.reason}` };
     return { ok: true, reason: p.reason };
 }

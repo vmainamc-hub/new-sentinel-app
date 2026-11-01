@@ -49,7 +49,10 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
     push({
         key: 'tiers',
         side: 'engine',
-        label: engine.source === 'digits' ? 'Ranked #1 / #2 / #3 for their pair' : 'Pulse signals (strong / steady / watch)',
+        label:
+            engine.source === 'digits'
+                ? 'Ranked #1 / #2 / #3 for their pair'
+                : 'Pulse signals (strong / steady / watch)',
         alive: engine.strong + engine.steady + engine.watch,
         note:
             engine.source === 'digits'
@@ -65,10 +68,10 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
             engine.mode === 'hunter'
                 ? 'the signal never blocks the Hunter'
                 : engine.mode === 'careful'
-                ? 'strong only'
-                : engine.mode === 'balanced'
-                  ? 'strong and steady'
-                  : 'strong, steady and watch',
+                  ? 'strong only'
+                  : engine.mode === 'balanced'
+                    ? 'strong and steady'
+                    : 'strong, steady and watch',
     });
 
     if (scan) {
@@ -156,8 +159,7 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
         };
     }
     const why: Record<string, string> = {
-        markets:
-            `No market has enough ticks yet (${who} needs 300). The live feed may still be connecting or warming up.`,
+        markets: `No market has enough ticks yet (${who} needs 300). The live feed may still be connecting or warming up.`,
         reads: `${who} has no contract to read. Switch on at least one contract.`,
         tiers:
             engine.source === 'digits'

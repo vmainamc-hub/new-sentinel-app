@@ -1132,11 +1132,11 @@ export class SixfoldRunner {
 
     /** Which guard refuses this contract (the first that does), and why. */
     private guardCheck(digits: readonly number[], primary: Contract): { kind: 'pressure' | 'window' | 'winning'; reason: string } | null {
-        const { pressureGate: pressureOn, multiWindowGate: windowsOn, pressureMax, winPressureGate: winOn, winPressureMin } = this.settings;
+        const { pressureGate: pressureOn, multiWindowGate: windowsOn, pressureMax, winPressureGate: winOn, winPressureMin, strictPressure } = this.settings;
         if (!pressureOn && !windowsOn && !winOn) return null;
         const traded = tradeContract(primary, this.session.consecutiveLosses, this.settings).contract;
         if (pressureOn) {
-            const g = pressureGate(losingSidePressure(digits, traded), pressureMax);
+            const g = pressureGate(losingSidePressure(digits, traded), pressureMax, strictPressure);
             if (!g.ok) return { kind: 'pressure', reason: g.reason };
         }
         if (windowsOn) {
@@ -1144,7 +1144,9 @@ export class SixfoldRunner {
             if (!g.ok) return { kind: 'window', reason: g.reason };
         }
         if (winOn) {
-            const g = winningSideGate(winningSidePressure(digits, traded, winPressureMin));
+            // Strict: after a loss (recovery) the winning side must be gaining one more point than usual, not just ticking up.
+            const minRise = strictPressure && this.session.consecutiveLosses > 0 ? winPressureMin + 1 : winPressureMin;
+            const g = winningSideGate(winningSidePressure(digits, traded, minRise));
             if (!g.ok) return { kind: 'winning', reason: g.reason };
         }
         return null;
