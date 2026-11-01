@@ -1,23 +1,23 @@
 {
-  "brand_name": "MasikaFX",
-  "brand_domain": "masikafx.netlify.app",
+  "brand_name": "Sentiih",
+  "brand_domain": "sentiih.netlify.app",
   "brand_hostname": {
-    "staging": "masikafx.netlify.app",
-    "production": "masikafx.netlify.app"
+    "staging": "sentiih.netlify.app",
+    "production": "sentiih.netlify.app"
   },
-  "domain_name": "masikafx.netlify.app",
+  "domain_name": "sentiih.netlify.app",
   "sites": {
     "default_site": "apex-sentinel",
     "entries": [
       {
         "id": "apex-sentinel",
         "hosts": [
-          "masikafx.netlify.app",
+          "sentiih.netlify.app",
           "localhost"
         ],
-        "display_domain": "MasikaFX",
-        "website_url": "https://masikafx.netlify.app",
-        "redirect_uri": "https://masikafx.netlify.app/callback",
+        "display_domain": "Sentiih",
+        "website_url": "https://sentiih.netlify.app",
+        "redirect_uri": "https://sentiih.netlify.app/callback",
         "client_id": "34BIr72thLXMJHaL9PQxN",
         "scopes": [
           "trade",
@@ -145,14 +145,14 @@
     "css_variable_prefix": "--brand"
   },
   "platform": {
-    "name": "MasikaFX",
+    "name": "Sentiih",
     "logo": {
       "type": "component",
       "component_name": "BrandLogo",
-      "alt_text": "MasikaFX",
+      "alt_text": "Sentiih",
       "link_url": "/",
       "show_text": true,
-      "text": "MasikaFX"
+      "text": "Sentiih"
     },
     "footer": {
       "enable_language_settings": false,
@@ -160,10 +160,10 @@
     },
     "hostname": {
       "production": {
-        "com": "masikafx.netlify.app"
+        "com": "sentiih.netlify.app"
       },
       "staging": {
-        "com": "masikafx.netlify.app"
+        "com": "sentiih.netlify.app"
       }
     },
     "auth2_url": {
