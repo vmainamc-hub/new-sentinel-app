@@ -44,10 +44,21 @@ export const keyOf = (symbol: string, side: string, param: number) =>
 
 /** Tiers each mode accepts. */
 export const ACCEPTED: Record<EngineSettings['mode'], readonly PulseTier[]> = {
+    hunter: ['strong', 'steady', 'watch'],
     careful: ['strong'],
     balanced: ['strong', 'steady'],
     active: ['strong', 'steady', 'watch'],
 };
+
+/** The Hunter never goes quiet: with no trade for a while, the score a contract needs comes down in steps (see huntEase). */
+export const HUNT_GRACE_MS = 15_000;
+export const HUNT_STEP_MS = 5_000;
+export const HUNT_STEP_POINTS = 3;
+export const HUNT_MAX_EASE = 30;
+export const huntEase = (idleMs: number): number =>
+    idleMs <= HUNT_GRACE_MS
+        ? 0
+        : Math.min(HUNT_MAX_EASE, (Math.floor((idleMs - HUNT_GRACE_MS) / HUNT_STEP_MS) + 1) * HUNT_STEP_POINTS);
 
 const TIER_BUMP: Record<PulseTier, number> = { strong: -6, steady: 0, watch: 4 };
 const TIER_RANK: Record<PulseTier, number> = { strong: 3, steady: 2, watch: 1 };
@@ -94,15 +105,28 @@ export const funnelOf = (snap: PulseSnapshot, board: BoardRow[], engine: EngineS
 export const createSentinelOverlay = (opts: {
     getEngine: () => EngineSettings;
     read: (symbols: readonly string[], engine: EngineSettings) => PulseSnapshot;
+    /** The clock used for the Hunter's idle time. Default: Date.now. */
+    now?: () => number;
 }): RunnerOverlay & { board: () => BoardRow[]; funnel: () => EngineFunnel | null } => {
     let board: BoardRow[] = [];
     let funnel: EngineFunnel | null = null;
     const index = new Map<string, BoardRow>();
+    const clock = opts.now ?? Date.now;
+    let lastActivity = clock();
 
     return {
         moduleId: 'sentinel-ai',
         name: 'Sentinel AI',
         contracts: () => contractsFor(opts.getEngine()),
+        onStart: now => {
+            lastActivity = now;
+        },
+        onBought: () => {
+            lastActivity = clock();
+        },
+        onSettled: () => {
+            lastActivity = clock();
+        },
         refresh: (now, symbols) => {
             const engine = opts.getEngine();
             try {
@@ -130,10 +154,31 @@ export const createSentinelOverlay = (opts: {
         },
         board: () => board,
         funnel: () => funnel,
-        call: cell => {
+        call: (cell, ctx) => {
             const { mode, source } = opts.getEngine();
             const who = source === 'digits' ? 'Digits Analysis' : 'Pulse';
             const row = index.get(keyOf(cell.symbol, cell.contract.side, cell.contract.param));
+            if (mode === 'hunter') {
+                // The signal source is a voice, not a gate: a signal eases the bar by its strength, no signal raises it a little, and
+                // the idle clock eases it step by step so something always comes up. The scanner, Meter guide, win-streak guard,
+                // loss shield and limits stay.
+                const idle = Math.max(0, ctx.now - lastActivity);
+                const ease = huntEase(idle);
+                const notes = [
+                    row
+                        ? source === 'digits'
+                            ? `Digits Analysis #${TIER_RANK_NUMBER[row.tier]} for its pair`
+                            : `Pulse ${row.tier} (${row.agree} of 4 windows)`
+                        : `no ${who} signal`,
+                    ease > 0 ? `no trade for ${Math.round(idle / 1000)}s: bar eased by ${ease}` : '',
+                ].filter(Boolean);
+                return {
+                    allow: true,
+                    bump: (row ? TIER_BUMP[row.tier] : 4) - ease,
+                    rank: row ? Math.min(10, row.score / 10) + TIER_RANK[row.tier] : 0,
+                    note: notes.join('; '),
+                };
+            }
             if (!row) {
                 if (mode === 'active') return { allow: true, bump: 6, rank: 0, note: `no ${who} signal: higher bar` };
                 return {

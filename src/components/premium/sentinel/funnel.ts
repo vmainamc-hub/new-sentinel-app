@@ -62,7 +62,9 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
         label: `Signals the ${engine.mode} mode accepts`,
         alive: engine.board,
         note:
-            engine.mode === 'careful'
+            engine.mode === 'hunter'
+                ? 'the signal never blocks the Hunter'
+                : engine.mode === 'careful'
                 ? 'strong only'
                 : engine.mode === 'balanced'
                   ? 'strong and steady'
@@ -138,7 +140,9 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
         });
     }
 
-    const firstEmpty = steps.find(s => s.alive === 0 && s.key !== 'armed');
+    // The Hunter does not need a signal (it only eases or raises its bar), so only the scanner's steps can block it.
+    const considered = engine.mode === 'hunter' ? steps.filter(s => s.side === 'scanner') : steps;
+    const firstEmpty = considered.find(s => s.alive === 0 && s.key !== 'armed');
     if (!firstEmpty) {
         const last = steps[steps.length - 1];
         return {

@@ -1,6 +1,6 @@
-import { buildBoard, createSentinelOverlay, keyOf } from '../overlay';
+import { buildBoard, createSentinelOverlay, HUNT_GRACE_MS, HUNT_MAX_EASE, huntEase, keyOf } from '../overlay';
 import type { PulseRead, PulseSnapshot, PulseTier } from '../pulse';
-import { DEFAULT_ENGINE, type EngineSettings } from '../settings';
+import { DEFAULT_ENGINE, type EngineSettings, PROPOSITION_KEYS } from '../settings';
 
 const read = (
     symbol: string,
@@ -21,7 +21,7 @@ const read = (
 const snap = (reads: PulseRead[]): PulseSnapshot => ({ markets: 1, reads });
 const cell = (symbol: string, side: 'OVER' | 'UNDER', param: number) =>
     ({ symbol, contract: { side, param } }) as never;
-const mode = (m: EngineSettings['mode']): EngineSettings => ({ ...DEFAULT_ENGINE, mode: m });
+const mode = (m: EngineSettings['mode']): EngineSettings => ({ ...DEFAULT_ENGINE, mode: m, propositions: [...PROPOSITION_KEYS] });
 
 describe('buildBoard', () => {
     const reads = [
@@ -87,5 +87,35 @@ describe('Sentinel overlay', () => {
         ]);
         expect(o.funnel()).toMatchObject({ markets: 1, reads: 3, strong: 1, watch: 1, none: 1, board: 1 });
         expect(keyOf('A', 'UNDER', 8)).toBe('A|DIGITUNDER|8');
+    });
+});
+
+describe('Hunter mode', () => {
+    const ctx = (now: number) => ({ recovering: false, now });
+    it('eases the bar in steps once nothing has traded for a while, up to a cap', () => {
+        expect(huntEase(0)).toBe(0);
+        expect(huntEase(HUNT_GRACE_MS)).toBe(0);
+        expect(huntEase(HUNT_GRACE_MS + 1)).toBe(3);
+        expect(huntEase(HUNT_GRACE_MS + 5_000)).toBe(6);
+        expect(huntEase(10 * 60_000)).toBe(HUNT_MAX_EASE);
+    });
+    it('never blocks: no signal only raises the bar a little, a signal eases it', () => {
+        const o = createSentinelOverlay({ getEngine: () => mode('hunter'), read: () => snap([read('A', 'UNDER', 8, 'strong')]), now: () => 0 });
+        o.refresh!(0, ['A']);
+        expect(o.call(cell('A', 'OVER', 1), ctx(0))).toMatchObject({ allow: true, bump: 4 });
+        expect(o.call(cell('A', 'UNDER', 8), ctx(0))).toMatchObject({ allow: true, bump: -6 });
+    });
+    it('the idle clock restarts on a start and on a settled trade', () => {
+        let t = 0;
+        const o = createSentinelOverlay({ getEngine: () => mode('hunter'), read: () => snap([]), now: () => t });
+        o.refresh!(0, ['A']);
+        const idle = (now: number) => o.call(cell('A', 'OVER', 1), ctx(now)).bump;
+        expect(idle(60_000)).toBe(4 - HUNT_MAX_EASE);
+        o.onStart!(60_000);
+        expect(idle(60_000)).toBe(4);
+        t = 100_000;
+        o.onSettled!({} as never);
+        expect(idle(100_000)).toBe(4);
+        expect(idle(100_000 + HUNT_GRACE_MS + 1)).toBe(4 - 3);
     });
 });

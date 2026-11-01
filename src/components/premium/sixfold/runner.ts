@@ -502,6 +502,11 @@ export class SixfoldRunner {
         this.session = freshSession(this.settings);
         this.runToken += 1;
         this.running = true;
+        try {
+            this.io.overlay?.onStart?.(this.io.now());
+        } catch {
+            /* an overlay failure must never stop a session from starting */
+        }
         this.waitingSince = this.io.now();
         this.io.rules?.reset();
         this.addLog('info', this.io.rules ? 'Run pressed: watching every market for the bot rules.' : this.opening ? 'Run pressed: scanning every market. The first trade is a paper trade; real trading starts after its first win.' : 'Run pressed: scanning every market.');

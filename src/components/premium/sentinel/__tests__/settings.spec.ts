@@ -1,4 +1,4 @@
-import { DEFAULT_TRADING, GREENS_DEFAULT, loadTrading, normalizeTradingSettings, PRESETS, SENTINEL_GATES } from '../settings';
+import { DEFAULT_TRADING, HUNTER_TRADING, GREENS_DEFAULT, loadTrading, normalizeTradingSettings, PRESETS, SENTINEL_GATES } from '../settings';
 
 describe('Sentinel AI trading gates', () => {
     beforeEach(() => window.localStorage.clear());
@@ -45,5 +45,24 @@ describe('Sentinel AI trading gates', () => {
         expect(by('balanced').pressureMax).toBeLessThan(by('active').pressureMax!);
         expect(by('careful').meterFloor).toBeGreaterThan(by('balanced').meterFloor!);
         expect(by('balanced').meterFloor).toBeGreaterThan(by('active').meterFloor!);
+    });
+});
+
+describe('Hunter preset', () => {
+    it('is Over 2 / Under 7 with recovery Over 3 / Under 6, keeps the win-streak guard on and the loss limits', () => {
+        const hunter = PRESETS.find(p => p.id === 'hunter')!;
+        expect(hunter.engine).toMatchObject({ mode: 'hunter', propositions: ['OVER:2', 'UNDER:7'] });
+        expect(hunter.trading).toBe(HUNTER_TRADING);
+        expect(HUNTER_TRADING).toMatchObject({
+            primaryOver: 2,
+            primaryUnder: 7,
+            recoveryOver: 3,
+            recoveryUnder: 6,
+            winStreakGate: true,
+            lossShield: true,
+            stopLoss: 10,
+            maxConsecutiveLosses: 4,
+            meterFloor: 0,
+        });
     });
 });

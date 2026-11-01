@@ -2,15 +2,16 @@
 //   - the trading settings, which are Sixfold's own (stake, recovery, loss shield, Meter floors...), and
 //   - the engine settings below: which Pulse signal strength may trade, and which of the six contracts.
 import type { Contract } from '../sixfold/bot';
+import { MARKETS } from '../sixfold/feed';
 import {
     DEFAULT_SETTINGS as SIXFOLD_DEFAULTS,
     normalizeSettings as normalizeTrading,
     type SixfoldSettings,
 } from '../sixfold/money';
 
-/** careful: only strong Pulse signals. balanced: strong and steady. active: also watch signals, and the scanner may trade alone at a higher bar. */
-export type EngineMode = 'careful' | 'balanced' | 'active';
-export const ENGINE_MODES: readonly EngineMode[] = ['careful', 'balanced', 'active'];
+/** hunter: the signal source is a voice, never a gate, and the bar eases while nothing trades. careful: only strong Pulse signals. balanced: strong and steady. active: also watch signals, and the scanner may trade alone at a higher bar. */
+export type EngineMode = 'hunter' | 'careful' | 'balanced' | 'active';
+export const ENGINE_MODES: readonly EngineMode[] = ['hunter', 'careful', 'balanced', 'active'];
 
 /** Where the signals come from: Pulse (windows above the fair rate) or Digits Analysis (the market ranking). */
 export type SignalSource = 'pulse' | 'digits';
@@ -84,7 +85,47 @@ export type Preset = {
     engine: Partial<EngineSettings>;
     trading: Partial<SixfoldSettings>;
 };
+/**
+ * The Hunter's trading rules: watch every market, take an Over 2 or Under 7 as soon as one is the best of the board, and after a
+ * loss look across the whole board again and fire Over 3 or Under 6. The filters that waited for rare moments are off (pressure,
+ * windows, Meter floors, paper-first opening); the win-streak guard stays on (two winning digits in a row is enough here), the Meter
+ * guide still refuses a contract sitting in a loss cluster, and the loss shield, stop loss and loss limits stay.
+ */
+export const HUNTER_TRADING: Partial<SixfoldSettings> = {
+    useOver: true,
+    primaryOver: 2,
+    useUnder: true,
+    primaryUnder: 7,
+    recovery: true,
+    recoveryOver: 3,
+    recoveryUnder: 6,
+    selectivity: 'active',
+    entry: 'SMART',
+    winStreakGate: true,
+    winStreak: 2,
+    pressureGate: false,
+    multiWindowGate: false,
+    winPressureGate: false,
+    virtualHook: false,
+    vhOpening: false,
+    meterFloor: 0,
+    meterFloorRecovery: 0,
+    pickyAfterLoss: false,
+    lossShield: true,
+    restTrades: 1,
+    stopLoss: 10,
+    maxConsecutiveLosses: 4,
+    takeProfit: 1,
+    markets: MARKETS.map(m => m[0]),
+};
 export const PRESETS: Preset[] = [
+    {
+        id: 'hunter',
+        name: 'Hunter',
+        blurb: 'Watches every market and always has a best candidate. Over 2 / Under 7, then Over 3 / Under 6 after a loss. The signal source eases the bar but never blocks, and the bar also eases while nothing trades.',
+        engine: { mode: 'hunter', propositions: ['OVER:2', 'UNDER:7'] },
+        trading: HUNTER_TRADING,
+    },
     {
         id: 'careful',
         name: 'Careful',

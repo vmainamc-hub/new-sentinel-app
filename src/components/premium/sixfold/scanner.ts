@@ -30,7 +30,7 @@ export const SCAN_CONTRACTS: Contract[] = [
 /** False-discovery rate used for the "significant" flag. */
 export const FDR_Q = 0.1;
 /** Most score points an outside engine can take off the bar for a cell. */
-export const MAX_EASE = 12;
+export const MAX_EASE = 30;
 /** A cell needs at least this many simulated trades in its window to be tested at all. */
 export const MIN_TESTED_TRADES = 20;
 

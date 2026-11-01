@@ -25,7 +25,7 @@ const PHASE_LABEL: Record<Phase, string> = {
     cooling: 'Looking for the next trade',
 };
 
-const STYLE_TAG: Record<string, string> = { careful: 'Fewest trades', balanced: 'Steady', active: 'Most trades' };
+const STYLE_TAG: Record<string, string> = { hunter: 'Always a trade', careful: 'Fewest trades', balanced: 'Steady', active: 'Most trades' };
 
 const money = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(2)}`;
 const contractName = (key: string) => key.replace(':', ' ').replace('OVER', 'Over').replace('UNDER', 'Under');

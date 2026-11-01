@@ -40,6 +40,8 @@ export type RunnerOverlay = {
     name: string;
     /** The contracts to scan and trade. */
     contracts: (settings: SixfoldSettings) => Contract[];
+    /** Called when a session starts. */
+    onStart?: (now: number) => void;
     /** Called at the start of every scan, before cells are judged. */
     refresh?: (now: number, symbols: readonly string[]) => void;
     call: (cell: Cell, ctx: { recovering: boolean; now: number }) => OverlayCall;
