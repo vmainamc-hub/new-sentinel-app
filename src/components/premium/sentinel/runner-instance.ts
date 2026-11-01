@@ -17,6 +17,7 @@ export const setEngineSettings = (next: EngineSettings) => {
 
 export const sentinelOverlay = createSentinelOverlay({
     getEngine: () => engine,
+    series: () => sixfoldFeed.getLiveSeries(),
     read: (symbols, eng) => {
         const series = sixfoldFeed.getSnapshot().series;
         return eng.source === 'digits'

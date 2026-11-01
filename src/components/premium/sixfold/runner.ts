@@ -315,6 +315,9 @@ export type RunnerIO = {
 
 const round2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100;
 
+/** How long a contract the overlay's mandatory rule held back is left alone before it can be armed again. */
+const OVERLAY_HOLD_BLOCK_MS = 5000;
+
 export class SixfoldRunner {
     private stores: RunnerStores | null = null;
     private watchStores: StoreWatcher | null = null;
@@ -979,8 +982,35 @@ export class SixfoldRunner {
         if (!quiet && next && next.arm !== old.arm) this.addLog('info', `Entry plan "${old.label}" did not fire on ${armed.name}; trying "${next.label}".`);
     }
 
+    /**
+     * The overlay's mandatory hold (Sentinel AI's special-digit rule), read on every tick for the contract that would be bought.
+     * When it refuses, the arm is dropped and the best other market is armed, as with the win-streak guard.
+     */
+    private overlayHolds(symbol: string): boolean {
+        const guard = this.io.overlay?.guard;
+        if (!guard || !this.armed) return true;
+        const traded = this.tradedFor(symbol);
+        if (!traded) return true;
+        let verdict: { ok: boolean; note: string };
+        try {
+            verdict = guard(symbol, traded, this.io.feed.getLiveSeries()[symbol] ?? []);
+        } catch {
+            return false; // a mandatory rule that cannot be read holds the trade back
+        }
+        if (verdict.ok) return true;
+        const armed = this.armed;
+        this.armed = null;
+        // Rest this contract briefly so the same one is not armed straight back (the scan also vetoes it by the same rule).
+        this.blocked.set(`${armed.symbol}|${armed.cellKey}`, this.io.now() + OVERLAY_HOLD_BLOCK_MS);
+        this.addLog('info', `${armed.label} on ${armed.name} held back: ${verdict.note}. Looking at another market.`);
+        this.armBest(this.io.now());
+        this.emit();
+        return false;
+    }
+
     /** The Brain's gate: the chosen plan must fire on the latest tick (and, in recovery, the AI model must agree). */
     private brainOk(symbol: string): boolean {
+        if (!this.overlayHolds(symbol)) return false;
         if (!this.brainGoverns()) return true;
         const traded = this.tradedFor(symbol);
         if (!traded) return false;

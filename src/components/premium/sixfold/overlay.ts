@@ -47,6 +47,11 @@ export type RunnerOverlay = {
     call: (cell: Cell, ctx: { recovering: boolean; now: number }) => OverlayCall;
     /** Entry digits to wait for instead of the runner's own, or null to let the runner choose. */
     entryDigits?: (cell: Cell, ctx: { recovering: boolean }) => number[] | null;
+    /**
+     * A mandatory hold, read on the tick a trade would be bought (and again when armed). `traded` is the contract that WOULD be
+     * bought (the recovery barrier after a loss). Returning ok:false stops the buy; the runner drops the arm and looks elsewhere.
+     */
+    guard?: (symbol: string, traded: Contract, series: readonly number[]) => { ok: boolean; note: string };
     onBought?: (notice: TradeNotice) => void;
     /** profit is null when Deriv's result could not be confirmed. */
     onSettled?: (notice: TradeNotice & { profit: number | null }) => void;

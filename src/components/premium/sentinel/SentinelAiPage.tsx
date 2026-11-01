@@ -181,6 +181,10 @@ const SentinelAiPage = () => {
                             </button>
                         ))}
                     </div>
+                    <p className='sn-empty' data-testid='special-digit-rule'>
+                        Special-digit rule, always on: Over waits while digit 1 is building, Under waits while digit 8 is building, and a sudden surge of the
+                        other one (8 for Over, 1 for Under) holds the trade too.
+                    </p>
                 </section>
 
                 <section className='sn-card'>

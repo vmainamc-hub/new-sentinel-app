@@ -1141,6 +1141,37 @@ describe('SixfoldRunner with an engine overlay', () => {
         expect(s.queue[0]?.reason).toMatch(/neither engine/i);
     });
 
+    it('a mandatory overlay guard stops the buy on the entry tick and drops the arm', async () => {
+        const seen: Array<{ symbol: string; side: string }> = [];
+        const h = harness(
+            {},
+            {
+                overlay: overlay({
+                    guard: (symbol, traded) => {
+                        seen.push({ symbol, side: traded.side });
+                        return { ok: false, note: 'digit 1 is building' };
+                    },
+                }),
+            }
+        );
+        h.runner.start();
+        const armed = h.runner.getSnapshot().armed;
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(armed).not.toBeNull();
+        expect(h.calls.buy).toHaveLength(0);
+        expect(seen[0]).toEqual({ symbol: 'P', side: 'OVER' });
+        expect(h.runner.getSnapshot().armed).toBeNull();
+    });
+
+    it('a passing guard lets the trade go through as before', async () => {
+        const h = harness({}, { overlay: overlay({ guard: () => ({ ok: true, note: '' }) }) });
+        h.runner.start();
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+    });
+
     it('waits for the engine entry digit instead of its own, and reports bought and settled trades', async () => {
         const bought: number[] = [];
         const settled: Array<number | null> = [];

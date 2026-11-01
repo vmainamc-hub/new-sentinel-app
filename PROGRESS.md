@@ -429,3 +429,11 @@ Next: demo run, confirm the opening paper trade and the first real entry in the 
 - [x] Signal lock and One tick switches stay always visible next to the Over / Under buttons ("Notes and explanations" in View only adds their descriptions).
 
 Not done / unverified: Jest could not run here (registry blocked); checked by type-check and a browser render only. Not run against live Deriv.
+
+## Sentinel AI: mandatory special-digit rule (digit 1 for Over, digit 8 for Under)
+- [x] New `sentinel/special-digits.ts`. Over: digit 1 must be dormant or falling. Under: digit 8 must be dormant or falling. "Building" = prints per window rising: last 30 vs the 30 before AND last 15 vs the 15 before, or a jump of 2 between neighbouring windows, or a rise in all three 30-tick windows. Fewer than 120 ticks = held back.
+- [x] Second check on the other special digit (8 for Over, 1 for Under): held back on a sudden surge (last 20 ticks at least 10 pp above the 100 before, 4+ prints and still accelerating, or 4+ prints in the last 10 with 2 more than the 10 before). `CHECK_MIRROR_SURGE` turns just this second check off.
+- [x] No switch for the first check. Applied in every mode (the Hunter too): at scan time (`overlay.call`, shown in the queue) and on every tick before a buy (`overlay.guard` via `brainOk` in the runner, drops the arm, rests the contract 5 s, arms another market). Uses the contract that would actually be bought (recovery barrier included).
+- [x] Specs: special-digits.spec.ts, runner.spec.ts (guard). Same 6 settings-spec failures as before this change.
+- Measured on 200k random digits: Over passes ~54% of moments, Under ~48% (watched digit blocks 38% / 47%, surge 8.5% / 5%). It waits, it does not stop for good. Thresholds are constants at the top of the file.
+- Not done: Vanguard, Sixfold and Apex Intel (Sentinel AI first, as asked). Not run against live Deriv.

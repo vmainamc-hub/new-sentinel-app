@@ -7,6 +7,7 @@
 import type { RunnerOverlay } from '../sixfold/overlay';
 import type { PulseRead, PulseSnapshot, PulseTier } from './pulse';
 import { contractsFor, type EngineSettings } from './settings';
+import { readSpecialDigits } from './special-digits';
 
 export type BoardRow = {
     key: string;
@@ -105,6 +106,8 @@ export const funnelOf = (snap: PulseSnapshot, board: BoardRow[], engine: EngineS
 export const createSentinelOverlay = (opts: {
     getEngine: () => EngineSettings;
     read: (symbols: readonly string[], engine: EngineSettings) => PulseSnapshot;
+    /** The live ticks per market. The special-digit rule reads them; without it the rule cannot run, so production always passes it. */
+    series?: () => Readonly<Record<string, readonly number[]>>;
     /** The clock used for the Hunter's idle time. Default: Date.now. */
     now?: () => number;
 }): RunnerOverlay & { board: () => BoardRow[]; funnel: () => EngineFunnel | null } => {
@@ -154,7 +157,16 @@ export const createSentinelOverlay = (opts: {
         },
         board: () => board,
         funnel: () => funnel,
+        guard: (symbol, traded, series) => {
+            const read = readSpecialDigits(series, traded.side);
+            return { ok: read.ok, note: read.note };
+        },
         call: (cell, ctx) => {
+            // MANDATORY special-digit rule (digit 1 for Over, digit 8 for Under): applies in every mode, the Hunter included.
+            if (opts.series) {
+                const special = readSpecialDigits(opts.series()[cell.symbol], cell.contract.side);
+                if (!special.ok) return { allow: false, bump: 0, rank: 0, note: special.note };
+            }
             const { mode, source } = opts.getEngine();
             const who = source === 'digits' ? 'Digits Analysis' : 'Pulse';
             const row = index.get(keyOf(cell.symbol, cell.contract.side, cell.contract.param));
