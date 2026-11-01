@@ -1,7 +1,7 @@
 // APEX INTEL: the app-wide executor, wired to the real Deriv purchase helpers and the shared live market feed.
 import { contract_stages } from '@/constants/contract-stage';
 import { api_base } from '@/external/bot-skeleton';
-import { sixfoldFeed } from '@/components/premium/sixfold/feed';
+import { apexFeed, apexSeries } from './feed-source';
 import { describeTradeFailure } from '@/utils/trade-errors';
 import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purchase';
 import { rankPicks } from './picker';
@@ -33,11 +33,11 @@ export const aiIntelExecutor = new AiIntelExecutor({
     settle: ({ contractId, fallback, onUpdate, signal }) => streamContractUntilSettled({ contractId, fallback, onUpdate, signal, source: 'Apex Intel' }),
     isAuthorized: () => Boolean((api_base as { is_authorized?: boolean }).is_authorized),
     now: () => Date.now(),
-    lastTickAt: symbol => sixfoldFeed.getLastTickAt(symbol),
-    isFeedLive: () => sixfoldFeed.isLive(),
-    connectFeed: () => sixfoldFeed.connect(),
-    history: symbol => sixfoldFeed.getLiveSeries()[symbol],
-    pick: opts => rankPicks(sixfoldFeed.getLiveSeries(), symbol => sixfoldFeed.getLastTickAt(symbol), Date.now(), { ...opts, candidates: getCandidates() }),
+    lastTickAt: symbol => apexFeed.getLastTickAt(symbol),
+    isFeedLive: () => apexFeed.isLive(),
+    connectFeed: () => apexFeed.connect(),
+    history: symbol => apexFeed.getLiveSeries()[symbol],
+    pick: opts => rankPicks(apexSeries(), symbol => apexFeed.getLastTickAt(symbol), Date.now(), { ...opts, candidates: getCandidates() }),
     describeFailure: error => describeTradeFailure(error),
     afterStop: () => {
         const base = api_base as { is_stopping?: boolean; setIsRunning?: (value: boolean) => void };
@@ -52,4 +52,4 @@ export const aiIntelExecutor = new AiIntelExecutor({
     notRunningStage: contract_stages.NOT_RUNNING,
 });
 
-sixfoldFeed.onTick((symbol, digit) => aiIntelExecutor.handleTick(symbol, digit));
+apexFeed.onTick((symbol, digit) => aiIntelExecutor.handleTick(symbol, digit));

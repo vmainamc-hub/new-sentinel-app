@@ -4,8 +4,9 @@
 // with the Sixfold-compatible simulator. Nothing is mocked. It reports what rules did on past ticks and how sure that
 // is; it does not predict the next digit. Sections that are not built yet are listed as such and cannot be clicked.
 import { useEffect, useMemo, useState } from 'react';
-import { marketName, shortName, sixfoldFeed } from '@/components/premium/sixfold/feed';
-import { useFeed } from '@/components/premium/sixfold/use-feed';
+import { marketName, shortName } from '@/components/premium/sixfold/feed';
+import { useFeedOf } from '@/components/premium/sixfold/use-feed';
+import { apexFeed, filterSeries } from './feed-source';
 import {
     conservativeEdgePts,
     DIRECTIONS,
@@ -111,7 +112,8 @@ function DirectionCell({ d }: { d: DirectionReport }) {
 }
 
 export default function AiIntelPage() {
-    const feed = useFeed();
+    const feed = useFeedOf(apexFeed);
+    const series = useMemo(() => filterSeries(feed.series), [feed.version]); // eslint-disable-line react-hooks/exhaustive-deps
     const exec = useExecutor();
     const [tab, setTab] = useState<TabId>('overview');
     const [duration, setDuration] = useState(1);
@@ -122,19 +124,19 @@ export default function AiIntelPage() {
     const [clock, setClock] = useState(() => Date.now());
 
     useEffect(() => {
-        if (sixfoldFeed.getMode() === 'live' && sixfoldFeed.getStatus() === 'offline') sixfoldFeed.connect();
+        if (apexFeed.getMode() === 'live' && apexFeed.getStatus() === 'offline') apexFeed.connect();
         const id = window.setInterval(() => setClock(Date.now()), 1000);
         return () => window.clearInterval(id);
     }, []);
 
     // Recomputed when the feed publishes (about every 400 ms) or the contract duration changes.
-    const scan = useMemo(() => scanRows(feed.series, duration), [feed.version, duration]); // eslint-disable-line react-hooks/exhaustive-deps
+    const scan = useMemo(() => scanRows(series, duration), [feed.version, duration]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const views: MarketView[] = scan.reports.map(report => {
-        const at = sixfoldFeed.getLastTickAt(report.market);
+        const at = apexFeed.getLastTickAt(report.market);
         const ageSeconds = at === null ? null : Math.max(0, (clock - at) / 1000);
-        const series = feed.series[report.market] ?? [];
-        return { report, ageSeconds, lastDigit: series.length ? series[series.length - 1] : null, ...eligibility(report, ageSeconds) };
+        const mSeries = series[report.market] ?? [];
+        return { report, ageSeconds, lastDigit: mSeries.length ? mSeries[mSeries.length - 1] : null, ...eligibility(report, ageSeconds) };
     });
     const sortedViews = [...views].sort((a, b) =>
         sortBy === 'ticks' ? b.report.ticks - a.report.ticks : a.report.market.localeCompare(b.report.market, undefined, { numeric: true })

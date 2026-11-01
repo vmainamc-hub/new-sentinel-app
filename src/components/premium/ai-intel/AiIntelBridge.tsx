@@ -7,7 +7,7 @@ import { reaction } from 'mobx';
 import { observer as globalObserver } from '@/external/bot-skeleton';
 import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
-import { sixfoldFeed } from '@/components/premium/sixfold/feed';
+import { apexFeed } from './feed-source';
 import { discoverVolatilityMarkets } from './discovery';
 import { aiIntelExecutor } from './executor-instance';
 import { useExecutor } from './use-executor';
@@ -22,14 +22,14 @@ const AiIntelBridge = () => {
         let started = false;
         let cancelled = false;
         const check = () => {
-            if (started || !sixfoldFeed.isLive()) return;
+            if (started || !apexFeed.isLive()) return;
             started = true;
             void discoverVolatilityMarkets().then(found => {
-                if (!cancelled && found.length) sixfoldFeed.addMarkets(found);
+                if (!cancelled && found.length) apexFeed.addMarkets(found);
             });
         };
         check();
-        const off = sixfoldFeed.subscribe(check);
+        const off = apexFeed.subscribe(check);
         return () => {
             cancelled = true;
             off();

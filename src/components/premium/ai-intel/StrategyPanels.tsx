@@ -1,7 +1,8 @@
 // APEX INTEL: Strategy Lab and Strategy Library screens. Everything shown is real lab output or registry state.
 import { useState, useSyncExternalStore } from 'react';
 import { marketName } from '@/components/premium/sixfold/feed';
-import { useFeed } from '@/components/premium/sixfold/use-feed';
+import { useFeedOf } from '@/components/premium/sixfold/use-feed';
+import { apexFeed, filterSeries } from './feed-source';
 import { MIN_TRADES } from './analysis';
 import { DEFAULT_LAB, type LabCandidate, type LabConfig } from './lab';
 import { labRunner, strategyRegistry } from './registry-instance';
@@ -51,14 +52,15 @@ function ResultRow({ r }: { r: LabCandidate }) {
 
 export function StrategyLabPanel() {
     const lab = useLab();
-    const feed = useFeed();
+    const feed = useFeedOf(apexFeed);
+    const apexData = filterSeries(feed.series);
     const strategies = useStrategies();
     const [cfg, setCfg] = useState<LabConfig>({ ...DEFAULT_LAB });
     const busy = lab.state === 'running' || lab.state === 'paused';
     const set = (p: Partial<LabConfig>) => setCfg(c => ({ ...c, ...p }));
-    const ready = Object.values(feed.series).filter(s => s.length >= 200).length;
+    const ready = Object.values(apexData).filter(s => s.length >= 200).length;
     const toggleMarket = (m: string) => set({ markets: cfg.markets.includes(m) ? cfg.markets.filter(x => x !== m) : [...cfg.markets, m] });
-    const marketList = Object.keys(feed.series);
+    const marketList = Object.keys(apexData);
     const experimental = strategies.filter(s => s.status === 'UNDER_VALIDATION').length;
 
     return (

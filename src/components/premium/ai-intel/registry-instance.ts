@@ -1,5 +1,5 @@
 // APEX INTEL: the app-wide strategy registry and Strategy Lab, wired to the shared feed and the picker.
-import { sixfoldFeed } from '@/components/premium/sixfold/feed';
+import { apexSeries } from './feed-source';
 import { setCandidateProvider } from './candidates';
 import { LabRunner } from './lab';
 import { BASELINE_CANDIDATES } from './picker';
@@ -11,6 +11,6 @@ export const strategyRegistry = new StrategyRegistry(localStorageRegistry('apex_
 setCandidateProvider(() => [...BASELINE_CANDIDATES, ...strategyRegistry.activeCandidates()]);
 
 export const labRunner: LabRunner = new LabRunner(
-    () => sixfoldFeed.getLiveSeries(),
+    () => apexSeries(),
     (results, cfg) => strategyRegistry.addFromLab(results, cfg, labRunner.getSnapshot().ticks)
 );

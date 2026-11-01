@@ -77,7 +77,9 @@ describe('feed.addMarkets', () => {
         expect(sockets).toHaveLength(1);
         sockets[0].onmessage({ data: JSON.stringify({ msg_type: 'tick', tick: { symbol: '1HZ150V', epoch: 100, quote: 1234.56, pip_size: 2 } }) });
         expect(ticks).toEqual([['1HZ150V', 6]]);
-        expect(marketName('1HZ150V')).toBe('Volatility 150 (1s) Index');
+        expect(marketName('1HZ150V')).toBe('Volatility 150 (1s)'); // already named upstream
+        feed.addMarkets([['R_999', 'Volatility 999 Index']]);
+        expect(marketName('R_999')).toBe('Volatility 999 Index');
         expect(feed.getSymbols()).toContain('1HZ150V');
     });
 
