@@ -1,9 +1,7 @@
 // VANGUARD: the "Sentinel Under 7 Psychology" bot's entry rules (and the same rules mirrored for Over 2), run on every market at once.
 // Press Run and Vanguard reads each market's own digits; the first market and contract to meet every rule is bought, through the same trade machinery Sixfold uses (stake, recovery, limits,
 // one trade at a time, stale-tick and refusal handling). Trades appear in the general Transactions panel.
-import { useEffect, useMemo } from 'react';
-import { marketName, shortName } from '../sixfold/feed';
-import { ALL_MARKETS } from '../sixfold/markets';
+import { useEffect } from 'react';
 import type { SixfoldSettings } from '../sixfold/money';
 import type { VhMode } from '../sixfold/virtual-hook';
 import { Num, Panel, Seg, Stat, Switch } from '../sixfold/SixfoldPage';
@@ -32,7 +30,6 @@ const VanguardPage = () => {
     const vx = useRunner(vanguardRunner, true);
     const s = vx.settings;
     const set = (patch: Partial<SixfoldSettings>) => vanguardRunner.updateSettings(patch);
-    const toggleMarket = (symbol: string) => set({ markets: s.markets.includes(symbol) ? s.markets.filter(m => m !== symbol) : [...s.markets, symbol] });
 
     useEffect(() => {
         if (feed.status === 'offline') vanguardFeed.connect();
@@ -40,29 +37,24 @@ const VanguardPage = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const rows = useMemo(() => {
-        const list = [...(vx.rules?.rows ?? [])];
-        // markets that meet every rule first, then the closest ones
-        return list.sort((a, b) => Number(b.entry) - Number(a.entry) || Number(b.ready) - Number(a.ready) || (b.score ?? -1) - (a.score ?? -1));
-    }, [vx.rules]);
+    const rows = vx.rules?.rows ?? [];
     const ready = rows.filter(r => r.entry).length;
-    const contractLabel = (side: 'UNDER' | 'OVER') => (side === 'UNDER' ? `Under ${s.primaryUnder}` : `Over ${s.primaryOver}`);
     return (
         <div className='sixfold sf vanguard'>
             <header className='sf-top'>
                 <b className='sf-brand'>
-                    VANGUARD<small>BOT RULES · EVERY MARKET</small>
+                    VANGUARD
                 </b>
                 <span className={`sf-feed ${feed.mode === 'live' ? feed.status : 'warn'}`}>{feed.status.toUpperCase()}</span>
             </header>
 
             <main className='sf-scanner'>
-                <Panel eyebrow='RUN' title='Bot rules on every market, both ways'>
+                <Panel>
                     <div className={`sf-phase t-${vx.running ? 'armed' : 'scan'}`}>
                         {vx.lastError ? vx.lastError : vx.stopReason && !vx.running ? vx.stopReason : PHASE[vx.phase] ?? vx.phase}
                     </div>
                     <div className='vg-mode' role='status'>
-                        <span>{ready === 0 ? 'No market meets every rule right now' : `${ready} contract${ready === 1 ? '' : 's'} meet every rule`}</span>
+                        <span>{ready === 0 ? 'Waiting for a signal' : 'Signal ready'}</span>
                     </div>
                     {vx.running && vx.virtualHook.on && (
                         <div className='vg-mode' role='status'>
@@ -101,46 +93,7 @@ const VanguardPage = () => {
                     </div>
                 </Panel>
 
-                <Panel eyebrow='RULES BOARD' title='What each market still needs'>
-                    <p className='sf-muted'>
-                        Every market is read on its own digits, once for Under {s.primaryUnder} (the bot's rules) and once for Over {s.primaryOver} (the same rules
-                        mirrored). A trade needs all seven checks to be true on the same tick. The last column shows the first thing still missing.
-                    </p>
-                    <div className='vg-board' role='table' aria-label='Rules board'>
-                        <div className='vg-row vg-head' role='row'>
-                            <span>Market</span>
-                            <span>Contract</span>
-                            <span title='Regime score out of 12'>Score</span>
-                            <span className='vg-dots' title='Regime ≥ 10 · Pressure · No veto · Winning · Digit 8 · Last ≤ 6 · Gate'>
-                                Checks
-                            </span>
-                            <span>Missing</span>
-                        </div>
-                        {rows.map(r => (
-                            <div key={`${r.symbol}|${r.side}`} className={`vg-row ${r.entry ? 'go' : ''}`} role='row'>
-                                <b title={marketName(r.symbol)}>{shortName(r.symbol)}</b>
-                                <span>{contractLabel(r.side)}</span>
-                                <span className='n'>{r.score === null ? '·' : `${r.score}/12`}</span>
-                                <span className='vg-dots'>
-                                    {r.checks.length === 0 ? (
-                                        <i className='vg-dot' />
-                                    ) : (
-                                        r.checks.map(c => <i key={c.key} className={`vg-dot ${c.ok ? 'ok' : ''}`} title={`${c.label}: ${c.ok ? 'yes' : 'no'}`} />)
-                                    )}
-                                </span>
-                                <small>{r.entry ? 'All rules met' : r.waitingOn}</small>
-                            </div>
-                        ))}
-                        {rows.length === 0 && <p className='sf-muted'>Waiting for the market feed…</p>}
-                    </div>
-                </Panel>
-
-                <Panel eyebrow='SETTINGS' title='How it trades'>
-                    <p className='sf-muted'>
-                        Buys Digits Under {s.primaryUnder} and Over {s.primaryOver}.{' '}
-                        {s.recovery ? `After a loss it switches to Under ${s.recoveryUnder} / Over ${s.recoveryOver}` : 'No recovery contract'}
-                        {s.martingale ? `, sized so one win pays back ${s.recoverShare}% of what is owed (capped).` : '.'}
-                    </p>
+                <Panel eyebrow='SETTINGS'>
                     <div className='sf-grid3'>
                         <Num label='Stake' value={s.stake} onCommit={n => set({ stake: n })} />
                         <Num label='TP' value={s.takeProfit} onCommit={n => set({ takeProfit: n })} hint='0 = off' />
@@ -186,10 +139,6 @@ const VanguardPage = () => {
                                     <Num label='Paper trades' value={s.vhFixedCount} onCommit={n => set({ vhFixedCount: n })} hint='then back to real' />
                                 )}
                             </div>
-                            <small>
-                                Works on top of the bot rules: a signal that meets every rule is still the one traded, but while the hook is virtual it is settled on paper and moves no
-                                money. It cannot change the odds of a real trade.
-                            </small>
                         </div>
                     )}
                     <div className='sf-field'>
@@ -203,39 +152,19 @@ const VanguardPage = () => {
                                 ['2', 'At least 2 (the original)'],
                             ]}
                         />
-                        <small>How many digits in each group must be moving the right way. The original bot asked for 2, which let almost nothing through.</small>
-                    </div>
-                    <div className='sf-field'>
-                        <span>Markets ({s.markets.length} on)</span>
-                        <div className='sf-chips'>
-                            {ALL_MARKETS.map(([sym]) => (
-                                <button
-                                    key={sym}
-                                    type='button'
-                                    className={`sf-chip ${s.markets.includes(sym) ? 'on' : ''}`}
-                                    aria-pressed={s.markets.includes(sym)}
-                                    onClick={() => toggleMarket(sym)}
-                                    title={vx.unavailable.includes(sym) ? `${marketName(sym)}: Deriv is not streaming this market, so it is skipped` : marketName(sym)}
-                                    data-unavailable={vx.unavailable.includes(sym) || undefined}
-                                >
-                                    {shortName(sym)}
-                                </button>
-                            ))}
-                        </div>
                     </div>
                     <button className='sf-btn' onClick={() => set({ ...VANGUARD_DEFAULTS })} disabled={vx.running}>
                         Reset to defaults
                     </button>
                 </Panel>
 
-                <Panel eyebrow='THIS SESSION' title='Trades'>
+                <Panel eyebrow='TRADES'>
                     {vx.trades.length === 0 ? (
                         <p className='sf-muted'>No trades yet.</p>
                     ) : (
                         <ul className='sf-trades'>
                             {vx.trades.slice(0, 12).map(t => (
                                 <li key={t.contractId} className={t.status}>
-                                    <b>{t.name}</b>
                                     <span>
                                         {t.label}
                                         {t.recovery ? ' ↺' : ''}
@@ -251,25 +180,9 @@ const VanguardPage = () => {
                     )}
                 </Panel>
 
-                <Panel eyebrow='ACTIVITY' title='What Vanguard is doing'>
-                    <ul className='sf-log'>
-                        {vx.log.slice(0, 14).map(l => (
-                            <li key={l.id} className={l.kind}>
-                                <time>{new Date(l.at).toLocaleTimeString([], { hour12: false })}</time>
-                                <span>{l.text}</span>
-                            </li>
-                        ))}
-                        {vx.log.length === 0 && <li className='info'>Nothing yet. Press Run.</li>}
-                    </ul>
-                </Panel>
             </main>
 
-            <footer className='sf-foot'>
-                Vanguard applies the bot's entry rules (and their mirror for Over {s.primaryOver}) to the last 30 digits of each market. Deriv digits are generated randomly, so the rules choose when to
-                trade, not whether a trade will win, and every contract carries a payout margin: over many trades the expected result is a loss. Watching
-                more markets gives more chances to trade, not better odds on any one trade. A bigger stake after a loss makes each loss bigger and cannot change
-                that. Test on a demo account first. Not financial advice.
-            </footer>
+            <footer className='sf-foot'>Digits are random: every trade carries a payout margin, so a bigger stake after a loss makes each loss bigger. Test on a demo account first.</footer>
         </div>
     );
 };
