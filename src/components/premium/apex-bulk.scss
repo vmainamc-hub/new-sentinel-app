@@ -313,3 +313,6 @@
 .apex-bt .apex-bt__viewlist label { display: flex; flex-direction: row; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; color: inherit; }
 .apex-bt .apex-bt__viewlist input { width: auto; margin: 0; }
 .apex-bt .apex-bt__viewlist button { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--bt-line); background: transparent; color: inherit; cursor: pointer; }
+.apex-bt__legend { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center; margin: 8px 0 4px; font-size: 11px; color: var(--bt-muted); }
+.apex-bt__legend span { display: inline-flex; align-items: center; gap: 5px; }
+.apex-bt__legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }

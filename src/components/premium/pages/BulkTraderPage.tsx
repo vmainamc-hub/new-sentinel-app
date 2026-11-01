@@ -222,6 +222,13 @@ const BulkTraderPage = () => {
     const digit = lastIndex >= 0 ? entry.digits[lastIndex] : null;
     // Recomputed on EVERY tick of the selected market. (Keying on the buffer length would freeze it once the 1000-tick window is full.)
     const digitPct = useMemo(() => digitPercents(entry?.digits ?? [], ENGINE_TICKS), [entry, tickVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+    const digitTrend = useMemo(() => {
+        // Change in each digit's share against the same window as it stood 25 ticks ago: positive means the digit is appearing more.
+        const all = entry?.digits ?? [];
+        if (all.length < ENGINE_TICKS / 2 + 25) return null;
+        const before = digitPercents(all.slice(0, -25), ENGINE_TICKS);
+        return digitPct.map((pct, digit) => pct - before[digit]);
+    }, [entry, tickVersion, digitPct]); // eslint-disable-line react-hooks/exhaustive-deps
     const recent = entry ? entry.digits.slice(-8) : [];
 
     const pickSide: 0 | 1 | null = loaded && loaded.symbol === symbol
@@ -578,7 +585,7 @@ const BulkTraderPage = () => {
         onLogDownload={() => downloadCsv(toCsv(autoLog))} onLogClear={() => { saveLog([]); setAutoLog([]); }}
         signalLock={{ on: signalLock, openSide: gateSide, note: gateNote, onToggle: toggleSignalLock }}
         oneTick={{ on: oneTick, onToggle: toggleOneTick }}
-        symbol={symbol} onSymbol={setSymbol} price={price} digit={digit} digitPct={digitPct} recent={recent}
+        symbol={symbol} onSymbol={setSymbol} price={price} digit={digit} digitPct={digitPct} digitTrend={digitTrend} recent={recent}
         form={form} onForm={onForm} overBarrier={overBarrier} underBarrier={underBarrier} onOverBarrier={setOverBarrier} onUnderBarrier={setUnderBarrier}
         pickSide={pickSide} loadedNote={loadedNote} currency={currency} running={running} status={status} error={error}
         tally={tally} syncNote={syncNote} log={log} onRun={side => void execute(side)} onStop={() => void stop()} traderRef={traderRef}

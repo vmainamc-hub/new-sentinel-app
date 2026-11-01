@@ -58,6 +58,7 @@ export type BulkViewProps = {
     price: number | null;
     digit: number | null;
     digitPct: number[];
+    digitTrend?: number[] | null;
     recent: number[];
     form: BulkForm;
     onForm: (key: keyof BulkForm) => (event: { target: { value: string } }) => void;
@@ -80,6 +81,30 @@ export type BulkViewProps = {
     traderRef?: RefObject<HTMLElement>;
 };
 
+export type DigitRole = 'most' | 'second-most' | 'least' | 'second-least' | 'rising' | null;
+export const ROLE_COLOR: Record<Exclude<DigitRole, null>, string> = {
+    most: '#19d38a', 'second-most': '#ffd23f', least: '#ff4d6a', 'second-least': '#ff8a1f', rising: '#c05cff',
+};
+export const ROLE_NAME: Record<Exclude<DigitRole, null>, string> = {
+    most: 'Most appearing', 'second-most': '2nd most', least: 'Least appearing', 'second-least': '2nd least', rising: 'Most increasing',
+};
+/** One role per digit: most / least win over the rest, then the fastest riser, then the 2nd most and 2nd least. */
+export const digitRoles = (pct: number[], trend?: number[] | null): DigitRole[] => {
+    const roles: DigitRole[] = Array(pct.length).fill(null);
+    if (!pct.some(v => v > 0)) return roles;
+    const order = pct.map((v, i) => i).sort((a, b) => pct[b] - pct[a] || a - b);
+    const n = order.length;
+    roles[order[0]] = 'most';
+    roles[order[n - 1]] = 'least';
+    if (trend && trend.length === n) {
+        let best = -1;
+        trend.forEach((v, i) => { if (!roles[i] && v > 0 && (best < 0 || v > trend[best])) best = i; });
+        if (best >= 0) roles[best] = 'rising';
+    }
+    if (!roles[order[1]]) roles[order[1]] = 'second-most';
+    if (!roles[order[n - 2]]) roles[order[n - 2]] = 'second-least';
+    return roles;
+};
 const ringStyle = (pct: number, color: string) => ({ '--p': Math.min(100, pct * 3), '--c': color }) as CSSProperties;
 const money = (value: number, currency: string) => `${value.toFixed(2)} ${currency}`;
 
@@ -307,8 +332,7 @@ const BulkTraderView = (props: BulkViewProps) => {
     const [view, setView] = useState<Record<ViewKey, boolean>>(loadView);
     const setViewKey = (key: ViewKey, on: boolean) => setView(current => { const next = { ...current, [key]: on }; saveView(next); return next; });
     const params = sanitizeBulk({ stake: Number(form.stake), runs: Number(form.runs), duration: Number(form.duration) });
-    const max = Math.max(...digitPct);
-    const min = Math.min(...digitPct);
+    const roles = digitRoles(digitPct, props.digitTrend);
     const hasData = digitPct.some(value => value > 0);
     const over = Number(props.overBarrier);
     const under = Number(props.underBarrier);
@@ -358,11 +382,19 @@ const BulkTraderView = (props: BulkViewProps) => {
                 <div className='apex-bt__rings'>
                     {digitPct.map((pct, digit) => (
                         <div key={digit} className={`apex-bt__ring${digit === props.digit ? ' is-current' : ''}`}
-                            style={ringStyle(pct, hasData && pct === max ? '#19d38a' : hasData && pct === min ? '#ff4d6a' : '#2a8cf0')}>
+                            style={ringStyle(pct, roles[digit] ? ROLE_COLOR[roles[digit] as Exclude<DigitRole, null>] : '#2a8cf0')}
+                            title={roles[digit] ? ROLE_NAME[roles[digit] as Exclude<DigitRole, null>] : undefined}>
                             <span>{digit}<small>{pct.toFixed(1)}%</small></span>
                         </div>
                     ))}
                 </div>
+                {hasData && (
+                    <div className='apex-bt__legend' aria-label='Digit colours'>
+                        {(Object.keys(ROLE_COLOR) as Exclude<DigitRole, null>[]).map(role => (
+                            <span key={role}><i style={{ background: ROLE_COLOR[role] }} />{ROLE_NAME[role]}</span>
+                        ))}
+                    </div>
+                )}
 
                 <div className='apex-bt__strip'>
                     {props.recent.slice(-8).map((digit, index) => {

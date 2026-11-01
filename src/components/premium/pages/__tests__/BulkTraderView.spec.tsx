@@ -71,3 +71,22 @@ describe('Bulk Trader Auto Trader scanner', () => {
         expect(screen.getByText('2 / 1')).toBeTruthy();
     });
 });
+
+describe('digit colour roles', () => {
+    const { digitRoles } = jest.requireActual('../BulkTraderView');
+    it('marks most, 2nd most, least, 2nd least and the fastest riser', () => {
+        const pct = [8, 12, 9, 11, 10, 7, 14, 9.5, 10.5, 9];
+        const trend = [0, 0, 0, 0, 0, 0, 0, 2, 0, 0];
+        const roles = digitRoles(pct, trend);
+        expect(roles[6]).toBe('most');
+        expect(roles[1]).toBe('second-most');
+        expect(roles[5]).toBe('least');
+        expect(roles[0]).toBe('second-least');
+        expect(roles[7]).toBe('rising');
+    });
+    it('gives the riser slot to the next digit when the riser is already most or least', () => {
+        const roles = digitRoles([8, 12, 9, 11, 10, 7, 14, 9.5, 10.5, 9], [0, 0, 0, 0, 0, 0, 5, 1, 0, 0]);
+        expect(roles[6]).toBe('most');
+        expect(roles[7]).toBe('rising');
+    });
+});
