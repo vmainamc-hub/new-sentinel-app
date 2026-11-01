@@ -20,6 +20,7 @@ export type FunnelView = { steps: FunnelStep[]; verdict: string; blockedAt: stri
 
 export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | null, armed: boolean): FunnelView => {
     const steps: FunnelStep[] = [];
+    const who = engine?.source === 'digits' ? 'Digits Analysis' : 'Pulse';
     const push = (s: FunnelStep) => steps.push(s);
 
     if (!engine) {
@@ -40,17 +41,20 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
     push({
         key: 'markets',
         side: 'engine',
-        label: 'Markets with enough ticks for Pulse',
+        label: `Markets with enough ticks for ${who}`,
         alive: engine.markets,
         note: '',
     });
-    push({ key: 'reads', side: 'engine', label: 'Contracts Pulse read', alive: engine.reads, note: '' });
+    push({ key: 'reads', side: 'engine', label: `Contracts ${who} read`, alive: engine.reads, note: '' });
     push({
         key: 'tiers',
         side: 'engine',
-        label: 'Pulse signals (strong / steady / watch)',
+        label: engine.source === 'digits' ? 'Ranked #1 / #2 / #3 for their pair' : 'Pulse signals (strong / steady / watch)',
         alive: engine.strong + engine.steady + engine.watch,
-        note: `${engine.strong} strong, ${engine.steady} steady, ${engine.watch} watch, ${engine.none} no signal`,
+        note:
+            engine.source === 'digits'
+                ? `${engine.strong} ranked #1, ${engine.steady} #2, ${engine.watch} #3, ${engine.none} not in the top 3`
+                : `${engine.strong} strong, ${engine.steady} steady, ${engine.watch} watch, ${engine.none} no signal`,
     });
     push({
         key: 'board',
@@ -104,9 +108,9 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
         push({
             key: 'engines',
             side: 'scanner',
-            label: 'Backed by a Pulse signal (mode rules)',
+            label: `Backed by ${who === 'Pulse' ? 'a Pulse signal' : 'Digits Analysis'} (mode rules)`,
             alive: afterEngines,
-            note: scan.overlayVeto ? `${scan.overlayVeto} without a Pulse signal` : '',
+            note: scan.overlayVeto ? `${scan.overlayVeto} without a ${who} signal` : '',
         });
         push({
             key: 'bar',
@@ -149,16 +153,19 @@ export const describeFunnel = (engine: EngineFunnel | null, scan: ScanFunnel | n
     }
     const why: Record<string, string> = {
         markets:
-            'No market has enough ticks yet (Pulse needs 300). The live feed may still be connecting or warming up.',
-        reads: 'Pulse has no contract to read. Switch on at least one contract.',
-        tiers: 'Pulse sees no signal on any market: no contract is winning above its fair share in enough time windows.',
-        board: 'Pulse has signals, but none strong enough for this mode. Try a looser style (Balanced or Active).',
+            `No market has enough ticks yet (${who} needs 300). The live feed may still be connecting or warming up.`,
+        reads: `${who} has no contract to read. Switch on at least one contract.`,
+        tiers:
+            engine.source === 'digits'
+                ? 'Digits Analysis has no ranked market for the contracts switched on.'
+                : 'Pulse sees no signal on any market: no contract is winning above its fair share in enough time windows.',
+        board: `${who} has signals, but none strong enough for this mode. Try a looser style (Balanced or Active).`,
         tradable: 'Every contract is quarantined.',
         resting: 'Every market is resting after a loss.',
         guards: 'The losing-side pressure, multi-window or winning-side guards refuse every contract. Check which one in the step note and loosen or switch it off.',
         streak: 'The win-streak guard drops every contract that cleared the checks.',
         meter: 'The Meter guide refuses every contract (a loss cluster or a Meter floor).',
-        engines: 'Pulse backs nothing the scanner can trade.',
+        engines: `${who} backs nothing the scanner can trade.`,
         bar: 'Contracts get through every check but none scores high enough for the bar it needs.',
     };
     return {

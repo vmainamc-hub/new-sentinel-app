@@ -12,17 +12,23 @@ import {
 export type EngineMode = 'careful' | 'balanced' | 'active';
 export const ENGINE_MODES: readonly EngineMode[] = ['careful', 'balanced', 'active'];
 
+/** Where the signals come from: Pulse (windows above the fair rate) or Digits Analysis (the market ranking). */
+export type SignalSource = 'pulse' | 'digits';
+export const SIGNAL_SOURCES: readonly SignalSource[] = ['pulse', 'digits'];
+
 /** The six contracts Pulse reads. */
 export const PROPOSITION_KEYS = ['OVER:1', 'OVER:2', 'OVER:3', 'UNDER:8', 'UNDER:7', 'UNDER:6'] as const;
 
 export type EngineSettings = {
     mode: EngineMode;
+    source: SignalSource;
     /** Propositions that may be traded, e.g. 'OVER:2'. */
     propositions: string[];
 };
 
 export const DEFAULT_ENGINE: EngineSettings = {
     mode: 'balanced',
+    source: 'pulse',
     propositions: [...PROPOSITION_KEYS],
 };
 
@@ -37,6 +43,7 @@ export const normalizeEngine = (raw: unknown): EngineSettings => {
         : [...d.propositions];
     return {
         mode: ENGINE_MODES.includes(s.mode as EngineMode) ? (s.mode as EngineMode) : d.mode,
+        source: SIGNAL_SOURCES.includes(s.source as SignalSource) ? (s.source as SignalSource) : d.source,
         propositions: props,
     };
 };

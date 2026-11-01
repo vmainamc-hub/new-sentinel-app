@@ -24,6 +24,8 @@ export type BoardRow = {
 export type EngineFunnel = {
     at: number;
     mode: EngineSettings['mode'];
+    /** Which engine produced the signals (absent on older readings: Pulse). */
+    source?: EngineSettings['source'];
     /** Markets with enough ticks, and contracts read. */
     markets: number;
     reads: number;
@@ -49,6 +51,7 @@ export const ACCEPTED: Record<EngineSettings['mode'], readonly PulseTier[]> = {
 
 const TIER_BUMP: Record<PulseTier, number> = { strong: -6, steady: 0, watch: 4 };
 const TIER_RANK: Record<PulseTier, number> = { strong: 3, steady: 2, watch: 1 };
+const TIER_RANK_NUMBER: Record<PulseTier, number> = { strong: 1, steady: 2, watch: 3 };
 
 export const toRow = (r: PulseRead): BoardRow => ({
     key: keyOf(r.symbol, r.contract.side, r.contract.param),
@@ -76,6 +79,7 @@ export const funnelOf = (snap: PulseSnapshot, board: BoardRow[], engine: EngineS
     return {
         at: now,
         mode: engine.mode,
+        source: engine.source,
         markets: snap.markets,
         reads: snap.reads.length,
         strong: count('strong'),
@@ -110,6 +114,7 @@ export const createSentinelOverlay = (opts: {
                 funnel = {
                     at: now,
                     mode: engine.mode,
+                    source: engine.source,
                     markets: 0,
                     reads: 0,
                     strong: 0,
@@ -126,22 +131,28 @@ export const createSentinelOverlay = (opts: {
         board: () => board,
         funnel: () => funnel,
         call: cell => {
-            const mode = opts.getEngine().mode;
+            const { mode, source } = opts.getEngine();
+            const who = source === 'digits' ? 'Digits Analysis' : 'Pulse';
             const row = index.get(keyOf(cell.symbol, cell.contract.side, cell.contract.param));
             if (!row) {
-                if (mode === 'active') return { allow: true, bump: 6, rank: 0, note: 'no Pulse signal: higher bar' };
+                if (mode === 'active') return { allow: true, bump: 6, rank: 0, note: `no ${who} signal: higher bar` };
                 return {
                     allow: false,
                     bump: 0,
                     rank: 0,
-                    note: `no ${mode === 'careful' ? 'strong' : 'strong or steady'} Pulse signal`,
+                    note: source === 'digits'
+                        ? `not in Digits Analysis's top ${mode === 'careful' ? '1' : '2'} for its pair`
+                        : `no ${mode === 'careful' ? 'strong' : 'strong or steady'} Pulse signal`,
                 };
             }
             return {
                 allow: true,
                 bump: TIER_BUMP[row.tier],
                 rank: Math.min(10, row.score / 10) + TIER_RANK[row.tier],
-                note: `Pulse ${row.tier} (${row.agree} of 4 windows)`,
+                note:
+                    source === 'digits'
+                        ? `Digits Analysis #${TIER_RANK_NUMBER[row.tier]} for its pair`
+                        : `Pulse ${row.tier} (${row.agree} of 4 windows)`,
             };
         },
     };

@@ -4,14 +4,14 @@
 // the overlay; it is just no longer drawn here. Sixfold's own page is untouched.
 import { useState } from 'react';
 import { marketName, MARKETS, shortName } from '../sixfold/feed';
-import { Num, Stat, Switch } from '../sixfold/SixfoldPage';
+import { Num, Seg, Stat, Switch } from '../sixfold/SixfoldPage';
 import { useFeed } from '../sixfold/use-feed';
 import type { Phase } from '../sixfold/runner';
 import { DEFAULT_SETTINGS } from '../sixfold/money';
 import SignalConditions, { MartingaleFields, VirtualHookFields } from '../sixfold/SignalConditions';
 import { describeFunnel } from './funnel';
 import { sentinelOverlay, sentinelRunner } from './runner-instance';
-import { type EngineSettings, PRESETS, PROPOSITION_KEYS } from './settings';
+import { type EngineSettings, PRESETS, PROPOSITION_KEYS, type SignalSource } from './settings';
 import { useSentinel } from './use-sentinel';
 import './sentinel-simple.scss';
 
@@ -127,6 +127,17 @@ const SentinelAiPage = () => {
                             </button>
                         ))}
                     </div>
+
+                    <div className='sn-label'>Signals from</div>
+                    <Seg<SignalSource>
+                        label='Signals from'
+                        value={engine.source}
+                        onChange={source => update({ source })}
+                        options={[
+                            ['pulse', 'Pulse'],
+                            ['digits', 'Digits Analysis'],
+                        ]}
+                    />
 
                     <div className='sf-grid3 sn-nums'>
                         <Num label='Stake' value={s.stake} onCommit={n => set({ stake: n })} />

@@ -4,8 +4,9 @@ import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purc
 import { sixfoldFeed } from '../sixfold/feed';
 import { SixfoldRunner } from '../sixfold/runner';
 import { createSentinelOverlay } from './overlay';
+import { readDigitsAnalysis } from './digits-source';
 import { readPulse } from './pulse';
-import { type EngineSettings, loadEngine, loadTrading, saveEngine, saveTrading } from './settings';
+import { contractsFor, type EngineSettings, loadEngine, loadTrading, saveEngine, saveTrading } from './settings';
 
 let engine: EngineSettings = loadEngine();
 export const getEngineSettings = () => engine;
@@ -16,7 +17,12 @@ export const setEngineSettings = (next: EngineSettings) => {
 
 export const sentinelOverlay = createSentinelOverlay({
     getEngine: () => engine,
-    read: symbols => readPulse(sixfoldFeed.getSnapshot().series, symbols),
+    read: (symbols, eng) => {
+        const series = sixfoldFeed.getSnapshot().series;
+        return eng.source === 'digits'
+            ? readDigitsAnalysis(series, symbols, contractsFor(eng))
+            : readPulse(series, symbols);
+    },
 });
 
 export const sentinelRunner = new SixfoldRunner({
