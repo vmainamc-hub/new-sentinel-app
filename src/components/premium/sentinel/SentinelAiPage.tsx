@@ -1,54 +1,118 @@
-// SENTINEL AI: a self-running trading tool in Sixfold's form, driven by the Pulse signal engine.
-// The scanner keeps going round the markets, Pulse says which contracts have been winning above their fair share and how strongly,
-// and the tool buys by itself. Every trade shows in the Run Panel and Transactions. All the work is Sixfold's runner with the Pulse
-// overlay (see overlay.ts and pulse.ts).
-import { useEffect, useMemo, useRef, useState } from 'react';
-import SixfoldPage, { Panel, Seg } from '../sixfold/SixfoldPage';
-import { describeFunnel, FunnelTally } from './funnel';
+// SENTINEL AI: the simple front face.
+// Only what is needed to run it: Run / Stop, one status line, the session numbers, the few settings that matter and the latest
+// trades. All the analysis (Pulse, the scanner, the Meter, the Entry Brain, the diagnosis funnel) still runs in the runner and
+// the overlay; it is just no longer drawn here. Sixfold's own page is untouched.
+import { useState } from 'react';
+import { marketName, MARKETS, shortName } from '../sixfold/feed';
+import { Num, Stat, Switch } from '../sixfold/SixfoldPage';
+import { useFeed } from '../sixfold/use-feed';
+import type { Phase } from '../sixfold/runner';
+import { DEFAULT_SETTINGS } from '../sixfold/money';
+import { describeFunnel } from './funnel';
 import { sentinelOverlay, sentinelRunner } from './runner-instance';
-import {
-    contractsFor,
-    ENGINE_MODES,
-    type EngineMode,
-    type EngineSettings,
-    PRESETS,
-    PROPOSITION_KEYS,
-} from './settings';
+import { type EngineSettings, PRESETS, PROPOSITION_KEYS } from './settings';
 import { useSentinel } from './use-sentinel';
+import './sentinel-simple.scss';
 
-const MODE_TEXT: Record<EngineMode, string> = {
-    careful: 'Only strong Pulse signals: all four time windows are above the fair rate. Fewest trades.',
-    balanced:
-        'Strong and steady Pulse signals (at least three windows above fair). A good rate of signals with a sensible bar.',
-    active: 'Also watch signals, and the scanner may trade with no signal at a higher bar. Most trades, most variance.',
+const PHASE_LABEL: Record<Phase, string> = {
+    idle: 'Ready',
+    connecting: 'Connecting to the market',
+    scanning: 'Scanning the markets',
+    watching: 'Watching the markets',
+    armed: 'Armed',
+    buying: 'Placing the trade',
+    settling: 'In a trade',
+    cooling: 'Looking for the next trade',
 };
 
-const EnginePanel = () => {
+const STYLE_TAG: Record<string, string> = { careful: 'Fewest trades', balanced: 'Steady', active: 'Most trades' };
+
+const money = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(2)}`;
+const contractName = (key: string) => key.replace(':', ' ').replace('OVER', 'Over').replace('UNDER', 'Under');
+
+const SentinelAiPage = () => {
     const { sx, engine, update } = useSentinel();
-    const board = sentinelOverlay.board();
-    const toggle = (key: string) =>
+    const feed = useFeed();
+    const s = sx.settings;
+    const set = sentinelRunner.updateSettings.bind(sentinelRunner);
+
+    const applyPreset = (id: string) => {
+        const preset = PRESETS.find(p => p.id === id);
+        if (!preset) return;
+        update(preset.engine as Partial<EngineSettings>);
+        set(preset.trading);
+    };
+    const toggleContract = (key: string) =>
         update({
             propositions: engine.propositions.includes(key)
                 ? engine.propositions.filter(p => p !== key)
                 : [...engine.propositions, key],
         });
-    const applyPreset = (id: string) => {
-        const preset = PRESETS.find(p => p.id === id);
-        if (!preset) return;
-        update(preset.engine as Partial<EngineSettings>);
-        sentinelRunner.updateSettings(preset.trading);
-    };
+    const toggleMarket = (symbol: string) =>
+        set({ markets: s.markets.includes(symbol) ? s.markets.filter(m => m !== symbol) : [...s.markets, symbol] });
+
+    // One line: what it is doing now. When it is looking but not trading, the first thing in the way (from the analysis).
+    const status = sx.armed
+        ? `${sx.armed.label} · ${shortName(sx.armed.symbol)} · waiting for entry`
+        : sx.running
+          ? PHASE_LABEL[sx.phase]
+          : (sx.stopReason ?? `${sx.readyMarkets} of ${s.markets.length} markets ready`);
+    const reason =
+        sx.running && !sx.armed && sx.phase !== 'connecting'
+            ? describeFunnel(sentinelOverlay.funnel(), sx.funnel, false).verdict
+            : null;
+
+    const [more, setMore] = useState(false);
+    const feedTone = feed.mode === 'live' ? feed.status : 'warn';
+
     return (
-        <>
-            <Panel eyebrow='PULSE' title='How Pulse decides'>
-                <p className='sf-note'>
-                    Pulse reads each market's last 1000, 300, 100 and 30 ticks and asks, for each contract, in how many
-                    of those windows it has been winning more than its fair share. More windows agreeing means a
-                    stronger signal. It decides when to look; it cannot make a random digit more likely.
-                </p>
-                <div className='sf-field sf-first'>
-                    <span>Style</span>
-                    <div className='sf-presets'>
+        <div className='sixfold sf sentinel-ai-auto sn'>
+            <header className='sf-top'>
+                <b className='sf-brand'>
+                    SENTINEL<small>AI</small>
+                </b>
+                <span className={`sf-feed ${feedTone}`}>
+                    {feed.mode === 'import' ? 'IMPORTED' : feed.status.toUpperCase()}
+                </span>
+            </header>
+
+            <main className='sn-wrap'>
+                <section className='sn-card sn-main'>
+                    <div className='sn-pl'>
+                        <small>Session P/L</small>
+                        <b className={sx.session.pnl > 0 ? 'pos' : sx.session.pnl < 0 ? 'neg' : ''}>
+                            {money(sx.session.pnl)}
+                        </b>
+                    </div>
+                    {sx.running ? (
+                        <button className='sf-run stop' onClick={() => sentinelRunner.stop('Stopped by you')}>
+                            Stop
+                        </button>
+                    ) : (
+                        <button className='sf-run' onClick={() => sentinelRunner.start()}>
+                            Run
+                        </button>
+                    )}
+                    <div className='sn-status' role='status'>
+                        {status}
+                    </div>
+                    {reason && <div className='sn-reason'>{reason}</div>}
+                    {feed.mode === 'live' && feed.status === 'offline' && !sx.running && (
+                        <button className='sf-btn primary' onClick={feed.connect}>
+                            Connect live
+                        </button>
+                    )}
+                    {(sx.lastError || feed.error) && <div className='sf-msg bad'>{sx.lastError || feed.error}</div>}
+                    <div className='sf-stats'>
+                        <Stat label='Trades' value={sx.session.trades} />
+                        <Stat label='Won / lost' value={`${sx.session.wins} / ${sx.session.losses}`} />
+                        <Stat label='Next stake' value={sx.session.currentStake.toFixed(2)} />
+                    </div>
+                </section>
+
+                <section className='sn-card'>
+                    <div className='sn-label'>Style</div>
+                    <div className='sn-presets'>
                         {PRESETS.map(p => (
                             <button
                                 key={p.id}
@@ -58,189 +122,118 @@ const EnginePanel = () => {
                                 disabled={sx.running}
                             >
                                 <b>{p.name}</b>
-                                <small>{p.blurb}</small>
+                                <small>{STYLE_TAG[p.id]}</small>
                             </button>
                         ))}
                     </div>
-                </div>
-                <div className='sf-field'>
-                    <span>Signal strength</span>
-                    <Seg<EngineMode>
-                        label='Signal strength'
-                        value={engine.mode}
-                        onChange={mode => update({ mode })}
-                        options={ENGINE_MODES.map(m => [m, m[0].toUpperCase() + m.slice(1)] as const)}
-                    />
-                    <small>{MODE_TEXT[engine.mode]}</small>
-                </div>
-                <div className='sf-field'>
-                    <span>Contracts it may trade</span>
-                    <div className='sf-chips'>
+
+                    <div className='sf-grid3 sn-nums'>
+                        <Num label='Stake' value={s.stake} onCommit={n => set({ stake: n })} />
+                        <Num label='Take profit' value={s.takeProfit} onCommit={n => set({ takeProfit: n })} hint='0 = off' />
+                        <Num label='Stop loss' value={s.stopLoss} onCommit={n => set({ stopLoss: n })} hint='0 = off' />
+                    </div>
+
+                    <Switch on={s.martingale} onChange={v => set({ martingale: v })} title='Martingale' sub='' />
+                    {s.martingale && (
+                        <div className='sf-grid2 sn-nums'>
+                            <Num label='Max steps' value={s.maxSteps} onCommit={n => set({ maxSteps: n })} hint='0 = no limit' />
+                            <Num label='Max stake' value={s.maxStake} onCommit={n => set({ maxStake: n })} hint='0 = no cap' />
+                        </div>
+                    )}
+
+                    <div className='sn-label'>Contracts</div>
+                    <div className='sn-chips'>
                         {PROPOSITION_KEYS.map(k => (
                             <button
                                 key={k}
                                 type='button'
                                 className={engine.propositions.includes(k) ? 'on' : ''}
-                                onClick={() => toggle(k)}
+                                aria-pressed={engine.propositions.includes(k)}
+                                onClick={() => toggleContract(k)}
                                 disabled={sx.running}
                             >
-                                {k.replace(':', ' ').replace('OVER', 'Over').replace('UNDER', 'Under')}
+                                {contractName(k)}
                             </button>
                         ))}
                     </div>
-                    <small>After a loss, recovery trades use the recovery barriers in the settings below.</small>
-                </div>
-            </Panel>
-            <Panel eyebrow='PULSE BOARD' title={`Signals right now (${board.length})`}>
-                {board.length === 0 ? (
-                    <p className='sf-note'>
-                        No contract has a signal the {engine.mode} mode accepts at the moment. The scanner keeps going
-                        round and Pulse is re-read on every scan.
-                    </p>
-                ) : (
-                    <table className='sf-table'>
-                        <thead>
-                            <tr>
-                                <th>Market</th>
-                                <th>Contract</th>
-                                <th>Signal</th>
-                                <th>Windows above fair</th>
-                                <th>Score</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {board.slice(0, 12).map(c => (
-                                <tr key={c.key}>
-                                    <td>{c.symbol}</td>
-                                    <td>{c.label}</td>
-                                    <td>{c.tier}</td>
-                                    <td>{c.agree} of 4</td>
-                                    <td>{c.score}</td>
-                                </tr>
+                </section>
+
+                <section className='sn-card'>
+                    <div className='sn-label'>Latest trades</div>
+                    {sx.trades.length === 0 ? (
+                        <p className='sn-empty'>No trades yet.</p>
+                    ) : (
+                        <ul className='sf-trades'>
+                            {sx.trades.slice(0, 8).map(t => (
+                                <li key={t.contractId} className={t.status}>
+                                    <b>{shortName(t.symbol)}</b>
+                                    <span>
+                                        {t.label}
+                                        {t.recovery ? ' ↺' : ''}
+                                        {t.virtual ? ' · paper' : ''}
+                                    </span>
+                                    <span className='dg'>
+                                        <i>{t.entryDigit ?? '·'}</i>→
+                                        <i className={t.status === 'won' ? 'w' : t.status === 'lost' ? 'l' : ''}>
+                                            {t.exitDigit ?? '·'}
+                                        </i>
+                                    </span>
+                                    <span>{t.stake.toFixed(2)}</span>
+                                    <em>{t.profit === null ? (t.status === 'open' ? 'open' : '?') : money(t.profit)}</em>
+                                </li>
                             ))}
-                        </tbody>
-                    </table>
-                )}
-            </Panel>
-        </>
-    );
-};
+                        </ul>
+                    )}
+                </section>
 
-const FunnelPanel = () => {
-    const { sx } = useSentinel();
-    const tally = useRef(new FunnelTally());
-    const [, force] = useState(0);
-    const engineFunnel = sentinelOverlay.funnel();
-    const view = useMemo(
-        () => describeFunnel(engineFunnel, sx.funnel, Boolean(sx.armed)),
-        [engineFunnel, sx.funnel, sx.armed]
-    );
-    // One point per scan; the 10-minute summary is re-read every few seconds.
-    useEffect(() => {
-        tally.current.add(sx.funnel, engineFunnel, Date.now());
-    }, [sx.funnel, engineFunnel]);
-    useEffect(() => {
-        const id = window.setInterval(() => force(n => n + 1), 5000);
-        return () => window.clearInterval(id);
-    }, []);
-    const sum = tally.current.summary(Date.now());
-    return (
-        <Panel eyebrow='DIAGNOSIS' title='Where is the signal being blocked?'>
-            <p className={`sf-note ${view.blockedAt ? 'bad' : ''}`}>
-                <b>{view.verdict}</b>
-            </p>
-            <table className='sf-table sf-funnel'>
-                <thead>
-                    <tr>
-                        <th>Step</th>
-                        <th>Alive</th>
-                        <th>What it removed</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {view.steps.map(step => (
-                        <tr key={step.key} className={view.blockedAt === step.key ? 'blocked' : ''}>
-                            <td>
-                                <small>{step.side === 'engine' ? 'PULSE' : 'SCANNER'}</small> {step.label}
-                            </td>
-                            <td>
-                                <b>{step.alive ?? '—'}</b>
-                            </td>
-                            <td>{step.note}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-            <p className='sf-note'>
-                Last 10 minutes: {sum.scans} scans, {sum.scansWithBoard} had a Pulse signal the mode accepts,{' '}
-                {sum.scansWithEligible} had a contract that cleared every check.
-            </p>
-            {sum.scans > 0 && (
-                <table className='sf-table'>
-                    <thead>
-                        <tr>
-                            <th>Stopped most often by</th>
-                            <th>Contracts stopped</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {sum.stoppedBy.map(row => (
-                            <tr key={row.key}>
-                                <td>{row.label}</td>
-                                <td>{row.count}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            )}
-            {sum.reasons.length > 0 && (
-                <details open>
-                    <summary>Exact reasons (last 10 minutes)</summary>
-                    <ul>
-                        {sum.reasons.map(r => (
-                            <li key={r.reason}>
-                                {r.count} × {r.reason}
-                            </li>
-                        ))}
-                    </ul>
-                </details>
-            )}
-        </Panel>
-    );
-};
+                <section className='sn-card'>
+                    <button type='button' className='sn-more' aria-expanded={more} onClick={() => setMore(v => !v)}>
+                        More settings <span aria-hidden='true'>{more ? '−' : '+'}</span>
+                    </button>
+                    {more && (
+                        <div className='sn-morebody'>
+                            <Switch on={s.recovery} onChange={v => set({ recovery: v })} title='Recovery barrier' sub='' />
+                            {s.recovery && (
+                                <div className='sf-grid2 sn-nums'>
+                                    <Num label='Over' value={s.recoveryOver} onCommit={n => set({ recoveryOver: n })} />
+                                    <Num label='Under' value={s.recoveryUnder} onCommit={n => set({ recoveryUnder: n })} />
+                                </div>
+                            )}
+                            <Switch on={s.lossShield} onChange={v => set({ lossShield: v })} title='Loss shield' sub='' />
+                            <Switch on={s.virtualHook} onChange={v => set({ virtualHook: v })} title='Virtual hook' sub='' />
+                            <div className='sn-label'>Markets ({s.markets.length})</div>
+                            <div className='sn-chips'>
+                                {MARKETS.map(([sym]) => (
+                                    <button
+                                        key={sym}
+                                        type='button'
+                                        className={s.markets.includes(sym) ? 'on' : ''}
+                                        aria-pressed={s.markets.includes(sym)}
+                                        onClick={() => toggleMarket(sym)}
+                                        title={marketName(sym)}
+                                    >
+                                        {shortName(sym)}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                type='button'
+                                className='sf-btn subtle'
+                                onClick={() => set({ ...DEFAULT_SETTINGS })}
+                                disabled={sx.running}
+                            >
+                                Reset to defaults
+                            </button>
+                        </div>
+                    )}
+                </section>
 
-const ContractNote = () => (
-    <div className='sf-field sf-first'>
-        <span>Contracts</span>
-        <small>
-            Chosen by Pulse (see above): the six Over 1/2/3 and Under 8/7/6 contracts, on the market the scanner finds
-            best.
-        </small>
-    </div>
-);
-
-const FOOTER =
-    'Pulse reads recent digit behaviour. Deriv digits are generated randomly, so a contract that has been winning is not more likely to win next, and every contract carries a payout margin: over many trades the expected result is a loss, whatever is picked. Martingale-style recovery makes each loss bigger. Test on a demo account first. Not financial advice.';
-
-const SentinelAiPage = () => {
-    const { engine } = useSentinel();
-    const contracts = useMemo(() => () => contractsFor(engine), [engine]);
-    return (
-        <SixfoldPage
-            runner={sentinelRunner}
-            brand='SENTINEL'
-            brandSub='AI'
-            contracts={contracts}
-            topSlot={
-                <>
-                    <FunnelPanel />
-                    <EnginePanel />
-                </>
-            }
-            contractControls={<ContractNote />}
-            footerText={FOOTER}
-            className='sentinel-ai-auto'
-        />
+                <footer className='sn-foot'>
+                    Digits are random and every contract has a payout margin, so over many trades the expected result is a
+                    loss. Martingale makes losses bigger. Demo account first.
+                </footer>
+            </main>
+        </div>
     );
 };
 

@@ -1,0 +1,144 @@
+// SENTINEL AI: the simple front face. Reuses the Sixfold tokens (--panel, --line, --teal ...) from sixfold.scss.
+.sixfold.sn {
+    .sn-wrap {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 12px 16px 20px;
+        display: grid;
+        gap: 12px;
+    }
+    .sn-card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px;
+        box-shadow: var(--shadow);
+    }
+    .sn-main {
+        display: grid;
+        gap: 12px;
+        justify-items: center;
+        text-align: center;
+        .sf-stats {
+            width: 100%;
+        }
+    }
+    .sn-pl {
+        display: grid;
+        gap: 2px;
+        small {
+            font: 500 10px 'DM Mono', monospace;
+            letter-spacing: 1.15px;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+        b {
+            font: 700 clamp(30px, 8vw, 42px) Manrope, sans-serif;
+            letter-spacing: -1px;
+            color: var(--text-strong);
+            &.pos {
+                color: var(--green);
+            }
+            &.neg {
+                color: var(--red);
+            }
+        }
+    }
+    .sn-status {
+        font: 600 14px Manrope, sans-serif;
+        color: var(--text-strong);
+    }
+    .sn-reason {
+        max-width: 560px;
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--muted);
+    }
+    .sn-label {
+        font: 500 10px 'DM Mono', monospace;
+        letter-spacing: 1.15px;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin: 14px 0 8px;
+        &:first-child {
+            margin-top: 0;
+        }
+    }
+    .sn-presets {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        button {
+            text-align: left;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--line);
+            background: transparent;
+            b,
+            small {
+                display: block;
+            }
+            small {
+                margin-top: 2px;
+                color: var(--muted);
+            }
+            &.on {
+                border-color: var(--teal);
+                box-shadow: inset 0 0 0 1px var(--teal);
+            }
+        }
+    }
+    .sn-nums {
+        margin: 12px 0;
+    }
+    .sn-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        button {
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            background: transparent;
+            &.on {
+                border-color: var(--teal);
+                color: var(--teal);
+                font-weight: 600;
+            }
+        }
+    }
+    .sn-empty {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+    }
+    .sn-more {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        font: 600 13px Manrope, sans-serif;
+        color: var(--text-strong);
+    }
+    .sn-morebody {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+    }
+    .sn-foot {
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--muted);
+        text-align: center;
+        padding: 0 4px;
+    }
+}
+
+@media (max-width: 480px) {
+    .sixfold.sn .sn-presets {
+        grid-template-columns: 1fr;
+    }
+}
