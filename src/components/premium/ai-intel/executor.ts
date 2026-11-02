@@ -15,6 +15,7 @@
 import { type Contract, losingDigits, winningDigits, winProbability } from '@/components/premium/sixfold/bot';
 import { profitMultiple } from '@/components/premium/sixfold/stats';
 import { freshVh, vhAfterReal, vhAfterVirtual, type VhConfig, type VhMode, type VhState } from '@/components/premium/sixfold/virtual-hook';
+import type { AiMode, GuardRequest, GuardVerdict } from './guard';
 import { compileRule } from './rules';
 import { bestPerMarket, contractOf, type Pick, type PickDirection, type PickEntry, type PickOptions, recoveryContract, type RecoveryPick } from './picker';
 
@@ -48,6 +49,8 @@ export type ExecConfig = {
     maxTrades: number;
     /** Only trade a market that beats chance after false-discovery control. */
     evidenceOnly: boolean;
+    /** AI guard: every signal is checked just before it is bought. OFF / GUARD (blocks unsafe signals) / STRICT (needs proven edge). */
+    ai: AiMode;
     /** Sixfold's Virtual Hook: after real losses, trade on paper (no money) until paper wins say go back. */
     virtualHook: { enabled: boolean; opening: boolean; mode: VhMode; enterLosses: number; returnWins: number; fixedCount: number };
     mode: ExecMode;
@@ -66,6 +69,7 @@ export const DEFAULT_EXEC: ExecConfig = {
     targetProfit: 10,
     maxTrades: 0,
     evidenceOnly: false,
+    ai: 'GUARD',
     virtualHook: { enabled: true, opening: true, mode: 'STREAK', enterLosses: 2, returnWins: 2, fixedCount: 3 },
     mode: 'ASSISTED',
     autoAuthorised: false,
@@ -114,6 +118,7 @@ export function normalizeExec(raw: Partial<ExecConfig> | null | undefined): Exec
         targetProfit: money(Math.max(0, num(r.targetProfit, d.targetProfit))),
         maxTrades: clampInt(r.maxTrades, 0, 100000, d.maxTrades),
         evidenceOnly: Boolean(r.evidenceOnly),
+        ai: r.ai === 'OFF' || r.ai === 'STRICT' ? r.ai : 'GUARD',
         virtualHook: {
             enabled: vh.enabled ?? d.virtualHook.enabled,
             opening: vh.opening ?? d.virtualHook.opening,
@@ -166,7 +171,7 @@ export type ExecTrade = {
 
 export type ExecPhase = 'idle' | 'waiting' | 'ready' | 'buying' | 'settling';
 
-export type Proposal = { market: string; contract: Contract; label: string; stake: number; recovery: boolean; step: number; triggerDigit: number; expiresAt: number };
+export type Proposal = { ai?: string; market: string; contract: Contract; label: string; stake: number; recovery: boolean; step: number; triggerDigit: number; expiresAt: number };
 
 export type VhStatus = { on: boolean; virtual: boolean; opening: boolean; open: boolean; realLosses: number; virtualWins: number; virtualDone: number };
 
@@ -190,6 +195,8 @@ export type ExecSnapshot = {
     board: { primary: Pick[]; recovery: RecoveryPick[] };
     /** Why nothing is tradable right now, or null. */
     note: string | null;
+    /** The AI guard this run: signals it blocked and the last reason given. */
+    aiGuard: { mode: AiMode; blocked: number; allowed: number; note: string | null };
 };
 
 type Loose = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -232,6 +239,8 @@ export type ExecIO = {
     pick?: (opts: PickRequest) => Pick[];
     /** Rank Over 3 / Under 6 on every market (recovery contracts). */
     pickRecovery?: (opts: { duration: number; entries?: readonly PickEntry[] }) => RecoveryPick[];
+    /** The AI guard: allow or block one signal. Absent means no guard. */
+    review?: (req: GuardRequest) => GuardVerdict;
     /** Recent digits of a market (current tick included), for SMART strategy rules. */
     history?: (symbol: string) => readonly number[];
     describeFailure: (e: unknown) => { kind: string; message: string; outcomeUnknown: boolean };
@@ -283,6 +292,11 @@ export class AiIntelExecutor {
     private board: ExecSnapshot['board'] = { primary: [], recovery: [] };
     private boardAt = 0;
     private note: string | null = null;
+    private aiBlocked = 0;
+    private aiAllowed = 0;
+    private aiNote: string | null = null;
+    private aiLogAt = new Map<string, number>();
+    private reconciling = false;
     private disposeWatch: (() => void) | null = null;
     private watch: ((on: (runPanelRunning: boolean, active: string | null) => void) => () => void) | null = null;
 
@@ -381,6 +395,7 @@ export class AiIntelExecutor {
             next: { label: recovering ? 'Over 3 / Under 6' : dirs, stake: n.stake, recovery: n.recovery, paper: this.paperNow() },
             board: this.board,
             note: this.note,
+            aiGuard: { mode: this.cfg.ai, blocked: this.aiBlocked, allowed: this.aiAllowed, note: this.aiNote },
         };
     }
 
@@ -436,6 +451,10 @@ export class AiIntelExecutor {
         this.board = { primary: [], recovery: [] };
         this.boardAt = 0;
         this.note = null;
+        this.aiBlocked = 0;
+        this.aiAllowed = 0;
+        this.aiNote = null;
+        this.aiLogAt.clear();
         this.running = true;
         this.phase = 'waiting';
         try {
@@ -513,22 +532,57 @@ export class AiIntelExecutor {
     }
 
     /** What would be bought on this tick of this market, or null. Main contracts normally, Over 3 / Under 6 while recovering. */
-    private plan(symbol: string, digit: number, now: number): Plan | null {
+    private plan(symbol: string, digit: number, now: number): { plan: Plan; src: Pick | RecoveryPick } | null {
         const n = nextStake(this.cfg, this.losses);
         let contract: Contract;
+        let src: Pick | RecoveryPick;
         if (n.recovery) {
             const rp = this.board.recovery.find(p => p.market === symbol);
             if (!rp) return null;
+            src = rp;
             contract = recoveryContract(rp.direction);
             if (!armsOn(rp, contract, digit)) return null;
         } else {
             const p = this.board.primary.find(x => x.market === symbol);
             if (!p) return null;
+            src = p;
             contract = contractOf(p.direction);
             // A SMART strategy also needs its rule to hold on the recent ticks. No history: no trade.
             if (!armsOn(p, contract, digit, p.rule ? this.io.history?.(symbol) : undefined)) return null;
         }
-        return { market: symbol, contract, label: labelOf(contract), stake: n.stake, recovery: n.recovery, step: n.step, triggerDigit: digit, expiresAt: now };
+        return { plan: { market: symbol, contract, label: labelOf(contract), stake: n.stake, recovery: n.recovery, step: n.step, triggerDigit: digit, expiresAt: now }, src };
+    }
+
+    /** The AI guard for one signal. Blocked signals are counted and logged (at most every 10 s per market). */
+    private review(src: Pick | RecoveryPick, plan: Plan, now: number): GuardVerdict {
+        if (this.cfg.ai === 'OFF' || !this.io.review) return { allow: true, reason: 'AI guard off' };
+        let verdict: GuardVerdict;
+        try {
+            verdict = this.io.review({
+                mode: this.cfg.ai,
+                market: plan.market,
+                contract: plan.contract,
+                recovery: plan.recovery,
+                strategyId: 'strategyId' in src ? src.strategyId : null,
+                significant: 'significant' in src ? src.significant : false,
+                trades: src.trades,
+            });
+        } catch {
+            verdict = { allow: false, reason: 'the guard could not be evaluated' }; // fail closed
+        }
+        this.aiNote = verdict.reason;
+        if (verdict.allow) {
+            this.aiAllowed += 1;
+        } else {
+            this.aiBlocked += 1;
+            const last = this.aiLogAt.get(plan.market) ?? 0;
+            if (now - last >= 10_000) {
+                this.aiLogAt.set(plan.market, now);
+                this.addLog('info', `AI guard skipped ${plan.label} on ${plan.market}: ${verdict.reason}.`);
+            }
+            this.emit();
+        }
+        return verdict;
     }
 
     /** Every live tick of every market. All markets are watched; the one whose entry fires first among the best is traded. */
@@ -554,8 +608,12 @@ export class AiIntelExecutor {
         }
         if (this.inFlight || this.proposal || now < this.cooldownUntil) return;
         if (this.limitReached()) return;
-        const plan = this.plan(symbol, digit, now);
-        if (!plan) return;
+        const found = this.plan(symbol, digit, now);
+        if (!found) return;
+        const plan = found.plan;
+        const verdict = this.review(found.src, plan, now);
+        if (!verdict.allow) return;
+        plan.ai = verdict.reason;
         if (this.paperNow()) return this.executeVirtual(plan);
         const check = this.stakeCheck(plan.stake);
         if (check) return this.stop(check);
@@ -661,7 +719,7 @@ export class AiIntelExecutor {
             profit: 0,
             transaction_ids: { buy: id },
         });
-        this.addLog('trade', `Paper ${p.label}${p.recovery ? ' (recovery)' : ''} on ${p.market}: no money staked.`);
+        this.addLog('trade', `Paper ${p.label}${p.recovery ? ' (recovery)' : ''} on ${p.market}: no money staked.${p.ai ? ` AI: ${p.ai}.` : ''}`);
         this.phase = 'settling';
         this.emit();
     }
@@ -783,7 +841,8 @@ export class AiIntelExecutor {
                 status: 'open',
             };
             this.trades = [record, ...this.trades].slice(0, HISTORY_LIMIT);
-            this.addLog('trade', `Bought ${p.label}${p.recovery ? ` (recovery step ${p.step})` : ''} on ${symbol}, stake ${stake.toFixed(2)}, entry digit ${p.triggerDigit}. Confirmed in ${Math.max(0, this.io.now() - sentAt)} ms.`);
+            this.persistTrades(); // an open contract is saved, so a reload can find out how it ended
+            this.addLog('trade', `Bought ${p.label}${p.recovery ? ` (recovery step ${p.step})` : ''} on ${symbol}, stake ${stake.toFixed(2)}, entry digit ${p.triggerDigit}. Confirmed in ${Math.max(0, this.io.now() - sentAt)} ms.${p.ai ? ` AI: ${p.ai}.` : ''}`);
             if (token !== this.runToken) {
                 this.inFlight = false;
                 return this.emit(); // stopped while buying: the contract is on the account, the run is over
@@ -833,6 +892,44 @@ export class AiIntelExecutor {
             if (this.rejections >= MAX_REJECTIONS_IN_A_ROW) return this.stop(`Stopped: Deriv refused ${this.rejections} purchases in a row. Last: ${failure.message}`);
             this.emit();
         }
+    }
+
+    /**
+     * After a page reload: any real contract saved as open is looked up on Deriv and its real result filled in. It never
+     * touches a running session. A contract that cannot be confirmed is marked unconfirmed (check the Deriv statement).
+     */
+    async reconcile(timeoutMs = 20_000): Promise<number> {
+        if (this.running || this.reconciling) return 0;
+        const open = this.trades.filter(t => t.status === 'open' && !t.virtual && t.contractId);
+        if (!open.length) return 0;
+        this.reconciling = true;
+        let done = 0;
+        for (const t of open) {
+            const abort = new AbortController();
+            const timer = setTimeout(() => abort.abort(), timeoutMs);
+            try {
+                const settled = await this.io.settle({ contractId: t.contractId as number, fallback: { contract_id: t.contractId }, onUpdate: () => undefined, signal: abort.signal });
+                const profit = Number(settled.profit);
+                const final = Boolean(settled.is_sold) || ['won', 'lost', 'sold'].includes(String(settled.status ?? '').toLowerCase());
+                if (final && Number.isFinite(profit)) {
+                    t.profit = profit;
+                    t.exitDigit = lastDigitOf(settled.exit_tick_display_value ?? settled.exit_spot_display_value ?? settled.exit_spot ?? settled.sell_spot_display_value ?? settled.sell_spot ?? settled.exit_tick);
+                    t.status = profit > 0 ? 'won' : 'lost';
+                    done += 1;
+                    this.addLog(profit > 0 ? 'win' : 'loss', `Found the result of an earlier ${t.label} on ${t.market}: ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}.`);
+                } else {
+                    t.status = 'unconfirmed';
+                }
+            } catch {
+                t.status = 'unconfirmed';
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+        this.reconciling = false;
+        this.persistTrades();
+        this.emit();
+        return done;
     }
 
     private finish(trade: ExecTrade, profit: number | null, exitDigit: number | null) {

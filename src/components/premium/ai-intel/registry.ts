@@ -30,7 +30,7 @@ const ALLOWED: Record<StrategyStatus, StrategyStatus[]> = {
     RETIRED: [],
 };
 
-export type StatusChange = { at: number; from: StrategyStatus | null; to: StrategyStatus; by: 'lab' | 'user' | 'monitor'; note: string };
+export type StatusChange = { at: number; from: StrategyStatus | null; to: StrategyStatus; by: 'lab' | 'user' | 'monitor' | 'auto'; note: string };
 
 export type Strategy = {
     /** Same for every version of one strategy. */

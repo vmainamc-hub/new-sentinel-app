@@ -4,15 +4,10 @@ import { getCandidates } from './candidates';
 import { type Decision, type IntelReport, runAgents } from './agents';
 import { aiIntelExecutor } from './executor-instance';
 import { apexFeed, apexSeries } from './feed-source';
-import { ForwardMonitor } from './monitor';
 import { rankPicks } from './picker';
-import { labRunner, strategyRegistry } from './registry-instance';
+import { forwardMonitor, labRunner, strategyRegistry } from './registry-instance';
 
-export const forwardMonitor = new ForwardMonitor(
-    () => strategyRegistry.getSnapshot(),
-    (id, note) => strategyRegistry.setStatus(id, 'SUSPENDED', 'monitor', note)
-);
-apexFeed.onTick((market, digit) => forwardMonitor.handleTick(market, digit));
+export { forwardMonitor };
 
 const LOG_KEY = 'apex_intel_decisions_v1';
 const LOG_MAX = 200;

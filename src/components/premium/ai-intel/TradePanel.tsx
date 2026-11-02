@@ -3,7 +3,7 @@
 // entry right now. Over 2 / Under 7 are the main contracts; after a loss it recovers with Over 3 or Under 6, whichever is
 // more viable. The Virtual Hook is Sixfold's. Everything else (scanner, competition, lab, library, agents) keeps running
 // behind the scenes and is under Insights.
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import '@/components/premium/sentinel/sentinel-simple.scss';
 import { shortName } from '@/components/premium/sixfold/feed';
 import { Num, Seg, Stat, Switch } from '@/components/premium/sixfold/SixfoldPage';
@@ -11,7 +11,12 @@ import { useFeedOf } from '@/components/premium/sixfold/use-feed';
 import { type ExecConfig, type ExecEntry, MIN_STAKE } from './executor';
 import { aiIntelExecutor } from './executor-instance';
 import { apexFeed, apexSymbols } from './feed-source';
+import { AutopilotPanel } from './AutopilotPanel';
+import { autopilot } from './autopilot-instance';
+import type { AiMode } from './guard';
+import { intelService } from './intel-instance';
 import { useExecutor } from './use-executor';
+import { useStrategies } from './StrategyPanels';
 
 const money = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(2)}`;
 const pct = (x: number | null) => (x === null ? '–' : `${(x * 100).toFixed(0)}%`);
@@ -24,6 +29,9 @@ export function TradePanel() {
     const set = (patch: Partial<ExecConfig>) => aiIntelExecutor.configure(patch);
     const setRec = (patch: Partial<ExecConfig['recovery']>) => set({ recovery: { ...c.recovery, ...patch } });
     const setVh = (patch: Partial<ExecConfig['virtualHook']>) => set({ virtualHook: { ...c.virtualHook, ...patch } });
+    const intel = useSyncExternalStore(intelService.subscribe, intelService.getSnapshot, intelService.getSnapshot);
+    const strategies = useStrategies();
+    const running = strategies.filter(x => x.status === 'ACTIVE').length;
     const [more, setMore] = useState(false);
     const [logOpen, setLogOpen] = useState(false);
     useEffect(() => {
@@ -144,12 +152,53 @@ export function TradePanel() {
                         </div>
                     )}
 
+                    <div className='sn-label'>AI guard</div>
+                    <Seg<AiMode>
+                        label='AI guard'
+                        value={c.ai}
+                        onChange={v => !locked && set({ ai: v })}
+                        options={[
+                            ['OFF', 'Off'],
+                            ['GUARD', 'Guard'],
+                            ['STRICT', 'Strict'],
+                        ]}
+                    />
+                    <div className='sn-reason'>
+                        {c.ai === 'OFF' ? 'Signals are not checked.' : c.ai === 'GUARD' ? 'Every signal is checked first; unstable markets, collapsed win share and failing strategies are skipped.' : 'Only signals with a stable market and proven edge over chance are traded (usually waits on random digits).'}
+                    </div>
+
                     <Switch
                         on={c.mode === 'AUTO' && c.autoAuthorised}
                         onChange={v => !locked && set({ mode: v ? 'AUTO' : 'ASSISTED', autoAuthorised: v })}
                         title='Trade automatically'
                         sub={c.mode === 'AUTO' ? 'On: it buys on your account without asking, within your limits' : 'Off: you confirm each trade'}
                     />
+                </section>
+
+                <section className='sn-card'>
+                    <div className='sn-label'>AI &amp; strategies</div>
+                    <ul className='sf-trades ai-best'>
+                        <li>
+                            <b>Chief</b>
+                            <span>{intel.report ? (intel.report.decision.decision === 'ENTER' ? `Enter ${intel.report.decision.market}` : 'No trade') : 'Evaluating…'}</span>
+                            <span>{intel.report ? intel.report.decision.explanation[0] : ''}</span>
+                            <em />
+                        </li>
+                        <li>
+                            <b>Guard</b>
+                            <span>{c.ai === 'OFF' ? 'Off' : `${s.aiGuard.allowed} passed · ${s.aiGuard.blocked} blocked`}</span>
+                            <span>{s.aiGuard.note ?? ''}</span>
+                            <em />
+                        </li>
+                        <li>
+                            <b>Strategies</b>
+                            <span>
+                                {running} running
+                            </span>
+                            <span>{autopilot.getSnapshot().config.promote === 'OFF' ? 'manual promotion' : `auto (${autopilot.getSnapshot().config.promote.toLowerCase()})`}</span>
+                            <em />
+                        </li>
+                    </ul>
                 </section>
 
                 <section className='sn-card'>
@@ -232,6 +281,8 @@ export function TradePanel() {
                                     {c.virtualHook.mode === 'FIXED' && <Num label='Paper trades' value={c.virtualHook.fixedCount} onCommit={n => !locked && setVh({ fixedCount: n })} hint='then back to real' />}
                                 </>
                             )}
+                            <div className='sn-label'>Strategies and research</div>
+                            <AutopilotPanel />
                             <div className='sn-label'>Markets ({watching} of {markets.length})</div>
                             <div className='sn-chips'>
                                 {markets.map(m => (

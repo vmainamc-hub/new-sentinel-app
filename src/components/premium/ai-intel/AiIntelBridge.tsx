@@ -9,6 +9,7 @@ import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
 import { apexFeed } from './feed-source';
 import { discoverVolatilityMarkets } from './discovery';
+import { autopilot } from './autopilot-instance';
 import { aiIntelExecutor } from './executor-instance';
 import { intelService } from './intel-instance'; // also starts the forward monitor on the shared feed
 import { useExecutor } from './use-executor';
@@ -17,8 +18,14 @@ const AiIntelBridge = () => {
     const store = useStore();
     const { isAuthorized } = useApiBase();
     const snapshot = useExecutor();
-    // An AUTO run keeps the intelligence service evaluating on every tab.
-    useEffect(() => (snapshot.running ? intelService.retain() : undefined), [snapshot.running]);
+    // The Chief's evaluations, the autopilot (background research and promotion) and the forward monitor run whenever the app is open.
+    useEffect(() => intelService.retain(), []);
+    useEffect(() => autopilot.start(), []);
+
+    // After a reload, find out how a contract that was open at that moment ended.
+    useEffect(() => {
+        if (isAuthorized) void aiIntelExecutor.reconcile();
+    }, [isAuthorized]);
 
     // Once the shared feed is live, ask Deriv which Volatility indices exist and track any beyond Sixfold's ten.
     useEffect(() => {

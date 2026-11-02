@@ -414,3 +414,74 @@ describe('virtual hook (paper trades)', () => {
         expect(h.buys).toHaveLength(1);
     });
 });
+
+describe('AI guard in live execution', () => {
+    it('blocks a signal the guard rejects, counts it and logs the reason; passes the rest with the reason in the trade log', async () => {
+        let allow = false;
+        const reviews: any[] = [];
+        const h = harness({ ai: 'GUARD' }, { review: r => (reviews.push(r), { allow, reason: allow ? 'stable regime' : 'unstable market' }) });
+        h.ex.start();
+        h.tick(1, 'R_10');
+        await flush();
+        expect(h.buys).toHaveLength(0);
+        expect(h.ex.getSnapshot().aiGuard).toMatchObject({ blocked: 1, allowed: 0, note: 'unstable market' });
+        expect(h.ex.getSnapshot().log[0].text).toMatch(/AI guard skipped.*unstable market/);
+        expect(reviews[0]).toMatchObject({ mode: 'GUARD', market: 'R_10', recovery: false, strategyId: null });
+        allow = true;
+        h.advance(500);
+        h.tick(1, 'R_10');
+        await flush();
+        expect(h.buys).toHaveLength(1);
+        expect(h.ex.getSnapshot().log.some(l => /AI: stable regime/.test(l.text))).toBe(true);
+    });
+    it('fails closed when the guard throws, and is skipped when switched off', async () => {
+        const boom = harness({ ai: 'GUARD' }, { review: () => { throw new Error('x'); } });
+        boom.ex.start();
+        boom.tick(1, 'R_10');
+        await flush();
+        expect(boom.buys).toHaveLength(0);
+        const off = harness({ ai: 'OFF' }, { review: () => ({ allow: false, reason: 'no' }) });
+        off.ex.start();
+        off.tick(1, 'R_10');
+        await flush();
+        expect(off.buys).toHaveLength(1);
+    });
+    it('also guards paper trades, and recovery signals carry no significance', async () => {
+        const reviews: any[] = [];
+        const h = harness({ ai: 'STRICT' }, { review: r => (reviews.push(r), { allow: true, reason: 'ok' }) });
+        h.ex.start();
+        h.tick(1, 'R_10');
+        await flush();
+        await h.lose(0);
+        h.advance(500);
+        h.tick(7, 'R_10');
+        await flush();
+        expect(reviews[1]).toMatchObject({ recovery: true, significant: false, mode: 'STRICT' });
+    });
+});
+
+describe('reconciling a contract that was open at reload', () => {
+    const open = (id: number, extra: Partial<any> = {}) => ({ id: `t${id}`, contractId: id, at: 1, market: 'R_10', label: 'Over 2', recovery: false, step: 0, stake: 1, duration: 1, triggerDigit: 1, exitDigit: null, profit: null, status: 'open', ...extra });
+    it('fills in the real result of an open contract and leaves the session alone', async () => {
+        const h = harness({}, { loadTrades: () => [open(11) as any, open(12, { virtual: true }) as any] });
+        const p = h.ex.reconcile(1000);
+        await flush();
+        h.settles[0].resolve({ is_sold: 1, status: 'won', profit: 0.4, exit_spot: '6' });
+        expect(await p).toBe(1);
+        const t = h.ex.getSnapshot().trades;
+        expect(t.find(x => x.contractId === 11)).toMatchObject({ status: 'won', profit: 0.4, exitDigit: 6 });
+        expect(t.find(x => x.contractId === 12)!.status).toBe('open'); // paper trades are not looked up
+        expect(h.ex.getSnapshot().session.trades).toBe(0);
+    });
+    it('marks an unreachable contract unconfirmed instead of guessing', async () => {
+        const h = harness({}, { loadTrades: () => [open(21) as any], settle: () => Promise.reject(new Error('gone')) });
+        await h.ex.reconcile(50);
+        expect(h.ex.getSnapshot().trades[0].status).toBe('unconfirmed');
+    });
+    it('does nothing while a run is active', async () => {
+        const h = harness({}, { loadTrades: () => [open(31) as any] });
+        h.ex.start();
+        expect(await h.ex.reconcile(50)).toBe(0);
+        expect(h.ex.getSnapshot().trades[0].status).toBe('open');
+    });
+});

@@ -48,6 +48,16 @@ Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main onl
 - Tests: 359 pass across Apex Intel + Sixfold + Vanguard (1 fail + 1 error are the old FreeBotsPage import). Still no build, render or live run here.
 - Note: all markets score close to chance on random digits, so the "best" entry is a ranking, not an edge; the 'Only proven edge' switch makes it wait instead.
 
+## Completion pass: AI in live execution, strategies that execute, analytics (latest)
+- [x] AI guard in live execution (`guard.ts`, setting AI guard Off / Guard / Strict, default Guard): every signal, real or paper, is checked just before it is bought: regime, winning digits drying up (last 100 ticks), strategy failing its forward test; Strict also needs a stable regime and, for main contracts, proven edge after false-discovery control. It can only block (fails closed), logs the reason, and the reason is written into each trade's log line. Rule-based statistics, no language model.
+- [x] Autopilot (`autopilot.ts`, always on in the background): re-runs the Strategy Lab on markets with 1000+ ticks (new seed, every N min), approves strategies that passed validation on unseen ticks, activates them by level: Strict (60+ forward trades, interval floor above chance) / Balanced (30+ forward trades at or above chance, default) / Fast (on validation alone) / Off. Max running strategies, audit entries as `auto`. The executor then trades ACTIVE strategies as SMART entries (tested end to end: lab -> registry -> autopilot -> picker -> executor buys).
+- [x] Forward monitor counts are saved in the browser and continue after a reload (open paper contracts restart).
+- [x] Reconciliation: a real contract saved as open at reload is looked up on Deriv and its result filled in (or marked unconfirmed); never touches a running session.
+- [x] Performance tab (`performance.ts`): equity curve, win rate, avg win/loss, max drawdown, longest losing run, by market / contract / recovery step, paper trades apart.
+- [x] Trade screen: AI guard selector, "AI & strategies" card (Chief verdict, guard passed/blocked, strategies running), autopilot controls under More settings. The Chief and forward monitor now run whenever the app is open.
+- Tests: 382 pass across Apex Intel + Sixfold + Vanguard (1 fail + 1 error = old FreeBotsPage import). Still no build, render or live run.
+- NOT done: language-model explanations (needs an API key and a server function; none exists in this repo), server-side database (browser storage only), live Deriv verification.
+
 ## Done
 - [x] Repo cloned, audited, branch created, plan committed.
 - [x] Apex Intel tab wired into the app (types, PremiumLayout, header icon, nav catalog, apex-sentinel domain nav); site-config validators pass.

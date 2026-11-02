@@ -20,6 +20,7 @@ import {
     scanRows,
 } from './analysis';
 import { HistoryPanel } from './ExecutionPanel';
+import { PerformancePanel } from './PerformancePanel';
 import { TradePanel } from './TradePanel';
 import { AiIntelligencePanel } from './AiIntelligencePanel';
 import { StrategyLabPanel, StrategyLibraryPanel } from './StrategyPanels';
@@ -27,7 +28,7 @@ import { intelService } from './intel-instance';
 import { useExecutor } from './use-executor';
 import './ai-intel.scss';
 
-type TabId = 'overview' | 'scanner' | 'competition' | 'history' | 'lab' | 'library' | 'ai';
+type TabId = 'overview' | 'scanner' | 'competition' | 'history' | 'lab' | 'library' | 'ai' | 'perf';
 
 // Everything under Insights keeps running in the background whether or not it is open; the first screen is only Trade.
 const TABS: Array<{ id: TabId; label: string }> = [
@@ -37,6 +38,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
     { id: 'ai', label: 'AI Intelligence' },
     { id: 'lab', label: 'Strategy Lab' },
     { id: 'library', label: 'Strategy Library' },
+    { id: 'perf', label: 'Performance' },
     { id: 'history', label: 'Trade History' },
 ];
 
@@ -368,6 +370,7 @@ export default function AiIntelPage() {
             {view === 'insights' && tab === 'ai' && <AiIntelligencePanel />}
             {view === 'insights' && tab === 'lab' && <StrategyLabPanel />}
             {view === 'insights' && tab === 'library' && <StrategyLibraryPanel />}
+            {view === 'insights' && tab === 'perf' && <PerformancePanel />}
             {view === 'insights' && tab === 'history' && <HistoryPanel />}
 
             {view === 'insights' && tab === 'competition' && (

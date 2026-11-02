@@ -8,6 +8,8 @@ import { rankPicks, rankRecovery } from './picker';
 import { getCandidates } from './candidates';
 import './registry-instance'; // sets the candidate provider (baseline + ACTIVE strategies)
 import { AiIntelExecutor, type ExecConfig, type ExecTrade } from './executor';
+import { assess } from './guard';
+import { forwardMonitor } from './registry-instance';
 
 const CONFIG_KEY = 'apex_intel_exec_v1';
 const TRADES_KEY = 'apex_intel_trades_v1';
@@ -39,6 +41,7 @@ export const aiIntelExecutor = new AiIntelExecutor({
     history: symbol => apexFeed.getLiveSeries()[symbol],
     pick: opts => rankPicks(apexSeries(), symbol => apexFeed.getLastTickAt(symbol), Date.now(), { ...opts, candidates: getCandidates() }),
     pickRecovery: opts => rankRecovery(apexSeries(), symbol => apexFeed.getLastTickAt(symbol), Date.now(), opts),
+    review: req => assess(req, { series: apexFeed.getLiveSeries()[req.market] ?? [], forward: forwardMonitor.getSnapshot() }),
     describeFailure: error => describeTradeFailure(error),
     afterStop: () => {
         const base = api_base as { is_stopping?: boolean; setIsRunning?: (value: boolean) => void };

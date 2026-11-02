@@ -4,7 +4,8 @@
 //
 // Deterioration: with MIN_TRADES+ forward trades, if even the UPPER end of the win-rate interval is below the contract's
 // chance level, the strategy is SUSPENDED by the monitor. The monitor can only suspend: it can never approve, activate or
-// edit a rule. Counts live in memory (since this page load); persisting them is not built.
+// edit a rule. Counts are kept in the browser (per strategy version), so a reload continues them; the open paper contracts
+// restart, so a few trades around a reload are not counted.
 import { winProbability } from '@/components/premium/sixfold/bot';
 import { wilson } from '@/components/premium/sixfold/stats';
 import { MIN_TRADES } from './analysis';
@@ -13,20 +14,28 @@ import type { Strategy, StrategyStatus } from './registry';
 import { compileRule } from './rules';
 import { SimBook, SimStream } from './sim';
 
+export type Counts = { trades: number; wins: number; since: number; suspended: boolean };
+export type CountStore = { load: () => Record<string, Counts> | null; save: (c: Record<string, Counts>) => void };
+
 export type Forward = { strategyId: string; trades: number; wins: number; rate: number | null; lo: number; hi: number; baseline: number; since: number; suspended: boolean };
 
 export class ForwardMonitor {
     private book = new SimBook();
     private streams = new Map<string, { strategyId: string; market: string }>();
-    private counts = new Map<string, { trades: number; wins: number; since: number; suspended: boolean }>();
+    private counts = new Map<string, Counts>();
     private listeners = new Set<() => void>();
     private snap: readonly Forward[] = [];
 
     constructor(
         private getStrategies: () => readonly Strategy[],
         private suspend: (id: string, note: string) => string | null,
-        private now: () => number = () => Date.now()
-    ) {}
+        private now: () => number = () => Date.now(),
+        private store?: CountStore
+    ) {
+        const saved = store?.load();
+        if (saved) for (const [id, c] of Object.entries(saved)) if (c && Number.isFinite(c.trades) && Number.isFinite(c.wins)) this.counts.set(id, { trades: c.trades, wins: c.wins, since: c.since ?? now(), suspended: Boolean(c.suspended) });
+        if (this.counts.size) this.publish(getStrategies());
+    }
 
     subscribe = (l: () => void) => {
         this.listeners.add(l);
@@ -94,6 +103,11 @@ export class ForwardMonitor {
                 const w = c.trades ? wilson(c.wins, c.trades) : { lo: 0, hi: 1 };
                 return { strategyId: s.id, trades: c.trades, wins: c.wins, rate: c.trades ? c.wins / c.trades : null, lo: w.lo, hi: w.hi, baseline: winProbability(contractOf(s.direction)), since: c.since, suspended: c.suspended };
             });
+        try {
+            this.store?.save(Object.fromEntries(this.counts));
+        } catch {
+            /* storage unavailable */
+        }
         this.listeners.forEach(l => l());
     }
 }
