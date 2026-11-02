@@ -79,9 +79,11 @@ window.Blockly.Blocks.text_charAt = {
         this.renderEfficiently();
     },
     getRequiredValueInputs() {
+        // The index input only exists for "letter #" and "letter # from end". For first / last / random letter there is no AT
+        // input, and requiring it made every such block show as "missing input values" and stopped the bot from running.
         return {
             VALUE: emptyTextValidator,
-            AT: emptyTextValidator,
+            ...(this.getInput('AT') ? { AT: emptyTextValidator } : {}),
         };
     },
 };
