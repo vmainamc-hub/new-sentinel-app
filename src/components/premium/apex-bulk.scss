@@ -332,7 +332,16 @@
 .apex-bt__scanctl label { display: grid; gap: 4px; font-size: 11px; color: var(--bt-muted); }
 .apex-bt__scanopts { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0 4px; font-size: 12px; color: var(--bt-muted); }
 .apex-bt .apex-bt__scanopts label { display: flex; flex-direction: row; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; font-weight: 600; font-size: 12px; }
-.apex-bt .apex-bt__scanopts input { width: auto; margin: 0; }
+.apex-bt .apex-bt__scanopts input[type='checkbox'] {
+    -webkit-appearance: none; appearance: none; flex: 0 0 18px; width: 18px; min-width: 18px; height: 18px; min-height: 18px; margin: 0; padding: 0;
+    border: 2px solid #5b7096; border-radius: 5px; background: #0b1730 center / 12px 12px no-repeat; cursor: pointer; transition: background-color .12s, border-color .12s;
+}
+.apex-bt .apex-bt__scanopts input[type='checkbox']:checked {
+    border-color: #19d38a; background-color: #19d38a;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6.4l2.7 2.6L10 3.2' fill='none' stroke='%23062b1c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.apex-bt .apex-bt__scanopts input[type='checkbox']:focus-visible { outline: 2px solid #19d3ff; outline-offset: 2px; }
+.apex-bt .apex-bt__scanopts label { cursor: pointer; }
 .apex-bt__scanrun { display: grid; gap: 6px; margin: 10px 0; font-size: 12px; color: var(--bt-muted); }
 .apex-bt__bar { height: 8px; border-radius: 6px; background: #13223f; overflow: hidden; }
 .apex-bt__bar i { display: block; height: 100%; background: linear-gradient(90deg, #19d3ff, #19d38a); transition: width .25s linear; }
