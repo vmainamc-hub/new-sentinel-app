@@ -1,23 +1,23 @@
 {
   "brand_name": "Sendivinnie",
-  "brand_domain": "sendivinnie.netlify.app",
+  "brand_domain": "appexsenti.netlify.app",
   "brand_hostname": {
-    "staging": "sendivinnie.netlify.app",
-    "production": "sendivinnie.netlify.app"
+    "staging": "appexsenti.netlify.app",
+    "production": "appexsenti.netlify.app"
   },
-  "domain_name": "sendivinnie.netlify.app",
+  "domain_name": "appexsenti.netlify.app",
   "sites": {
     "default_site": "apex-sentinel",
     "entries": [
       {
         "id": "apex-sentinel",
         "hosts": [
-          "sendivinnie.netlify.app",
+          "appexsenti.netlify.app",
           "localhost"
         ],
         "display_domain": "Sendivinnie",
-        "website_url": "https://sendivinnie.netlify.app",
-        "redirect_uri": "https://sendivinnie.netlify.app/callback",
+        "website_url": "https://appexsenti.netlify.app",
+        "redirect_uri": "https://appexsenti.netlify.app/callback",
         "client_id": "34BIr72thLXMJHaL9PQxN",
         "scopes": [
           "trade",
@@ -160,10 +160,10 @@
     },
     "hostname": {
       "production": {
-        "com": "sendivinnie.netlify.app"
+        "com": "appexsenti.netlify.app"
       },
       "staging": {
-        "com": "sendivinnie.netlify.app"
+        "com": "appexsenti.netlify.app"
       }
     },
     "auth2_url": {
