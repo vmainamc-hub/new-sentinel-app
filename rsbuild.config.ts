@@ -63,7 +63,13 @@ export default defineConfig({
                 from: 'node_modules/@deriv-com/smartcharts-champion/dist/assets/shaders/*',
                 to: 'assets/shaders/[name][ext]',
             },
-            { from: path.join(__dirname, 'public') },
+            {
+                from: path.join(__dirname, 'public'),
+                // The Manual Trader (Deriv DTrader) is already built. It must not go through the bundler's copy and
+                // minify step (that rewrites the files and clashes on *.LICENSE.txt). scripts/copy-manual-trader.mjs
+                // copies it untouched into dist/ after the build.
+                globOptions: { ignore: ['**/br_manual-trader/**'] },
+            },
         ],
     },
     html: {
@@ -72,6 +78,8 @@ export default defineConfig({
     server: {
         port: 8443,
         compress: true,
+        // public/ is copied by output.copy above (with the Manual Trader excluded), not by the default copy.
+        publicDir: { copyOnBuild: false },
     },
     dev: {
         hmr: true,
