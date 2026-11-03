@@ -20,8 +20,7 @@
         "redirect_uri": "https://appexsenti.netlify.app/callback",
         "client_id": "34BIr72thLXMJHaL9PQxN",
         "scopes": [
-          "trade",
-          "application_read"
+          "trade"
         ],
         "environment": "production",
         "bot_library": {
@@ -40,8 +39,7 @@
         "redirect_uri": "https://precisionapex.netlify.app/callback",
         "client_id": "34BIr72thLXMJHaL9PQxN",
         "scopes": [
-          "trade",
-          "application_read"
+          "trade"
         ],
         "environment": "production",
         "bot_library": {
@@ -60,8 +58,7 @@
         "redirect_uri": "https://repair-additions--newapexsentinel.netlify.app/callback",
         "client_id": "34BIr72thLXMJHaL9PQxN",
         "scopes": [
-          "trade",
-          "application_read"
+          "trade"
         ],
         "environment": "production",
         "bot_library": {
