@@ -78,10 +78,12 @@ const SixfoldBridge = lazy(() => import('./sixfold/sixfold-bridge'));
 const VanguardPage = lazy(() => import('./vanguard/VanguardPage'));
 const VanguardBridge = lazy(() => import('./vanguard/vanguard-bridge'));
 const DTraderPage = lazy(() => import('./dtrader/DTraderPage'));
+// Manual Trader: Deriv's own DTrader frontend, built from the db-traders repo and served from /dtrader-app/ in an iframe.
+const ManualTraderPage = lazy(() => import('./manual-trader/ManualTraderPage'));
 
 const validSections: PremiumSection[] = [
     'dashboard', 'bot_ideas', 'quick_bot', 'bot_builder', 'free_bots', 'signal_ai', 'auto_trader', 'sentinel_ai',
-    'manual_trading', 'bulk_trader', 'batch_trader', 'copy_trading', 'speedbot', 'calculator', 'pro_ai', 'analysis_tools',
+    'manual_trading', 'manual_trader', 'bulk_trader', 'batch_trader', 'copy_trading', 'speedbot', 'calculator', 'pro_ai', 'analysis_tools',
     'analysis_hub', 'charts', 'tradingview', 'dtrader', 'ai_bots', 'digits_analysis', 'sixfold', 'vanguard', 'ai_intel',
 ];
 
@@ -231,6 +233,7 @@ const PremiumLayout = observer(() => {
             case 'sentinel_ai': return <Suspense fallback={<PremiumLoader />}><SentinelAiPage /></Suspense>;
             // The nav's "DTrader" tab. The previous page (src/pages/manual-trading) is left in the repo, unused, so it can be restored.
             case 'manual_trading': return <Suspense fallback={<PremiumLoader />}><DTraderPage /></Suspense>;
+            case 'manual_trader': return <Suspense fallback={<PremiumLoader />}><ManualTraderPage /></Suspense>;
             case 'bulk_trader': return <BulkTraderPage />;
             case 'batch_trader': return <BatchTraderPage />;
             case 'copy_trading': return <PatCopyTradingPage />;

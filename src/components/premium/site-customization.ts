@@ -26,6 +26,7 @@ export const NAVIGATION_CATALOG: Array<{ id: PremiumSection; label: string; requ
     { id: 'vanguard', label: 'Vanguard' },
     { id: 'ai_intel', label: 'Apex Intel' },
     { id: 'manual_trading', label: 'DTrader' },
+    { id: 'manual_trader', label: 'Manual Trader' },
     { id: 'tradingview', label: 'TradingView' },
     { id: 'bulk_trader', label: 'Bulk Trader' },
     { id: 'batch_trader', label: 'Batch Trader' },

@@ -6,6 +6,7 @@
     "bot_builder",
     "free_bots",
     "manual_trading",
+    "manual_trader",
     "ai_bots",
     "auto_trader",
     "sentinel_ai",

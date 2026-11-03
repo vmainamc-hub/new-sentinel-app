@@ -40,6 +40,10 @@
       "label": "DTrader"
     },
     {
+      "id": "manual_trader",
+      "label": "Manual Trader"
+    },
+    {
       "id": "tradingview",
       "label": "TradingView"
     },
@@ -87,6 +91,7 @@
       "vanguard",
       "ai_intel",
       "manual_trading",
+      "manual_trader",
       "tradingview",
       "bulk_trader",
       "batch_trader",
