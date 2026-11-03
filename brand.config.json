@@ -1,23 +1,23 @@
 {
-  "brand_name": "Sentiih",
-  "brand_domain": "sentiih.netlify.app",
+  "brand_name": "Sendivinnie",
+  "brand_domain": "sendivinnie.netlify.app",
   "brand_hostname": {
-    "staging": "sentiih.netlify.app",
-    "production": "sentiih.netlify.app"
+    "staging": "sendivinnie.netlify.app",
+    "production": "sendivinnie.netlify.app"
   },
-  "domain_name": "sentiih.netlify.app",
+  "domain_name": "sendivinnie.netlify.app",
   "sites": {
     "default_site": "apex-sentinel",
     "entries": [
       {
         "id": "apex-sentinel",
         "hosts": [
-          "sentiih.netlify.app",
+          "sendivinnie.netlify.app",
           "localhost"
         ],
-        "display_domain": "Sentiih",
-        "website_url": "https://sentiih.netlify.app",
-        "redirect_uri": "https://sentiih.netlify.app/callback",
+        "display_domain": "Sendivinnie",
+        "website_url": "https://sendivinnie.netlify.app",
+        "redirect_uri": "https://sendivinnie.netlify.app/callback",
         "client_id": "34BIr72thLXMJHaL9PQxN",
         "scopes": [
           "trade",
@@ -145,14 +145,14 @@
     "css_variable_prefix": "--brand"
   },
   "platform": {
-    "name": "Sentiih",
+    "name": "Sendivinnie",
     "logo": {
       "type": "component",
       "component_name": "BrandLogo",
-      "alt_text": "Sentiih",
+      "alt_text": "Sendivinnie",
       "link_url": "/",
       "show_text": true,
-      "text": "Sentiih"
+      "text": "Sendivinnie"
     },
     "footer": {
       "enable_language_settings": false,
@@ -160,10 +160,10 @@
     },
     "hostname": {
       "production": {
-        "com": "sentiih.netlify.app"
+        "com": "sendivinnie.netlify.app"
       },
       "staging": {
-        "com": "sentiih.netlify.app"
+        "com": "sendivinnie.netlify.app"
       }
     },
     "auth2_url": {

@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Netlify exposes URL for the primary deployed site. Only rewrite the production
-// Apex Sentinel entry during a production build so preview builds retain their
+// primary Sendivinnie entry during a production build so preview builds retain their
 // explicitly registered OAuth configuration.
 const context = process.env.CONTEXT || '';
 const deploymentUrl = String(process.env.URL || process.env.DEPLOY_PRIME_URL || '').trim().replace(/\/$/, '');
@@ -17,7 +17,7 @@ const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 const hostname = new URL(deploymentUrl).hostname;
 const site = config.sites?.entries?.find(entry => entry.id === 'apex-sentinel');
 
-if (!site) throw new Error('Apex Sentinel site configuration is missing.');
+if (!site) throw new Error('Primary Sendivinnie site configuration is missing.');
 
 site.hosts = Array.from(new Set([hostname, 'localhost']));
 site.website_url = deploymentUrl;
@@ -31,5 +31,5 @@ if (config.platform?.hostname) {
 }
 
 fs.writeFileSync(configPath, JSON.stringify(config, null, 4) + '\\n');
-console.log('Netlify brand sync: Apex Sentinel production host set to ' + hostname);
+console.log('Netlify brand sync: Sendivinnie production host set to ' + hostname);
 console.log('Netlify brand sync: OAuth client ID retained from the repository configuration.');
