@@ -8,6 +8,7 @@ export type PremiumSection =
     | 'auto_trader'
     | 'sentinel_ai'
     | 'manual_trading'
+    | 'manual_trader'
     | 'bulk_trader'
     | 'batch_trader'
     | 'copy_trading'

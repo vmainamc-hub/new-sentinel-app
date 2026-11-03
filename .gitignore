@@ -52,3 +52,5 @@ cline_instructions.md
 .chatgpt-instructions.md
 .claude-instructions.md
 .ai-rules.md
+# Manual Trader build workspace (scripts/build-manual-trader.sh)
+.manual-trader-build/

@@ -17,6 +17,12 @@
   to = "/index.html"
   status = 200
 
+# Manual Trader (Deriv DTrader build): its own single-page app under /br_manual-trader/. Real files win over this rewrite.
+[[redirects]]
+  from = "/br_manual-trader/*"
+  to = "/br_manual-trader/index.html"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

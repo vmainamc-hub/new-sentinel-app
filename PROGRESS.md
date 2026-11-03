@@ -489,3 +489,30 @@ Plan: 1) generalize the edge layer + runner hook, 2) Sixfold + Vanguard, 3) Apex
   - Console handle `apexIntelEdge` (same shape as the others; own settings and evidence keys). 14 new tests. Premium suites: 892 pass, same 51 failures and 3 errors as before the change (window-less settings specs etc.). Changed files type-check clean.
 - Known behaviour to measure, not hide: (a) Kalman's "not above fair" veto reads the contract's raw win rate, while Sixfold/Vanguard score entry-conditioned simulated trades, so on a market where only the entry-conditioned rate is high the gate stands the cell down (shadow mode shows how often); (b) default cooldown 20 s per market and hourly budget 40 will slow a fast session: `sixfoldEdge.set({ hourlyBudget: 0, cooldownMs: 0 })`; (c) no Hunter here, so the level rule and the budget always apply.
 - NOT verified: `npm run build`, eslint, any React render, any live Deriv run (registry unreachable here). Run first on a networked machine: `npm ci && npm run build && npm test`, then a DEMO account with `sixfoldEdge.set({ shadow: true })` to compare.
+
+## Manual Trader (exact Deriv DTrader frontend) — branch `feat/manual-trader`
+Goal: a "Manual Trader" tab that is the real DTrader screen from `vmainamc-hub/db-traders-` (packages/trader, route "/"), not a rebuild. The existing "DTrader" tab (`dtrader/DTraderPage.tsx`) is untouched and stays as is.
+Approach (chosen by the owner): same-origin iframe. The source's own app is built once and served from `/br_manual-trader/`; the new tab shows it in an iframe. Reasons it is not a code copy: the trader is ~650 files on React 17 / react-router 5 / webpack and reads its state from `@deriv/stores`, `@deriv/shared`, `@deriv/components` and core stores (client, ui, portfolio, common, ...) that this app does not have.
+- Folder name: must start with `br_`, the only prefix the source router (`packages/core/src/App/app.jsx`) accepts as a base path.
+- Login: no second Deriv login. `ManualTraderPage` copies the app's own sign-in into the keys the DTrader build reads (`deriv_oauth_session`, `deriv_oauth_accounts_raw`, `deriv_oauth_app_id`) and opens it with the acct1/token1/cur1 address (tokens there are `oauth:<account_id>`, never the bearer token). It opens on the account Sentinel is already on, else demo.
+- Storage: the build shares this origin's localStorage/sessionStorage and both apps use the same key names with different values (`active_loginid`: real id here, `VRTC...` alias there). `scripts/manual-trader/storage-isolation.js` is inlined first in the built `index.html` and namespaces every key `mt:` except the three shared ones.
+- Source patch (only one): the one-time-WebSocket request in `packages/shared/src/utils/config/deriv-socket.ts` also sends `Deriv-App-ID`. Nothing in packages/trader changes.
+
+### Done
+- [x] Tab `manual_trader` ("Manual Trader"): `types.ts`, `site-customization.ts`, `PremiumLayout.tsx` (lazy page + case), `catalog.json` (regenerated with `scripts/site-customization-catalog.js`), `domains/apex-sentinel.json`
+- [x] `manual-trader/manual-trader-session.ts` (pure hand-off logic) + `ManualTraderPage.tsx` + scss; shows "not installed yet" until the build is in place (checked via `/br_manual-trader/manual-trader.json`, so the SPA fallback page cannot fool it)
+- [x] `netlify.toml` rewrite for `/br_manual-trader/*`
+- [x] `scripts/build-manual-trader.sh` (`npm run build:manual-trader`): fetch source commit `5f15b9a`, patch, build with the source's own sub-folder flow, inline the isolation script, install into `public/br_manual-trader/`, write the manifest
+- [x] Checked offline: `node scripts/manual-trader/storage-isolation.test.js` passes; session logic run under Node; the build script's patch and inline steps dry-run on copies (patch fails if its anchor ever stops matching once); `bash -n` ok; JSON files valid
+
+### Not done / not verified
+- NOT done: the source build itself (needs Node 18 and the npm registry; unreachable in the session that wrote this). Until `npm run build:manual-trader` runs, the tab shows the "not installed" notice.
+- NOT verified: that the source builds under `/br_manual-trader/` (header/footer checks of the form `pathname === '/'` in core may not match under a sub-folder), that the iframe loads, that the bridged token authorizes (OTP request with `Deriv-App-ID`), that the storage isolation works in a real browser with the trader's libraries, `npm run build`, `npm run type-check`, `npm test` (the new spec is written, not run).
+- NOT decided: whether the built folder is committed (check size; GitHub rejects files over 100 MB) or built in CI.
+- Not handled: `ultimatetraders` / `vantagetraders` hosts are not in `brand.config.json` `sites.entries` (only sendivinnie, precisionapex and one preview), so sign-in fails closed there regardless of this feature.
+
+### Next
+1. On a machine with Node 18 and network: `npm run build:manual-trader`, fix whatever the first real build reports.
+2. `npm ci && npm run type-check && npm test && npm run test:manual-trader-storage`.
+3. Open a branch deploy with a DEMO account: Manual Trader tab loads, balance shows, one demo trade works, and Sentinel's active account is unchanged afterwards.
+4. Only then decide on committing the built folder and merging.
