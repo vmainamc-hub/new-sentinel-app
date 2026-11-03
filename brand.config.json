@@ -1,5 +1,5 @@
 {
-  "brand_name": "Sendivinnie",
+  "brand_name": "Apex Sentinel",
   "brand_domain": "appexsenti.netlify.app",
   "brand_hostname": {
     "staging": "appexsenti.netlify.app",
@@ -15,7 +15,7 @@
           "appexsenti.netlify.app",
           "localhost"
         ],
-        "display_domain": "Sendivinnie",
+        "display_domain": "Apex Sentinel",
         "website_url": "https://appexsenti.netlify.app",
         "redirect_uri": "https://appexsenti.netlify.app/callback",
         "client_id": "34BIr72thLXMJHaL9PQxN",
@@ -145,14 +145,14 @@
     "css_variable_prefix": "--brand"
   },
   "platform": {
-    "name": "Sendivinnie",
+    "name": "Apex Sentinel",
     "logo": {
       "type": "component",
       "component_name": "BrandLogo",
-      "alt_text": "Sendivinnie",
+      "alt_text": "Apex Sentinel",
       "link_url": "/",
       "show_text": true,
-      "text": "Sendivinnie"
+      "text": "Apex Sentinel"
     },
     "footer": {
       "enable_language_settings": false,
