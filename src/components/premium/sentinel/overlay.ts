@@ -5,6 +5,7 @@
 // bonus by Pulse score. The scanner, Meter, loss shield and money rules are Sixfold's. Pulse decides when to look, it cannot create
 // an edge on random digits, and the app says so.
 import type { RunnerOverlay } from '../sixfold/overlay';
+import type { EdgeInfluence } from './edge/influence';
 import type { PulseRead, PulseSnapshot, PulseTier } from './pulse';
 import { contractsFor, type EngineSettings } from './settings';
 import { readSpecialDigits } from './special-digits';
@@ -110,12 +111,69 @@ export const createSentinelOverlay = (opts: {
     series?: () => Readonly<Record<string, readonly number[]>>;
     /** The clock used for the Hunter's idle time. Default: Date.now. */
     now?: () => number;
+    /** The Kalman / danger / frequency / arbiter gates (see ./edge). Without it the overlay behaves exactly as before. */
+    edge?: EdgeInfluence;
+    /** The signal source that is NOT selected, read the same way. The arbiter uses it as a second opinion. */
+    readOther?: (symbols: readonly string[], engine: EngineSettings) => PulseSnapshot;
 }): RunnerOverlay & { board: () => BoardRow[]; funnel: () => EngineFunnel | null } => {
     let board: BoardRow[] = [];
     let funnel: EngineFunnel | null = null;
     const index = new Map<string, BoardRow>();
     const clock = opts.now ?? Date.now;
     let lastActivity = clock();
+
+    const baseCall: RunnerOverlay['call'] = (cell, ctx) => {
+        // MANDATORY special-digit rule (digit 1 for Over, digit 8 for Under): applies in every mode, the Hunter included.
+        if (opts.series) {
+            const special = readSpecialDigits(opts.series()[cell.symbol], cell.contract.side);
+            if (!special.ok) return { allow: false, bump: 0, rank: 0, note: special.note };
+        }
+        const { mode, source } = opts.getEngine();
+        const who = source === 'digits' ? 'Digits Analysis' : 'Pulse';
+        const row = index.get(keyOf(cell.symbol, cell.contract.side, cell.contract.param));
+        if (mode === 'hunter') {
+            // The signal source is a voice, not a gate: a signal eases the bar by its strength, no signal raises it a little, and
+            // the idle clock eases it step by step so something always comes up. The scanner, Meter guide, win-streak guard,
+            // loss shield and limits stay.
+            const idle = Math.max(0, ctx.now - lastActivity);
+            const ease = huntEase(idle);
+            const notes = [
+                row
+                    ? source === 'digits'
+                        ? `Digits Analysis #${TIER_RANK_NUMBER[row.tier]} for its pair`
+                        : `Pulse ${row.tier} (${row.agree} of 4 windows)`
+                    : `no ${who} signal`,
+                ease > 0 ? `no trade for ${Math.round(idle / 1000)}s: bar eased by ${ease}` : '',
+            ].filter(Boolean);
+            return {
+                allow: true,
+                bump: (row ? TIER_BUMP[row.tier] : 4) - ease,
+                rank: row ? Math.min(10, row.score / 10) + TIER_RANK[row.tier] : 0,
+                note: notes.join('; '),
+            };
+        }
+        if (!row) {
+            if (mode === 'active') return { allow: true, bump: 6, rank: 0, note: `no ${who} signal: higher bar` };
+            return {
+                allow: false,
+                bump: 0,
+                rank: 0,
+                note:
+                    source === 'digits'
+                        ? `not in Digits Analysis's top ${mode === 'careful' ? '1' : '2'} for its pair`
+                        : `no ${mode === 'careful' ? 'strong' : 'strong or steady'} Pulse signal`,
+            };
+        }
+        return {
+            allow: true,
+            bump: TIER_BUMP[row.tier],
+            rank: Math.min(10, row.score / 10) + TIER_RANK[row.tier],
+            note:
+                source === 'digits'
+                    ? `Digits Analysis #${TIER_RANK_NUMBER[row.tier]} for its pair`
+                    : `Pulse ${row.tier} (${row.agree} of 4 windows)`,
+        };
+    };
 
     return {
         moduleId: 'sentinel-ai',
@@ -124,11 +182,21 @@ export const createSentinelOverlay = (opts: {
         onStart: now => {
             lastActivity = now;
         },
-        onBought: () => {
+        onBought: notice => {
             lastActivity = clock();
+            try {
+                opts.edge?.onBought(notice);
+            } catch {
+                /* a gate failure must never disturb a live trade */
+            }
         },
-        onSettled: () => {
+        onSettled: notice => {
             lastActivity = clock();
+            try {
+                opts.edge?.onSettled(notice);
+            } catch {
+                /* a gate failure must never disturb a live session */
+            }
         },
         refresh: (now, symbols) => {
             const engine = opts.getEngine();
@@ -154,64 +222,56 @@ export const createSentinelOverlay = (opts: {
             }
             index.clear();
             for (const row of board) index.set(row.key, row);
+            if (opts.edge) {
+                try {
+                    let other: BoardRow[] | null = null;
+                    try {
+                        const snap = opts.readOther?.(symbols, engine);
+                        other = snap ? buildBoard(snap, { ...engine, mode: 'active' }) : null;
+                    } catch {
+                        other = null; // no second opinion is not a reason to stop
+                    }
+                    opts.edge.refresh({
+                        now,
+                        symbols,
+                        contracts: contractsFor(engine),
+                        board,
+                        other,
+                        hunter: engine.mode === 'hunter',
+                    });
+                } catch {
+                    /* the gates stay on their last read; the engine's own verdicts are unaffected */
+                }
+            }
         },
         board: () => board,
         funnel: () => funnel,
         guard: (symbol, traded, series) => {
             const read = readSpecialDigits(series, traded.side);
-            return { ok: read.ok, note: read.note };
+            if (!read.ok || !opts.edge) return { ok: read.ok, note: read.note };
+            try {
+                const edge = opts.edge.guard(symbol, traded, series);
+                return { ok: edge.ok, note: [read.note, edge.note].filter(Boolean).join('; ') };
+            } catch {
+                return { ok: true, note: read.note }; // the gates are an extra look; the mandatory rule has already passed
+            }
         },
         call: (cell, ctx) => {
-            // MANDATORY special-digit rule (digit 1 for Over, digit 8 for Under): applies in every mode, the Hunter included.
-            if (opts.series) {
-                const special = readSpecialDigits(opts.series()[cell.symbol], cell.contract.side);
-                if (!special.ok) return { allow: false, bump: 0, rank: 0, note: special.note };
-            }
-            const { mode, source } = opts.getEngine();
-            const who = source === 'digits' ? 'Digits Analysis' : 'Pulse';
-            const row = index.get(keyOf(cell.symbol, cell.contract.side, cell.contract.param));
-            if (mode === 'hunter') {
-                // The signal source is a voice, not a gate: a signal eases the bar by its strength, no signal raises it a little, and
-                // the idle clock eases it step by step so something always comes up. The scanner, Meter guide, win-streak guard,
-                // loss shield and limits stay.
-                const idle = Math.max(0, ctx.now - lastActivity);
-                const ease = huntEase(idle);
-                const notes = [
-                    row
-                        ? source === 'digits'
-                            ? `Digits Analysis #${TIER_RANK_NUMBER[row.tier]} for its pair`
-                            : `Pulse ${row.tier} (${row.agree} of 4 windows)`
-                        : `no ${who} signal`,
-                    ease > 0 ? `no trade for ${Math.round(idle / 1000)}s: bar eased by ${ease}` : '',
-                ].filter(Boolean);
+            const base = baseCall(cell, ctx);
+            // A signal the engine already stood down has nothing left for the gates to judge.
+            if (!opts.edge || !base.allow) return base;
+            try {
+                const row = index.get(keyOf(cell.symbol, cell.contract.side, cell.contract.param));
+                const extra = opts.edge.call(cell, row, { recovering: ctx.recovering, now: ctx.now });
                 return {
-                    allow: true,
-                    bump: (row ? TIER_BUMP[row.tier] : 4) - ease,
-                    rank: row ? Math.min(10, row.score / 10) + TIER_RANK[row.tier] : 0,
-                    note: notes.join('; '),
+                    allow: extra.allow,
+                    bump: base.bump + extra.bump,
+                    rank: base.rank + extra.rank,
+                    note: [base.note, extra.note].filter(Boolean).join('; '),
                 };
+            } catch {
+                return base;
             }
-            if (!row) {
-                if (mode === 'active') return { allow: true, bump: 6, rank: 0, note: `no ${who} signal: higher bar` };
-                return {
-                    allow: false,
-                    bump: 0,
-                    rank: 0,
-                    note:
-                        source === 'digits'
-                            ? `not in Digits Analysis's top ${mode === 'careful' ? '1' : '2'} for its pair`
-                            : `no ${mode === 'careful' ? 'strong' : 'strong or steady'} Pulse signal`,
-                };
-            }
-            return {
-                allow: true,
-                bump: TIER_BUMP[row.tier],
-                rank: Math.min(10, row.score / 10) + TIER_RANK[row.tier],
-                note:
-                    source === 'digits'
-                        ? `Digits Analysis #${TIER_RANK_NUMBER[row.tier]} for its pair`
-                        : `Pulse ${row.tier} (${row.agree} of 4 windows)`,
-            };
         },
     };
 };

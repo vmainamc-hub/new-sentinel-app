@@ -3,6 +3,8 @@ import { api_base } from '@/external/bot-skeleton';
 import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purchase';
 import { sixfoldFeed } from '../sixfold/feed';
 import { SixfoldRunner } from '../sixfold/runner';
+import { createEdgeInfluence, describeReport } from './edge/influence';
+import { type EdgeSettings, loadEdge, normalizeEdge, saveEdge } from './edge/settings';
 import { createSentinelOverlay } from './overlay';
 import { readDigitsAnalysis } from './digits-source';
 import { readPulse } from './pulse';
@@ -15,15 +17,42 @@ export const setEngineSettings = (next: EngineSettings) => {
     saveEngine(next);
 };
 
+let edgeSettings: EdgeSettings = loadEdge();
+
+/**
+ * The Kalman / cross-market danger / frequency / arbiter gates. They sit inside the overlay, so they change which signals come up for
+ * execution and nothing on screen. No screen for them: from the console, `sentinelEdge.set({ shadow: true })` measures without
+ * acting, `sentinelEdge.set({ kalman: false })` switches one off, `sentinelEdge.report()` prints the evidence.
+ */
+export const sentinelEdgeInfluence = createEdgeInfluence({
+    getSettings: () => edgeSettings,
+    series: () => sixfoldFeed.getLiveSeries(),
+});
+export const sentinelEdge = {
+    get: (): EdgeSettings => ({ ...edgeSettings }),
+    set: (patch: Partial<EdgeSettings>): EdgeSettings => {
+        edgeSettings = normalizeEdge({ ...edgeSettings, ...patch });
+        saveEdge(edgeSettings);
+        return { ...edgeSettings };
+    },
+    report: () => sentinelEdgeInfluence.report(),
+    print: (): string => describeReport(sentinelEdgeInfluence.report()),
+    reset: () => sentinelEdgeInfluence.reset(),
+};
+if (typeof window !== 'undefined')
+    (window as unknown as { sentinelEdge?: typeof sentinelEdge }).sentinelEdge = sentinelEdge;
+
+const readSource = (source: EngineSettings['source'], symbols: readonly string[], eng: EngineSettings) => {
+    const series = sixfoldFeed.getSnapshot().series;
+    return source === 'digits' ? readDigitsAnalysis(series, symbols, contractsFor(eng)) : readPulse(series, symbols);
+};
+
 export const sentinelOverlay = createSentinelOverlay({
     getEngine: () => engine,
     series: () => sixfoldFeed.getLiveSeries(),
-    read: (symbols, eng) => {
-        const series = sixfoldFeed.getSnapshot().series;
-        return eng.source === 'digits'
-            ? readDigitsAnalysis(series, symbols, contractsFor(eng))
-            : readPulse(series, symbols);
-    },
+    read: (symbols, eng) => readSource(eng.source, symbols, eng),
+    readOther: (symbols, eng) => readSource(eng.source === 'digits' ? 'pulse' : 'digits', symbols, eng),
+    edge: sentinelEdgeInfluence,
 });
 
 export const sentinelRunner = new SixfoldRunner({
@@ -50,5 +79,12 @@ export const attachEngines = (): (() => void) => {
     return () => undefined;
 };
 
-sixfoldFeed.onTick((symbol, digit) => sentinelRunner.handleFeedTick(symbol, digit));
+sixfoldFeed.onTick((symbol, digit) => {
+    sentinelRunner.handleFeedTick(symbol, digit);
+    try {
+        sentinelEdgeInfluence.onTick(symbol, digit);
+    } catch {
+        /* the gates' record never gets in the way of a tick */
+    }
+});
 if (typeof window !== 'undefined') window.setInterval(() => sentinelRunner.tick(), 500);
