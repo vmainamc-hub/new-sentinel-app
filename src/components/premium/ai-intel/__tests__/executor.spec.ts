@@ -485,3 +485,39 @@ describe('reconciling a contract that was open at reload', () => {
         expect(h.ex.getSnapshot().trades[0].status).toBe('open');
     });
 });
+
+describe('extra checks added to the executor (edge gates hooks)', () => {
+    it('hands the full ranked book to onBoard, before the one-per-market cut', () => {
+        const seen: number[] = [];
+        const h = harness({}, { onBoard: ranked => seen.push(ranked.length) }, { primary: [pick('R_10', 'OVER_2'), pick('R_10', 'UNDER_7'), pick('R_50', 'UNDER_7')] });
+        h.ex.start();
+        h.tick(1);
+        expect(seen[0]).toBe(3);
+        expect(h.ex.getSnapshot().board.primary).toHaveLength(2);
+    });
+    it('reports a real purchase and its settlement (not paper trades)', async () => {
+        const events: string[] = [];
+        const h = harness({}, { onBought: n => events.push(`bought:${n.market}:${n.contract.side}${n.contract.param}`), onSettled: n => events.push(`settled:${n.profit}`) });
+        h.ex.start();
+        h.tick(1);
+        await flush();
+        await h.win(0);
+        expect(events).toEqual(['bought:R_10:OVER2', 'settled:0.4']);
+    });
+    it('a throwing hook never stops a trade', async () => {
+        const h = harness({}, { onBoard: () => { throw new Error('x'); }, onBought: () => { throw new Error('x'); }, onSettled: () => { throw new Error('x'); } });
+        h.ex.start();
+        h.tick(1);
+        await flush();
+        await h.win(0);
+        expect(h.buys).toHaveLength(1);
+        expect(h.ex.getSnapshot().session.trades).toBe(1);
+    });
+    it('a signal blocked by review is skipped and logged as an AI-guard skip', () => {
+        const h = harness({}, { review: () => ({ allow: false, reason: 'edge gates: test' }) });
+        h.ex.start();
+        h.tick(1);
+        expect(h.buys).toHaveLength(0);
+        expect(h.ex.getSnapshot().log.some(l => /edge gates: test/.test(l.text))).toBe(true);
+    });
+});

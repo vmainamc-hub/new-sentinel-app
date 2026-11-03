@@ -241,6 +241,11 @@ export type ExecIO = {
     pickRecovery?: (opts: { duration: number; entries?: readonly PickEntry[] }) => RecoveryPick[];
     /** The AI guard: allow or block one signal. Absent means no guard. */
     review?: (req: GuardRequest) => GuardVerdict;
+    /** Every board refresh: the full ranked lists (before one-per-market), for extra checks that read the whole book. */
+    onBoard?: (ranked: readonly Pick[], recovery: readonly RecoveryPick[], now: number) => void;
+    /** A real contract was bought / settled (profit null: result not confirmed). */
+    onBought?: (n: { contractId: number; market: string; contract: Contract; recovery: boolean; stake: number }) => void;
+    onSettled?: (n: { contractId: number; market: string; contract: Contract; recovery: boolean; stake: number; profit: number | null }) => void;
     /** Recent digits of a market (current tick included), for SMART strategy rules. */
     history?: (symbol: string) => readonly number[];
     describeFailure: (e: unknown) => { kind: string; message: string; outcomeUnknown: boolean };
@@ -296,6 +301,8 @@ export class AiIntelExecutor {
     private aiAllowed = 0;
     private aiNote: string | null = null;
     private aiLogAt = new Map<string, number>();
+    /** Real contracts awaiting their result: what was bought, for the settle notice. */
+    private bought = new Map<string, { market: string; contract: Contract; recovery: boolean }>();
     private reconciling = false;
     private disposeWatch: (() => void) | null = null;
     private watch: ((on: (runPanelRunning: boolean, active: string | null) => void) => () => void) | null = null;
@@ -340,12 +347,17 @@ export class AiIntelExecutor {
         if (!force && now - this.boardAt < BOARD_EVERY_MS) return;
         this.boardAt = now;
         const out = new Set(this.cfg.excluded);
-        const primary = bestPerMarket(this.io.pick({ duration: this.cfg.duration, evidenceOnly: this.cfg.evidenceOnly, directions: this.cfg.directions, entries: this.entryKinds() }).filter(p => !out.has(p.market))).slice(0, BOARD_TOP);
+        const rankedPrimary = this.io.pick({ duration: this.cfg.duration, evidenceOnly: this.cfg.evidenceOnly, directions: this.cfg.directions, entries: this.entryKinds() }).filter(p => !out.has(p.market));
+        const primary = bestPerMarket(rankedPrimary).slice(0, BOARD_TOP);
         const recoveryEntries = this.entryKinds()?.filter((e): e is 'SETUP' | 'ANY' => e === 'SETUP' || e === 'ANY');
-        const recovery =
-            this.cfg.recovery.enabled && this.io.pickRecovery
-                ? bestPerMarket(this.io.pickRecovery({ duration: this.cfg.duration, entries: recoveryEntries }).filter(p => !out.has(p.market))).slice(0, BOARD_TOP)
-                : [];
+        const rankedRecovery =
+            this.cfg.recovery.enabled && this.io.pickRecovery ? this.io.pickRecovery({ duration: this.cfg.duration, entries: recoveryEntries }).filter(p => !out.has(p.market)) : [];
+        const recovery = bestPerMarket(rankedRecovery).slice(0, BOARD_TOP);
+        try {
+            this.io.onBoard?.(rankedPrimary, rankedRecovery, now);
+        } catch {
+            /* an extra look never stops the board */
+        }
         const prevTop = this.board.primary[0]?.key;
         this.board = { primary, recovery };
         const recovering = this.cfg.recovery.enabled && this.losses > 0;
@@ -841,6 +853,12 @@ export class AiIntelExecutor {
                 status: 'open',
             };
             this.trades = [record, ...this.trades].slice(0, HISTORY_LIMIT);
+            this.bought.set(record.id, { market: symbol, contract: p.contract, recovery: p.recovery });
+            try {
+                this.io.onBought?.({ contractId, market: symbol, contract: p.contract, recovery: p.recovery, stake });
+            } catch {
+                /* never disturbs a live trade */
+            }
             this.persistTrades(); // an open contract is saved, so a reload can find out how it ended
             this.addLog('trade', `Bought ${p.label}${p.recovery ? ` (recovery step ${p.step})` : ''} on ${symbol}, stake ${stake.toFixed(2)}, entry digit ${p.triggerDigit}. Confirmed in ${Math.max(0, this.io.now() - sentAt)} ms.${p.ai ? ` AI: ${p.ai}.` : ''}`);
             if (token !== this.runToken) {
@@ -933,6 +951,15 @@ export class AiIntelExecutor {
     }
 
     private finish(trade: ExecTrade, profit: number | null, exitDigit: number | null) {
+        const meta = this.bought.get(trade.id);
+        this.bought.delete(trade.id);
+        if (meta) {
+            try {
+                this.io.onSettled?.({ contractId: trade.contractId ?? 0, ...meta, stake: trade.stake, profit });
+            } catch {
+                /* never disturbs a live session */
+            }
+        }
         this.inFlight = false;
         this.cooldownUntil = this.io.now() + COOLDOWN_MS;
         if (this.running) this.phase = 'waiting';

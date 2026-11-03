@@ -9,12 +9,13 @@ import { getCandidates } from './candidates';
 import './registry-instance'; // sets the candidate provider (baseline + ACTIVE strategies)
 import { AiIntelExecutor, type ExecConfig, type ExecTrade } from './executor';
 import { assess } from './guard';
+import { createApexGates } from '@/components/premium/edge-gates/apex-gates';
 import { forwardMonitor } from './registry-instance';
 
 const CONFIG_KEY = 'apex_intel_exec_v1';
 const TRADES_KEY = 'apex_intel_trades_v1';
 
-const read = <T,>(key: string): T | null => {
+const read = <T>(key: string): T | null => {
     try {
         const raw = window.localStorage.getItem(key);
         return raw ? (JSON.parse(raw) as T) : null;
@@ -30,18 +31,35 @@ const write = (key: string, value: unknown) => {
     }
 };
 
+// The edge gates (Kalman health, cross-market danger + frequency, arbiter) added on top of the AI guard below. Console: `apexIntelEdge`.
+const apexGates = createApexGates({ series: () => apexFeed.getLiveSeries() });
+
 export const aiIntelExecutor = new AiIntelExecutor({
     buy: ({ parameters, price }) => buyContractForUi({ parameters, price, source: 'Apex Intel' }),
-    settle: ({ contractId, fallback, onUpdate, signal }) => streamContractUntilSettled({ contractId, fallback, onUpdate, signal, source: 'Apex Intel' }),
+    settle: ({ contractId, fallback, onUpdate, signal }) =>
+        streamContractUntilSettled({ contractId, fallback, onUpdate, signal, source: 'Apex Intel' }),
     isAuthorized: () => Boolean((api_base as { is_authorized?: boolean }).is_authorized),
     now: () => Date.now(),
     lastTickAt: symbol => apexFeed.getLastTickAt(symbol),
     isFeedLive: () => apexFeed.isLive(),
     connectFeed: () => apexFeed.connect(),
     history: symbol => apexFeed.getLiveSeries()[symbol],
-    pick: opts => rankPicks(apexSeries(), symbol => apexFeed.getLastTickAt(symbol), Date.now(), { ...opts, candidates: getCandidates() }),
+    pick: opts =>
+        rankPicks(apexSeries(), symbol => apexFeed.getLastTickAt(symbol), Date.now(), {
+            ...opts,
+            candidates: getCandidates(),
+        }),
     pickRecovery: opts => rankRecovery(apexSeries(), symbol => apexFeed.getLastTickAt(symbol), Date.now(), opts),
-    review: req => assess(req, { series: apexFeed.getLiveSeries()[req.market] ?? [], forward: forwardMonitor.getSnapshot() }),
+    review: req => {
+        const series = apexFeed.getLiveSeries()[req.market] ?? [];
+        const verdict = assess(req, { series, forward: forwardMonitor.getSnapshot() });
+        if (!verdict.allow) return verdict; // the AI guard's own rules come first and are unchanged
+        const gates = apexGates.review({ market: req.market, contract: req.contract, recovery: req.recovery, series });
+        return gates.allow ? verdict : gates;
+    },
+    onBoard: (ranked, recovery, now) => apexGates.onBoard(ranked, recovery, now),
+    onBought: n => apexGates.onBought(n),
+    onSettled: n => apexGates.onSettled(n),
     describeFailure: error => describeTradeFailure(error),
     afterStop: () => {
         const base = api_base as { is_stopping?: boolean; setIsRunning?: (value: boolean) => void };
@@ -56,4 +74,7 @@ export const aiIntelExecutor = new AiIntelExecutor({
     notRunningStage: contract_stages.NOT_RUNNING,
 });
 
-apexFeed.onTick((symbol, digit) => aiIntelExecutor.handleTick(symbol, digit));
+apexFeed.onTick((symbol, digit) => {
+    apexGates.onTick(symbol, digit);
+    aiIntelExecutor.handleTick(symbol, digit);
+});
