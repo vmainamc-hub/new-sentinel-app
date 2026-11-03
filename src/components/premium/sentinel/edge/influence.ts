@@ -48,7 +48,7 @@ export const MAX_RAISE = 10;
 export const ELEVATED_BUMP = 3;
 /** The same signal on the same gate is only counted this often, ms. */
 const COUNT_EVERY_MS = 20_000;
-const LEDGER_KEY = 'sentinelai.edge.ledger.v1';
+export const SENTINEL_LEDGER_KEY = 'sentinelai.edge.ledger.v1';
 
 const NEUTRAL: OverlayCall = { allow: true, bump: 0, rank: 0, note: '' };
 const rowKey = (symbol: string, c: Contract) =>
@@ -57,10 +57,11 @@ const contractKeyOf = (c: Contract) => `${c.side}:${c.param}`;
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 
 export type EdgeStorage = { load: () => EdgeReport | null; save: (r: EdgeReport) => void };
-const browserStorage: EdgeStorage = {
+/** The ledger kept in the browser under `key`. Each engine has its own key, so their evidence never mixes. */
+export const browserLedger = (key: string): EdgeStorage => ({
     load: () => {
         try {
-            const raw = window.localStorage.getItem(LEDGER_KEY);
+            const raw = window.localStorage.getItem(key);
             return raw ? (JSON.parse(raw) as EdgeReport) : null;
         } catch {
             return null;
@@ -68,20 +69,24 @@ const browserStorage: EdgeStorage = {
     },
     save: r => {
         try {
-            window.localStorage.setItem(LEDGER_KEY, JSON.stringify(r));
+            window.localStorage.setItem(key, JSON.stringify(r));
         } catch {
             /* not remembered */
         }
     },
-};
+});
 
 export type RefreshInput = {
     now: number;
     symbols: readonly string[];
     /** The contracts the overlay trades (the propositions switched on). */
     contracts: readonly Contract[];
-    /** The board the engine settings let through, and the other source's (any tier) or null when it could not be read. */
-    board: readonly BoardRow[];
+    /**
+     * The board the engine settings let through, and the other source's (any tier) or null when it could not be read.
+     * `board: null` means the engine has no board at refresh time and will hand it over later through `arbitrate()` (the runner's
+     * own eligible cells, on Sixfold and Vanguard). The arbiter and the hold-through-scans count then wait for that call.
+     */
+    board: readonly BoardRow[] | null;
     other: readonly BoardRow[] | null;
     /** Hunter: the signal source is a voice, never a gate. */
     hunter: boolean;
@@ -97,7 +102,7 @@ export const createEdgeInfluence = (opts: {
     storage?: EdgeStorage | null;
 }) => {
     const clock = opts.now ?? Date.now;
-    const storage = opts.storage === undefined ? browserStorage : opts.storage;
+    const storage = opts.storage === undefined ? browserLedger(SENTINEL_LEDGER_KEY) : opts.storage;
     const arbiter = new Arbiter();
     const freq = new FrequencyGate();
     let report: EdgeReport = storage?.load() ?? freshReport(clock());
@@ -140,34 +145,44 @@ export const createEdgeInfluence = (opts: {
         persist();
     };
 
+    /** Reads the board: the hold counts, and one arbiter verdict per signal. */
+    const settle = (board: readonly BoardRow[], other: readonly BoardRow[] | null) => {
+        const s = opts.getSettings();
+        onBoard.clear();
+        for (const r of board) onBoard.add(r.key);
+        if (s.frequency) freq.observe(onBoard);
+        if (s.arbiter) {
+            const cands: Candidate[] = board.map(row => {
+                const c: Contract = { side: row.contract === 'DIGITOVER' ? 'OVER' : 'UNDER', param: row.barrier };
+                return {
+                    row,
+                    healthLift: s.kalman ? judgeHealth(healthOf(row.symbol, c), { hunter, recovering: false }).rank : 0,
+                    second: secondOpinion(row, other),
+                };
+            });
+            verdicts = arbiter.decide(cands);
+        } else {
+            verdicts = new Map();
+            arbiter.reset();
+        }
+    };
+
     return {
         /** Once per scan, after the overlay has built its board. */
         refresh(input: RefreshInput): void {
             const s = opts.getSettings();
             hunter = input.hunter;
             healthCache = new Map();
-            onBoard.clear();
-            for (const r of input.board) onBoard.add(r.key);
-
             danger = s.danger ? assessCrossMarketDanger(opts.series(), input.symbols, input.contracts) : null;
-            if (s.frequency) freq.observe(onBoard);
+            if (input.board) settle(input.board, input.other);
+        },
 
-            if (s.arbiter) {
-                const cands: Candidate[] = input.board.map(row => {
-                    const c: Contract = { side: row.contract === 'DIGITOVER' ? 'OVER' : 'UNDER', param: row.barrier };
-                    return {
-                        row,
-                        healthLift: s.kalman
-                            ? judgeHealth(healthOf(row.symbol, c), { hunter, recovering: false }).rank
-                            : 0,
-                        second: secondOpinion(row, input.other),
-                    };
-                });
-                verdicts = arbiter.decide(cands);
-            } else {
-                verdicts = new Map();
-                arbiter.reset();
-            }
+        /**
+         * For an engine whose board only exists after the scan: settles the arbiter and the hold-through-scans count on `board`.
+         * Call it once per scan, after `refresh({ board: null })`, even with an empty board (a signal that left loses its hold).
+         */
+        arbitrate(board: readonly BoardRow[], other: readonly BoardRow[] | null = null): void {
+            settle(board, other);
         },
 
         /** Per cell. `row` is the signal on the board for this cell, if there is one. */

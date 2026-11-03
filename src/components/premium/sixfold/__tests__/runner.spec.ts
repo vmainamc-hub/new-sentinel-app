@@ -2,6 +2,7 @@ import { TradeRequestError } from '@/utils/trade-errors';
 import { DEFAULT_SETTINGS, normalizeSettings, type SixfoldSettings } from '../money';
 import type { RunnerOverlay } from '../overlay';
 import { MIN_TICKS, type RunnerIO, SixfoldRunner } from '../runner';
+import { createEngineGates } from '../../edge-gates/runner-gates';
 
 // A market where Over 2 wins on every simulated trade (1 -> 7 -> 1 -> 7 ...), so the scanner finds it at once.
 const planted = Array.from({ length: 600 }, (_, i) => (i % 2 === 0 ? 1 : 7));
@@ -1241,4 +1242,121 @@ describe('SixfoldRunner with an engine overlay', () => {
         h.runner.start();
         expect(h.runner.getSnapshot().funnel!.eligible).toBeGreaterThan(0);
     });
+
+    it('hands an arbitrating overlay the cells that pass the runner own bars, every scan', () => {
+        const seen: string[][] = [];
+        const h = harness({}, { overlay: overlay({ arbitrate: cells => seen.push(cells.map(c => `${c.symbol}:${c.label}`)) }) });
+        h.runner.start();
+        expect(seen.length).toBeGreaterThan(0);
+        // P (planted) passes the strict bar; Q (noise) does not.
+        expect(seen[0]).toEqual(['P:Over 2']);
+    });
+
+    it('an arbitrating overlay that throws never stops a scan', () => {
+        const h = harness(
+            {},
+            {
+                overlay: overlay({
+                    arbitrate: () => {
+                        throw new Error('boom');
+                    },
+                }),
+            }
+        );
+        h.runner.start();
+        expect(h.runner.getSnapshot().armed?.label).toBe('Over 2');
+    });
+
+    it('names the guard in the log with its own label, and copes with an empty note', async () => {
+        const h = harness({}, { overlay: overlay({ guardLabel: 'Gate check', guard: () => ({ ok: true, note: '' }) }) });
+        h.runner.start();
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        const log = h.runner.getSnapshot().log.map(l => l.text);
+        expect(log.some(t => /^Gate check passed on P\.$/.test(t))).toBe(true);
+        expect(log.some(t => /Special-digit/.test(t))).toBe(false);
+    });
+
+    it('keeps the Special-digit wording when the overlay gives no label (Sentinel AI)', async () => {
+        const h = harness({}, { overlay: overlay({ guard: () => ({ ok: true, note: 'digit 1 counts' }) }) });
+        h.runner.start();
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.runner.getSnapshot().log.some(l => /^Special-digit check passed on P: digit 1 counts\.$/.test(l.text))).toBe(true);
+    });
 });
+
+describe('SixfoldRunner with the edge gates (Sixfold / Vanguard)', () => {
+    const gates = (edge: Record<string, unknown>) => {
+        const g = createEngineGates({
+            moduleId: 'sixfold',
+            name: 'Sixfold',
+            contracts: () => [{ side: 'OVER', param: 2 }],
+            series: () => ({}),
+            settingsKey: 'runner.test.settings',
+            ledgerKey: 'runner.test.ledger',
+            handle: 'runnerTestEdge',
+            now: () => 1_000_000,
+        });
+        g.controls.set({ kalman: false, danger: false, frequency: false, arbiter: false, cooldownMs: 0, minHoldScans: 0, hourlyBudget: 0, shadow: false, ...edge });
+        return g;
+    };
+
+    it('with every gate off, trades exactly as the runner does on its own', async () => {
+        const g = gates({});
+        const h = harness({}, { overlay: g.overlay });
+        h.runner.start();
+        expect(h.runner.getSnapshot().armed?.label).toBe('Over 2');
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+        expect(h.calls.pushed[0].shortcode).toBe('SIXFOLD_DIGITOVER_P');
+    });
+
+    it('the arbiter sees the scanner cell and lets its pick through', async () => {
+        const g = gates({ arbiter: true });
+        const h = harness({}, { overlay: g.overlay });
+        h.runner.start();
+        expect(h.runner.getSnapshot().armed?.label).toBe('Over 2');
+    });
+
+    it('Kalman stands down a signal that is not above fair, and the runner reports it as "Engines:"', () => {
+        // The planted market wins its simulated entry trades every time, but its raw Over 2 rate is 50%, below the fair 70%.
+        const feed = { P: planted.slice() };
+        const g = createEngineGates({
+            moduleId: 'sixfold',
+            name: 'Sixfold',
+            contracts: () => [{ side: 'OVER', param: 2 }],
+            series: () => feed,
+            settingsKey: 'runner.test.settings2',
+            ledgerKey: 'runner.test.ledger2',
+            handle: 'runnerTestEdge2',
+            now: () => 1_000_000,
+        });
+        g.controls.set({ kalman: true, danger: false, frequency: false, arbiter: false });
+        const h = harness({}, { overlay: g.overlay });
+        h.runner.start();
+        const s = h.runner.getSnapshot();
+        expect(s.armed).toBeNull();
+        expect(s.funnel!.reasons.some(r => /^Engines: Kalman/.test(r.reason))).toBe(true);
+        // Shadow mode keeps the same read but the runner trades as before.
+        g.controls.set({ shadow: true });
+        const shadow = harness({}, { overlay: g.overlay });
+        shadow.runner.start();
+        expect(shadow.runner.getSnapshot().armed?.label).toBe('Over 2');
+    });
+
+    it('after a trade the market rests, so the same signal is not armed straight back', async () => {
+        const g = gates({ frequency: true, cooldownMs: 60_000 });
+        const h = harness({}, { overlay: g.overlay });
+        h.runner.start();
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+        h.advance(2_000);
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+    });
+});
+

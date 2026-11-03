@@ -44,6 +44,13 @@ export type RunnerOverlay = {
     onStart?: (now: number) => void;
     /** Called at the start of every scan, before cells are judged. */
     refresh?: (now: number, symbols: readonly string[]) => void;
+    /**
+     * Called once per scan, after the runner has applied its own bars and before any cell is judged by `call`: the cells that
+     * passed the runner's own checks (tradable, not resting, not guarded, Meter allows, above the selectivity bar). An overlay with no
+     * board of its own (the edge gates on Sixfold and Vanguard) arbitrates between them here. It is called every scan, with an empty
+     * list when nothing passed, so holds can expire.
+     */
+    arbitrate?: (eligible: readonly Cell[], now: number) => void;
     call: (cell: Cell, ctx: { recovering: boolean; now: number }) => OverlayCall;
     /** Entry digits to wait for instead of the runner's own, or null to let the runner choose. */
     entryDigits?: (cell: Cell, ctx: { recovering: boolean }) => number[] | null;
@@ -52,6 +59,8 @@ export type RunnerOverlay = {
      * bought (the recovery barrier after a loss). Returning ok:false stops the buy; the runner drops the arm and looks elsewhere.
      */
     guard?: (symbol: string, traded: Contract, series: readonly number[]) => { ok: boolean; note: string };
+    /** What the guard is called in the log line written when it passes. Default: "Special-digit check" (Sentinel AI). */
+    guardLabel?: string;
     onBought?: (notice: TradeNotice) => void;
     /** profit is null when Deriv's result could not be confirmed. */
     onSettled?: (notice: TradeNotice & { profit: number | null }) => void;

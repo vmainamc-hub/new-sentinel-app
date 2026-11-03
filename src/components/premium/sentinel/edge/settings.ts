@@ -50,19 +50,19 @@ export const normalizeEdge = (raw: unknown): EdgeSettings => {
     };
 };
 
-const KEY = 'sentinelai.edge.settings.v1';
+export const SENTINEL_EDGE_SETTINGS_KEY = 'sentinelai.edge.settings.v1';
 
-export const loadEdge = (): EdgeSettings => {
+export const loadEdge = (key: string = SENTINEL_EDGE_SETTINGS_KEY): EdgeSettings => {
     try {
-        const raw = window.localStorage.getItem(KEY);
+        const raw = window.localStorage.getItem(key);
         return normalizeEdge(raw ? JSON.parse(raw) : null);
     } catch {
         return { ...DEFAULT_EDGE };
     }
 };
-export const saveEdge = (s: EdgeSettings): void => {
+export const saveEdge = (s: EdgeSettings, key: string = SENTINEL_EDGE_SETTINGS_KEY): void => {
     try {
-        window.localStorage.setItem(KEY, JSON.stringify(s));
+        window.localStorage.setItem(key, JSON.stringify(s));
     } catch {
         /* not remembered */
     }

@@ -1023,7 +1023,8 @@ export class SixfoldRunner {
             verdict = { ok: false, note: 'the rule could not be read' };
         }
         if (verdict.ok) {
-            this.addLog('info', `Special-digit check passed on ${armed.name}: ${verdict.note}.`);
+            const label = this.io.overlay?.guardLabel ?? 'Special-digit check';
+            this.addLog('info', verdict.note ? `${label} passed on ${armed.name}: ${verdict.note}.` : `${label} passed on ${armed.name}.`);
             return true;
         }
         this.blocked.set(`${armed.symbol}|${armed.cellKey}`, this.io.now() + OVERLAY_HOLD_BLOCK_MS);
@@ -1296,6 +1297,7 @@ export class SixfoldRunner {
         this.guards = this.computeGuards(series);
         const rested = this.restedSymbols(now);
         const bump = this.pickyBump(now);
+        this.arbitrateOverlay(now, rested, bump);
         this.queue = this.scan.cells
             .filter(c => c.executable && !this.quarantined.has(c.symbol))
             .sort((a, b) => b.score - a.score)
@@ -1311,6 +1313,27 @@ export class SixfoldRunner {
             });
         this.funnel = this.buildFunnel(now, rested, bump);
         this.scheduleEmit();
+    }
+
+    /**
+     * Hands an overlay that arbitrates (see RunnerOverlay.arbitrate) the cells that pass the runner's OWN bars: tradable, not resting,
+     * not guarded, Meter allows, above the selectivity bar. The overlay's own bump is left out on purpose, so the arbiter picks among
+     * what the scanner would trade anyway and cannot feed back on itself.
+     */
+    private arbitrateOverlay(now: number, rested: Set<string>, bump: number) {
+        const arbitrate = this.io.overlay?.arbitrate;
+        if (!arbitrate || !this.scan) return;
+        try {
+            const eligible = this.scan.cells.filter(cell => {
+                if (!cell.executable || this.quarantined.has(cell.symbol) || rested.has(cell.symbol)) return false;
+                if (this.guards.has(`${cell.symbol}|${cell.key}`)) return false;
+                const meter = this.meterOnly(cell, now);
+                return meter.allow && eligibility(cell, this.settings.selectivity, bump + meter.bump).ok;
+            });
+            arbitrate(eligible, now);
+        } catch {
+            /* an overlay failure must never stop a scan */
+        }
     }
 
     /** Walks EVERY scanned contract through the same checks the pick uses and counts where each one stops. */
