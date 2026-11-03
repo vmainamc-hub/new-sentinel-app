@@ -4,7 +4,7 @@ import { PROPOSITIONS } from '@/lib/propositions';
 import {
     ACTION_RANK, ALLOWED_BARRIERS, BULK_MARKETS, LEGACY_QUALITY, OverUnderEngine, RECOMMENDATION_TTL_MS, SIGNAL_QUALITY, SignalStability, assertAllowedContract,
     buildEngineTicks, compareCandidates, contractFor, digitPercents, digitsFromPrices, engineTick, hitRate, inferDecimals,
-    isAllowedContract, lastDigit, passesQuality, propositionFor, recommend, refreshLocked, validateRecommendation, watching,
+    executeGate, isAllowedContract, lastDigit, passesQuality, propositionFor, recommend, refreshLocked, validateRecommendation, watching,
     type CombinedVerdict, type Proposition, type VerdictAction,
 } from '../over-under-engine';
 import { propositionSpec } from '@/lib/propositions';
@@ -152,6 +152,15 @@ describe('cross-market comparison', () => {
         expect(recommend({ R_10: fakeVerdict('R_10', [{ proposition: 'OVER2', action: 'OBSERVE', score: 59 }]) }, 1)).toBeNull();
         expect(recommend({ R_10: fakeVerdict('R_10', [{ proposition: 'OVER2', action: 'EXECUTE', score: 99 }], { ready: false }) }, 1)).toBeNull();
         expect(recommend({}, 1)).toBeNull();
+    });
+    it('offers nothing the extra rule refuses, and passes a refused rule to the validity checks', () => {
+        const verdicts = { R_10: fakeVerdict('R_10', [{ proposition: 'OVER2', action: 'EXECUTE', score: 99 }]) };
+        expect(recommend(verdicts, verdicts.R_10.generatedAt)).not.toBeNull();
+        expect(recommend(verdicts, verdicts.R_10.generatedAt, null, null, undefined, () => false)).toBeNull();
+        const rec = recommend(verdicts, verdicts.R_10.generatedAt)!;
+        expect(executeGate(rec, verdicts, verdicts.R_10.generatedAt).ok).toBe(true);
+        const blocked = executeGate(rec, verdicts, verdicts.R_10.generatedAt, () => ({ ok: false, reason: 'Scanner rules block it.' }));
+        expect(blocked).toEqual({ ok: false, reason: 'Scanner rules block it.' });
     });
     it('keeps the current recommendation until a same-grade challenger is clearly better AND the hold time has passed', () => {
         const { stickyMargin, holdMs } = SIGNAL_QUALITY;

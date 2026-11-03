@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApiBase } from '@/hooks/useApiBase';
 import { PremiumDerivApiService } from '@/services/premium-deriv-api.service';
 import {
-    BULK_MARKETS, ENGINE_TICKS, OVER_BARRIERS, UNDER_BARRIERS, assertAllowedContract, assertFreeContract, contractLabel, digitPercents, executeGate,
+    BULK_MARKETS, ENGINE_TICKS, contractFor, OVER_BARRIERS, UNDER_BARRIERS, assertAllowedContract, assertFreeContract, contractLabel, digitPercents, executeGate,
     refreshLocked, validateRecommendation, watching,
     type OverUnderContract, type Recommendation,
 } from '../over-under-engine';
@@ -12,7 +12,7 @@ import {
 } from '../bulk-run';
 import { bulkFeed } from '../bulk-feed';
 import {
-    ScanSession, entryTriggered, loadScanSettings, parseEntryDigit, sanitizeScan, saveScanSettings,
+    ScanSession, checkFusionRules, entryTriggered, loadScanSettings, parseEntryDigit, sanitizeScan, saveScanSettings,
     type EntryMode, type ScanOutcome, type ScanPick, type ScanSettings,
 } from '../bulk-scan';
 import { DEFAULT_BUY_MS, fitOnOneTick, learnPace, tickIntervalMs } from '../burst-pace';
@@ -144,6 +144,9 @@ const BulkTraderPage = () => {
 
     symbolRef.current = symbol;
     scanSettingsRef.current = scanSettings;
+    // The scanner's gates applied to Fusion's signals (Fusion itself is untouched). Reads a ref, so the switch applies on the next step.
+    const fusionRules = (target: Recommendation): { ok: boolean; reason: string } =>
+        scanSettingsRef.current.fusionRules ? checkFusionRules(bulkFeed.store[target.symbol]?.digits, target.contract, target.barrier) : { ok: true, reason: '' };
     waitRef.current = waiting;
     lockedRef.current = locked;
     formRef.current = form;
@@ -170,6 +173,12 @@ const BulkTraderPage = () => {
     // ------------------------------------------------------------------
     useEffect(() => {
         bulkFeed.start();
+        // Fusion's own signals must also pass the scanner's gates before they are recommended (switch: scanner panel).
+        bulkFeed.accept = (symbol, proposition) => {
+            if (!scanSettingsRef.current.fusionRules) return true;
+            const { contract, barrier } = contractFor(proposition);
+            return checkFusionRules(bulkFeed.store[symbol]?.digits, contract, barrier).ok;
+        };
         const offTick = bulkFeed.onTick(tickSymbol => {
             if (tickSymbol === symbolRef.current) setTickVersion(value => value + 1);
             // A press that is waiting for its entry digit buys on the first NEW tick that shows it (never on a digit that was already there).
@@ -192,7 +201,7 @@ const BulkTraderPage = () => {
             if (auto.session.armed) {
                 const held = lockedRef.current;
                 const target = held ? refreshLocked(held, bulkFeed.verdicts, now) : next;
-                const valid = target ? validateRecommendation(target, bulkFeed.verdicts, now, Boolean(held)).ok : false;
+                const valid = target ? validateRecommendation(target, bulkFeed.verdicts, now, Boolean(held), fusionRules).ok : false;
                 // Base stake and trades per run let the loss-limit guard price the run BEFORE it is fired.
                 const sized = sanitizeBulk({ stake: Number(baseStakeRef.current), runs: Number(formRef.current.runs), duration: Number(formRef.current.duration) });
                 const result = stepAuto(auto.session, auto.config, {
@@ -228,7 +237,7 @@ const BulkTraderPage = () => {
                 setStatus(`Digit ${wait.digit} did not print in time. Nothing was bought.`);
             }
         }, 1000);
-        return () => { offTick(); offStep(); window.clearInterval(clock); };
+        return () => { bulkFeed.accept = null; offTick(); offStep(); window.clearInterval(clock); };
     }, []);
 
     // ------------------------------------------------------------------
@@ -280,7 +289,7 @@ const BulkTraderPage = () => {
         : null;
 
     const loadedIsLocked = Boolean(locked && loaded && loaded.id === locked.id);
-    const loadedCheck = loaded ? validateRecommendation(loaded, bulkFeed.verdicts, now, loadedIsLocked) : null;
+    const loadedCheck = loaded ? validateRecommendation(loaded, bulkFeed.verdicts, now, loadedIsLocked, fusionRules) : null;
     const loadedNote = scanLoaded && !loaded
         ? `Loaded ${scanLoaded.label} on ${scanLoaded.market} from the scanner${scanLoaded.entry ? `, entry digit ${scanLoaded.entry.digit} (${scanLoaded.entry.strength})` : ''}. Nothing is purchased until you press ${scanLoaded.label}.`
         : !loaded
@@ -309,7 +318,7 @@ const BulkTraderPage = () => {
             if (!UNDER_BARRIERS.includes(Number(underBarrier))) setUnderBarrier(String(UNDER_BARRIERS[1]));
         }
     };
-    const gateCheck = executeGate(loaded, bulkFeed.verdicts, now);
+    const gateCheck = executeGate(loaded, bulkFeed.verdicts, now, fusionRules);
     const gateSide: 0 | 1 | null = !signalLock ? null : gateCheck.ok && pickSide !== null ? pickSide : scanPickSide;
     const gateNote = !signalLock ? ''
         : scanPickSide !== null && scanLoaded ? `Unlocked for ${scanLoaded.label} on ${scanLoaded.market}: loaded from the scanner.`
@@ -377,12 +386,12 @@ const BulkTraderPage = () => {
                 if (!autoBusy.current) {
                     // Signal lock ON, hand-placed: only the loaded signal, only while the engine still says EXECUTE.
                     const scanOk = Boolean(scanLoaded && scanLoaded.symbol === symbol && scanLoaded.contract === contract && scanLoaded.barrier === barrier);
-                    const gate = isPick ? executeGate(loaded, bulkFeed.verdicts, Date.now())
+                    const gate = isPick ? executeGate(loaded, bulkFeed.verdicts, Date.now(), fusionRules)
                         : scanOk ? { ok: true as const }
                             : { ok: false as const, reason: 'Only the loaded EXECUTE signal or scanner pick can be traded while the signal lock is on.' };
                     if (!gate.ok) { setError(gate.reason); return; }
                 } else if (isPick) {
-                    const check = validateRecommendation(loaded, bulkFeed.verdicts, Date.now(), Boolean(locked && loaded && loaded.id === locked.id));
+                    const check = validateRecommendation(loaded, bulkFeed.verdicts, Date.now(), Boolean(locked && loaded && loaded.id === locked.id), fusionRules);
                     if (!check.ok) { setError(check.reason); return; }
                 }
             }

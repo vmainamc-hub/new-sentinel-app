@@ -281,8 +281,10 @@ export type ScanSettings = {
     entryDigit: string;
     /** How long a wait for the entry digit may last, seconds. */
     waitSec: number;
+    /** Fusion's signals must also pass the scanner's gates (the same readCell rules) before they are offered or can trade. */
+    fusionRules: boolean;
 };
-export const DEFAULT_SCAN_SETTINGS: ScanSettings = { seconds: DEFAULT_SCAN_SECONDS, autoLoad: false, autoLoadEntry: true, entryMode: 'INSTANT', entryDigit: '', waitSec: 90 };
+export const DEFAULT_SCAN_SETTINGS: ScanSettings = { seconds: DEFAULT_SCAN_SECONDS, autoLoad: false, autoLoadEntry: true, entryMode: 'INSTANT', entryDigit: '', waitSec: 90, fusionRules: true };
 
 export const parseEntryDigit = (text: string): number | null => {
     const n = Number(text);
@@ -299,6 +301,7 @@ export const sanitizeScan = (input: Partial<ScanSettings>): ScanSettings => {
         entryMode: input.entryMode === 'WAIT' ? 'WAIT' : 'INSTANT',
         entryDigit: parseEntryDigit(String(input.entryDigit ?? '')) === null ? '' : String(Number(input.entryDigit)),
         waitSec: Number.isFinite(wait) ? clamp(Math.round(wait), 5, 600) : DEFAULT_SCAN_SETTINGS.waitSec,
+        fusionRules: input.fusionRules === undefined ? DEFAULT_SCAN_SETTINGS.fusionRules : Boolean(input.fusionRules),
     };
 };
 
@@ -318,4 +321,18 @@ export const entryTriggered = (waitDigit: number, armedAtTime: number, tickTimes
     const n = digits.length;
     if (n === 0 || tickTimes.length !== n) return false;
     return tickTimes[n - 1] > armedAtTime && digits[n - 1] === waitDigit;
+};
+
+/**
+ * The scanner's rules applied to ONE Fusion signal (a contract on a market's live digits). Fusion itself is untouched: this only
+ * decides whether its signal may be offered or traded. A contract the scanner does not read passes through unchanged.
+ */
+export const checkFusionRules = (
+    digits: readonly number[] | undefined, contract: string, barrier: number, options: ScanOptions = DEFAULT_SCAN_OPTIONS,
+): { ok: boolean; reason: string } => {
+    const s = SCAN_SPECS.find(x => x.contract === contract && x.barrier === barrier);
+    if (!s) return { ok: true, reason: '' };
+    if (!digits || digits.length < SCAN_MIN_TICKS) return { ok: false, reason: `Scanner rules: only ${digits?.length ?? 0} ticks read, ${SCAN_MIN_TICKS} needed.` };
+    const read = readCell(digits, s, options);
+    return read.pass ? { ok: true, reason: '' } : { ok: false, reason: `Scanner rules block ${s.label}: ${read.blockedBy.join('; ')}.` };
 };

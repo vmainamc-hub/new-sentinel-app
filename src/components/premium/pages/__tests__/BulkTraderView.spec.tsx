@@ -14,7 +14,7 @@ const props = (over: Partial<AutoView> = {}, extra: Partial<BulkViewProps> = {})
         symbol: 'R_75', onSymbol: jest.fn(), price: '1', digit: 1, digitPct: Array(10).fill(10), recent: [], onForm: () => jest.fn(),
         form: { duration: '5', stake: '1', runs: '5' }, overBarrier: '3', underBarrier: '6', onOverBarrier: jest.fn(), onUnderBarrier: jest.fn(),
         pickSide: null, loadedNote: '', currency: 'USD', running: false, status: '', error: '', tally: emptyTally(), syncNote: '', log: [], onRun: jest.fn(), onStop: jest.fn(),
-        scan: { phase: 'idle', progress: 0, secondsLeft: 0, marketsRead: 0, ticksChecked: 0, outcome: null, settings: { seconds: 20, autoLoad: false, autoLoadEntry: true, entryMode: 'INSTANT', entryDigit: '', waitSec: 90 }, loadedKey: '' },
+        scan: { phase: 'idle', progress: 0, secondsLeft: 0, marketsRead: 0, ticksChecked: 0, outcome: null, settings: { seconds: 20, autoLoad: false, autoLoadEntry: true, entryMode: 'INSTANT', entryDigit: '', waitSec: 90, fusionRules: true }, loadedKey: '' },
         onScan: jest.fn(), onScanCancel: jest.fn(), onScanLoad: jest.fn(), onScanSettings: jest.fn(),
         entry: { mode: 'INSTANT', digit: '', waitSec: 90, waiting: null }, onEntryDigit: jest.fn(), onEntryMode: jest.fn(), onWaitCancel: jest.fn(),
         ...extra,
@@ -103,7 +103,7 @@ describe('market scanner and entry digit', () => {
     });
     const done = (over: Record<string, unknown> = {}) => ({
         phase: 'done', progress: 1, secondsLeft: 0, marketsRead: 13, ticksChecked: 40, loadedKey: '',
-        settings: { seconds: 20, autoLoad: false, autoLoadEntry: true, entryMode: 'INSTANT', entryDigit: '', waitSec: 90 },
+        settings: { seconds: 20, autoLoad: false, autoLoadEntry: true, entryMode: 'INSTANT', entryDigit: '', waitSec: 90, fusionRules: true },
         outcome: { seconds: 20, finishedAt: 1, marketsRead: 13, best: pick(), closest: null, top: [pick()], note: 'Over 2 on Volatility 75: passed 80%.' }, ...over,
     });
 

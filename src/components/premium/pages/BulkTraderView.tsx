@@ -241,6 +241,7 @@ const ScanPanel = ({ scan, onScan, onScanCancel, onScanLoad, onScanSettings }: P
             <div className='apex-bt__scanopts'>
                 <label><input type='checkbox' checked={scan.settings.autoLoad} onChange={event => onScanSettings({ autoLoad: event.target.checked })} />Load the result onto the deck when a scan ends</label>
                 <label><input type='checkbox' checked={scan.settings.autoLoadEntry} onChange={event => onScanSettings({ autoLoadEntry: event.target.checked })} />Load its entry digit with it</label>
+                <label><input type='checkbox' checked={scan.settings.fusionRules} onChange={event => onScanSettings({ fusionRules: event.target.checked })} />Apply these rules to Fusion signals</label>
             </div>
             {running && (
                 <div className='apex-bt__scanrun' role='status'>

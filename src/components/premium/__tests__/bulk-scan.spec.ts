@@ -1,5 +1,5 @@
 import {
-    DEFAULT_SCAN_SETTINGS, SCAN_SPECS, ScanSession, discoverEntry, entryTriggered, parseEntryDigit, readCell, sanitizeScan,
+    DEFAULT_SCAN_SETTINGS, SCAN_SPECS, checkFusionRules, ScanSession, discoverEntry, entryTriggered, parseEntryDigit, readCell, sanitizeScan,
 } from '../bulk-scan';
 
 const lcg = (seed: number) => { let a = seed; return () => ((a = (a * 1103515245 + 12345) & 0x7fffffff), (a >> 8) % 10); };
@@ -154,5 +154,28 @@ describe('settings and the entry wait', () => {
         expect(entryTriggered(4, 100, [100, 110], [4, 2])).toBe(false);
         expect(entryTriggered(4, 100, [100, 110], [2, 4])).toBe(true);
         expect(entryTriggered(4, 100, [], [])).toBe(false);
+    });
+});
+
+describe('scanner rules on Fusion signals', () => {
+    it('lets a Fusion signal through when the market passes the gates', () => {
+        expect(checkFusionRules(planted(), 'DIGITOVER', 2).ok).toBe(true);
+    });
+    it('blocks a Fusion signal when digit 1 is building, and says why', () => {
+        const d = planted();
+        [1, 3, 6, 9].forEach(b => { d[999 - b] = 1; });
+        const r = checkFusionRules(d, 'DIGITOVER', 2);
+        expect(r.ok).toBe(false);
+        expect(r.reason).toMatch(/Over 2.*Special digits/);
+    });
+    it('holds a signal back while the market has too few ticks, and ignores contracts the scanner does not read', () => {
+        expect(checkFusionRules(planted().slice(-50), 'DIGITOVER', 2).ok).toBe(false);
+        expect(checkFusionRules(undefined, 'DIGITUNDER', 7).ok).toBe(false);
+        expect(checkFusionRules([1, 2, 3], 'DIGITOVER', 5).ok).toBe(true);
+    });
+    it('defaults to on and survives sanitising', () => {
+        expect(DEFAULT_SCAN_SETTINGS.fusionRules).toBe(true);
+        expect(sanitizeScan({}).fusionRules).toBe(true);
+        expect(sanitizeScan({ fusionRules: false }).fusionRules).toBe(false);
     });
 });

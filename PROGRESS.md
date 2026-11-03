@@ -466,3 +466,9 @@ Ported from the Precision Vantage zip (Precision Edge V2 / CIO) and built into S
 - [x] Manual Bulk Trader flow and all parameters unchanged; digit distribution and Over/Under buttons always shown. A scan pick bypasses the signal lock for that side only.
 - [x] Checked: bulk-scan.spec.ts (15 pass), tsc (stub baseline errors only), browser render desktop + 390 px (no overflow, no console errors).
 - Not verified: BulkTraderView.spec.tsx (.tsx specs cannot run here), live Deriv. Many scans end with "closest" rather than a pick (~1% of random looks pass every gate). Digits are random: a scan changes when and where you trade, not the odds.
+
+## Bulk Trader: scanner rules applied to Fusion signals
+- [x] Fusion's signals must now also pass the scanner's gates (`checkFusionRules` = `readCell`: distribution edge, winners building, losers fading, end digit not climbing, no loss cluster, special digits 1/8) on that market's live digits. Fusion (src/lib) is untouched.
+- [x] Enforced in four places: the recommendation offered (`recommend(..., accept)` via `bulkFeed.accept`), the validity check (`validateRecommendation(..., rules)`), the signal-lock gate (`executeGate(..., rules)`) and the Auto trader (it uses the same validity check). A refused signal shows the reason, e.g. "Scanner rules block Over 2: Special digits 1 / 8."
+- [x] Switch "Apply these rules to Fusion signals" in the scanner panel, ON by default, remembered in the browser. Off = Fusion exactly as before.
+- Specs: bulk-scan (19), over-under-engine, bulk-engine all pass under Bun. Not run against live Deriv. Expect fewer Fusion signals; the rules cut the number of trades, not the randomness of digits.

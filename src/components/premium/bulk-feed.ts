@@ -8,7 +8,7 @@
 import { PremiumDerivApiService } from '@/services/premium-deriv-api.service';
 import {
     BULK_MARKETS, ENGINE_TICKS, MIN_ENGINE_TICKS, OverUnderEngine, buildEngineTicks, digitsFromPrices, inferDecimals, lastDigit, recommend,
-    SignalStability, type CombinedVerdict, type Recommendation,
+    SignalStability, type CombinedVerdict, type Proposition, type Recommendation,
 } from './over-under-engine';
 
 export type MarketStore = { prices: number[]; times: number[]; digits: number[]; decimals: number; lastTickAt: number };
@@ -31,6 +31,8 @@ export class BulkFeed {
     readonly store: Record<string, MarketStore> = {};
     readonly verdicts: Record<string, CombinedVerdict> = {};
     rec: Recommendation | null = null;
+    /** Extra rule on Fusion's signals (set by the Bulk Trader page: the scanner's gates). null = Fusion's own verdicts only. */
+    accept: ((symbol: string, proposition: Proposition) => boolean) | null = null;
     private readonly errors = new Map<string, string>();
     /** The most recent market connection problem that has not been resolved yet ('' when everything is connected). */
     get lastError() { return [...this.errors.values()].pop() ?? ''; }
@@ -198,7 +200,7 @@ export class BulkFeed {
                 }
                 break;
             }
-            this.rec = recommend(this.verdicts, now, this.rec, this.stability);
+            this.rec = recommend(this.verdicts, now, this.rec, this.stability, undefined, this.accept);
             const ready = Object.values(this.verdicts).filter(v => v.ready).length;
             this.stepListeners.forEach(listener => { try { listener({ now, ready }); } catch (error) { console.warn('[bulk-feed] listener failed:', error); } });
         } catch (error) {

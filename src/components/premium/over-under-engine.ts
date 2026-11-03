@@ -268,8 +268,10 @@ const toRecommendation = (c: Candidate, now: number, createdAt = now, id?: strin
 export const recommend = (
     verdicts: Record<string, CombinedVerdict>, now: number, previous: Recommendation | null = null,
     stability: SignalStability | null = null, quality: QualityOptions = SIGNAL_QUALITY,
+    /** Extra rule (the scanner's gates): a signal it refuses is neither offered nor kept. */
+    accept: ((symbol: string, proposition: Proposition) => boolean) | null = null,
 ): Recommendation | null => {
-    const all = candidates(verdicts);
+    const all = candidates(verdicts).filter(c => !accept || accept(c.symbol, c.item.proposition));
     const offered = all.filter(c => passesQuality(c.item, quality)
         && (!stability || stability.streak(c.symbol, c.item.proposition) >= quality.minStreak)).sort(compareCandidates);
     const best = offered[0];
@@ -307,11 +309,14 @@ export type Validity = { ok: true } | { ok: false; reason: string };
  */
 export const validateRecommendation = (
     rec: Recommendation | null, verdicts: Record<string, CombinedVerdict>, now: number, locked = false,
+    rules: ((rec: Recommendation) => Validity) | null = null,
 ): Validity => {
     if (!rec) return { ok: false, reason: 'No recommendation is loaded.' };
     if (!isAllowedContract(rec.contract, rec.barrier) || propositionFor(rec.contract, rec.barrier) !== rec.proposition) {
         return { ok: false, reason: `${rec.label} is not a permitted contract.` };
     }
+    const ruled = rules ? rules(rec) : null;
+    if (ruled && !ruled.ok) return ruled;
     const verdict = verdicts[rec.symbol];
     if (!verdict || !verdict.ready) return { ok: false, reason: `Not enough live data for ${rec.market} yet.` };
     if (now - verdict.generatedAt > RECOMMENDATION_TTL_MS) return { ok: false, reason: 'The analysis is stale. Wait for a refreshed recommendation.' };
@@ -327,9 +332,11 @@ export const validateRecommendation = (
  * The signal lock's gate. A trade is allowed only while the LIVE engine says EXECUTE for the loaded signal (PREPARE, OBSERVE and
  * STAND DOWN all keep it shut, whether or not the signal was held with "Lock signal"), and the signal is a permitted, fresh contract.
  */
-export const executeGate = (rec: Recommendation | null, verdicts: Record<string, CombinedVerdict>, now: number): Validity => {
+export const executeGate = (
+    rec: Recommendation | null, verdicts: Record<string, CombinedVerdict>, now: number, rules: ((rec: Recommendation) => Validity) | null = null,
+): Validity => {
     if (!rec) return { ok: false, reason: 'No signal is loaded. Load an EXECUTE signal to the Trading Deck to unlock the buttons.' };
-    const base = validateRecommendation(rec, verdicts, now, false);
+    const base = validateRecommendation(rec, verdicts, now, false, rules);
     const item = verdicts[rec.symbol]?.verdicts.find(v => v.proposition === rec.proposition);
     if (!item) return base.ok ? { ok: false, reason: `${rec.label} is no longer produced by the engine.` } : base;
     if (item.action === 'EXECUTE') return base;
