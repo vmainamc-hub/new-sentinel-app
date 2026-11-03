@@ -1,0 +1,382 @@
+/*------------------------------------*
+ *  # Constants
+ *------------------------------------*/
+/* stylelint-disable color-no-hex */
+/* COLOR PALETTE */
+/* colors */
+/* status colors */
+/* alpha colors */
+/* gradient colors */
+/* Preserve legacy variables */
+/* Primary */
+/* stylelint-enable color-no-hex */
+/* Wallet gradient background */
+/* App Cards gradient background */
+/* Wallets */
+/*------------------------------------*
+ *  # SASS Mixins and Functions
+ *------------------------------------*/
+/*
+ * SASS interpolation
+ */
+/*
+ * PX to EM
+ * @param $px - px value to be converted
+ * @param $base - base font size (in `em`)
+ * Note: 'em' values are calculate based on the element font-size
+ *       to properly converts 'px' to 'em', please pass in the element font-size with it
+ * Usage example:
+    padding: em(16px, 1.6em); // font-size in 'em'
+ */
+/*
+ * Set property by passing a property name, and values.
+ * @param $property name - padding, margin etc.
+ * @param $values        - values in `px` (space separated for multiple values)
+ * @param $font-size     - base font-size in `em`
+ * Usage example:
+   @include toEm(padding, 8px 16px 8px, 1.6em);
+ */
+/*
+ * Generate typefaces key-value pair of variable name and config
+ * Example:
+   --paragraph-center-bold-black: (14px, center, bold, black)
+ */
+/*
+ * Sets font-size, font-weight, color, text-transform, text-align and line-height
+ * Usage example:
+   @include setTypeface(16px, bold, black, uppercase);
+ */
+/*
+ * Set typefaces by passing a typeface variable name
+ * @param $var   - typeface variable
+ * @param $tt    - text-transform property
+ * @param $align - text-align property
+ * Usage example:
+   @include typeface(--paragraph-bold-black, uppercase, center);
+ */
+/*
+ * Range Slider Thumb styling is set here
+ */
+/*
+ * SVG icons colors
+ */
+/*
+ * Bar Spinner Animation
+ * @param $count    - number of bars
+ * @param $duration - duration of animation
+ * @param $phase    - each bar phase change delay
+ * Usage example:
+   @include createBarspinnerAnimation(5, 1.2s, 0,1);
+ */
+/*
+ * Tooltip colors
+ * @param $color - color property
+ * Usage example:
+   @include tooltipColor($COLOR_RED);
+ */
+/*
+ * Convert Tooltip colors
+ * @param $color - css color property
+ * Usage example:
+   @include convertTooltipColor(var(--status-default));
+ */
+/*
+    Constants
+*/
+/*
+    Variables
+*/
+/*
+    List of all typefaces variables in the format: --$FONT_SIZES-$TEXT_ALIGN-$FONT_WEIGHTS-COLORS.
+    See $FONT_SIZES, $TEXT_ALIGN, $FONT_WEIGHTS, $COLORS maps above for references.
+    Variables name example: --title-center-semibold-red
+ */
+/*
+    to use styles without modifier class on .inline-icon
+    use @extend
+
+    e.g. style icon on parent hover:
+        a:hover .inline-icon {
+            @extend %inline-icon-active;
+        }
+*/
+/**
+ * Define Breakpoints here.
+ */
+/* @define account-signup; weak */
+.account-signup .signup-separator-container {
+  border-bottom: 1px solid var(--general-section-1);
+}
+@media (min-width: 320px) and (max-width: 767px) {
+  .account-signup .signup-separator-container {
+    display: none;
+  }
+}
+.account-signup__dialog .dc-dialog__content {
+  margin-bottom: 0;
+}
+.account-signup__dialog .dc-dialog__dialog {
+  max-height: none;
+  max-height: initial;
+}
+@media (min-width: 320px) and (max-width: 767px) {
+  .account-signup__dialog .dc-dialog__dialog {
+    padding: 1.6rem;
+  }
+}
+.account-signup__error-wrapper {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-gap: 0.8rem;
+}
+.account-signup__location-selection, .account-signup__password-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 2.4rem;
+}
+@media (min-width: 320px) and (max-width: 767px) {
+  .account-signup__location-selection, .account-signup__password-selection {
+    gap: 1.6rem;
+  }
+}
+.account-signup__location-selection .account-signup__residence-selection {
+  height: 8.6rem;
+}
+.account-signup__location-selection .account-signup__residence-selection .dc-field--error,
+.account-signup__location-selection .account-signup__residence-selection .account-signup__subtext {
+  margin-left: 1.6rem;
+  margin-top: 1rem;
+  padding-left: 0;
+  padding-left: initial;
+}
+.account-signup__password-selection .dc-password-meter__container {
+  max-height: 6rem;
+  width: 100%;
+}
+.account-signup__password-selection .dc-password-meter,
+.account-signup__password-selection .dc-password-meter__bg {
+  bottom: 2.1rem;
+}
+.account-signup__password-selection .dc-field--error {
+  top: 4.4rem;
+}
+.account-signup .dc-password-input__visibility-icon {
+  background-color: var(--general-main-2);
+}
+@media (min-width: 320px) and (max-width: 767px) {
+  .account-signup__heading {
+    margin-bottom: 0.8rem;
+  }
+}
+.account-signup__checkbox {
+  align-items: flex-start;
+}
+.account-signup__label {
+  line-height: var(--text-lh-m);
+}
+@media (min-width: 320px) and (max-width: 767px) {
+  .account-signup__label {
+    line-height: var(--text-lh-l);
+    font-size: var(--text-size-xxs);
+  }
+}
+.account-signup__footer {
+  display: grid;
+  justify-content: flex-end;
+}
+@media (min-width: 320px) and (max-width: 767px) {
+  .account-signup__footer {
+    justify-content: stretch;
+  }
+}
+.account-signup__btn {
+  background-color: var(--button-primary-default);
+  font-weight: bold;
+  color: var(--text-colored-background);
+}
+.account-signup__btn:hover {
+  background-color: var(--button-primary-hover);
+}
+.account-signup__password-field {
+  width: 100%;
+}
+/*------------------------------------*
+ *  # Constants
+ *------------------------------------*/
+/* stylelint-disable color-no-hex */
+/* COLOR PALETTE */
+/* colors */
+/* status colors */
+/* alpha colors */
+/* gradient colors */
+/* Preserve legacy variables */
+/* Primary */
+/* stylelint-enable color-no-hex */
+/* Wallet gradient background */
+/* App Cards gradient background */
+/* Wallets */
+/*------------------------------------*
+ *  # SASS Mixins and Functions
+ *------------------------------------*/
+/*
+ * SASS interpolation
+ */
+/*
+ * PX to EM
+ * @param $px - px value to be converted
+ * @param $base - base font size (in `em`)
+ * Note: 'em' values are calculate based on the element font-size
+ *       to properly converts 'px' to 'em', please pass in the element font-size with it
+ * Usage example:
+    padding: em(16px, 1.6em); // font-size in 'em'
+ */
+/*
+ * Set property by passing a property name, and values.
+ * @param $property name - padding, margin etc.
+ * @param $values        - values in `px` (space separated for multiple values)
+ * @param $font-size     - base font-size in `em`
+ * Usage example:
+   @include toEm(padding, 8px 16px 8px, 1.6em);
+ */
+/*
+ * Generate typefaces key-value pair of variable name and config
+ * Example:
+   --paragraph-center-bold-black: (14px, center, bold, black)
+ */
+/*
+ * Sets font-size, font-weight, color, text-transform, text-align and line-height
+ * Usage example:
+   @include setTypeface(16px, bold, black, uppercase);
+ */
+/*
+ * Set typefaces by passing a typeface variable name
+ * @param $var   - typeface variable
+ * @param $tt    - text-transform property
+ * @param $align - text-align property
+ * Usage example:
+   @include typeface(--paragraph-bold-black, uppercase, center);
+ */
+/*
+ * Range Slider Thumb styling is set here
+ */
+/*
+ * SVG icons colors
+ */
+/*
+ * Bar Spinner Animation
+ * @param $count    - number of bars
+ * @param $duration - duration of animation
+ * @param $phase    - each bar phase change delay
+ * Usage example:
+   @include createBarspinnerAnimation(5, 1.2s, 0,1);
+ */
+/*
+ * Tooltip colors
+ * @param $color - color property
+ * Usage example:
+   @include tooltipColor($COLOR_RED);
+ */
+/*
+ * Convert Tooltip colors
+ * @param $color - css color property
+ * Usage example:
+   @include convertTooltipColor(var(--status-default));
+ */
+/*
+    Constants
+*/
+/*
+    Variables
+*/
+/*
+    List of all typefaces variables in the format: --$FONT_SIZES-$TEXT_ALIGN-$FONT_WEIGHTS-COLORS.
+    See $FONT_SIZES, $TEXT_ALIGN, $FONT_WEIGHTS, $COLORS maps above for references.
+    Variables name example: --title-center-semibold-red
+ */
+/*
+    to use styles without modifier class on .inline-icon
+    use @extend
+
+    e.g. style icon on parent hover:
+        a:hover .inline-icon {
+            @extend %inline-icon-active;
+        }
+*/
+/**
+ * Define Breakpoints here.
+ */
+.questionnaire-modal {
+  border-radius: 1.6rem;
+}
+@media (min-width: 320px) and (max-width: 767px) {
+  .questionnaire-modal {
+    border-radius: 1.6rem;
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+.questionnaire-modal .dc-btn {
+  height: auto;
+  height: initial;
+  padding: 0;
+  padding: initial;
+}
+.questionnaire-modal .dc-modal__container_questionnaire-modal {
+  padding-top: 3.8rem;
+  padding-bottom: 3.8rem;
+}
+.questionnaire-modal__answers {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 1.6rem;
+  padding-top: 3.2rem;
+}
+.questionnaire-modal__answers_content {
+  display: flex;
+  justify-content: space-between;
+  width: 32.8rem;
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+  padding-left: 1.6rem;
+  padding-right: 1.6rem;
+  box-shadow: 0 0.4rem 0.6rem -0.2rem rgba(14, 14, 14, 0.03), 0 1.2rem 1.6rem -0.4rem rgba(14, 14, 14, 0.08);
+  border-radius: 16px;
+  border: 0.1rem solid var(--general-active);
+}
+@media (min-width: 320px) and (max-width: 767px) {
+  .questionnaire-modal__answers_content {
+    width: 28rem;
+  }
+}
+.questionnaire-modal__answers_content:hover {
+  box-shadow: 0 0.2rem 0.8rem 0 var(--shadow-menu);
+}
+.questionnaire-modal__options {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 1.6rem;
+  padding-top: 3.2rem;
+}
+.questionnaire-modal__options_card {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 15rem;
+  min-height: 13.8rem;
+  box-shadow: 0 0.4rem 0.6rem -0.2rem rgba(14, 14, 14, 0.03), 0 1.2rem 1.6rem -0.4rem rgba(14, 14, 14, 0.08);
+  border-radius: 16px;
+  border: 0.1rem solid var(--general-active);
+}
+.questionnaire-modal__options_card:hover {
+  box-shadow: 0 0.2rem 0.8rem 0 var(--shadow-menu);
+}
+@media (min-width: 320px) and (max-width: 767px) {
+  .questionnaire-modal__options_card {
+    min-width: 13.2rem;
+    min-height: 13.8rem;
+  }
+}
