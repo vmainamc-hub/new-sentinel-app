@@ -2,6 +2,7 @@ import { useState, type CSSProperties, type RefObject } from 'react';
 import { BULK_MARKETS, FREE_BARRIERS, OVER_BARRIERS, UNDER_BARRIERS, hitRate, type Recommendation } from '../over-under-engine';
 import { MAX_BULK_RUNS, exposure, sanitizeBulk, type Tally } from '../bulk-run';
 import type { AutoLogRow } from '../auto-log';
+import { SCAN_MAX_SECONDS, SCAN_MIN_SECONDS, type EntryMode, type ScanOutcome, type ScanPick, type ScanSettings } from '../bulk-scan';
 
 export type LogRow = {
     id: number;
@@ -34,6 +35,8 @@ export type SignalLockView = {
     /** The one button the signal has unlocked (it wears the EXECUTE tag); null while everything is shut or the lock is off. */
     openSide: 0 | 1 | null;
     note: string;
+    /** The tag on the open button: 'EXECUTE SIGNAL' (default) or 'SCAN PICK'. */
+    openLabel?: string;
     onToggle: () => void;
 };
 
@@ -68,6 +71,8 @@ export type BulkViewProps = {
     onUnderBarrier: (value: string) => void;
     /** Which button carries the AI PICK tag (the loaded recommendation, while it still matches the deck). */
     pickSide: 0 | 1 | null;
+    /** The tag on the picked button: 'AI PICK' for a Fusion signal, 'SCAN PICK' for a scanner result. */
+    pickLabel?: string;
     loadedNote: string;
     currency: string;
     running: boolean;
@@ -79,6 +84,37 @@ export type BulkViewProps = {
     onRun: (side: 0 | 1) => void;
     onStop: () => void;
     traderRef?: RefObject<HTMLElement>;
+    scan: ScanView;
+    onScan: () => void;
+    onScanCancel: () => void;
+    onScanLoad: (pick: ScanPick, what: 'all' | 'entry') => void;
+    onScanSettings: (patch: Partial<ScanSettings>) => void;
+    entry: EntryView;
+    onEntryDigit: (value: string) => void;
+    onEntryMode: (mode: EntryMode) => void;
+    onWaitCancel: () => void;
+};
+
+export type ScanView = {
+    phase: 'idle' | 'running' | 'done';
+    /** 0-1 while running. */
+    progress: number;
+    secondsLeft: number;
+    marketsRead: number;
+    ticksChecked: number;
+    outcome: ScanOutcome | null;
+    settings: ScanSettings;
+    /** The pick that is on the deck now (symbol|label), so its card can say so. */
+    loadedKey: string;
+};
+
+export type EntryView = {
+    mode: EntryMode;
+    /** The digit typed or loaded ('' = none). */
+    digit: string;
+    waitSec: number;
+    /** Set while a press is waiting for its entry digit. */
+    waiting: { digit: number; side: 0 | 1; secondsLeft: number } | null;
 };
 
 export type DigitRole = 'most' | 'second-most' | 'least' | 'second-least' | 'rising' | null;
@@ -145,14 +181,98 @@ const RecommendationBar = ({ rec, watch, onLoadRec, marketsReady, live, locked, 
     </section>
 );
 
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Market scanner: runs for a few seconds across every market and Over / Under contract, then names the market, the contract and the
+// digit to wait for. Loading puts them on the Trading Deck; nothing is bought until Over or Under is pressed.
+// ---------------------------------------------------------------------------------------------------------------------------------
+const pct0 = (x: number) => `${Math.round(x * 100)}%`;
+
+const PickCard = ({ pick, kind, loaded, onLoad }: { pick: ScanPick; kind: 'pick' | 'closest' | 'other'; loaded: boolean; onLoad: BulkViewProps['onScanLoad'] }) => (
+    <div className={`apex-bt__pick apex-bt__pick--${kind}${loaded ? ' is-loaded' : ''}`}>
+        <div className='apex-bt__pickhead'>
+            <strong>{pick.label}</strong><span>on {pick.market}</span>
+            <em>{kind === 'pick' ? 'SCAN PICK' : kind === 'closest' ? 'CLOSEST · NOT ALL CHECKS PASSED' : `#${pick.rank.toFixed(0)}`}</em>
+            {loaded && <em className='is-on'>ON THE DECK</em>}
+        </div>
+        <div className='apex-bt__pickmeta'>
+            <span>Held {pct0(pick.persistence)} of {pick.samples} checks</span>
+            <span>Score {pick.score.toFixed(0)}</span>
+        </div>
+        {pick.entry
+            ? <p className='apex-bt__pickentry'>
+                <b>Wait for digit {pick.entry.digit}</b> <i className={pick.entry.strength === 'confirmed' ? 'is-ok' : 'is-weak'}>{pick.entry.strength === 'confirmed' ? 'confirmed on newer ticks' : 'weak'}</i>
+                <small>{pick.entry.note}</small>
+            </p>
+            : <p className='apex-bt__pickentry'><small>No entry digit: too little history for this market.</small></p>}
+        {kind !== 'other' && (
+            <div className='apex-bt__gates'>
+                {pick.gates.map(g => <span key={g.key} className={g.pass ? 'is-ok' : 'is-bad'} title={g.note}>{g.pass ? '✓' : '✕'} {g.label}</span>)}
+            </div>
+        )}
+        <div className='apex-bt__pickbtns'>
+            <button type='button' className='apex-bt__loadrec' onClick={() => onLoad(pick, 'all')}>Load to Trading Deck</button>
+            {pick.entry && <button type='button' className='apex-bt__ghost' onClick={() => onLoad(pick, 'entry')}>Use digit {pick.entry.digit} only</button>}
+        </div>
+    </div>
+);
+
+const ScanPanel = ({ scan, onScan, onScanCancel, onScanLoad, onScanSettings }: Pick<BulkViewProps, 'scan' | 'onScan' | 'onScanCancel' | 'onScanLoad' | 'onScanSettings'>) => {
+    const running = scan.phase === 'running';
+    const outcome = scan.outcome;
+    const shown = outcome?.best ?? outcome?.closest ?? null;
+    const others = outcome ? outcome.top.filter(p => p !== shown).slice(0, 3) : [];
+    const isLoaded = (p: ScanPick) => scan.loadedKey === `${p.symbol}|${p.label}`;
+    return (
+        <section className='apex-bt__panel apex-bt__scan' aria-label='Market scanner'>
+            <div className='apex-bt__scanhead'>
+                <div><small>MARKET SCANNER</small><h3>Find the market, the contract and the entry digit</h3></div>
+                <div className='apex-bt__scanctl'>
+                    <label>Scan for
+                        <select value={scan.settings.seconds} disabled={running} onChange={event => onScanSettings({ seconds: Number(event.target.value) })}>
+                            {[5, 10, 15, 20, 25, 30].filter(n => n >= SCAN_MIN_SECONDS && n <= SCAN_MAX_SECONDS).map(n => <option key={n} value={n}>{n} seconds</option>)}
+                        </select>
+                    </label>
+                    {running
+                        ? <button type='button' className='apex-bt__run is-stop' onClick={onScanCancel}>Cancel scan</button>
+                        : <button type='button' className='apex-bt__run' onClick={onScan}>Scan markets</button>}
+                </div>
+            </div>
+            <div className='apex-bt__scanopts'>
+                <label><input type='checkbox' checked={scan.settings.autoLoad} onChange={event => onScanSettings({ autoLoad: event.target.checked })} />Load the result onto the deck when a scan ends</label>
+                <label><input type='checkbox' checked={scan.settings.autoLoadEntry} onChange={event => onScanSettings({ autoLoadEntry: event.target.checked })} />Load its entry digit with it</label>
+            </div>
+            {running && (
+                <div className='apex-bt__scanrun' role='status'>
+                    <div className='apex-bt__bar'><i style={{ width: `${Math.round(scan.progress * 100)}%` }} /></div>
+                    <span>Scanning… {scan.secondsLeft}s left · {scan.marketsRead} markets read · {scan.ticksChecked} new ticks checked</span>
+                </div>
+            )}
+            {!running && !outcome && <p className='apex-bt__hint'>Press Scan markets. For up to {scan.settings.seconds} seconds every new tick of all 13 markets is checked against all six contracts. The one that keeps passing wins.</p>}
+            {!running && outcome && (
+                <>
+                    <p className='apex-bt__hint'>{outcome.note}</p>
+                    {shown && <PickCard pick={shown} kind={outcome.best ? 'pick' : 'closest'} loaded={isLoaded(shown)} onLoad={onScanLoad} />}
+                    {others.length > 0 && (
+                        <details className='apex-bt__params'>
+                            <summary>Other contracts ({others.length})</summary>
+                            {others.map(p => <PickCard key={`${p.symbol}|${p.label}`} pick={p} kind='other' loaded={isLoaded(p)} onLoad={onScanLoad} />)}
+                        </details>
+                    )}
+                </>
+            )}
+        </section>
+    );
+};
+
 // ---------------------------------------------------------------------------------------------------------------------------------
 // What the page shows is the trader's choice: every block below can be switched on or off from "View". The choice is remembered.
 // ---------------------------------------------------------------------------------------------------------------------------------
-export type ViewKey = 'signal' | 'auto' | 'stats' | 'log' | 'notes';
+export type ViewKey = 'scan' | 'signal' | 'auto' | 'stats' | 'log' | 'notes';
 export const VIEW_OPTIONS: ReadonlyArray<readonly [ViewKey, string]> = [
-    ['signal', 'Fusion signal'], ['auto', 'Auto trader'], ['stats', 'Run results'], ['log', 'Logs and tables'], ['notes', 'Notes and explanations'],
+    ['scan', 'Market scanner'], ['signal', 'Fusion signal'], ['auto', 'Auto trader'], ['stats', 'Run results'], ['log', 'Logs and tables'], ['notes', 'Notes and explanations'],
 ];
-export const DEFAULT_VIEW: Record<ViewKey, boolean> = { signal: true, auto: true, stats: true, log: false, notes: false };
+export const DEFAULT_VIEW: Record<ViewKey, boolean> = { scan: true, signal: true, auto: true, stats: true, log: false, notes: false };
 const VIEW_KEY = 'apex.bulk.view.v1';
 const loadView = (): Record<ViewKey, boolean> => {
     try {
@@ -344,7 +464,9 @@ const BulkTraderView = (props: BulkViewProps) => {
         { side: 1 as const, label: `Under ${under}`, hit: hitRate(digitPct, 'DIGITUNDER', under), cls: 'b' },
     ];
     const settled = log.filter(row => row.state === 'won' || row.state === 'lost');
-    const busy = running || props.auto.armed;
+    const waiting = props.entry.waiting;
+    const entryDigit = props.entry.digit === '' ? null : Number(props.entry.digit);
+    const busy = running || props.auto.armed || waiting !== null;
 
     return (
         <div className='apex-bt'>
@@ -355,6 +477,8 @@ const BulkTraderView = (props: BulkViewProps) => {
                     <ViewMenu view={view} onChange={setViewKey} />
                 </div>
             </div>
+
+            {view.scan && <ScanPanel scan={props.scan} onScan={props.onScan} onScanCancel={props.onScanCancel} onScanLoad={props.onScanLoad} onScanSettings={props.onScanSettings} />}
 
             {view.signal && (
                 <RecommendationBar rec={props.rec} watch={props.watch} onLoadRec={props.onLoadRec} marketsReady={props.marketsReady} live={props.live}
@@ -381,11 +505,14 @@ const BulkTraderView = (props: BulkViewProps) => {
 
                 <div className='apex-bt__rings'>
                     {digitPct.map((pct, digit) => (
-                        <div key={digit} className={`apex-bt__ring${digit === props.digit ? ' is-current' : ''}`}
+                        <button key={digit} type='button' disabled={busy} aria-pressed={entryDigit === digit}
+                            title={`${roles[digit] ? `${ROLE_NAME[roles[digit] as Exclude<DigitRole, null>]}. ` : ''}${entryDigit === digit ? 'Entry digit: click to clear' : 'Click to use as the entry digit'}`}
+                            className={`apex-bt__ring${digit === props.digit ? ' is-current' : ''}${entryDigit === digit ? ' is-entry' : ''}`}
                             style={ringStyle(pct, roles[digit] ? ROLE_COLOR[roles[digit] as Exclude<DigitRole, null>] : '#2a8cf0')}
-                            title={roles[digit] ? ROLE_NAME[roles[digit] as Exclude<DigitRole, null>] : undefined}>
+                            onClick={() => props.onEntryDigit(entryDigit === digit ? '' : String(digit))}>
                             <span>{digit}<small>{pct.toFixed(1)}%</small></span>
-                        </div>
+                            {entryDigit === digit && <b className='apex-bt__entrytag'>ENTRY</b>}
+                        </button>
                     ))}
                 </div>
                 {hasData && (
@@ -445,24 +572,46 @@ const BulkTraderView = (props: BulkViewProps) => {
                 </div>
                 {view.notes && <p className='apex-bt__pickinfo'>{lock.on && lock.note ? lock.note : props.loadedNote}</p>}
 
+                <div className='apex-bt__entry' aria-label='Entry'>
+                    <span className='apex-bt__entrylabel'>Entry</span>
+                    <div className='apex-bt__seg' role='group' aria-label='Entry mode'>
+                        <button type='button' className={props.entry.mode === 'INSTANT' ? 'is-on' : ''} aria-pressed={props.entry.mode === 'INSTANT'} disabled={busy} onClick={() => props.onEntryMode('INSTANT')}>Instant</button>
+                        <button type='button' className={props.entry.mode === 'WAIT' ? 'is-on' : ''} aria-pressed={props.entry.mode === 'WAIT'} disabled={busy} onClick={() => props.onEntryMode('WAIT')}>Wait for digit</button>
+                    </div>
+                    <label>Entry digit
+                        <input value={props.entry.digit} disabled={busy} inputMode='numeric' maxLength={1} placeholder='0-9' aria-label='Entry digit'
+                            onChange={event => props.onEntryDigit(event.target.value.replace(/[^0-9]/g, '').slice(-1))} />
+                    </label>
+                    {props.entry.digit !== '' && !busy && <button type='button' className='apex-bt__ghost' onClick={() => props.onEntryDigit('')}>Clear</button>}
+                    <small>{props.entry.mode === 'WAIT'
+                        ? (entryDigit === null ? 'Wait for digit is on but no digit is set: Over / Under will buy at once. Click a digit above or type one.' : `Over / Under waits up to ${props.entry.waitSec}s for a ${entryDigit}, then buys.`)
+                        : 'Over / Under buys the moment you press it.'}</small>
+                </div>
+
                 <div className='apex-bt__sides' aria-label='Over and Under'>
                     {sides.map(item => {
                         const open = !lock.on || lock.openSide === item.side;
                         const executeTag = lock.on && lock.openSide === item.side;
                         return (
-                            <button key={item.side} type='button' disabled={running || !hasData || props.auto.armed || !open}
+                            <button key={item.side} type='button' disabled={busy || !hasData || !open}
                                 className={`apex-bt__side apex-bt__side--${item.cls}${!lock.on && props.pickSide === item.side ? ' is-pick' : ''}${executeTag ? ' is-execute' : ''}${lock.on && !open ? ' is-gated' : ''}`}
                                 onClick={() => props.onRun(item.side)}>
-                                {executeTag && <em>EXECUTE SIGNAL</em>}
-                                {!lock.on && props.pickSide === item.side && <em>AI PICK</em>}
+                                {executeTag && <em>{lock.openLabel ?? 'EXECUTE SIGNAL'}</em>}
+                                {!lock.on && props.pickSide === item.side && <em>{props.pickLabel ?? 'AI PICK'}</em>}
                                 <span>{item.label}</span>
                                 <strong>{item.hit.toFixed(1)}%</strong>
-                                <small>{lock.on && !open ? '🔒 locked · waiting for an EXECUTE signal' : `run ×${params.runs} together`}</small>
+                                <small>{lock.on && !open ? '🔒 locked · waiting for an EXECUTE signal or a scanner pick' : props.entry.mode === 'WAIT' && entryDigit !== null ? `waits for ${entryDigit}, then run ×${params.runs}` : `run ×${params.runs} together`}</small>
                             </button>
                         );
                     })}
                 </div>
 
+                {waiting && (
+                    <div className='apex-bt__status is-waiting' role='status'>
+                        <span>Waiting for digit {waiting.digit} to print on {BULK_MARKETS.find(m => m.symbol === symbol)?.name ?? symbol} · {waiting.secondsLeft}s left. Nothing is bought until it does.</span>
+                        <button type='button' className='apex-bt__stop' onClick={props.onWaitCancel}>Cancel wait</button>
+                    </div>
+                )}
                 {(props.status || running) && (
                     <div className='apex-bt__status'>
                         <span>{props.status}</span>

@@ -72,6 +72,7 @@
 .apex-bt__rings { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 8px; margin: 14px 0; }
 
 .apex-bt__ring {
+    padding: 0; border: 0; color: inherit; cursor: pointer; font: inherit;
     --p: 0; --c: #2a8cf0;
     position: relative; width: 100%; max-width: 96px; aspect-ratio: 1; margin: 0 auto; border-radius: 50%;
     display: grid; place-items: center; background: conic-gradient(var(--c) calc(var(--p) * 1%), #13223f 0);
@@ -319,3 +320,51 @@
 .apex-bt__legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .apex-bt__switches { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-start; }
 .apex-bt__switches .apex-bt__siglock { margin-top: 14px; flex: 0 1 auto; }
+
+.apex-bt__ring:disabled { cursor: default; }
+.apex-bt__ring.is-entry { box-shadow: 0 0 0 3px #19d3ff, 0 0 14px rgba(25, 211, 255, .55); }
+.apex-bt__entrytag { position: absolute; bottom: -9px; left: 50%; transform: translateX(-50%); padding: 1px 6px; border-radius: 6px; background: #19d3ff; color: #04202a; font-size: 9px; letter-spacing: .08em; font-weight: 900; }
+.apex-bt__rings { padding-bottom: 8px; }
+
+.apex-bt__scanhead { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.apex-bt__scanhead h3 { margin: 2px 0 0; font-size: 16px; }
+.apex-bt__scanctl { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.apex-bt__scanctl label { display: grid; gap: 4px; font-size: 11px; color: var(--bt-muted); }
+.apex-bt__scanopts { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0 4px; font-size: 12px; color: var(--bt-muted); }
+.apex-bt .apex-bt__scanopts label { display: flex; flex-direction: row; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; font-weight: 600; font-size: 12px; }
+.apex-bt .apex-bt__scanopts input { width: auto; margin: 0; }
+.apex-bt__scanrun { display: grid; gap: 6px; margin: 10px 0; font-size: 12px; color: var(--bt-muted); }
+.apex-bt__bar { height: 8px; border-radius: 6px; background: #13223f; overflow: hidden; }
+.apex-bt__bar i { display: block; height: 100%; background: linear-gradient(90deg, #19d3ff, #19d38a); transition: width .25s linear; }
+.apex-bt__hint { margin: 8px 0; font-size: 12px; color: var(--bt-muted); }
+
+.apex-bt__pick { display: grid; gap: 8px; margin: 8px 0; padding: 12px; border-radius: 12px; border: 1px solid var(--bt-line); }
+.apex-bt__pick--pick { border-color: #19d38a; }
+.apex-bt__pick--closest { border-color: #e8b84a; }
+.apex-bt__pick.is-loaded { box-shadow: 0 0 0 2px rgba(25, 211, 255, .4); }
+.apex-bt__pickhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+.apex-bt__pickhead strong { font-size: 18px; }
+.apex-bt__pickhead em { font-style: normal; font-size: 10px; font-weight: 900; letter-spacing: .08em; padding: 2px 8px; border-radius: 6px; background: rgba(255, 255, 255, .08); }
+.apex-bt__pickhead em.is-on { background: #19d3ff; color: #04202a; }
+.apex-bt__pickmeta { display: flex; gap: 14px; font-size: 12px; color: var(--bt-muted); }
+.apex-bt__pickentry { margin: 0; display: grid; gap: 2px; font-size: 14px; }
+.apex-bt__pickentry i { font-style: normal; font-size: 11px; font-weight: 800; margin-left: 6px; }
+.apex-bt__pickentry i.is-ok { color: #19d38a; }
+.apex-bt__pickentry i.is-weak { color: #e8b84a; }
+.apex-bt__pickentry small { color: var(--bt-muted); font-size: 11px; }
+.apex-bt__gates { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; }
+.apex-bt__gates .is-ok { color: #19d38a; }
+.apex-bt__gates .is-bad { color: #ff4d6a; }
+.apex-bt__pickbtns { display: flex; flex-wrap: wrap; gap: 8px; }
+.apex-bt__ghost { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--bt-line); background: transparent; color: inherit; cursor: pointer; font-weight: 700; }
+
+.apex-bt__entry { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 14px 0 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--bt-line); }
+.apex-bt__entrylabel { font-size: 11px; font-weight: 900; letter-spacing: .1em; color: var(--bt-muted); text-transform: uppercase; }
+.apex-bt__seg { display: inline-flex; border-radius: 10px; overflow: hidden; border: 1px solid var(--bt-line); }
+.apex-bt__seg button { padding: 7px 14px; border: 0; background: transparent; color: inherit; cursor: pointer; font-weight: 700; font-size: 13px; }
+.apex-bt__seg button.is-on { background: #19d3ff; color: #04202a; }
+.apex-bt__seg button:disabled { opacity: .5; cursor: default; }
+.apex-bt__entry label { display: flex; flex-direction: row; align-items: center; gap: 8px; font-size: 12px; text-transform: none; letter-spacing: 0; }
+.apex-bt__entry input { width: 52px; text-align: center; }
+.apex-bt__entry small { flex: 1 1 240px; color: var(--bt-muted); font-size: 12px; }
+.apex-bt__status.is-waiting { border-color: #19d3ff; }

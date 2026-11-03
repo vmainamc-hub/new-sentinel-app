@@ -11,6 +11,10 @@ import {
     type Fill, type Tally,
 } from '../bulk-run';
 import { bulkFeed } from '../bulk-feed';
+import {
+    ScanSession, entryTriggered, loadScanSettings, parseEntryDigit, sanitizeScan, saveScanSettings,
+    type EntryMode, type ScanOutcome, type ScanPick, type ScanSettings,
+} from '../bulk-scan';
 import { DEFAULT_BUY_MS, fitOnOneTick, learnPace, tickIntervalMs } from '../burst-pace';
 import {
     DEFAULT_AUTO, armSession, disarmSession, entryRuleFor, entrySlip, lossLimitError, modeText, newSession, planTrade, recordAutoRun, releaseRun, sanitizeAuto, signalKey, slipText,
@@ -101,6 +105,16 @@ const BulkTraderPage = () => {
     const [autoNote, setAutoNote] = useState('Off.');
     const [pendingAuto, setPendingAuto] = useState<{ rec: Recommendation; nonce: number; decidedAt: number } | null>(null);
     const [tickVersion, setTickVersion] = useState(0);
+    // Market scanner and entry digit. The settings (scan length, auto-load, entry mode, entry digit) are remembered in the browser.
+    const [scanSettings, setScanSettings] = useState<ScanSettings>(loadScanSettings);
+    const scanSettingsRef = useRef(scanSettings);
+    const [scanState, setScanState] = useState<{ phase: 'idle' | 'running' | 'done'; progress: number; secondsLeft: number; marketsRead: number; ticksChecked: number; outcome: ScanOutcome | null }>(
+        { phase: 'idle', progress: 0, secondsLeft: 0, marketsRead: 0, ticksChecked: 0, outcome: null });
+    const [scanLoaded, setScanLoaded] = useState<ScanPick | null>(null);
+    const scanTimer = useRef<number | null>(null);
+    const [waiting, setWaiting] = useState<{ digit: number; side: 0 | 1; symbol: string; armedAt: number; until: number } | null>(null);
+    const waitRef = useRef(waiting);
+    const [pendingManual, setPendingManual] = useState<{ side: 0 | 1; decidedAt: number; nonce: number } | null>(null);
     const [, setClock] = useState(0);
     const [recVersion, setRecVersion] = useState('');
     const [marketsReady, setMarketsReady] = useState(0);
@@ -129,6 +143,8 @@ const BulkTraderPage = () => {
     const traderRef = useRef<HTMLElement>(null);
 
     symbolRef.current = symbol;
+    scanSettingsRef.current = scanSettings;
+    waitRef.current = waiting;
     lockedRef.current = locked;
     formRef.current = form;
     const autoConfig = sanitizeAuto({
@@ -142,7 +158,10 @@ const BulkTraderPage = () => {
     autoRef.current.config = autoConfig;
     useEffect(() => {
         mounted.current = true;
-        return () => { mounted.current = false; stopRef.current = true; };
+        return () => {
+            mounted.current = false; stopRef.current = true;
+            if (scanTimer.current !== null) window.clearInterval(scanTimer.current);
+        };
     }, []);
 
     // ------------------------------------------------------------------
@@ -151,7 +170,19 @@ const BulkTraderPage = () => {
     // ------------------------------------------------------------------
     useEffect(() => {
         bulkFeed.start();
-        const offTick = bulkFeed.onTick(tickSymbol => { if (tickSymbol === symbolRef.current) setTickVersion(value => value + 1); });
+        const offTick = bulkFeed.onTick(tickSymbol => {
+            if (tickSymbol === symbolRef.current) setTickVersion(value => value + 1);
+            // A press that is waiting for its entry digit buys on the first NEW tick that shows it (never on a digit that was already there).
+            const wait = waitRef.current;
+            if (wait && tickSymbol === wait.symbol) {
+                const store = bulkFeed.store[wait.symbol];
+                if (store && entryTriggered(wait.digit, wait.armedAt, store.times, store.digits)) {
+                    waitRef.current = null;
+                    setWaiting(null);
+                    setPendingManual({ side: wait.side, decidedAt: store.times.at(-1) ?? 0, nonce: Date.now() });
+                }
+            }
+        });
         const offStep = bulkFeed.onStep(({ now, ready }) => {
             const next = bulkFeed.rec;
             const version = next ? `${next.id}|${next.action}|${next.score}` : '';
@@ -188,7 +219,15 @@ const BulkTraderPage = () => {
             }
             setMarketsReady(previous => (previous === ready ? previous : ready));
         });
-        const clock = window.setInterval(() => setClock(value => value + 1), 1000);
+        const clock = window.setInterval(() => {
+            setClock(value => value + 1);
+            const wait = waitRef.current;
+            if (wait && Date.now() > wait.until) {
+                waitRef.current = null;
+                setWaiting(null);
+                setStatus(`Digit ${wait.digit} did not print in time. Nothing was bought.`);
+            }
+        }, 1000);
         return () => { offTick(); offStep(); window.clearInterval(clock); };
     }, []);
 
@@ -202,7 +241,7 @@ const BulkTraderPage = () => {
     const rec = locked ? refreshLocked(locked, bulkFeed.verdicts, now) : offered;
     const watch = rec ? null : watching(bulkFeed.verdicts);
     const applyToDeck = (target: Recommendation, scroll = true, barrier = target.barrier) => {
-        setLoaded(target); setSymbol(target.symbol);
+        setLoaded(target); setScanLoaded(null); setSymbol(target.symbol);
         if (target.contract === 'DIGITOVER') setOverBarrier(String(barrier)); else setUnderBarrier(String(barrier));
         setError('');
         if (scroll) window.setTimeout(() => traderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
@@ -235,9 +274,16 @@ const BulkTraderPage = () => {
         ? (loaded.side === 0 && Number(overBarrier) === loaded.barrier ? 0 : loaded.side === 1 && Number(underBarrier) === loaded.barrier ? 1 : null)
         : null;
 
+    // A scanner result on the deck. It opens its own button while the signal lock is on (the scan is its own gate), and carries SCAN PICK.
+    const scanPickSide: 0 | 1 | null = scanLoaded && scanLoaded.symbol === symbol
+        ? (scanLoaded.side === 0 && Number(overBarrier) === scanLoaded.barrier ? 0 : scanLoaded.side === 1 && Number(underBarrier) === scanLoaded.barrier ? 1 : null)
+        : null;
+
     const loadedIsLocked = Boolean(locked && loaded && loaded.id === locked.id);
     const loadedCheck = loaded ? validateRecommendation(loaded, bulkFeed.verdicts, now, loadedIsLocked) : null;
-    const loadedNote = !loaded
+    const loadedNote = scanLoaded && !loaded
+        ? `Loaded ${scanLoaded.label} on ${scanLoaded.market} from the scanner${scanLoaded.entry ? `, entry digit ${scanLoaded.entry.digit} (${scanLoaded.entry.strength})` : ''}. Nothing is purchased until you press ${scanLoaded.label}.`
+        : !loaded
         ? 'Load the recommendation, or choose your own market and barrier. Nothing is purchased until you press Over or Under.'
         : loadedCheck && !loadedCheck.ok
             ? `Loaded ${loaded.label} on ${loaded.market} is no longer valid: ${loadedCheck.reason}`
@@ -264,8 +310,9 @@ const BulkTraderPage = () => {
         }
     };
     const gateCheck = executeGate(loaded, bulkFeed.verdicts, now);
-    const gateSide: 0 | 1 | null = signalLock && gateCheck.ok ? pickSide : null;
+    const gateSide: 0 | 1 | null = !signalLock ? null : gateCheck.ok && pickSide !== null ? pickSide : scanPickSide;
     const gateNote = !signalLock ? ''
+        : scanPickSide !== null && scanLoaded ? `Unlocked for ${scanLoaded.label} on ${scanLoaded.market}: loaded from the scanner.`
         : !loaded ? (offered?.action === 'EXECUTE'
             ? `EXECUTE signal ready: ${offered.label} on ${offered.market}. Press “Load to Trading Deck” to unlock its button.`
             : 'Locked. Waiting for an EXECUTE signal to load to the Trading Deck.')
@@ -329,7 +376,10 @@ const BulkTraderPage = () => {
                 const isPick = Boolean(loaded && loaded.symbol === symbol && loaded.contract === contract && loaded.barrier === barrier);
                 if (!autoBusy.current) {
                     // Signal lock ON, hand-placed: only the loaded signal, only while the engine still says EXECUTE.
-                    const gate = isPick ? executeGate(loaded, bulkFeed.verdicts, Date.now()) : { ok: false as const, reason: 'Only the loaded EXECUTE signal can be traded while the signal lock is on.' };
+                    const scanOk = Boolean(scanLoaded && scanLoaded.symbol === symbol && scanLoaded.contract === contract && scanLoaded.barrier === barrier);
+                    const gate = isPick ? executeGate(loaded, bulkFeed.verdicts, Date.now())
+                        : scanOk ? { ok: true as const }
+                            : { ok: false as const, reason: 'Only the loaded EXECUTE signal or scanner pick can be traded while the signal lock is on.' };
                     if (!gate.ok) { setError(gate.reason); return; }
                 } else if (isPick) {
                     const check = validateRecommendation(loaded, bulkFeed.verdicts, Date.now(), Boolean(locked && loaded && loaded.id === locked.id));
@@ -463,8 +513,15 @@ const BulkTraderPage = () => {
     };
 
     // One Stop/Exit: no further purchases; ask Deriv to sell what it will sell; keep monitoring the rest.
+    const cancelWait = (note = 'Entry wait cancelled. Nothing was bought.') => {
+        if (!waitRef.current) return;
+        waitRef.current = null;
+        setWaiting(null);
+        setStatus(note);
+    };
     const stop = async () => {
         stopRef.current = true;
+        cancelWait('Stopped. Nothing was bought.');
         if (autoRef.current.session.armed) {
             const off = disarmSession(autoRef.current.session, 'Stopped by you.');
             autoRef.current.session = off;
@@ -545,6 +602,78 @@ const BulkTraderPage = () => {
         })();
     }, [pendingAuto]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // ------------------------------------------------------------------
+    // Market scanner and entry digit. Neither buys anything by itself: a scan only fills the deck, and a press with "Wait for digit"
+    // on only starts the wait. The buy then goes through the same execute() path as every other run.
+    // ------------------------------------------------------------------
+    const updateScan = (patch: Partial<ScanSettings>) => {
+        const next = sanitizeScan({ ...scanSettingsRef.current, ...patch });
+        scanSettingsRef.current = next;
+        setScanSettings(next);
+        saveScanSettings(next);
+    };
+    const loadScan = (pick: ScanPick, what: 'all' | 'entry', auto = false) => {
+        if (what === 'entry') { if (pick.entry) updateScan({ entryDigit: String(pick.entry.digit) }); return; }
+        if (guard.current.busy || autoBusy.current || autoRef.current.session.armed || waitRef.current) { setError('Finish the current run, auto trader or entry wait before loading a scan result.'); return; }
+        setScanLoaded(pick); setLoaded(null); setSymbol(pick.symbol);
+        if (pick.contract === 'DIGITOVER') setOverBarrier(String(pick.barrier)); else setUnderBarrier(String(pick.barrier));
+        setError('');
+        if (pick.entry && (!auto || scanSettingsRef.current.autoLoadEntry)) updateScan({ entryDigit: String(pick.entry.digit) });
+        if (!auto) window.setTimeout(() => traderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    };
+    const stopScanTimer = () => { if (scanTimer.current !== null) { window.clearInterval(scanTimer.current); scanTimer.current = null; } };
+    const startScan = () => {
+        if (scanTimer.current !== null) return;
+        if (guard.current.busy || autoBusy.current || autoRef.current.session.armed || waitRef.current) { setError('Finish the current run, auto trader or entry wait before scanning.'); return; }
+        setError('');
+        const seconds = scanSettingsRef.current.seconds;
+        const startedAt = Date.now();
+        const session = new ScanSession(startedAt, seconds);
+        setScanState({ phase: 'running', progress: 0, secondsLeft: seconds, marketsRead: 0, ticksChecked: 0, outcome: null });
+        const poll = () => {
+            const t = Date.now();
+            for (const market of BULK_MARKETS) {
+                const store = bulkFeed.store[market.symbol];
+                if (store && store.digits.length) session.sample(market.symbol, store.digits, store.times.at(-1) ?? 0);
+            }
+            const elapsed = t - startedAt;
+            if (elapsed >= seconds * 1000) {
+                stopScanTimer();
+                const outcome = session.finish(t, BULK_MARKETS, symbol => bulkFeed.store[symbol]?.digits ?? [], Number(formRef.current.duration) || 1);
+                if (!mounted.current) return;
+                setScanState({ phase: 'done', progress: 1, secondsLeft: 0, marketsRead: outcome.marketsRead, ticksChecked: session.sampleCount, outcome });
+                if (scanSettingsRef.current.autoLoad && outcome.best) loadScan(outcome.best, 'all', true);
+                return;
+            }
+            setScanState({ phase: 'running', progress: elapsed / (seconds * 1000), secondsLeft: Math.max(0, Math.ceil(seconds - elapsed / 1000)), marketsRead: session.marketsRead, ticksChecked: session.sampleCount, outcome: null });
+        };
+        poll();
+        scanTimer.current = window.setInterval(poll, 250);
+    };
+    const cancelScan = () => { stopScanTimer(); setScanState(current => ({ ...current, phase: 'idle', progress: 0, outcome: null })); };
+
+    // Over / Under pressed. Instant: buy now. Wait for digit (with a digit set): start the wait; the tick handler buys when it prints.
+    const press = (side: 0 | 1) => {
+        const settings = scanSettingsRef.current;
+        const digit = parseEntryDigit(settings.entryDigit);
+        if (settings.entryMode !== 'WAIT' || digit === null) { void execute(side); return; }
+        if (running || guard.current.busy || autoBusy.current) return;
+        const contract: OverUnderContract = side === 0 ? 'DIGITOVER' : 'DIGITUNDER';
+        const barrier = Number(side === 0 ? overBarrier : underBarrier);
+        try { if (!signalLock) assertFreeContract(contract, barrier); else assertAllowedContract(contract, barrier); } catch (err) { setError(errorText(err)); return; }
+        const store = bulkFeed.store[symbol];
+        const next = { digit, side, symbol, armedAt: store?.times.at(-1) ?? 0, until: Date.now() + settings.waitSec * 1000 };
+        waitRef.current = next;
+        setWaiting(next);
+        setError('');
+    };
+    useEffect(() => {
+        if (!pendingManual) return;
+        const { side, decidedAt } = pendingManual;
+        setPendingManual(null);
+        void execute(side, decidedAt);
+    }, [pendingManual]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const toggleAuto = () => {
         const current = autoRef.current.session;
         const onScreen = lockedRef.current
@@ -583,12 +712,16 @@ const BulkTraderPage = () => {
         }}
         onAutoToggle={toggleAuto} onAutoForm={onAutoForm}
         onLogDownload={() => downloadCsv(toCsv(autoLog))} onLogClear={() => { saveLog([]); setAutoLog([]); }}
-        signalLock={{ on: signalLock, openSide: gateSide, note: gateNote, onToggle: toggleSignalLock }}
+        signalLock={{ on: signalLock, openSide: gateSide, openLabel: gateSide !== null && pickSide === null ? 'SCAN PICK' : undefined, note: gateNote, onToggle: toggleSignalLock }}
         oneTick={{ on: oneTick, onToggle: toggleOneTick }}
         symbol={symbol} onSymbol={setSymbol} price={price} digit={digit} digitPct={digitPct} digitTrend={digitTrend} recent={recent}
         form={form} onForm={onForm} overBarrier={overBarrier} underBarrier={underBarrier} onOverBarrier={setOverBarrier} onUnderBarrier={setUnderBarrier}
-        pickSide={pickSide} loadedNote={loadedNote} currency={currency} running={running} status={status} error={error}
-        tally={tally} syncNote={syncNote} log={log} onRun={side => void execute(side)} onStop={() => void stop()} traderRef={traderRef}
+        pickSide={pickSide ?? scanPickSide} pickLabel={pickSide !== null ? 'AI PICK' : 'SCAN PICK'} loadedNote={loadedNote} currency={currency} running={running} status={status} error={error}
+        tally={tally} syncNote={syncNote} log={log} onRun={press} onStop={() => void stop()} traderRef={traderRef}
+        scan={{ ...scanState, settings: scanSettings, loadedKey: scanLoaded ? `${scanLoaded.symbol}|${scanLoaded.label}` : '' }}
+        onScan={startScan} onScanCancel={cancelScan} onScanLoad={(pick, what) => loadScan(pick, what)} onScanSettings={updateScan}
+        entry={{ mode: scanSettings.entryMode, digit: scanSettings.entryDigit, waitSec: scanSettings.waitSec, waiting: waiting ? { digit: waiting.digit, side: waiting.side, secondsLeft: Math.max(0, Math.ceil((waiting.until - Date.now()) / 1000)) } : null }}
+        onEntryDigit={value => updateScan({ entryDigit: value })} onEntryMode={(mode: EntryMode) => updateScan({ entryMode: mode })} onWaitCancel={() => cancelWait()}
     />;
 };
 
