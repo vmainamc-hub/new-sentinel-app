@@ -193,7 +193,15 @@
             }
         </style>
         <script type="text/javascript">
-            if (self === top) {
+            // Allowed to sit inside a frame of this same site (the Sentinel "Manual Trader" tab). Any other site that frames
+            // it still gets the original behaviour: reading another site's top.location throws, so sameSiteParent stays false.
+            var sameSiteParent = false;
+            try {
+                sameSiteParent = window.top.location.origin === window.location.origin;
+            } catch (e) {
+                sameSiteParent = false;
+            }
+            if (self === top || sameSiteParent) {
                 var antiClickjack = document.getElementById('antiClickjack');
                 antiClickjack.parentNode.removeChild(antiClickjack);
             } else {

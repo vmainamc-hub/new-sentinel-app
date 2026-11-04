@@ -17,6 +17,8 @@
 #   1. packages/shared/src/utils/config/deriv-socket.ts: the one-time-WebSocket request also sends the Deriv-App-ID
 #      header when a client id is stored under deriv_oauth_app_id. The token comes from this site's own sign-in, so it
 #      belongs to this site's OAuth client, not the source's.
+#   3. dist/index.html: the anti-clickjack check no longer sends the top window to the trader's own address when this
+#      same site is the one framing it (it did, so the tab left the app instead of opening the trader in place).
 #   2. dist/index.html: scripts/manual-trader/storage-isolation.js is inlined first, so the trader's localStorage and
 #      sessionStorage keys are namespaced and cannot overwrite Sentinel's (it shares this site's origin).
 #
@@ -92,6 +94,41 @@ if (!head) {
 }
 const at = head.index + head[0].length;
 fs.writeFileSync(html_path, `${html.slice(0, at)}\n<script>\n${shim}\n</script>${html.slice(at)}`);
+NODE
+
+echo "==> Letting index.html open inside this site's own frame (anti-clickjack check)"
+node - "$DIST/index.html" <<'NODE'
+const fs = require('node:fs');
+const file = process.argv[2];
+const before = [
+    "            if (self === top) {",
+    "                var antiClickjack = document.getElementById('antiClickjack');",
+    "                antiClickjack.parentNode.removeChild(antiClickjack);",
+    "            } else {",
+    "                top.location = self.location;",
+    "            }",
+].join('\n');
+const after = [
+    "            var sameSiteParent = false;",
+    "            try {",
+    "                sameSiteParent = window.top.location.origin === window.location.origin;",
+    "            } catch (e) {",
+    "                sameSiteParent = false;",
+    "            }",
+    "            if (self === top || sameSiteParent) {",
+    "                var antiClickjack = document.getElementById('antiClickjack');",
+    "                antiClickjack.parentNode.removeChild(antiClickjack);",
+    "            } else {",
+    "                top.location = self.location;",
+    "            }",
+].join('\n');
+const text = fs.readFileSync(file, 'utf8');
+const count = text.split(before).length - 1;
+if (count !== 1) {
+    console.error('Anti-clickjack anchor found ' + count + ' times in ' + file + '; expected exactly 1. The source changed, so review the patch.');
+    process.exit(1);
+}
+fs.writeFileSync(file, text.replace(before, after));
 NODE
 
 echo "==> Installing into public/$FOLDER"
