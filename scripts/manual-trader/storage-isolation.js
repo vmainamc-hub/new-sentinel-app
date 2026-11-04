@@ -16,6 +16,9 @@
     'use strict';
 
     var PREFIX = 'mt:';
+    // Members the page expects on a Storage object but that are not stored keys: hasOwnProperty, toString and the helpers the
+    // trader adds to Storage.prototype itself (getObject / setObject). Without them the trader fails at start-up.
+    var inherited = typeof win.Storage === 'function' && win.Storage.prototype ? win.Storage.prototype : Object.prototype;
     var SHARED = { deriv_oauth_session: true, deriv_oauth_accounts_raw: true, deriv_oauth_app_id: true };
 
     function isOwn(object, name) {
@@ -67,6 +70,7 @@
                     if (prop === 'length') return keys().length;
                     if (typeof prop === 'symbol') return undefined;
                     if (isOwn(methods, prop)) return methods[prop];
+                    if (prop in inherited) return inherited[prop];
                     var value = real.getItem(name(prop));
                     return value === null ? undefined : value;
                 },
@@ -79,7 +83,11 @@
                     return true;
                 },
                 has: function (_target, prop) {
-                    return typeof prop === 'string' && (isOwn(methods, prop) || real.getItem(name(prop)) !== null);
+                    return typeof prop === 'string' && (isOwn(methods, prop) || prop in inherited || real.getItem(name(prop)) !== null);
+                },
+                // Makes `storage instanceof Storage` true, which libraries (mobx-persist-store) use to recognise a storage object.
+                getPrototypeOf: function () {
+                    return inherited;
                 },
                 ownKeys: function () {
                     return keys();

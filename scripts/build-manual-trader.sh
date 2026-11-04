@@ -131,6 +131,26 @@ if (count !== 1) {
 fs.writeFileSync(file, text.replace(before, after));
 NODE
 
+echo "==> Hiding the trader's own brand strip (Sentinel shows its own header)"
+node - "$DIST/index.html" <<'NODE'
+const fs = require('node:fs');
+const file = process.argv[2];
+const text = fs.readFileSync(file, 'utf8');
+const marker = '</head>';
+const count = text.split(marker).length - 1;
+if (count !== 1) {
+    console.error('Expected exactly one </head> in ' + file + ' but found ' + count + '.');
+    process.exit(1);
+}
+const style = [
+    '<style id="manual-trader-embed">',
+    '.apollo_info { display: none !important; }',
+    '</style>',
+    '',
+].join('\n');
+fs.writeFileSync(file, text.replace(marker, style + marker));
+NODE
+
 echo "==> Installing into public/$FOLDER"
 rm -rf "$OUT"
 mkdir -p "$OUT"

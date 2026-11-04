@@ -21,7 +21,16 @@ const makeStorage = () => {
 };
 
 const run = () => {
-    const win = { localStorage: makeStorage(), sessionStorage: makeStorage() };
+    // A stand-in for the browser's Storage type, including the helpers the trader adds to Storage.prototype itself.
+    class FakeStorageType {}
+    FakeStorageType.prototype.getObject = function (key) {
+        const value = this.getItem(key);
+        return value === null ? null : JSON.parse(value);
+    };
+    FakeStorageType.prototype.setObject = function (key, value) {
+        this.setItem(key, JSON.stringify(value));
+    };
+    const win = { localStorage: makeStorage(), sessionStorage: makeStorage(), Storage: FakeStorageType };
     const real = win.localStorage;
     const realSession = win.sessionStorage;
     // Sentinel's own values, written before the trader starts.
@@ -75,6 +84,18 @@ ls.clear();
 assert.equal(real.getItem('active_loginid'), 'ROT91139228');
 assert.equal(real.getItem('client.accounts'), '{"sentinel":true}');
 assert.equal(real.getItem('mt:active_loginid'), null);
+
+// What the trader needs from a Storage object at start-up: its own helpers, hasOwnProperty, and instanceof Storage.
+ls.setObject('prefs', { a: 1 });
+assert.deepEqual(ls.getObject('prefs'), { a: 1 });
+assert.equal(real.getItem('mt:prefs'), '{"a":1}');
+assert.equal(ls.getObject('nothing'), null);
+assert.equal(typeof ls.hasOwnProperty, 'function');
+assert.equal(ls.hasOwnProperty('prefs'), true);
+assert.equal(typeof ls.toString, 'function');
+assert.equal(ls instanceof win.Storage, true);
+assert.equal(win.sessionStorage instanceof win.Storage, true);
+ls.removeItem('prefs');
 
 // sessionStorage gets the same treatment.
 assert.equal(win.sessionStorage.getItem('oauth_site_id'), null);

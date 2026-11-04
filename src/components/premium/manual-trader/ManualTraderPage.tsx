@@ -20,7 +20,7 @@ import './manual-trader.scss';
  * Marks the address of the current trader page. The trader's own service worker keeps pages it has seen for up to a day, so a
  * copy of an older index.html would otherwise be reused. Raise the number whenever public/br_manual-trader/index.html changes.
  */
-const TRADER_PAGE_TAG = 'mt_page=2';
+const TRADER_PAGE_TAG = 'mt_page=3';
 
 type TState =
     | { status: 'loading' }
