@@ -20,7 +20,7 @@ import './manual-trader.scss';
  * Marks the address of the current trader page. The trader's own service worker keeps pages it has seen for up to a day, so a
  * copy of an older index.html would otherwise be reused. Raise the number whenever public/br_manual-trader/index.html changes.
  */
-const TRADER_PAGE_TAG = 'mt_page=3';
+const TRADER_PAGE_TAG = 'mt_page=4';
 
 type TState =
     | { status: 'loading' }
@@ -81,11 +81,28 @@ const ManualTraderPage = () => {
 
     useEffect(() => {
         let alive = true;
-        prepare()
-            .then(next => alive && setState(next))
-            .catch(error => alive && setState({ status: 'error', message: errorText(error) }));
+        const activeAccount = () => {
+            try {
+                return window.localStorage.getItem('active_loginid');
+            } catch {
+                return null;
+            }
+        };
+        let shown = activeAccount();
+        const open = () => {
+            shown = activeAccount();
+            prepare()
+                .then(next => alive && setState(next))
+                .catch(error => alive && setState({ status: 'error', message: errorText(error) }));
+        };
+        open();
+        // The trader has no account switcher of its own: when the account is changed in Sentinel's header, reopen it on that account.
+        const timer = window.setInterval(() => {
+            if (activeAccount() !== shown) open();
+        }, 1000);
         return () => {
             alive = false;
+            window.clearInterval(timer);
         };
     }, []);
 

@@ -516,3 +516,10 @@ Approach (chosen by the owner): same-origin iframe. The source's own app is buil
 2. `npm ci && npm run type-check && npm test && npm run test:manual-trader-storage`.
 3. Open a branch deploy with a DEMO account: Manual Trader tab loads, balance shows, one demo trade works, and Sentinel's active account is unchanged afterwards.
 4. Only then decide on committing the built folder and merging.
+
+
+### Manual Trader repair (2026-11-04)
+- Fixed the endless loading dots: the bot app owned route "/" (now "/bot"), the sub-packages loaded files from "/" instead of the build folder, and the trader dropped the folder from the page address. All three are patched by `scripts/manual-trader/patch-built-output.js`, which `npm run build:manual-trader` now runs.
+- The trader's own header (second account, Reports, bell) is hidden; the account comes from Sentinel. The page reopens the trader when the active account changes.
+- Trade form layout fixed (chart left, Rise/Fall form right).
+- Verified in a headless browser against a simulated Deriv API only; a real demo trade is still to be confirmed on the live site.

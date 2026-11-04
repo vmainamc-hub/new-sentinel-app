@@ -155,6 +155,10 @@ echo "==> Installing into public/$FOLDER"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 cp -R "$DIST/." "$OUT/"
+
+# Run on the installed folder: the public path it writes comes from the folder name (must start with br_).
+echo "==> Patching the built trader (route, public path, embedded look)"
+node "$ROOT/scripts/manual-trader/patch-built-output.js" "$OUT"
 printf '{\n  "source_repo": "%s",\n  "source_commit": "%s",\n  "built_at": "%s"\n}\n' \
     "$SOURCE_REPO" "$SOURCE_COMMIT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT/manual-trader.json"
 

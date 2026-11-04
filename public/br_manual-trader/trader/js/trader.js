@@ -352,7 +352,7 @@ module.exports = __WEBPACK_EXTERNAL_MODULE_react_router_dom__;
 /******/ 	
 /******/ 	/* webpack/runtime/publicPath */
 /******/ 	(() => {
-/******/ 		__webpack_require__.p = "/";
+/******/ 		__webpack_require__.p = "/br_manual-trader/";
 /******/ 	})();
 /******/ 	
 /******/ 	/* webpack/runtime/css loading */
