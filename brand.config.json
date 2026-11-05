@@ -66,6 +66,25 @@
           "manifest_url": "/free-bots/domains/apex-sentinel.json",
           "base_url": "/free-bots"
         }
+      },
+      {
+        "id": "zenith-traders",
+        "hosts": [
+          "zenithtraders.netlify.app"
+        ],
+        "display_domain": "Zenith Traders",
+        "website_url": "https://zenithtraders.netlify.app",
+        "redirect_uri": "https://zenithtraders.netlify.app/callback",
+        "client_id": "34BIr72thLXMJHaL9PQxN",
+        "scopes": [
+          "trade"
+        ],
+        "environment": "production",
+        "bot_library": {
+          "title": "Free Bots",
+          "manifest_url": "/free-bots/domains/apex-sentinel.json",
+          "base_url": "/free-bots"
+        }
       }
     ]
   },

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "site_id": "zenith-traders",
+  "navigation": [
+    "dashboard",
+    "bot_builder",
+    "free_bots",
+    "manual_trading",
+    "manual_trader",
+    "ai_bots",
+    "auto_trader",
+    "sentinel_ai",
+    "sixfold",
+    "vanguard",
+    "ai_intel",
+    "tradingview",
+    "bulk_trader",
+    "copy_trading",
+    "calculator",
+    "analysis_tools",
+    "digits_analysis"
+  ],
+  "colors": {
+    "primary": "#e8b84a",
+    "secondary": "#e8b84a",
+    "nav_background": "#07101f",
+    "nav_text": "#f3f6fb",
+    "header_background": "#050a14"
+  }
+}
