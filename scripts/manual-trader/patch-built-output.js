@@ -319,3 +319,25 @@ const html = fs.readFileSync(indexHtml, 'utf8');
         POC_BEFORE;
     replaceOnce(findChunk(jsDir, POC_BEFORE), POC_BEFORE, POC_AFTER, '/* mt-poc-expired */', 'digit pointer (open contract fields)');
 }
+
+// ---- 9. extra Last Digit colours ------------------------------------------------------------------------------------------
+// scripts/manual-trader/digit-highlights.js shades the 2nd most and 2nd least frequent digits and glows the most increasing one
+// (the trader itself only shades the most and least frequent). It only reads the percentages on screen and adds CSS classes.
+// Inlined at the end of <head>; it waits for the page to load. Tested by scripts/manual-trader/digit-highlights.test.js.
+{
+    const HIGHLIGHT_ID = 'manual-trader-digit-highlights';
+    const highlights = fs.readFileSync(path.join(__dirname, 'digit-highlights.js'), 'utf8');
+    if (highlights.includes('</script')) fail('digit-highlights.js must not contain </script>.');
+    const block = `<script id="${HIGHLIGHT_ID}">\n${highlights}\n</script>\n`;
+    const current = fs.readFileSync(indexHtml, 'utf8');
+    const existing = new RegExp(`<script id="${HIGHLIGHT_ID}">[\\s\\S]*?</script>\\n?`);
+    if (existing.test(current)) {
+        fs.writeFileSync(indexHtml, current.replace(existing, () => block));
+        console.log('digit highlights: updated');
+    } else {
+        const close = /<\/head>/i.exec(current);
+        if (!close) fail('no </head> tag in index.html; cannot install the digit highlights.');
+        fs.writeFileSync(indexHtml, `${current.slice(0, close.index)}${block}${current.slice(close.index)}`);
+        console.log('digit highlights: installed');
+    }
+}

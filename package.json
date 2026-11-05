@@ -22,7 +22,7 @@
     "generate:brand-css": "node scripts/generate-brand-css.js",
     "type-check": "tsc --noEmit",
     "build:manual-trader": "bash scripts/build-manual-trader.sh",
-    "test:manual-trader-storage": "node scripts/manual-trader/storage-isolation.test.js && node scripts/manual-trader/tick-watchdog.test.js"
+    "test:manual-trader-storage": "node scripts/manual-trader/storage-isolation.test.js && node scripts/manual-trader/tick-watchdog.test.js && node scripts/manual-trader/digit-highlights.test.js"
   },
   "dependencies": {
     "@deriv-com/quill-ui": "1.18.1",
