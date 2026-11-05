@@ -16,6 +16,13 @@
  *   2. if ticks have not come back after SOFT_WAIT_MS, it reloads the trader frame once (never more than once a minute).
  * It only arms after the first tick of a page load, so a closed market (no ticks at all) never triggers it more than once.
  *
+ *
+ * Second failure mode: ticks keep arriving (from some stream) but the screen no longer follows them, e.g. the chart's own
+ * stream was forgotten at settlement while another stream is still alive. The check above never fires then, because a tick is
+ * a tick. So it also watches the Last Digit panel (.digits__container), which re-renders on every tick: if ticks keep coming
+ * (RENDER_TICKS of them over RENDER_STALL_MS) and the panel's markup has not changed, it takes the same two steps (restart the
+ * connection, then reload the frame once).
+ *
  * It does not change or hide any message; it only listens. scripts/manual-trader/patch-built-output.js inlines this file
  * into the built index.html before any other script. It has no dependencies.
  */
@@ -28,10 +35,17 @@
     var STALL_MS = 8000;
     var SOFT_WAIT_MS = 10000;
     var RELOAD_GAP_MS = 60000;
+    var RENDER_STALL_MS = 8000;
+    var RENDER_TICKS = 6;
+    var RENDER_SELECTOR = '.digits__container';
+    var LOG_KEEP = 14;
     var RELOAD_KEY = 'manual_trader_tick_watchdog_reload';
     var TICK = /"msg_type"\s*:\s*"tick"|"tick"\s*:\s*\{/;
 
     var state = { last_tick: 0, stage: 0, stage_at: 0, main: null, ticks: 0, sockets: [] };
+    // Render watch: what the Last Digit panel looked like, when it last changed, and how many ticks came in since.
+    var render = { sig: null, at: 0, ticks: 0, stage: 0, stage_at: 0, restarts: 0 };
+    var events = [];
 
     function log(message) {
         try {
@@ -86,6 +100,64 @@
         return true;
     }
 
+    function restartConnection() {
+        var main = state.main;
+        if (main && (main.readyState === NativeWebSocket.OPEN || main.readyState === NativeWebSocket.CONNECTING)) {
+            try {
+                main.close();
+            } catch (e) {
+                // already closing
+            }
+        }
+    }
+
+    // The markup of the Last Digit panel, or null when it is not on screen (other trade types, still loading).
+    function renderSignature() {
+        try {
+            var doc = win.document;
+            if (!doc || typeof doc.querySelector !== 'function') return null;
+            var node = doc.querySelector(RENDER_SELECTOR);
+            return node ? String(node.innerHTML) : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function checkRender(now) {
+        var sig = renderSignature();
+        if (sig === null || state.stage !== 0) {
+            // Nothing to compare, or the plain tick stall above is already being handled.
+            render.sig = null;
+            render.stage = 0;
+            return;
+        }
+        if (sig !== render.sig) {
+            render.sig = sig;
+            render.at = now;
+            render.ticks = state.ticks;
+            render.stage = 0;
+            return;
+        }
+        if (render.stage === 0) {
+            if (now - render.at > RENDER_STALL_MS && state.ticks - render.ticks >= RENDER_TICKS) {
+                render.stage = 1;
+                render.stage_at = now;
+                render.restarts += 1;
+                log(
+                    state.ticks - render.ticks + ' ticks in ' + Math.round((now - render.at) / 1000) +
+                        's but the screen did not change; restarting the connection'
+                );
+                restartConnection();
+            }
+        } else if (render.stage === 1) {
+            if (now - render.stage_at > SOFT_WAIT_MS) {
+                render.stage = 2;
+                log('screen still frozen after the restart; reloading the trader');
+                if (!reloadOnce(now)) log('reload skipped (done less than a minute ago)');
+            }
+        }
+    }
+
     function check(now) {
         if (win.document && win.document.hidden) {
             // Background tabs are throttled and get no timely ticks; do not count that as a stall.
@@ -99,14 +171,7 @@
                 state.stage = 1;
                 state.stage_at = now;
                 log('no ticks for ' + Math.round((now - state.last_tick) / 1000) + 's; restarting the connection');
-                var main = state.main;
-                if (main && (main.readyState === NativeWebSocket.OPEN || main.readyState === NativeWebSocket.CONNECTING)) {
-                    try {
-                        main.close();
-                    } catch (e) {
-                        // already closing
-                    }
-                }
+                restartConnection();
             }
         } else if (state.stage === 1) {
             if (now - state.stage_at > SOFT_WAIT_MS) {
@@ -115,6 +180,19 @@
                 if (!reloadOnce(now)) log('reload skipped (done less than a minute ago)');
             }
         }
+        checkRender(now);
+    }
+
+    // The app reports every socket message it sends and receives as a 'deriv-socket-log' event; keep the last few (ticks are left out) so the readout can show what happened right before a freeze.
+    function recordEvents() {
+        if (typeof win.addEventListener !== 'function') return;
+        win.addEventListener('deriv-socket-log', function (event) {
+            var d = (event && event.detail) || {};
+            if (d.type === 'tick') return;
+            var text = (d.dir === 'out' ? '>' : '<') + ' ' + d.type + (d.error ? ' !' + (d.error.code || 'error') : '');
+            events.push(text);
+            if (events.length > LOG_KEEP) events.shift();
+        });
     }
 
     // Optional on-screen readout (open the site with ?mt_debug=1). It tells "ticks stopped arriving" (age keeps growing)
@@ -136,11 +214,25 @@
             var parts = state.sockets.map(function (item) {
                 return item.name + ':' + ['connecting', 'open', 'closing', 'closed'][item.socket.readyState];
             });
-            box.textContent = 'ticks ' + state.ticks + ' | last ' + age + ' ago | stage ' + state.stage + '\n' + parts.join('  ');
+            var shown = render.sig === null ? 'no digit panel' : 'panel changed ' + ((Date.now() - render.at) / 1000).toFixed(0) + 's ago';
+            box.textContent =
+                'ticks ' + state.ticks + ' | last ' + age + ' ago | stage ' + state.stage + '/' + render.stage +
+                ' | ' + shown + ' | restarts ' + render.restarts + '\n' + parts.join('  ') +
+                '\nlast calls: ' + events.join(' | ');
         }, 500);
     }
 
-    win.__manualTraderTickWatchdog = { check: check, state: state, STALL_MS: STALL_MS, SOFT_WAIT_MS: SOFT_WAIT_MS };
+    win.__manualTraderTickWatchdog = {
+        check: check,
+        state: state,
+        render: render,
+        events: events,
+        STALL_MS: STALL_MS,
+        SOFT_WAIT_MS: SOFT_WAIT_MS,
+        RENDER_STALL_MS: RENDER_STALL_MS,
+        RENDER_TICKS: RENDER_TICKS,
+    };
+    recordEvents();
     win.setInterval(function () {
         check(Date.now());
     }, 1000);

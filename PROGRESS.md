@@ -523,3 +523,9 @@ Approach (chosen by the owner): same-origin iframe. The source's own app is buil
 - The trader's own header (second account, Reports, bell) is hidden; the account comes from Sentinel. The page reopens the trader when the active account changes.
 - Trade form layout fixed (chart left, Rise/Fall form right).
 - Verified in a headless browser against a simulated Deriv API only; a real demo trade is still to be confirmed on the live site.
+
+### Manual Trader: screen freezes after a trade settles (2026-11-05)
+- Symptom: after a trade settles the chart cursor and Last Digit panel stop; the market keeps ticking. The earlier tick watchdog only reacted when NO ticks arrived, so it stayed silent if some stream kept ticking while the one feeding the screen was gone.
+- `scripts/manual-trader/tick-watchdog.js` now also watches `.digits__container`: ticks arriving (6+ over 8 s) while its markup does not change = frozen screen -> restart the connection, then reload the frame once (max once a minute). Tests added in `tick-watchdog.test.js`.
+- `?mt_debug=1` readout now also shows the panel age, restart count and the last 14 socket calls (ticks left out), to see what the app sent just before a freeze.
+- NOT confirmed: the root cause. Suspects seen in the code, not proven: `deriv-socket.ts` sends `forget` / `forget_all` raw to BOTH sockets (two replies with the same req_id), and after sign-in ticks are requested on the account socket while earlier streams live on the public one. Needs a freeze captured with `?mt_debug=1`.
