@@ -239,3 +239,27 @@ const html = fs.readFileSync(indexHtml, 'utf8');
         console.log('auto close drawer: installed');
     }
 }
+
+// ---- 7. tick watchdog -----------------------------------------------------------------------------------------------------
+// After a trade settles the chart cursor and the last-digit circles can stop moving while the market keeps ticking, and the
+// trader's own reconnect logic does not notice. scripts/manual-trader/tick-watchdog.js restarts the connection (and, if that
+// does not help, reloads the frame once) when ticks stop. It is inlined first in <head> so it wraps WebSocket before any trader
+// script runs. Tested by scripts/manual-trader/tick-watchdog.test.js.
+{
+    const WATCHDOG_ID = 'manual-trader-tick-watchdog';
+    const watchdog = fs.readFileSync(path.join(__dirname, 'tick-watchdog.js'), 'utf8');
+    if (watchdog.includes('</script')) fail('tick-watchdog.js must not contain </script>.');
+    const block = `<script id="${WATCHDOG_ID}">\n${watchdog}\n</script>\n`;
+    const current = fs.readFileSync(indexHtml, 'utf8');
+    const existing = new RegExp(`<script id="${WATCHDOG_ID}">[\\s\\S]*?</script>\\n?`);
+    if (existing.test(current)) {
+        fs.writeFileSync(indexHtml, current.replace(existing, () => block));
+        console.log('tick watchdog: updated');
+    } else {
+        const head = /<head[^>]*>/i.exec(current);
+        if (!head) fail('no <head> tag in index.html; cannot install the tick watchdog.');
+        const at = head.index + head[0].length;
+        fs.writeFileSync(indexHtml, `${current.slice(0, at)}\n${block}${current.slice(at)}`);
+        console.log('tick watchdog: installed');
+    }
+}
