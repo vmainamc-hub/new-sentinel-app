@@ -154,6 +154,9 @@ const html = fs.readFileSync(indexHtml, 'utf8');
         '#trade_container { height: calc(100vh - 36px) !important; top: 0 !important; overflow-x: hidden !important; overflow-y: auto !important; }',
         '/* The chart is fixed under the (hidden) top bar; move it up to the top of the frame and size it to the free height. */',
         '.chart-container__wrapper { top: 2px !important; height: calc(100vh - 38px) !important; }',
+        '/* "Go to Reports" sends the frame to the trader\'s own Reports page, which has no top bar and no way back. Sentinel has its own',
+        '   reports, so the button is hidden. */',
+        '#dt_positions_drawer_report_button { display: none !important; }',
         '</style>',
         '',
     ].join('\n');
@@ -196,4 +199,43 @@ const html = fs.readFileSync(indexHtml, 'utf8');
         }
     }
     console.log(dropped ? `source maps: dropped ${dropped} inline map(s) from ${files} file(s)` : 'source maps: none left');
+}
+
+// ---- 6. close the Recent positions drawer after a trade ------------------------------------------------------------------
+// A purchase opens the drawer over the left of the chart and it stays open until the small "-" is pressed, so after a trade the
+// screen looked stuck. Once every contract in it has closed, close it after a few seconds (the footer icon opens it again).
+{
+    const AUTO_ID = 'manual-trader-auto-close';
+    const autoCloseScript = [
+        `<script id="${AUTO_ID}">`,
+        '(function () {',
+        '    var closedSince = 0;',
+        '    setInterval(function () {',
+        "        var drawer = document.getElementById('dt_positions_drawer');",
+        "        if (!drawer || drawer.className.indexOf('positions-drawer--open') === -1) { closedSince = 0; return; }",
+        "        var text = drawer.innerText || '';",
+        "        if (text.indexOf('Closed') === -1 || /Sell|Cancel|Running|Open/.test(text.replace('Recent positions', ''))) { closedSince = 0; return; }",
+        '        if (!closedSince) closedSince = Date.now();',
+        '        if (Date.now() - closedSince > 6000) {',
+        "            var icon = document.getElementById('dt_positions_drawer_close_icon');",
+        '            if (icon) icon.click();',
+        '            closedSince = 0;',
+        '        }',
+        '    }, 1000);',
+        '})();',
+        '</script>',
+        '',
+    ].join('\n');
+    const current = fs.readFileSync(indexHtml, 'utf8');
+    const existing = new RegExp(`<script id="${AUTO_ID}">[\\s\\S]*?</script>\\n?`);
+    if (existing.test(current)) {
+        fs.writeFileSync(indexHtml, current.replace(existing, () => autoCloseScript));
+        console.log('auto close drawer: updated');
+    } else {
+        const marker = '</head>';
+        const count = current.split(marker).length - 1;
+        if (count !== 1) fail(`expected exactly one </head> in index.html but found ${count}.`);
+        fs.writeFileSync(indexHtml, current.replace(marker, () => autoCloseScript + marker));
+        console.log('auto close drawer: installed');
+    }
 }
