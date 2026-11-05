@@ -20,7 +20,7 @@ import './manual-trader.scss';
  * Marks the address of the current trader page. The trader's own service worker keeps pages it has seen for up to a day, so a
  * copy of an older index.html would otherwise be reused. Raise the number whenever public/br_manual-trader/index.html changes.
  */
-const TRADER_PAGE_TAG = 'mt_page=8';
+const TRADER_PAGE_TAG = 'mt_page=9';
 
 type TState =
     | { status: 'loading' }
@@ -92,7 +92,9 @@ const prepare = async (): Promise<TState> => {
 
     const query = buildTraderLoginQuery(accounts, window.localStorage.getItem('active_loginid'));
     const address = buildTraderUrl(query);
-    return { status: 'ready', src: `${address}${address.includes('?') ? '&' : '?'}${TRADER_PAGE_TAG}` };
+    // ?mt_debug=1 on this site shows a small tick readout inside the trader (see scripts/manual-trader/tick-watchdog.js).
+    const debug = /[?&]mt_debug=1(&|$)/.test(window.location.search) ? '&mt_debug=1' : '';
+    return { status: 'ready', src: `${address}${address.includes('?') ? '&' : '?'}${TRADER_PAGE_TAG}${debug}` };
 };
 
 const ManualTraderPage = () => {

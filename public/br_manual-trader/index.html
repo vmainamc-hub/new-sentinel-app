@@ -31,7 +31,7 @@
     var RELOAD_KEY = 'manual_trader_tick_watchdog_reload';
     var TICK = /"msg_type"\s*:\s*"tick"|"tick"\s*:\s*\{/;
 
-    var state = { last_tick: 0, stage: 0, stage_at: 0, main: null };
+    var state = { last_tick: 0, stage: 0, stage_at: 0, main: null, ticks: 0, sockets: [] };
 
     function log(message) {
         try {
@@ -45,10 +45,13 @@
         if (url.indexOf('api.derivws.com') === -1) return;
         var isMain = /\/ws\/public(\?|$)/.test(url);
         if (isMain) state.main = socket;
+        state.sockets.push({ socket: socket, name: isMain ? 'public' : 'account' });
+        if (state.sockets.length > 6) state.sockets.shift();
         // Added through the native prototype, so it is not affected by the trader replacing addEventListener on the instance.
         NativeWebSocket.prototype.addEventListener.call(socket, 'message', function (event) {
             if (typeof event.data === 'string' && TICK.test(event.data)) {
                 state.last_tick = Date.now();
+                state.ticks += 1;
                 state.stage = 0;
             }
         });
@@ -114,10 +117,34 @@
         }
     }
 
+    // Optional on-screen readout (open the site with ?mt_debug=1). It tells "ticks stopped arriving" (age keeps growing)
+    // apart from "ticks arrive but the chart does not move" (age stays near one second while the screen is frozen).
+    function showReadout() {
+        var doc = win.document;
+        if (!doc || !doc.createElement || !win.location || !/[?&]mt_debug=1(&|$)/.test(String(win.location.search || ''))) return;
+        var box = null;
+        win.setInterval(function () {
+            if (!box) {
+                if (!doc.body) return;
+                box = doc.createElement('div');
+                box.style.cssText =
+                    'position:fixed;left:4px;bottom:4px;z-index:2147483647;background:rgba(0,0,0,.75);color:#9f9;' +
+                    'font:11px/1.3 monospace;padding:3px 6px;border-radius:4px;pointer-events:none;white-space:pre';
+                doc.body.appendChild(box);
+            }
+            var age = state.last_tick ? ((Date.now() - state.last_tick) / 1000).toFixed(1) + 's' : 'none yet';
+            var parts = state.sockets.map(function (item) {
+                return item.name + ':' + ['connecting', 'open', 'closing', 'closed'][item.socket.readyState];
+            });
+            box.textContent = 'ticks ' + state.ticks + ' | last ' + age + ' ago | stage ' + state.stage + '\n' + parts.join('  ');
+        }, 500);
+    }
+
     win.__manualTraderTickWatchdog = { check: check, state: state, STALL_MS: STALL_MS, SOFT_WAIT_MS: SOFT_WAIT_MS };
     win.setInterval(function () {
         check(Date.now());
     }, 1000);
+    showReadout();
 })(window);
 
 </script>
