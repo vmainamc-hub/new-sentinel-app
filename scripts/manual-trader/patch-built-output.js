@@ -158,3 +158,31 @@ const html = fs.readFileSync(indexHtml, 'utf8');
         console.log('embedded look: installed');
     }
 }
+
+// ---- 5. drop inline source maps ---------------------------------------------------------------------------------------
+// The build is a development build with a source map inlined after every module (about a third of the folder). It only feeds
+// browser dev tools; parsing it slows the first load and can run small devices out of memory. Removing it changes no behaviour.
+{
+    const INLINE_SOURCE_MAP = /\/\/# sourceMappingURL=data:application\/json;charset=utf-8;base64,[A-Za-z0-9+/=]+/g;
+    const walk = dir =>
+        fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+            const full = path.join(dir, entry.name);
+            return entry.isDirectory() ? walk(full) : [full];
+        });
+    let dropped = 0;
+    let files = 0;
+    for (const file of walk(folder).filter(name => name.endsWith('.js'))) {
+        const text = fs.readFileSync(file, 'utf8');
+        let found = 0;
+        const next = text.replace(INLINE_SOURCE_MAP, () => {
+            found += 1;
+            return '';
+        });
+        if (found > 0) {
+            fs.writeFileSync(file, next);
+            dropped += found;
+            files += 1;
+        }
+    }
+    console.log(dropped ? `source maps: dropped ${dropped} inline map(s) from ${files} file(s)` : 'source maps: none left');
+}

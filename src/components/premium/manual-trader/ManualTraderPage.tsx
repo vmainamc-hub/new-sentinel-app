@@ -52,8 +52,27 @@ const freshAuth = async () => {
     return auth;
 };
 
+/**
+ * Removes the trader's own service worker once per page tag. An earlier copy of the trader cached its broken files (they were
+ * requested from the wrong folder) and its worker would keep serving them after the fix. It registers itself again on the next load.
+ */
+const dropStaleTraderWorker = async () => {
+    try {
+        const flag = `manual_trader_worker_reset_${TRADER_PAGE_TAG}`;
+        if (window.localStorage.getItem(flag) || !('serviceWorker' in navigator)) return;
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(
+            registrations.filter(item => item.scope.includes('/br_manual-trader/')).map(item => item.unregister())
+        );
+        window.localStorage.setItem(flag, '1');
+    } catch {
+        // Not critical: the trader still opens, it may just show an older copy until its worker refreshes.
+    }
+};
+
 const prepare = async (): Promise<TState> => {
     if (!(await isInstalled())) return { status: 'missing' };
+    await dropStaleTraderWorker();
 
     const auth = await freshAuth();
     const session = buildTraderSession(auth);
