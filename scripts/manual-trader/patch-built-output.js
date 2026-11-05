@@ -263,3 +263,59 @@ const html = fs.readFileSync(indexHtml, 'utf8');
         console.log('tick watchdog: installed');
     }
 }
+
+// ---- 8. last-digit pointer stuck on the finished contract's digit ---------------------------------------------------------------
+// While a contract is on screen the Last Digit panel follows the CONTRACT's tick stream; it returns to the live tick only when
+// isContractElapsed() says a live tick is 2 s past the contract's end. That needs getEndTime(), which relies on the legacy
+// `is_expired` flag. If the new API does not send it, the panel never leaves contract mode: the pointer stays on the digit the
+// contract ended on while the stats, chart and price keep moving.
+//  a) the trader's Digits wrapper also treats a finished contract (won / lost / sold / is_sold) as elapsed once a live tick is
+//     2 s past its best known end time (sell_time, exit_tick_time, exit_spot_time, date_expiry, else its last contract tick);
+//  b) the socket adapter fills in `is_expired` (and exit_tick_time from exit_spot_time) for a won/lost contract when missing.
+{
+    const replaceOnce = (file, before, after, marker, what) => {
+        const text = fs.readFileSync(file, 'utf8');
+        if (text.includes(marker)) return console.log(`${what}: already patched`);
+        const count = text.split(before).length - 1;
+        if (count !== 1) fail(`${what}: anchor found ${count} times in ${path.basename(file)}; expected exactly 1. The source changed, review the patch.`);
+        fs.writeFileSync(file, text.replace(before, () => after));
+        console.log(`${what}: patched`);
+    };
+    const findChunk = (dir, needle) => {
+        const hits = fs
+            .readdirSync(dir)
+            .filter(name => name.endsWith('.js'))
+            .filter(name => fs.readFileSync(path.join(dir, name), 'utf8').includes(needle));
+        if (hits.length !== 1) fail(`digit pointer: expected exactly one file containing the anchor in ${dir}, found ${hits.length}.`);
+        return path.join(dir, hits[0]);
+    };
+
+    // a) the Digits wrapper (the module is stored as an escaped string, so the replacement must stay on one line with no double quotes)
+    const ELAPSED_BEFORE =
+        'var is_contract_elapsed = is_trade_page ? (0,_deriv_shared__WEBPACK_IMPORTED_MODULE_4__.isContractElapsed)(contract_info, tick) : false;';
+    const finished =
+        "(function (ci, t) { try { if (!ci || !t || !t.epoch) return false; var st = ci.status; " +
+        "if (!(ci.is_sold || ci.is_expired || st === 'won' || st === 'lost' || st === 'sold')) return false; " +
+        "var ts = ci.tick_stream; var last = ts && ts.length ? ts[ts.length - 1] : null; " +
+        "var end = Number(ci.sell_time) || Number(ci.exit_tick_time) || Number(ci.exit_spot_time) || Number(ci.date_expiry) || (last ? Number(last.epoch) : 0); " +
+        "return !!end && Number(t.epoch) - end >= 2; } catch (e) { return false; } })(contract_info, tick)";
+    const ELAPSED_AFTER =
+        'var is_contract_elapsed = is_trade_page ? ((0,_deriv_shared__WEBPACK_IMPORTED_MODULE_4__.isContractElapsed)(contract_info, tick) || ' +
+        finished +
+        ') : false; /* mt-digit-elapsed */';
+    replaceOnce(
+        findChunk(path.join(folder, 'trader', 'js'), ELAPSED_BEFORE) ,
+        ELAPSED_BEFORE,
+        ELAPSED_AFTER,
+        '/* mt-digit-elapsed */',
+        'digit pointer (Digits wrapper)'
+    );
+
+    // b) the adapter's open-contract translation (also an escaped string; \n here is the two characters backslash and n)
+    const POC_BEFORE = '// sell_spot / sell_spot_time are deprecated in favour of exit_spot / exit_spot_time.';
+    const POC_AFTER =
+        "if (result.is_expired === undefined && (result.status === 'won' || result.status === 'lost')) result.is_expired = 1; /* mt-poc-expired */\\n  " +
+        "if (result.exit_tick_time === undefined && result.exit_spot_time !== undefined) result.exit_tick_time = result.exit_spot_time;\\n  " +
+        POC_BEFORE;
+    replaceOnce(findChunk(jsDir, POC_BEFORE), POC_BEFORE, POC_AFTER, '/* mt-poc-expired */', 'digit pointer (open contract fields)');
+}
