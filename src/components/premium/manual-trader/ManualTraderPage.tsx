@@ -21,7 +21,7 @@ import './manual-trader.scss';
  * day (cache first), so older copies would otherwise be reused. Raise the number whenever ANY file under public/br_manual-trader/
  * changes: patched scripts keep their file names, so only this reset makes browsers fetch them again.
  */
-const TRADER_PAGE_TAG = 'mt_page=11';
+const TRADER_PAGE_TAG = 'mt_page=12';
 
 /** Caches the trader's service worker (Workbox) fills; other caches of this site are left alone. */
 const TRADER_CACHE_NAMES = ['assets', 'core-js-files', 'smartchart-files', 'core-css-files', 'packages-files'];

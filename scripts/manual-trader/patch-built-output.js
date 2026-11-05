@@ -341,3 +341,16 @@ const html = fs.readFileSync(indexHtml, 'utf8');
         console.log('digit highlights: installed');
     }
 }
+
+// ---- 10. a temporary server error must not replace the whole screen -------------------------------------------------------------
+// The trader shows a full-screen "Sorry for the interruption / internal server error" box for ANY reply with error code
+// InternalServerError or OutputValidationFailed. The socket adapter now renames those codes, so only the part of the screen that made
+// the request sees the error. See scripts/manual-trader/soft-server-error-patch.js (tested by soft-server-error-patch.test.js).
+{
+    const soft = require('./soft-server-error-patch.js');
+    try {
+        console.log(`soft server error: ${soft.applyToFile(soft.findFile(path.join(folder, 'js')))}`);
+    } catch (error) {
+        fail(error.message);
+    }
+}
