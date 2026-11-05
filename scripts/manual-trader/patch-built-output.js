@@ -148,6 +148,12 @@ const html = fs.readFileSync(indexHtml, 'utf8');
         '/* With the top bar hidden, remove the gap it left above and below the trade area. */',
         '#deriv_app, #app_contents { margin-top: 0 !important; padding-top: 0 !important; }',
         '#app_contents { height: calc(100% - 36px) !important; }',
+        '/* The trade area is the only scroller: the form (stake, payout, Over/Under or Even/Odd buttons) is taller than the frame and',
+        '   is reached by scrolling it. Give it an explicit height so it always scrolls, and stop the page behind it scrolling. */',
+        'html, body { overflow: hidden !important; }',
+        '#trade_container { height: calc(100vh - 36px) !important; top: 0 !important; overflow-x: hidden !important; overflow-y: auto !important; }',
+        '/* The chart is fixed under the (hidden) top bar; move it up to the top of the frame and size it to the free height. */',
+        '.chart-container__wrapper { top: 2px !important; height: calc(100vh - 38px) !important; }',
         '</style>',
         '',
     ].join('\n');
