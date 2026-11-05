@@ -17,10 +17,14 @@ import {
 import './manual-trader.scss';
 
 /**
- * Marks the address of the current trader page. The trader's own service worker keeps pages it has seen for up to a day, so a
- * copy of an older index.html would otherwise be reused. Raise the number whenever public/br_manual-trader/index.html changes.
+ * Marks the address of the current trader page. The trader's own service worker keeps pages and scripts it has seen for up to a
+ * day (cache first), so older copies would otherwise be reused. Raise the number whenever ANY file under public/br_manual-trader/
+ * changes: patched scripts keep their file names, so only this reset makes browsers fetch them again.
  */
-const TRADER_PAGE_TAG = 'mt_page=9';
+const TRADER_PAGE_TAG = 'mt_page=10';
+
+/** Caches the trader's service worker (Workbox) fills; other caches of this site are left alone. */
+const TRADER_CACHE_NAMES = ['assets', 'core-js-files', 'smartchart-files', 'core-css-files', 'packages-files'];
 
 type TState =
     | { status: 'loading' }
@@ -53,8 +57,9 @@ const freshAuth = async () => {
 };
 
 /**
- * Removes the trader's own service worker once per page tag. An earlier copy of the trader cached its broken files (they were
- * requested from the wrong folder) and its worker would keep serving them after the fix. It registers itself again on the next load.
+ * Removes the trader's own service worker AND the files it cached, once per page tag. An earlier copy of the trader cached its
+ * broken files (they were requested from the wrong folder) and its worker would keep serving them after the fix; the same happens
+ * when a script is patched but keeps its file name. The worker registers itself again on the next load and caches fresh copies.
  */
 const dropStaleTraderWorker = async () => {
     try {
@@ -64,6 +69,14 @@ const dropStaleTraderWorker = async () => {
         await Promise.all(
             registrations.filter(item => item.scope.includes('/br_manual-trader/')).map(item => item.unregister())
         );
+        if ('caches' in window) {
+            const names = await window.caches.keys();
+            await Promise.all(
+                names
+                    .filter(name => TRADER_CACHE_NAMES.includes(name) || name.startsWith('workbox-'))
+                    .map(name => window.caches.delete(name))
+            );
+        }
         window.localStorage.setItem(flag, '1');
     } catch {
         // Not critical: the trader still opens, it may just show an older copy until its worker refreshes.
