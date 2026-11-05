@@ -43,6 +43,9 @@
 
 /* The Bot Builder's Run / "Bot is not running" strip is drawn at the top right of the content area on every page; on this page it
    covered the contract type picker of the trader. The footer bar still shows the bot state. */
-.prodb-premium-shell:has(.manual-trader-page) .main__run-strategy-wrapper {
+/* premium-execution-fixes.scss pins this strip with `position: fixed; display: block !important` (specificity 0,3,0), so the selector
+   here is deliberately more specific. */
+html body .prodb-premium-shell:has(.manual-trader-page) .prodb-bot-builder-host .main__run-strategy-wrapper,
+html body .prodb-premium-shell:has(.manual-trader-page) .prodb-bot-builder-host.is-hidden .main__run-strategy-wrapper {
     display: none !important;
 }
