@@ -142,7 +142,12 @@ const html = fs.readFileSync(indexHtml, 'utf8');
         '/* The trade area is absolutely positioned inside a zero-height scroll box, so it was clipped (right-hand form invisible)',
         '   and shrink-wrapped to 256px (form hidden behind the fixed chart). Give it the full width and stop the clipping. */',
         '#trade_container { width: 100% !important; }',
-        '#app_contents .dc-themed-scrollbars { overflow: visible !important; }',
+        '/* Only the outer box. The trade form (stake, payout, Buy buttons) has its own scroll box under #app_contents; making that',
+        '   one visible as well cut off everything below the first options. */',
+        '#app_contents > .dc-themed-scrollbars { overflow: visible !important; }',
+        '/* With the top bar hidden, remove the gap it left above and below the trade area. */',
+        '#deriv_app, #app_contents { margin-top: 0 !important; padding-top: 0 !important; }',
+        '#app_contents { height: calc(100% - 36px) !important; }',
         '</style>',
         '',
     ].join('\n');
