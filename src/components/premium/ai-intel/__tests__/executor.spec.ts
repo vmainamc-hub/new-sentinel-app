@@ -460,6 +460,77 @@ describe('AI guard in live execution', () => {
     });
 });
 
+describe("Sentinel AI's mandatory digit 1 / digit 8 rule in Apex Intel", () => {
+    const refuse = { allow: false, reason: 'digit 1 loses this contract and is building' };
+    const accept = { allow: true, reason: 'digit 1 dormant or falling (1, 1, 0) and digit 8 increasing (1, 2, 4)' };
+
+    it('stops a signal it refuses even with the AI guard OFF, and is not counted as an AI-guard block', async () => {
+        const h = harness({ ai: 'OFF' }, { special: () => refuse });
+        h.ex.start();
+        h.tick(1, 'R_10');
+        await flush();
+        expect(h.buys).toHaveLength(0);
+        expect(h.ex.getSnapshot().aiGuard).toMatchObject({ blocked: 0 });
+        expect(h.ex.getSnapshot().log.some(l => /Digit 1\/8 rule skipped.*building/.test(l.text))).toBe(true);
+    });
+    it('is asked about the contract that would be bought, recovery included', async () => {
+        const seen: string[] = [];
+        const h = harness({ ai: 'OFF' }, { special: r => (seen.push(`${r.market}:${r.contract.side}${r.contract.param}:${r.recovery}`), accept) });
+        h.ex.start();
+        h.tick(1, 'R_10');
+        await flush();
+        await h.lose(0);
+        h.advance(500);
+        h.tick(7, 'R_10');
+        await flush();
+        expect(seen[0]).toBe('R_10:OVER2:false');
+        expect(seen.some(s => /:true$/.test(s))).toBe(true);
+    });
+    it('lets a signal through when it passes, and the AI guard still applies after it', async () => {
+        const pass = harness({ ai: 'OFF' }, { special: () => accept });
+        pass.ex.start();
+        pass.tick(1, 'R_10');
+        await flush();
+        expect(pass.buys).toHaveLength(1);
+        expect(pass.ex.getSnapshot().log.some(l => /digit 1 dormant or falling/.test(l.text))).toBe(true);
+        const guarded = harness({ ai: 'GUARD' }, { special: () => accept, review: () => ({ allow: false, reason: 'unstable market' }) });
+        guarded.ex.start();
+        guarded.tick(1, 'R_10');
+        await flush();
+        expect(guarded.buys).toHaveLength(0);
+        expect(guarded.ex.getSnapshot().aiGuard).toMatchObject({ blocked: 1 });
+    });
+    it('fails closed when the rule cannot be read', async () => {
+        const h = harness({ ai: 'OFF' }, { special: () => { throw new Error('x'); } });
+        h.ex.start();
+        h.tick(1, 'R_10');
+        await flush();
+        expect(h.buys).toHaveLength(0);
+        expect(h.ex.getSnapshot().log.some(l => /could not be read/.test(l.text))).toBe(true);
+    });
+    it('also guards paper trades', async () => {
+        const h = harness({ ai: 'OFF' }, { special: () => refuse });
+        h.ex.start();
+        h.tick(1, 'R_10');
+        await flush();
+        expect(h.ex.getSnapshot().paper).toMatchObject({ trades: 0 });
+        expect(h.buys).toHaveLength(0);
+    });
+    it('is read again when an assisted trade is confirmed, in case the digits turned meanwhile', async () => {
+        let verdict = accept;
+        const h = harness({ mode: 'ASSISTED', autoAuthorised: false }, { special: () => verdict });
+        h.ex.start();
+        h.tick(8, 'R_50');
+        expect(h.ex.getSnapshot().proposal).toMatchObject({ market: 'R_50' });
+        verdict = refuse as typeof accept;
+        h.ex.confirmProposal();
+        await flush();
+        expect(h.buys).toHaveLength(0);
+        expect(h.ex.getSnapshot().proposal).toBeNull();
+        expect(h.ex.getSnapshot().log.some(l => /not bought: digit 1 loses/.test(l.text))).toBe(true);
+    });
+});
+
 describe('reconciling a contract that was open at reload', () => {
     const open = (id: number, extra: Partial<any> = {}) => ({ id: `t${id}`, contractId: id, at: 1, market: 'R_10', label: 'Over 2', recovery: false, step: 0, stake: 1, duration: 1, triggerDigit: 1, exitDigit: null, profit: null, status: 'open', ...extra });
     it('fills in the real result of an open contract and leaves the session alone', async () => {

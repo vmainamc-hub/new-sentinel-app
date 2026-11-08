@@ -10,6 +10,7 @@ import './registry-instance'; // sets the candidate provider (baseline + ACTIVE 
 import { AiIntelExecutor, type ExecConfig, type ExecTrade } from './executor';
 import { assess } from './guard';
 import { createApexGates } from '@/components/premium/edge-gates/apex-gates';
+import { readSpecialDigits } from '@/components/premium/sentinel/special-digits';
 import { forwardMonitor } from './registry-instance';
 
 const CONFIG_KEY = 'apex_intel_exec_v1';
@@ -56,6 +57,11 @@ export const aiIntelExecutor = new AiIntelExecutor({
         if (!verdict.allow) return verdict; // the AI guard's own rules come first and are unchanged
         const gates = apexGates.review({ market: req.market, contract: req.contract, recovery: req.recovery, series });
         return gates.allow ? verdict : gates;
+    },
+    // Sentinel AI's mandatory digit 1 / digit 8 rule: no switch, and not tied to the AI guard mode above.
+    special: req => {
+        const read = readSpecialDigits(apexFeed.getLiveSeries()[req.market], req.contract.side);
+        return { allow: read.ok, reason: read.note };
     },
     onBoard: (ranked, recovery, now) => apexGates.onBoard(ranked, recovery, now),
     onBought: n => apexGates.onBought(n),

@@ -1297,6 +1297,7 @@ describe('SixfoldRunner with the edge gates (Sixfold / Vanguard)', () => {
             ledgerKey: 'runner.test.ledger',
             handle: 'runnerTestEdge',
             now: () => 1_000_000,
+            specialDigits: false, // these tests are about the gates alone; the digit 1 / 8 rule has its own tests in runner-gates.spec
         });
         g.controls.set({ kalman: false, danger: false, frequency: false, arbiter: false, cooldownMs: 0, minHoldScans: 0, hourlyBudget: 0, shadow: false, ...edge });
         return g;
@@ -1332,6 +1333,7 @@ describe('SixfoldRunner with the edge gates (Sixfold / Vanguard)', () => {
             ledgerKey: 'runner.test.ledger2',
             handle: 'runnerTestEdge2',
             now: () => 1_000_000,
+            specialDigits: false,
         });
         g.controls.set({ kalman: true, danger: false, frequency: false, arbiter: false });
         const h = harness({}, { overlay: g.overlay });

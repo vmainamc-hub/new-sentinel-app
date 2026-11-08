@@ -35,7 +35,13 @@ const notice = (symbol: string) =>
         entryDigit: null,
     }) as never;
 
-type Setup = { series: Record<string, number[]>; edge?: Record<string, unknown>; now?: () => number };
+type Setup = {
+    series: Record<string, number[]>;
+    edge?: Record<string, unknown>;
+    now?: () => number;
+    /** Leave Sentinel AI's mandatory digit 1 / 8 rule on. Off by default so the gate tests below judge the gates alone. */
+    rule?: boolean;
+};
 const make = (o: Setup) => {
     const g = createEngineGates({
         moduleId: 'sixfold',
@@ -46,6 +52,7 @@ const make = (o: Setup) => {
         ledgerKey: 'test.edge.ledger',
         handle: 'testEdge',
         now: o.now ?? (() => 0),
+        specialDigits: o.rule === true,
     });
     // Only the gate under test is on, unless the test says otherwise.
     g.controls.set({
@@ -247,6 +254,98 @@ describe('gate overlay for the Sixfold runner', () => {
         expect(() => g.overlay.arbitrate!([cell('M0', 'UNDER', 7)], 0)).not.toThrow();
         expect(() => g.overlay.onBought!(notice('M0'))).not.toThrow();
         expect(() => g.overlay.onSettled!({ ...(notice('M0') as object), profit: 1 } as never)).not.toThrow();
+    });
+
+    describe("Sentinel AI's mandatory digit 1 / digit 8 rule (Sixfold and Vanguard)", () => {
+        // 150 ticks, each digit at the given positions counted back from the newest tick (0 = newest); filler is 5.
+        const put = (spec: Record<number, number[]>): number[] => {
+            const s = Array(150).fill(5);
+            for (const [digit, backs] of Object.entries(spec)) for (const p of backs) s[149 - p] = Number(digit);
+            return s;
+        };
+        const BUILDING = [1, 3, 6, 9, 20, 40];
+        const BUILDING_B = [0, 2, 5, 8, 21, 41];
+        const overGood = put({ 8: BUILDING }); // digit 1 dormant, digit 8 increasing: Over may trade
+        const overBad = put({ 1: BUILDING, 8: BUILDING_B }); // digit 1 building: Over must wait
+        const underGood = put({ 1: BUILDING }); // digit 8 dormant, digit 1 increasing: Under may trade
+        const rule = (series: number[], edge: Record<string, unknown> = {}) =>
+            make({ series: book(() => series), edge, rule: true });
+
+        it('Over: digit 1 must be dormant or falling and digit 8 increasing', () => {
+            expect(rule(overGood).overlay.call(cell('M0', 'OVER', 2), ctx()).allow).toBe(true);
+            const held = rule(overBad).overlay.call(cell('M0', 'OVER', 2), ctx());
+            expect(held.allow).toBe(false);
+            expect(held.note).toMatch(/digit 1 loses this contract and is building/);
+            const quiet = rule(put({})).overlay.call(cell('M0', 'OVER', 2), ctx());
+            expect(quiet.allow).toBe(false);
+            expect(quiet.note).toMatch(/digit 8 wins this contract but is not increasing/);
+        });
+
+        it('Under mirrors it: digit 8 dormant or falling, digit 1 increasing', () => {
+            expect(rule(underGood).overlay.call(cell('M0', 'UNDER', 7), ctx()).allow).toBe(true);
+            expect(rule(overBad).overlay.call(cell('M0', 'UNDER', 7), ctx()).allow).toBe(false);
+            expect(rule(overGood).overlay.call(cell('M0', 'UNDER', 7), ctx()).allow).toBe(false);
+        });
+
+        it('holds a contract back when there are too few ticks to judge', () => {
+            const call = rule(Array(60).fill(5)).overlay.call(cell('M0', 'OVER', 2), ctx());
+            expect(call.allow).toBe(false);
+            expect(call.note).toMatch(/ticks/);
+        });
+
+        it('applies to recovery steps and cannot be shadowed or switched off with the gates', () => {
+            expect(rule(overBad).overlay.call(cell('M0', 'OVER', 3), ctx(0, true)).allow).toBe(false);
+            const shadow = rule(overBad, {
+                shadow: true,
+                kalman: false,
+                danger: false,
+                frequency: false,
+                arbiter: false,
+            });
+            expect(shadow.overlay.call(cell('M0', 'OVER', 2), ctx()).allow).toBe(false);
+        });
+
+        it('keeps the gates working behind it, and shows what the rule saw in the note', () => {
+            const g = rule(overGood, { frequency: true, cooldownMs: 20_000 });
+            expect(g.overlay.call(cell('M0', 'OVER', 2), ctx()).note).toMatch(/digit 1 dormant or falling/);
+            g.overlay.onBought!(notice('M0')); // bought at t = 0: the market now rests
+            expect(g.overlay.call(cell('M0', 'OVER', 2), ctx(5_000)).allow).toBe(false);
+        });
+
+        it('is read again on the buy tick, for the contract that would be bought', () => {
+            const g = rule(overGood);
+            const pass = g.overlay.guard!('M0', { side: 'OVER', param: 2 }, overGood);
+            expect(pass.ok).toBe(true);
+            expect(pass.note).toMatch(/digit 1 dormant or falling/);
+            expect(g.overlay.guard!('M0', { side: 'OVER', param: 2 }, overBad).ok).toBe(false);
+            expect(g.overlay.guard!('M0', { side: 'UNDER', param: 7 }, overGood).ok).toBe(false);
+            expect(g.overlay.guard!('M0', { side: 'OVER', param: 3 }, []).ok).toBe(false);
+        });
+
+        it('a gate that throws behind it never lets a refused signal through', () => {
+            const g = rule(overBad);
+            g.influence.call = (() => {
+                throw new Error('boom');
+            }) as never;
+            g.influence.guard = g.influence.call;
+            expect(g.overlay.call(cell('M0', 'OVER', 2), ctx()).allow).toBe(false);
+            expect(g.overlay.guard!('M0', { side: 'OVER', param: 2 }, overBad).ok).toBe(false);
+        });
+
+        it('the production wiring has the rule on (Sixfold and Vanguard are built the same way)', () => {
+            const g = createEngineGates({
+                moduleId: 'vanguard',
+                name: 'Vanguard',
+                contracts: () => [{ side: 'OVER', param: 2 }],
+                series: () => ({ M0: overBad }),
+                settingsKey: 'prod.edge.settings',
+                ledgerKey: 'prod.edge.ledger',
+                handle: 'prodEdge',
+                now: () => 0,
+            });
+            expect(g.overlay.call(cell('M0', 'OVER', 2), ctx()).allow).toBe(false);
+            expect(g.overlay.guard!('M0', { side: 'OVER', param: 2 }, overBad).ok).toBe(false);
+        });
     });
 
     it('each engine has its own switches and evidence', () => {

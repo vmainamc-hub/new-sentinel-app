@@ -241,6 +241,11 @@ export type ExecIO = {
     pickRecovery?: (opts: { duration: number; entries?: readonly PickEntry[] }) => RecoveryPick[];
     /** The AI guard: allow or block one signal. Absent means no guard. */
     review?: (req: GuardRequest) => GuardVerdict;
+    /**
+     * Sentinel AI's MANDATORY special-digit rule (digit 1 and digit 8). Unlike `review` it is not tied to the AI guard mode: it runs
+     * on every signal, paper or real, in every mode, and again when an assisted trade is confirmed. Absent only in tests.
+     */
+    special?: (req: { market: string; contract: Contract; recovery: boolean }) => GuardVerdict;
     /** Every board refresh: the full ranked lists (before one-per-market), for extra checks that read the whole book. */
     onBoard?: (ranked: readonly Pick[], recovery: readonly RecoveryPick[], now: number) => void;
     /** A real contract was bought / settled (profit null: result not confirmed). */
@@ -565,8 +570,39 @@ export class AiIntelExecutor {
         return { plan: { market: symbol, contract, label: labelOf(contract), stake: n.stake, recovery: n.recovery, step: n.step, triggerDigit: digit, expiresAt: now }, src };
     }
 
-    /** The AI guard for one signal. Blocked signals are counted and logged (at most every 10 s per market). */
+    /**
+     * The mandatory digit 1 / digit 8 rule for one signal. A rule that cannot be read holds the trade back. Refusals are logged
+     * (at most every 10 s per market) but are not counted as AI-guard blocks: the rule is not part of the AI guard.
+     */
+    private special(plan: { market: string; contract: Contract; recovery: boolean; label: string }, now: number): GuardVerdict {
+        if (!this.io.special) return { allow: true, reason: '' };
+        let verdict: GuardVerdict;
+        try {
+            verdict = this.io.special({ market: plan.market, contract: plan.contract, recovery: plan.recovery });
+        } catch {
+            verdict = { allow: false, reason: 'the digit rule could not be read' }; // fail closed
+        }
+        if (!verdict.allow) {
+            const key = `special|${plan.market}`;
+            if (now - (this.aiLogAt.get(key) ?? 0) >= 10_000) {
+                this.aiLogAt.set(key, now);
+                this.addLog('info', `Digit 1/8 rule skipped ${plan.label} on ${plan.market}: ${verdict.reason}.`);
+            }
+            this.emit();
+        }
+        return verdict;
+    }
+
+    /** One signal's checks: the mandatory digit rule first (always), then the AI guard (when it is on). */
     private review(src: Pick | RecoveryPick, plan: Plan, now: number): GuardVerdict {
+        const rule = this.special(plan, now);
+        if (!rule.allow) return rule;
+        const verdict = this.reviewAi(src, plan, now);
+        return verdict.allow && rule.reason ? { ...verdict, reason: [rule.reason, verdict.reason].filter(Boolean).join('; ') } : verdict;
+    }
+
+    /** The AI guard for one signal. Blocked signals are counted and logged (at most every 10 s per market). */
+    private reviewAi(src: Pick | RecoveryPick, plan: Plan, now: number): GuardVerdict {
         if (this.cfg.ai === 'OFF' || !this.io.review) return { allow: true, reason: 'AI guard off' };
         let verdict: GuardVerdict;
         try {
@@ -647,6 +683,14 @@ export class AiIntelExecutor {
             this.proposal = null;
             this.phase = 'waiting';
             this.addLog('info', 'That signal expired before it was confirmed.');
+            return this.emit();
+        }
+        // The rule is read once more on the tick the person confirms: the digits may have turned since the signal was prepared.
+        const rule = this.special(p, this.io.now());
+        if (!rule.allow) {
+            this.proposal = null;
+            this.phase = 'waiting';
+            this.addLog('warn', `${p.label} on ${p.market} not bought: ${rule.reason}.`);
             return this.emit();
         }
         this.proposal = null;
