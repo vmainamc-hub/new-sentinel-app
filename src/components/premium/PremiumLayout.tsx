@@ -9,6 +9,7 @@ import { useStore } from '@/hooks/useStore';
 import AutoTradesPage from '@/pages/auto-trades/auto-trades';
 import TradingViewPage from '@/pages/tradingview';
 import { OAuthTokenExchangeService } from '@/services/oauth-token-exchange.service';
+import AiHubTabs from './AiHubTabs';
 import BottomStatusBar from './BottomStatusBar';
 import { getTemplateDomain } from './domain-brand';
 import GlobalAIScannerV2 from './GlobalAIScannerV2';
@@ -37,7 +38,7 @@ import {
 import { ChartsPage } from './pages/LiveTradingPages';
 import PatCopyTradingPage from './pages/PatCopyTradingPage';
 import SpeedBotPage from './pages/SpeedBotPage';
-import { isCustomizableSection, useSiteCustomization } from './site-customization';
+import { getGroupForSection, isCustomizableSection, useSiteCustomization } from './site-customization';
 import type { PremiumSection } from './types';
 import './premium-base.scss';
 import './premium-app.scss';
@@ -63,6 +64,7 @@ import './premium-site-theme.scss';
 import './apex-theme.scss';
 import './apex-pages.scss';
 import './apex-bulk.scss';
+import './premium-ai-hub.scss';
 
 // Sentinel AI pulls in the whole Sentinel engine, so it loads on demand instead of with the shell.
 const SentinelAiPage = lazy(() => import('./sentinel/SentinelAiPage'));
@@ -255,6 +257,7 @@ const PremiumLayout = observer(() => {
     };
 
     const isBotBuilder = section === 'bot_builder';
+    const hubGroup = getGroupForSection(section, customization.navigation);
     const isRunPanelOpen = Boolean(run_panel?.is_drawer_open);
     const themeStyle = {
         '--site-primary': customization.colors.primary,
@@ -275,6 +278,9 @@ const PremiumLayout = observer(() => {
         <Suspense fallback={null}><AiIntelBridge /></Suspense>
         <PremiumHeader active={section} navigation={customization.navigation} onChange={changeSection} />
         <main className='prodb-premium-content'>
+            {hubGroup && (
+                <AiHubTabs label={hubGroup.group.label} members={hubGroup.members} active={section} onChange={changeSection} />
+            )}
             {!isBotBuilder && renderSection()}
             <div className={`prodb-bot-builder-host ${isBotBuilder ? 'is-active' : 'is-hidden'}`} data-premium-builder-active={isBotBuilder ? 'true' : 'false'}>
                 <Outlet />

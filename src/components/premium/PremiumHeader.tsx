@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { observer } from 'mobx-react-lite';
 import useThemeSwitcher from '@/hooks/useThemeSwitcher';
 import BrandMark from './BrandMark';
 import PremiumAccountSwitcher from './PremiumAccountSwitcher';
 import { BoltIcon, CalculatorIcon, CopyIcon, GearIcon, GridIcon, HomeIcon, MonitorIcon, MoonIcon, PulseIcon, RobotIcon, SearchIcon, ShieldIcon, SunIcon } from './icons';
-import { NAVIGATION_CATALOG } from './site-customization';
+import { buildNavItems, getGroupForSection, NAVIGATION_CATALOG, readGroupTab, rememberGroupTab } from './site-customization';
 import PremiumTicker from './PremiumTicker';
 import type { PremiumSection } from './types';
 
@@ -71,6 +71,19 @@ const PremiumHeader = observer(
                 inline: 'nearest',
             });
         }, [active]);
+
+        const navItems = useMemo(() => buildNavItems(navigation), [navigation]);
+
+        // Remember the last tab opened inside each group, so clicking the group button returns to it.
+        useEffect(() => {
+            const found = getGroupForSection(active, navigation);
+            if (found) rememberGroupTab(found.group.id, active);
+        }, [active, navigation]);
+
+        const getGroupTarget = (groupId: string, members: PremiumSection[]) => {
+            const last = readGroupTab(groupId);
+            return last && members.includes(last) ? last : members[0];
+        };
 
         const scrollNav = (direction: -1 | 1) => {
             const nav = navRef.current;
@@ -156,12 +169,28 @@ const PremiumHeader = observer(
                     onPointerUp={endPointerDrag}
                     onPointerCancel={endPointerDrag}
                 >
-                    {navigation.map(id => {
-                        const Icon = NAV_ICONS[id];
-                        const label = NAV_LABELS[id];
+                    {navItems.map(item => {
+                        if (item.type === 'group') {
+                            const { group, members } = item;
+                            const isGroupActive = members.includes(active);
+                            return (
+                                <button
+                                    key={group.id}
+                                    className={isGroupActive ? 'is-active' : ''}
+                                    aria-pressed={isGroupActive}
+                                    title={members.map(member => NAV_LABELS[member]).filter(Boolean).join(' · ')}
+                                    onClick={() => onNavClick(isGroupActive ? active : getGroupTarget(group.id, members))}
+                                >
+                                    <PulseIcon />
+                                    <span>{group.label}</span>
+                                </button>
+                            );
+                        }
+                        const Icon = NAV_ICONS[item.id];
+                        const label = NAV_LABELS[item.id];
                         if (!Icon || !label) return null;
                         return (
-                            <button key={id} className={active === id ? 'is-active' : ''} onClick={() => onNavClick(id)}>
+                            <button key={item.id} className={active === item.id ? 'is-active' : ''} onClick={() => onNavClick(item.id)}>
                                 <Icon />
                                 <span>{label}</span>
                             </button>

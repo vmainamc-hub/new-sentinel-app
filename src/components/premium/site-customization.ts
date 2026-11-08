@@ -54,6 +54,69 @@ export const DEFAULT_NAVIGATION: PremiumSection[] = [
     'digits_analysis',
 ];
 
+// Tabs that share one top-bar button. Members keep their own section ids (hashes, Run Panel hand-offs and bridges are unchanged);
+// only the way they are laid out in the top bar differs. To add another group or move an app into one, edit this list.
+export type NavGroup = { id: string; label: string; members: PremiumSection[] };
+
+export const NAV_GROUPS: NavGroup[] = [
+    { id: 'ai_hub', label: 'AI Hub', members: ['sentinel_ai', 'sixfold', 'vanguard', 'ai_intel'] },
+];
+
+export type NavItem =
+    | { type: 'section'; id: PremiumSection }
+    | { type: 'group'; group: NavGroup; members: PremiumSection[] };
+
+// A group only forms when at least two of its members are enabled for the site. Otherwise its tab is left as a normal tab,
+// so a site that only lists one of the apps looks exactly as it did before.
+export const getVisibleGroupMembers = (group: NavGroup, navigation: PremiumSection[]) =>
+    group.members.filter(member => navigation.includes(member));
+
+export const getGroupForSection = (section: PremiumSection, navigation: PremiumSection[]) => {
+    const group = NAV_GROUPS.find(candidate => candidate.members.includes(section));
+    if (!group) return null;
+    const members = getVisibleGroupMembers(group, navigation);
+    return members.length >= 2 && members.includes(section) ? { group, members } : null;
+};
+
+// Turns the flat navigation list into top-bar items. The group button takes the place of its first enabled member.
+export const buildNavItems = (navigation: PremiumSection[]): NavItem[] => {
+    const items: NavItem[] = [];
+    const placed = new Set<string>();
+
+    navigation.forEach(id => {
+        const group = NAV_GROUPS.find(candidate => candidate.members.includes(id));
+        const members = group ? getVisibleGroupMembers(group, navigation) : [];
+        if (!group || members.length < 2) {
+            items.push({ type: 'section', id });
+            return;
+        }
+        if (placed.has(group.id)) return;
+        placed.add(group.id);
+        items.push({ type: 'group', group, members });
+    });
+
+    return items;
+};
+
+const GROUP_TAB_KEY = 'prodb-nav-group-last:';
+
+// Browser storage can be unavailable (private windows, blocked site data), so every access is guarded.
+export const readGroupTab = (groupId: string): PremiumSection | null => {
+    try {
+        return (window.localStorage.getItem(GROUP_TAB_KEY + groupId) as PremiumSection | null) || null;
+    } catch {
+        return null;
+    }
+};
+
+export const rememberGroupTab = (groupId: string, section: PremiumSection) => {
+    try {
+        window.localStorage.setItem(GROUP_TAB_KEY + groupId, section);
+    } catch {
+        // Not remembering the last tab is harmless.
+    }
+};
+
 const CATALOG_ID_LIST = NAVIGATION_CATALOG.map(item => item.id);
 
 export const DEFAULT_THEME_COLORS: SiteThemeColors = {
