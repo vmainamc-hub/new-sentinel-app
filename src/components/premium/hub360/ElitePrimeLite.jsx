@@ -17,7 +17,24 @@ const JOURNAL_SLOT_ID = 'db-journal-custom-slot-lite'; // Pro owns the real jour
 const MAX_STRATEGIES = 5;
 const MONITOR_WINDOW = 5;
 const CONDITION_TYPES = ['EVEN', 'ODD', 'OVER', 'UNDER', 'RISE', 'FALL'];
-const ALL_SYMBOLS = ['1HZ10V', 'R_10', '1HZ25V', 'R_25', '1HZ50V', 'R_50', '1HZ75V', 'R_75', '1HZ100V', 'R_100'];
+// Contracts a strategy (or the recovery trade) can place. "Only Ups / Only Downs" are Deriv's RUNHIGH / RUNLOW (2-5 ticks).
+const TRADE_TYPES = ['EVEN', 'ODD', 'OVER', 'UNDER', 'MATCHES', 'DIFFERS', 'RISE', 'FALL', 'ONLY_UPS', 'ONLY_DOWNS'];
+const TRADE_LABELS = { ONLY_UPS: 'Only Ups', ONLY_DOWNS: 'Only Downs' };
+const isRunTrade = type => type === 'ONLY_UPS' || type === 'ONLY_DOWNS';
+const ONE_S_SYMBOLS = ['1HZ10V', '1HZ15V', '1HZ25V', '1HZ30V', '1HZ50V', '1HZ75V', '1HZ90V', '1HZ100V'];
+const PLAIN_SYMBOLS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
+const ALL_SYMBOLS = [...ONE_S_SYMBOLS, ...PLAIN_SYMBOLS];
+const MARKET_PRESETS = [
+    { id: 'one_s', label: '1s Markets', symbols: ONE_S_SYMBOLS },
+    { id: 'plain', label: 'Plain Indices', symbols: PLAIN_SYMBOLS },
+    { id: 'all', label: 'All Markets', symbols: ALL_SYMBOLS },
+    { id: 'choose', label: 'Choose Market', symbols: null },
+];
+const MAX_EXTRA_CONDITIONS = 3;
+const RECOVERY_SETTINGS = [
+    { id: 'until_win', label: 'Returns after recovery' },
+    { id: 'once', label: 'One recovery trade, then back' },
+];
 
 const CONTRACT_TYPE_MAP = {
     EVEN: 'DIGITEVEN',
@@ -26,16 +43,22 @@ const CONTRACT_TYPE_MAP = {
     UNDER: 'DIGITUNDER',
     RISE: 'CALL',
     FALL: 'PUT',
+    MATCHES: 'DIGITMATCH',
+    DIFFERS: 'DIGITDIFF',
+    ONLY_UPS: 'RUNHIGH',
+    ONLY_DOWNS: 'RUNLOW',
 };
 
 const createStrategyId = () => `elite-lite-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const isDigitCondition = type => ['EVEN', 'ODD', 'OVER', 'UNDER'].includes(type);
 const isMoveCondition = type => ['RISE', 'FALL'].includes(type);
-const requiresBarrier = type => type === 'OVER' || type === 'UNDER';
+const requiresBarrier = type => type === 'OVER' || type === 'UNDER' || type === 'MATCHES' || type === 'DIFFERS';
+const getBarrierRange = type => (type === 'OVER' ? [0, 8] : type === 'UNDER' ? [1, 9] : [0, 9]);
 
 const getDefaultBarrier = tradeType => {
     if (tradeType === 'OVER') return '4';
     if (tradeType === 'UNDER') return '5';
+    if (tradeType === 'MATCHES' || tradeType === 'DIFFERS') return '5';
     return '';
 };
 
@@ -46,8 +69,22 @@ const createStrategy = (overrides = {}) => ({
     trade: 'EVEN',
     barrier: '',
     conditionBarrier: '',
+    duration: '1',
+    extras: [],
     ...overrides,
 });
+
+const normalizeDuration = (value, tradeType) => {
+    const parsed = Number.parseInt(value, 10);
+    const ticks = Number.isInteger(parsed) ? Math.min(10, Math.max(1, parsed)) : 1;
+    return isRunTrade(tradeType) ? Math.min(5, Math.max(2, ticks)) : ticks;
+};
+
+// A strategy fires when its main condition and every extra "+ condition" hold at the same time.
+const getStrategyConditions = strategy => [
+    { lookback: strategy.lookback, condition: strategy.condition, conditionBarrier: strategy.conditionBarrier },
+    ...(Array.isArray(strategy.extras) ? strategy.extras : []),
+];
 
 const normalizeLookback = value => {
     const parsed = Number.parseInt(value, 10);
@@ -69,6 +106,7 @@ const clampBarrierValue = (tradeType, rawValue) => {
     if (!Number.isInteger(parsed)) return '';
     if (tradeType === 'OVER') return String(Math.min(8, Math.max(0, parsed)));
     if (tradeType === 'UNDER') return String(Math.min(9, Math.max(1, parsed)));
+    if (tradeType === 'MATCHES' || tradeType === 'DIFFERS') return String(Math.min(9, Math.max(0, parsed)));
     return '';
 };
 
@@ -89,7 +127,7 @@ const formatCondition = strategy =>
         : strategy.condition;
 
 const TRADING_MODES = [
-    { id: 'signal', label: 'Trade only on a strategy match' },
+    { id: 'signal', label: 'Analyze before every trade' },
     { id: 'continuous_loss', label: 'Trade continuously when there is a loss' },
 ];
 
@@ -111,29 +149,34 @@ const getRecentMoves = (prices, limit = MONITOR_WINDOW) => {
 
 const getMaxDigitHistory = strategies => {
     const digitWindows = strategies
-        .filter(strategy => isDigitCondition(strategy.condition))
-        .map(strategy => normalizeLookback(strategy.lookback));
+        .flatMap(getStrategyConditions)
+        .filter(item => isDigitCondition(item.condition))
+        .map(item => normalizeLookback(item.lookback));
 
     return Math.max(MONITOR_WINDOW, ...digitWindows, 1);
 };
 
 const getMaxPriceHistory = strategies => {
     const moveWindows = strategies
-        .filter(strategy => isMoveCondition(strategy.condition))
-        .map(strategy => normalizeLookback(strategy.lookback) + 1);
+        .flatMap(getStrategyConditions)
+        .filter(item => isMoveCondition(item.condition))
+        .map(item => normalizeLookback(item.lookback) + 1);
 
     return Math.max(MONITOR_WINDOW + 1, ...moveWindows, 2);
 };
 
 const formatTradeLabel = (tradeType, barrier) => {
-    if (!requiresBarrier(tradeType)) return tradeType;
+    if (!requiresBarrier(tradeType)) return TRADE_LABELS[tradeType] || tradeType;
     return `${tradeType} ${barrier}`;
 };
 
 const formatStrategySummary = strategy => {
-    const lookback = normalizeLookback(strategy.lookback);
-    const subject = isMoveCondition(strategy.condition) ? 'market moves' : 'digits';
-    return `If the last ${lookback} ${subject} are ${formatCondition(strategy)}, trade ${formatTradeLabel(strategy.trade, strategy.barrier)}.`;
+    const clauses = getStrategyConditions(strategy).map(item => {
+        const subject = isMoveCondition(item.condition) ? 'market moves' : 'digits';
+        return `the last ${normalizeLookback(item.lookback)} ${subject} are ${formatCondition(item)}`;
+    });
+    const ticks = normalizeDuration(strategy.duration, strategy.trade);
+    return `If ${clauses.join(' and ')}, trade ${formatTradeLabel(strategy.trade, strategy.barrier)} for ${ticks} ticks.`;
 };
 
 const formatTokenMove = move => {
@@ -189,12 +232,15 @@ const ElitePrimeLite = () => {
     const [useRecovery, setUseRecovery] = useState(false);
     const [recoveryType, setRecoveryType] = useState('OVER');
     const [recoveryBarrier, setRecoveryBarrier] = useState('4');
-    const [selectedSymbols, setSelectedSymbols] = useState(ALL_SYMBOLS);
+    const [marketMode, setMarketMode] = useState('one_s');
+    const [recoverySetting, setRecoverySetting] = useState('until_win');
+    const recoverySettingRef = useRef('until_win');
+    const [selectedSymbols, setSelectedSymbols] = useState(ONE_S_SYMBOLS);
     const tradingModeRef = useRef('continuous_loss');
     const useRecoveryRef = useRef(false);
     const recoveryTypeRef = useRef('OVER');
     const recoveryBarrierRef = useRef('4');
-    const selectedSymbolsRef = useRef(ALL_SYMBOLS);
+    const selectedSymbolsRef = useRef(ONE_S_SYMBOLS);
     const lastTradeWasLossRef = useRef(false);
     const continuationRef = useRef(null);
 
@@ -228,7 +274,8 @@ const ElitePrimeLite = () => {
         recoveryTypeRef.current = recoveryType;
         recoveryBarrierRef.current = recoveryBarrier;
         selectedSymbolsRef.current = selectedSymbols;
-    }, [tradingMode, useRecovery, recoveryType, recoveryBarrier, selectedSymbols]);
+        recoverySettingRef.current = recoverySetting;
+    }, [tradingMode, useRecovery, recoveryType, recoveryBarrier, selectedSymbols, recoverySetting]);
 
     useEffect(() => {
         stakeRef.current = stake;
@@ -425,7 +472,7 @@ const ElitePrimeLite = () => {
             const { contract_id, transaction_id, buy_price, longcode } = data.buy || {};
             const contractKey = String(contract_id ?? '');
             const passthrough = data.echo_req?.passthrough || pendingTradeContextRef.current || {};
-            const { symbol, custom_type, sent_stake, strategy_id, strategy_label, trigger_type, lookback, barrier } =
+            const { symbol, custom_type, sent_stake, strategy_id, strategy_label, trigger_type, lookback, barrier, is_recovery } =
                 passthrough;
             const normalizedSymbol = symbol || '';
             const normalizedStake = Number(
@@ -459,6 +506,7 @@ const ElitePrimeLite = () => {
                 trigger_type,
                 lookback,
                 barrier,
+                is_recovery,
             };
 
             contractMetaRef.current[contractKey] = transactionPayload;
@@ -491,7 +539,7 @@ const ElitePrimeLite = () => {
                 ].slice(0, 14)
             );
 
-            wsRef.current?.send(JSON.stringify({ proposal_open_contract: 1, contract_id: contractKey, subscribe: 1 }));
+            wsRef.current?.send(JSON.stringify({ proposal_open_contract: 1, contract_id: Number(contract_id), subscribe: 1 }));
         },
         [client?.currency, publishNativeContract, publishNativeError, run_panel]
     );
@@ -514,7 +562,8 @@ const ElitePrimeLite = () => {
                 nextStakeRef.current = baseStake;
             }
 
-            lastTradeWasLossRef.current = profit < 0;
+            // "One recovery trade, then back": a recovery trade (win or loss) hands control back to the main strategy.
+            lastTradeWasLossRef.current = profit < 0 && !(meta.is_recovery && recoverySettingRef.current === 'once');
             if (!(profit < 0 && tradingModeRef.current === 'continuous_loss')) continuationRef.current = null;
 
             setNextStakeDisplay(nextStakeRef.current);
@@ -589,26 +638,27 @@ const ElitePrimeLite = () => {
         const digitHistory = digitHistoryRef.current[symbol] || [];
         const priceHistory = priceHistoryRef.current[symbol] || [];
 
+        // Returns the sampled digits / moves when the condition holds right now, otherwise null.
+        const checkCondition = item => {
+            const lookback = normalizeLookback(item.lookback);
+
+            if (isDigitCondition(item.condition)) {
+                const relevantDigits = digitHistory.slice(-lookback);
+                return relevantDigits.length === lookback &&
+                    relevantDigits.every(digit => matchesDigitCondition(digit, item.condition, item.conditionBarrier))
+                    ? relevantDigits
+                    : null;
+            }
+
+            const recentMoves = getRecentMoves(priceHistory, lookback);
+            return recentMoves.length === lookback && recentMoves.every(move => move === item.condition) ? recentMoves : null;
+        };
+
         for (let index = 0; index < strategiesRef.current.length; index += 1) {
             const strategy = strategiesRef.current[index];
-            const lookback = normalizeLookback(strategy.lookback);
+            const samples = getStrategyConditions(strategy).map(checkCondition);
 
-            if (isDigitCondition(strategy.condition)) {
-                const relevantDigits = digitHistory.slice(-lookback);
-
-                if (
-                    relevantDigits.length === lookback &&
-                    relevantDigits.every(digit => matchesDigitCondition(digit, strategy.condition, strategy.conditionBarrier))
-                ) {
-                    return { strategy, index, sample: relevantDigits };
-                }
-            } else {
-                const recentMoves = getRecentMoves(priceHistory, lookback);
-
-                if (recentMoves.length === lookback && recentMoves.every(move => move === strategy.condition)) {
-                    return { strategy, index, sample: recentMoves };
-                }
-            }
+            if (samples.every(Boolean)) return { strategy, index, sample: samples[0] };
         }
 
         return null;
@@ -647,7 +697,7 @@ const ElitePrimeLite = () => {
                 basis: 'stake',
                 currency: client?.currency || 'USD',
                 underlying_symbol: symbol,
-                duration: 1,
+                duration: normalizeDuration(strategy.duration, tradeType),
                 duration_unit: 't',
                 amount: currentStake,
                 contract_type: CONTRACT_TYPE_MAP[tradeType],
@@ -661,6 +711,7 @@ const ElitePrimeLite = () => {
                     lookback: normalizeLookback(strategy.lookback),
                     barrier: tradeBarrier,
                     summary_label: summaryLabel,
+                    is_recovery: isRecovering,
                 },
             };
 
@@ -673,7 +724,7 @@ const ElitePrimeLite = () => {
             continuationRef.current = { symbol, matched: matchedStrategy };
             ws.send(JSON.stringify(payload));
             updateLastSignalLabel(
-                `${strategyLabel} on ${formatSymbolDisplay(symbol)}: last ${normalizeLookback(strategy.lookback)} ${conditionLabel} were ${formatCondition(strategy)}.${isRecovering ? ' (recovery trade)' : ''}`
+                `${strategyLabel} on ${formatSymbolDisplay(symbol)}: last ${normalizeLookback(strategy.lookback)} ${conditionLabel} were ${formatCondition(strategy)}${strategy.extras?.length ? ` (+${strategy.extras.length} more)` : ''}.${isRecovering ? ' (recovery trade)' : ''}`
             );
             setStatusMessage(
                 `Matched ${strategyLabel} on ${formatSymbolDisplay(symbol)}. Sending ${formatTradeLabel(tradeType, tradeBarrier)} proposal.`
@@ -976,8 +1027,7 @@ const ElitePrimeLite = () => {
         if (!selectedSymbolsRef.current.length) return 'Select at least one market.';
         if (useRecoveryRef.current && requiresBarrier(recoveryTypeRef.current)) {
             const recoveryValue = Number.parseInt(recoveryBarrierRef.current, 10);
-            const minValue = recoveryTypeRef.current === 'OVER' ? 0 : 1;
-            const maxValue = recoveryTypeRef.current === 'OVER' ? 8 : 9;
+            const [minValue, maxValue] = getBarrierRange(recoveryTypeRef.current);
             if (!Number.isInteger(recoveryValue) || recoveryValue < minValue || recoveryValue > maxValue) {
                 return `Recovery ${recoveryTypeRef.current} needs a prediction between ${minValue} and ${maxValue}.`;
             }
@@ -994,8 +1044,7 @@ const ElitePrimeLite = () => {
 
             if (requiresBarrier(strategy.trade)) {
                 const barrier = Number.parseInt(strategy.barrier, 10);
-                const minBarrier = strategy.trade === 'OVER' ? 0 : 1;
-                const maxBarrier = strategy.trade === 'OVER' ? 8 : 9;
+                const [minBarrier, maxBarrier] = getBarrierRange(strategy.trade);
 
                 if (!Number.isInteger(barrier) || barrier < minBarrier || barrier > maxBarrier) {
                     return `Strategy ${strategyNumber} needs a valid ${strategy.trade} barrier between ${minBarrier} and ${maxBarrier}.`;
@@ -1208,9 +1257,66 @@ const ElitePrimeLite = () => {
         );
     };
 
+    const addExtraCondition = strategyId => {
+        setStrategies(previous =>
+            previous.map(strategy =>
+                strategy.id !== strategyId || (strategy.extras || []).length >= MAX_EXTRA_CONDITIONS
+                    ? strategy
+                    : {
+                          ...strategy,
+                          extras: [
+                              ...(strategy.extras || []),
+                              { id: createStrategyId(), lookback: '3', condition: 'EVEN', conditionBarrier: '' },
+                          ],
+                      }
+            )
+        );
+    };
+
+    const removeExtraCondition = (strategyId, extraId) => {
+        setStrategies(previous =>
+            previous.map(strategy =>
+                strategy.id !== strategyId
+                    ? strategy
+                    : { ...strategy, extras: (strategy.extras || []).filter(extra => extra.id !== extraId) }
+            )
+        );
+    };
+
+    const updateExtraCondition = (strategyId, extraId, field, value) => {
+        setStrategies(previous =>
+            previous.map(strategy => {
+                if (strategy.id !== strategyId) return strategy;
+                return {
+                    ...strategy,
+                    extras: (strategy.extras || []).map(extra => {
+                        if (extra.id !== extraId) return extra;
+                        if (field === 'condition') {
+                            return {
+                                ...extra,
+                                condition: value,
+                                conditionBarrier: requiresBarrier(value) ? getDefaultConditionBarrier(value) : '',
+                            };
+                        }
+                        if (field === 'conditionBarrier') {
+                            return { ...extra, conditionBarrier: value === '' ? '' : clampBarrierValue(extra.condition, value) };
+                        }
+                        return { ...extra, [field]: value };
+                    }),
+                };
+            })
+        );
+    };
+
+    const applyMarketMode = modeId => {
+        const preset = MARKET_PRESETS.find(item => item.id === modeId);
+        setMarketMode(modeId);
+        if (preset?.symbols) setSelectedSymbols(preset.symbols);
+    };
+
     const renderCompactMonitor = (variant = 'main') => (
         <div className={`epf-monitor-grid epf-monitor-grid--${variant}`}>
-            {ALL_SYMBOLS.map(symbol => {
+            {selectedSymbols.map(symbol => {
                 const digits = Array.isArray(liveDigits[symbol]) ? liveDigits[symbol] : [];
                 const moves = Array.isArray(liveMoves[symbol]) ? liveMoves[symbol] : [];
 
@@ -1438,9 +1544,9 @@ const ElitePrimeLite = () => {
                                     onChange={event => updateStrategy(strategy.id, 'trade', event.target.value)}
                                     disabled={isRunning}
                                 >
-                                    {CONDITION_TYPES.map(type => (
+                                    {TRADE_TYPES.map(type => (
                                         <option key={`${strategy.id}-${type}`} value={type}>
-                                            {type}
+                                            {TRADE_LABELS[type] || type}
                                         </option>
                                     ))}
                                 </select>
@@ -1452,8 +1558,8 @@ const ElitePrimeLite = () => {
                                             aria-label={`Strategy ${index + 1} ${strategy.trade} barrier`}
                                             className='epf-field__control epf-strategy-rule__control epf-strategy-rule__control--barrier'
                                             type='number'
-                                            min={strategy.trade === 'OVER' ? '0' : '1'}
-                                            max={strategy.trade === 'OVER' ? '8' : '9'}
+                                            min={getBarrierRange(strategy.trade)[0]}
+                                            max={getBarrierRange(strategy.trade)[1]}
                                             value={strategy.barrier}
                                             onChange={event =>
                                                 updateStrategy(strategy.id, 'barrier', event.target.value)
@@ -1462,23 +1568,25 @@ const ElitePrimeLite = () => {
                                         />
                                     </>
                                 )}
+                                
                             </div>
 
-                            {/*  <p className='epf-strategy-preview'>{formatStrategySummary(strategy)}</p>*/}
+                            
                         </div>
                     ))}
                 </div>
             </div>
 
-            <div className='epf-recovery'>
+            <div className={`epf-recovery ${useRecovery ? 'is-on' : ''}`}>
                 <div className='epf-recovery__head'>
                     <div>
                         <strong className='epf-recovery__title'>RECOVERY MODE</strong>
-                        <p className='epf-recovery__hint'>To be used after losing main trade.</p>
+                        <p className='epf-recovery__hint'>This contract will be used after a loss.</p>
                     </div>
                     <label className='epf-switch'>
                         <input
                             type='checkbox'
+                            aria-label='Recovery mode'
                             checked={useRecovery}
                             onChange={event => setUseRecovery(event.target.checked)}
                             disabled={isRunning}
@@ -1486,21 +1594,22 @@ const ElitePrimeLite = () => {
                         <span className='epf-switch__track' />
                     </label>
                 </div>
-                {useRecovery && (
-                    <div className='epf-recovery__controls'>
-                        <label className='epf-field__label'>Recovery trade</label>
+                <div className='epf-recovery__controls'>
+                    <div className='epf-recovery__field'>
+                        <span className='epf-field__label'>Contract</span>
                         <select
+                            aria-label='Recovery contract'
                             className='epf-field__control'
                             value={recoveryType}
                             onChange={event => {
                                 setRecoveryType(event.target.value);
                                 setRecoveryBarrier(getDefaultBarrier(event.target.value) || '4');
                             }}
-                            disabled={isRunning}
+                            disabled={isRunning || !useRecovery}
                         >
-                            {CONDITION_TYPES.map(type => (
+                            {TRADE_TYPES.map(type => (
                                 <option key={`recovery-${type}`} value={type}>
-                                    {type}
+                                    {TRADE_LABELS[type] || type}
                                 </option>
                             ))}
                         </select>
@@ -1509,15 +1618,16 @@ const ElitePrimeLite = () => {
                                 aria-label='Recovery prediction'
                                 className='epf-field__control epf-recovery__barrier'
                                 type='number'
-                                min={recoveryType === 'OVER' ? '0' : '1'}
-                                max={recoveryType === 'OVER' ? '8' : '9'}
+                                min={getBarrierRange(recoveryType)[0]}
+                                max={getBarrierRange(recoveryType)[1]}
                                 value={recoveryBarrier}
                                 onChange={event => setRecoveryBarrier(clampBarrierValue(recoveryType, event.target.value))}
-                                disabled={isRunning}
+                                disabled={isRunning || !useRecovery}
                             />
                         )}
                     </div>
-                )}
+                    
+                </div>
             </div>
 
             <div className='epf-panel epf-markets'>
@@ -1525,30 +1635,46 @@ const ElitePrimeLite = () => {
                     <h2 className='epf-panel__title'>Markets</h2>
                     <span className='epf-markets__count'>{selectedSymbols.length} selected</span>
                 </div>
-                <p className='epf-markets__hint'>Select the market(s) to execute your strategies on.</p>
-                <div className='epf-markets__chips'>
-                    {ALL_SYMBOLS.map(symbol => {
-                        const isSelected = selectedSymbols.includes(symbol);
-                        return (
-                            <button
-                                key={symbol}
-                                type='button'
-                                aria-pressed={isSelected}
-                                className={`epf-chip ${isSelected ? 'is-selected' : ''}`}
-                                disabled={isRunning}
-                                onClick={() =>
-                                    setSelectedSymbols(previous =>
-                                        previous.includes(symbol)
-                                            ? previous.filter(item => item !== symbol)
-                                            : ALL_SYMBOLS.filter(item => item === symbol || previous.includes(item))
-                                    )
-                                }
-                            >
-                                {formatSymbolDisplay(symbol)}
-                            </button>
-                        );
-                    })}
+                <p className='epf-markets__hint'>Select market(s) to execute your strategies on.</p>
+                <div className='epf-markets__presets' role='group' aria-label='Market selection'>
+                    {MARKET_PRESETS.map(preset => (
+                        <button
+                            key={preset.id}
+                            type='button'
+                            aria-pressed={marketMode === preset.id}
+                            className={`epf-markets__preset ${marketMode === preset.id ? 'is-active' : ''}`}
+                            disabled={isRunning}
+                            onClick={() => applyMarketMode(preset.id)}
+                        >
+                            {preset.label}
+                        </button>
+                    ))}
                 </div>
+                {marketMode === 'choose' && (
+                    <div className='epf-markets__chips'>
+                        {ALL_SYMBOLS.map(symbol => {
+                            const isSelected = selectedSymbols.includes(symbol);
+                            return (
+                                <button
+                                    key={symbol}
+                                    type='button'
+                                    aria-pressed={isSelected}
+                                    className={`epf-chip ${isSelected ? 'is-selected' : ''}`}
+                                    disabled={isRunning}
+                                    onClick={() =>
+                                        setSelectedSymbols(previous =>
+                                            previous.includes(symbol)
+                                                ? previous.filter(item => item !== symbol)
+                                                : ALL_SYMBOLS.filter(item => item === symbol || previous.includes(item))
+                                        )
+                                    }
+                                >
+                                    {formatSymbolDisplay(symbol)}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
 
             <div className='epf-cta-row'>

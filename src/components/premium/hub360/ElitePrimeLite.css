@@ -37,3 +37,31 @@
 }
 .epf-chip.is-selected { border-color: #0d9488; background: #0d9488; color: #fff; }
 .epf-chip:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Recovery mode: contract + setting always visible (dimmed while the switch is off) */
+.epf-recovery:not(.is-on) .epf-recovery__controls { opacity: 0.6; }
+.epf-recovery__controls { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; }
+.epf-recovery__field { display: flex; flex: 1 1 220px; flex-direction: column; gap: 6px; }
+.epf-recovery__field .epf-field__control { width: 100%; }
+.epf-recovery__field .epf-recovery__barrier { max-width: 90px; }
+
+/* Markets: preset buttons (1s / plain / all / choose) */
+.epf-markets__presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.epf-markets__preset {
+    padding: 11px 14px;
+    border: 1px solid #c5d3e6;
+    border-radius: 10px;
+    background: #fff;
+    color: #33415a;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+}
+.epf-markets__preset.is-active { border-color: #0d8a9f; background: #0d8a9f; color: #fff; }
+.epf-markets__preset:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Pro: extra conditions and the plain-English summary */
+.epf-strategy-rule--extra { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #d3deec; }
+.epf-strategy-add-condition { margin-top: 10px; }
+.epf-strategy-preview { margin: 10px 0 0; padding: 8px 12px; border-radius: 8px; background: #f3f7fc; font-size: 13px; color: #44516a; }
