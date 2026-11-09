@@ -76,6 +76,7 @@ const Oracle = () => {
   // Result of the last engine scan (Even/Odd, Over/Under) and whether it ended without anything to trade.
   const [engineScan, setEngineScan] = useState(null);
   const [scanEmpty, setScanEmpty] = useState(false);
+  const [scanInfo, setScanInfo] = useState(null);
 
   const scanSocketRef = useRef(null);
   const tickData = useRef({});
@@ -1222,6 +1223,7 @@ const Oracle = () => {
     scanSessionRef.current += 1;
     oracleScanner.stop();
     setEngineScan(null);
+    setScanInfo(null);
     setScanEmpty(false);
     scanFinalizedRef.current = false;
     closeScanSockets();
@@ -1427,6 +1429,7 @@ const syncSignalToBot = (signal) => {
     setStrongestSignal(null);
     setTopScanResult(null);
     setEngineScan(null);
+    setScanInfo(null);
     setScanEmpty(false);
     setScannedMarketsCount(0);
     setCurrentScanSymbol(symbolNames[volatilityList[0]] || '');
@@ -1434,9 +1437,10 @@ const syncSignalToBot = (signal) => {
     predictionDigitRef.current = null;
 
     oracleScanner.start(kind, {
-      onProgress: (scan, current) => {
+      onProgress: (scan, current, info) => {
         if (session !== scanSessionRef.current) return;
         setEngineScan(scan);
+        setScanInfo(info);
         setScannedMarketsCount(scan.ready);
         setCurrentScanSymbol(current);
         setTopScanResult({ deviation: scan.topScore });
@@ -1486,16 +1490,32 @@ const syncSignalToBot = (signal) => {
     ? Math.min(100, Math.max(0, Number(strongestSignal.deviation || 0)))
     : 0;
   const totalMarkets = engineScan?.total ?? volatilityList.length;
-  const scanProgress = Math.min(100, (scannedMarketsCount / totalMarkets) * 100);
+  const scanProgress = isEngineKind(tradeType) && scanInfo
+    ? Math.min(100, (scanInfo.elapsedMs / scanInfo.assessMs) * 100)
+    : Math.min(100, (scannedMarketsCount / totalMarkets) * 100);
   const topScanDeviation = topScanResult?.deviation ?? 0;
   const closest = engineScan?.closest || null;
   const isEngineTab = isEngineKind(tradeType);
+  const isEvenOdd = tradeType === 'EVEN/ODD';
+  const secondsLeft = scanInfo ? Math.max(0, Math.ceil((scanInfo.assessMs - scanInfo.elapsedMs) / 1000)) : 0;
+  const waitingForData = Boolean(scanInfo) && scanInfo.elapsedMs >= scanInfo.assessMs;
+  const marketCalls = engineScan?.markets || [];
+  const flaggedMarkets = marketCalls.filter(m => m.level === 'FLAGGED');
+  const watchMarkets = marketCalls.filter(m => m.level === 'WATCH');
+  const clearMarkets = marketCalls.filter(m => m.level === 'CLEAR');
+  const bestSoFar = engineScan ? engineScan.best || engineScan.fallback : null;
+  const RISK_TEXT = { LOW: 'Low', ELEVATED: 'Elevated', HIGH: 'High' };
 
   const signalContractClass = strongestSignal
     ? `or-contract-${strongestSignal.contractType.toLowerCase()}`
     : '';
-  const statusText = strongestSignal ? 'SIGNAL READY' : analysisStarted ? 'SCANNING LIVE' : 'SYSTEM IDLE';
+  const statusText = strongestSignal ? 'SIGNAL READY' : analysisStarted ? 'ASSESSING' : 'IDLE';
   const statusClass = strongestSignal ? 'or-status--ready' : analysisStarted ? 'or-status--active' : '';
+  const weakBoard = strongestSignal?.rules && strongestSignal.tier === 'BEST' && strongestSignal.rules.passed < 4;
+
+  const flaggedLines = (limit = 3) => flaggedMarkets.slice(0, limit).map(m => (
+    <li key={m.symbol}><strong>{m.name}</strong> {m.contract}: {m.reason}</li>
+  ));
 
   return (
     <div className="or-shell">
@@ -1504,7 +1524,6 @@ const syncSignalToBot = (signal) => {
           <div className="or-badge">OR</div>
           <div className="or-brand">
             <h2>THE <span>ORACLE</span></h2>
-            <p>Choose a contract type, scan the market flow, and launch with precision.</p>
           </div>
           <div className={`or-status ${statusClass}`}>
             <i className="or-status-dot" />
@@ -1524,6 +1543,7 @@ const syncSignalToBot = (signal) => {
                 tradeTypeRef.current = tab.id;
                 setTradeType(tab.id);
                 setEngineScan(null);
+                setScanInfo(null);
                 setScanEmpty(false);
                 if (analysisStarted) stopAll();
               }}
@@ -1532,99 +1552,6 @@ const syncSignalToBot = (signal) => {
             </button>
           ))}
         </div>
-
-        {strongestSignal ? (
-          <div className="or-card or-signal or-pop">
-            <div className="or-signal-main">
-              <div className="or-signal-col">
-                <span className="or-signal-tag">
-                  {strongestSignal.tier === 'BEST' ? 'Best Available' : 'Signal Found'}
-                </span>
-                <div className="or-signal-row">
-                  <span className="or-label">Market</span>
-                  <strong className="or-value">{symbolNames[strongestSignal.symbol]}</strong>
-                </div>
-                <div className="or-signal-row">
-                  <span className="or-label">Contract Type</span>
-                  <strong className={`or-value or-signal-type ${signalContractClass}`}>
-                    {strongestSignal.contractType}{' '}
-                    {predictionDigit !== null && predictionDigit !== undefined && (
-                      <span className="or-signal-digit">{predictionDigit}</span>
-                    )}
-                  </strong>
-                </div>
-              </div>
-              <div className="or-signal-col">
-                <div className="or-box">
-                  <span className="or-label">{isEngineTab ? 'Strength' : 'Deviation'}</span>
-                  <span className="or-big">{signalConfidence.toFixed(1)}%</span>
-                  <span className="or-bar"><span style={{ width: `${signalConfidence}%` }} /></span>
-                </div>
-                <div className="or-box or-box--center">
-                  <span className="or-label">Valid for</span>
-                  <strong className="or-value">{signalTimeLeft}s</strong>
-                </div>
-              </div>
-            </div>
-            {strongestSignal.checks?.length > 0 && (
-              <ul className="or-checks">
-                {strongestSignal.checks.map(c => (
-                  <li key={c.label} className={c.ok ? 'is-ok' : 'is-fail'}>
-                    <span className="or-check-mark">{c.ok ? '✓' : '✕'}</span>
-                    <span className="or-check-text">
-                      {c.label}
-                      <small>{c.source ? `${c.source} · ` : ''}{c.detail}</small>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ) : (
-          <div className="or-card or-ready or-pop">
-            <div className="or-ready-left">
-              <span className="or-ready-title">MARKET READINESS</span>
-              <div className="or-row">
-                <span>Markets scanned</span>
-                <strong>{analysisStarted || engineScan ? `${scannedMarketsCount}/${totalMarkets}` : '--'}</strong>
-              </div>
-              <div className="or-row">
-                <span>Scanning now</span>
-                <strong>{analysisStarted ? currentScanSymbol || '--' : '--'}</strong>
-              </div>
-              <div className="or-row">
-                <span>Best deviation</span>
-                <strong>{analysisStarted || engineScan ? `${topScanDeviation.toFixed(1)}%` : '--'}</strong>
-              </div>
-            </div>
-            <div className="or-ready-right">
-              <div className="or-progress-head">
-                <span>Progress</span>
-                <strong>{Math.round(analysisStarted ? scanProgress : 0)}%</strong>
-              </div>
-              <span className="or-bar or-bar--thick"><span style={{ width: `${analysisStarted ? scanProgress : 0}%` }} /></span>
-              <div className="or-current">
-                <span>Current market</span>
-                <strong>{analysisStarted ? currentScanSymbol || '--' : '--'}</strong>
-              </div>
-            </div>
-            {isEngineTab && (analysisStarted || scanEmpty) && closest && (
-              <div className="or-closest">
-                {scanEmpty && (
-                  <strong>
-                    {tradeType === 'EVEN/ODD'
-                      ? 'No market meets every Even/Odd rule right now. Scan again in a moment.'
-                      : 'No contract cleared the engines. Scan again in a moment.'}
-                  </strong>
-                )}
-                <span>
-                  Closest: {closest.name} · {closest.contract} ({closest.passed}/{closest.total} checks)
-                  {closest.failing.length > 0 ? ` — waiting on: ${closest.failing.slice(0, 2).join('; ')}` : ''}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="or-actions">
           <button
@@ -1642,6 +1569,143 @@ const syncSignalToBot = (signal) => {
             {isRunning ? <FaStop /> : <FaPlay />} {isRunning ? 'STOP BOT' : 'RUN BOT'}
           </button>
         </div>
+
+        {strongestSignal ? (
+          <div className="or-card or-signal or-pop">
+            <div className="or-signal-head">
+              <span className={`or-signal-tag ${strongestSignal.tier === 'BEST' ? 'or-signal-tag--best' : ''}`}>
+                {strongestSignal.tier === 'BEST' ? 'Best available' : 'Signal found'}
+              </span>
+              <span className="or-valid">Valid {signalTimeLeft}s</span>
+            </div>
+            <div className="or-signal-main">
+              <div className="or-signal-col">
+                <span className="or-label">Market</span>
+                <strong className="or-value">{symbolNames[strongestSignal.symbol]}</strong>
+                <span className="or-label">Contract</span>
+                <strong className={`or-value or-signal-type ${signalContractClass}`}>
+                  {strongestSignal.contractType}{' '}
+                  {predictionDigit !== null && predictionDigit !== undefined && (
+                    <span className="or-signal-digit">{predictionDigit}</span>
+                  )}
+                </strong>
+              </div>
+              <div className="or-signal-col or-box">
+                <span className="or-label">{isEvenOdd ? 'Match' : isEngineTab ? 'Strength' : 'Deviation'}</span>
+                <span className="or-big">{signalConfidence.toFixed(isEngineTab ? 0 : 1)}%</span>
+                <span className="or-bar"><span style={{ width: `${signalConfidence}%` }} /></span>
+                {strongestSignal.rules && (
+                  <span className="or-sub">{strongestSignal.rules.passed} of {strongestSignal.rules.total} rules</span>
+                )}
+                {strongestSignal.risk && (
+                  <span className={`or-sub or-risk or-risk--${strongestSignal.risk.toLowerCase()}`}>
+                    Losing-digit risk: {RISK_TEXT[strongestSignal.risk]}
+                  </span>
+                )}
+              </div>
+            </div>
+            {weakBoard && (
+              <p className="or-note or-note--warn">Weak board: only {strongestSignal.rules.passed} of {strongestSignal.rules.total} rules hold. Trade it with care or scan again.</p>
+            )}
+            {flaggedMarkets.length > 0 && (
+              <p className="or-note">
+                Flagged and skipped: {flaggedMarkets.slice(0, 3).map(m => m.name).join(', ')}
+                {flaggedMarkets.length > 3 ? ` +${flaggedMarkets.length - 3}` : ''}
+              </p>
+            )}
+            {strongestSignal.checks?.length > 0 && (
+              <details className="or-why">
+                <summary>Why this one</summary>
+                <ul className="or-checks">
+                  {strongestSignal.checks.map(c => (
+                    <li key={c.label} className={c.ok ? 'is-ok' : 'is-fail'}>
+                      <span className="or-check-mark">{c.ok ? '✓' : '✕'}</span>
+                      <span className="or-check-text">
+                        {c.label}
+                        <small>{c.detail}</small>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        ) : isEngineTab ? (
+          <div className="or-card or-assess or-pop">
+            {analysisStarted ? (
+              <>
+                <div className="or-progress-head">
+                  <span>{waitingForData ? 'Waiting for market data…' : isEvenOdd ? 'Reading the digit boards' : 'Assessing risk on every market'}</span>
+                  <strong>{waitingForData ? '' : `${secondsLeft}s`}</strong>
+                </div>
+                <span className="or-bar or-bar--thick"><span style={{ width: `${scanProgress}%` }} /></span>
+                <div className="or-row">
+                  <span>Markets read</span>
+                  <strong>{scannedMarketsCount}/{totalMarkets}</strong>
+                </div>
+                {isEvenOdd ? (
+                  bestSoFar && (
+                    <div className="or-row">
+                      <span>Best so far</span>
+                      <strong>{bestSoFar.name} {bestSoFar.contractType} · {bestSoFar.deviation.toFixed(0)}% ({bestSoFar.rules?.passed}/{bestSoFar.rules?.total})</strong>
+                    </div>
+                  )
+                ) : (
+                  <>
+                    <div className="or-tally">
+                      <span className="or-tally-clear">Clear {clearMarkets.length}</span>
+                      <span className="or-tally-watch">Watch {watchMarkets.length}</span>
+                      <span className="or-tally-flag">Flagged {flaggedMarkets.length}</span>
+                    </div>
+                    {flaggedMarkets.length > 0 && <ul className="or-flags">{flaggedLines()}</ul>}
+                  </>
+                )}
+              </>
+            ) : scanEmpty ? (
+              <>
+                <strong className="or-empty-title">
+                  {isEvenOdd ? 'No market has a usable Even/Odd board right now.' : 'Every market is flagged or failed a check right now.'}
+                </strong>
+                {flaggedMarkets.length > 0 && <ul className="or-flags">{flaggedLines()}</ul>}
+                {closest && !isEvenOdd && (
+                  <span className="or-sub">Closest: {closest.name} · {closest.contract} ({closest.passed}/{closest.total} checks)</span>
+                )}
+                <span className="or-sub">Scan again in a moment.</span>
+              </>
+            ) : (
+              <span className="or-sub or-idle">
+                {isEvenOdd
+                  ? 'Scan reads every market for about 15 seconds and gives the best Even/Odd board with its match percentage.'
+                  : 'Scan assesses every market for about 18 seconds, flags the ones whose losing digits are running hot, then gives one contract.'}
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="or-card or-ready or-pop">
+            <div className="or-ready-left">
+              <span className="or-ready-title">MARKET READINESS</span>
+              <div className="or-row">
+                <span>Markets scanned</span>
+                <strong>{analysisStarted ? `${scannedMarketsCount}/${totalMarkets}` : '--'}</strong>
+              </div>
+              <div className="or-row">
+                <span>Scanning now</span>
+                <strong>{analysisStarted ? currentScanSymbol || '--' : '--'}</strong>
+              </div>
+              <div className="or-row">
+                <span>Best deviation</span>
+                <strong>{analysisStarted ? `${topScanDeviation.toFixed(1)}%` : '--'}</strong>
+              </div>
+            </div>
+            <div className="or-ready-right">
+              <div className="or-progress-head">
+                <span>Progress</span>
+                <strong>{Math.round(analysisStarted ? scanProgress : 0)}%</strong>
+              </div>
+              <span className="or-bar or-bar--thick"><span style={{ width: `${analysisStarted ? scanProgress : 0}%` }} /></span>
+            </div>
+          </div>
+        )}
 
         <div className="or-card or-settings">
           <div className="or-settings-grid">

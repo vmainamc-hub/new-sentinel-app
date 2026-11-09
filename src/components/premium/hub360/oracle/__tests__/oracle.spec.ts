@@ -1,7 +1,7 @@
 import { mulberry32 } from '../../../sixfold/stats';
 import { EO, PARITY_DIGITS, digitRows, readEvenOdd } from '../even-odd';
-import { OracleScanner, type FeedLike, runOracleScan } from '../oracle-engine';
-import { OU_CONTRACTS, readOverUnder, scanOverUnder } from '../over-under';
+import { OracleScanner, StabilityTracker, type FeedLike, evenOddMatch, marketCalls, pickOverUnder, runOracleScan } from '../oracle-engine';
+import { OU_CONTRACTS, readLossRisk, readOverUnder, scanOverUnder } from '../over-under';
 
 const rand = mulberry32(11);
 const random = (n: number) => Array.from({ length: n }, () => Math.floor(rand() * 10));
@@ -122,11 +122,24 @@ describe('Oracle Over/Under', () => {
 });
 
 describe('Oracle scan', () => {
-    it('Even/Odd offers no signal and no fallback on a random market, and says how close it came', () => {
+    it('Even/Odd always answers with the best available board and a percentage, and says how close it came', () => {
         const scan = runOracleScan('EVEN/ODD', { R_10: random(500) }, ['R_10']);
         expect(scan.ready).toBe(1);
-        expect(scan.fallback).toBeNull();
         expect(scan.closest?.total).toBe(6);
+        const pick = scan.best ?? scan.fallback;
+        expect(pick).not.toBeNull();
+        expect(pick?.deviation).toBeGreaterThan(0);
+        expect(pick?.deviation).toBeLessThanOrEqual(100);
+        expect(pick?.rules?.total).toBe(6);
+        if (pick?.tier === 'BEST') expect(pick.rules?.passed).toBeLessThan(6);
+    });
+
+    it('Even/Odd ranks the best available by match percentage, and a full pass beats a partial one', () => {
+        const scan = runOracleScan('EVEN/ODD', { R_10: random(500), R_25: [...random(400), ...evenBoard()] }, ['R_10', 'R_25']);
+        expect(scan.best?.tier).toBe('STRONG');
+        expect(scan.best?.rules).toEqual({ passed: 6, total: 6 });
+        expect(scan.best!.deviation).toBeGreaterThan(scan.fallback!.deviation);
+        expect(evenOddMatch({ passed: 6, total: 6, score: 80 })).toBeGreaterThan(evenOddMatch({ passed: 4, total: 6, score: 80 }));
     });
 
     it('Even/Odd picks the market whose board passes', () => {
@@ -162,29 +175,80 @@ describe('OracleScanner', () => {
         return feed;
     };
 
-    it('connects an offline feed, waits for ticks, and signals when a market qualifies', () => {
+    it('connects an offline feed and holds the verdict until the assessment time is up', () => {
         jest.useFakeTimers();
+        let clock = 0;
         const series: Record<string, number[]> = {};
         const feed = fakeFeed(series);
         const found: string[] = [];
-        const scanner = new OracleScanner(feed, { throttleMs: 0, warmupMs: 0 });
-        scanner.start('EVEN/ODD', { onSignal: s => found.push(`${s.symbol}:${s.contractType}`) });
+        const scanner = new OracleScanner(feed, { throttleMs: 0, assessMs: 15_000, minReadyShare: 0.1, now: () => clock });
+        scanner.start('EVEN/ODD', { onSignal: s => found.push(`${s.symbol}:${s.contractType}:${s.tier}`) });
         expect(feed.connected).toBe(1);
-        expect(found).toEqual([]);
         series.R_10 = [...random(300), ...evenBoard()];
+        series.R_25 = random(500);
+        clock = 5_000;
         feed.emit();
-        expect(found).toEqual(['R_10:EVEN']);
+        // the board already qualifies, but the assessment is still running
+        expect(found).toEqual([]);
+        expect(scanner.isScanning()).toBe(true);
+        clock = 15_000;
+        jest.advanceTimersByTime(15_000);
+        expect(found).toEqual(['R_10:EVEN:STRONG']);
         expect(scanner.isScanning()).toBe(false);
         jest.useRealTimers();
     });
 
-    it('reports none when an Even/Odd scan window ends without a qualifying market', () => {
+    it('Even/Odd gives the best available answer when no market passes every rule', () => {
         jest.useFakeTimers();
-        const feed = fakeFeed({ R_10: random(500) });
+        let clock = 0;
+        const feed = fakeFeed({ R_10: random(500), R_25: random(500) });
+        const found: Array<{ tier: string; rules: unknown }> = [];
         let none = 0;
-        const scanner = new OracleScanner(feed, { maxMs: 5000 });
-        scanner.start('EVEN/ODD', { onSignal: () => undefined, onNone: () => { none += 1; } });
-        jest.advanceTimersByTime(5001);
+        const scanner = new OracleScanner(feed, { assessMs: 4000, minReadyShare: 0.1, now: () => clock });
+        scanner.start('EVEN/ODD', { onSignal: s => found.push({ tier: s.tier, rules: s.rules }), onNone: () => { none += 1; } });
+        clock = 4_000;
+        jest.advanceTimersByTime(4_000);
+        expect(none).toBe(0);
+        expect(found).toHaveLength(1);
+        expect(found[0].tier === 'STRONG' || found[0].tier === 'BEST').toBe(true);
+        jest.useRealTimers();
+    });
+
+    it('Over/Under does not answer before its assessment is over, then names a contract', () => {
+        jest.useFakeTimers();
+        let clock = 0;
+        const feed = fakeFeed({ R_10: random(1000), R_25: random(1000), R_50: random(1000) });
+        const found: string[] = [];
+        const progress: number[] = [];
+        const scanner = new OracleScanner(feed, { throttleMs: 0, assessMs: 18_000, minReadyShare: 0.1, now: () => clock });
+        scanner.start('OVER/UNDER', {
+            onProgress: (_scan, _name, info) => progress.push(info.elapsedMs),
+            onSignal: s => found.push(`${s.contractType}${s.barrier}`),
+        });
+        clock = 9_000;
+        feed.emit();
+        jest.advanceTimersByTime(9_000);
+        expect(found).toEqual([]);
+        clock = 18_000;
+        jest.advanceTimersByTime(9_000);
+        expect(found).toHaveLength(1);
+        expect(found[0]).toMatch(/^(OVER[1-4]|UNDER[5-8])$/);
+        expect(Math.max(...progress)).toBeGreaterThanOrEqual(18_000);
+        jest.useRealTimers();
+    });
+
+    it('waits past the assessment for markets to have ticks, then gives up at the cap', () => {
+        jest.useFakeTimers();
+        let clock = 0;
+        const feed = fakeFeed({});
+        let none = 0;
+        const scanner = new OracleScanner(feed, { assessMs: 5_000, capMs: 12_000, now: () => clock });
+        scanner.start('OVER/UNDER', { onSignal: () => undefined, onNone: () => { none += 1; } });
+        clock = 6_000;
+        jest.advanceTimersByTime(6_000);
+        expect(none).toBe(0);
+        clock = 12_000;
+        jest.advanceTimersByTime(6_000);
         expect(none).toBe(1);
         jest.useRealTimers();
     });
@@ -193,11 +257,115 @@ describe('OracleScanner', () => {
         jest.useFakeTimers();
         const feed = fakeFeed({ R_10: random(500) });
         let none = 0;
-        const scanner = new OracleScanner(feed, { maxMs: 5000 });
-        scanner.start('EVEN/ODD', { onSignal: () => undefined, onNone: () => { none += 1; } });
+        let found = 0;
+        const scanner = new OracleScanner(feed, { assessMs: 5000 });
+        scanner.start('EVEN/ODD', { onSignal: () => { found += 1; }, onNone: () => { none += 1; } });
         scanner.stop();
         jest.advanceTimersByTime(6000);
         expect(none).toBe(0);
+        expect(found).toBe(0);
         jest.useRealTimers();
+    });
+});
+
+describe('Oracle losing-digit risk', () => {
+    // Over 2 loses on 0, 1, 2 (30% fair). Build a market whose losing digits have been running at about 50%.
+    const hot = (n: number, loseEvery = 2) => Array.from({ length: n }, (_, i) => (i % loseEvery === 0 ? i % 3 : 3 + (i % 7)));
+    const calm = (n: number) => Array.from({ length: n }, (_, i) => (i % 10 < 3 ? i % 3 : 3 + (i % 7)));
+    const over2 = { side: 'OVER' as const, param: 2 };
+
+    it('reads a fair market as LOW risk', () => {
+        const r = readLossRisk(calm(600), over2);
+        expect(r.level).toBe('LOW');
+        expect(r.expected).toBeCloseTo(0.3, 5);
+    });
+
+    it('flags losing digits printing far above their fair share as HIGH, which is a hard veto', () => {
+        const r = readLossRisk(hot(600), over2);
+        expect(r.level).toBe('HIGH');
+        expect(r.loss100).toBeGreaterThan(0.4);
+        expect(r.detail).toContain('losing digits');
+        const read = readOverUnder('A', hot(600), over2);
+        expect(read?.layers.find(l => l.key === 'risk')?.hard).toBe(true);
+        expect(read?.vetoed).toBe(true);
+        expect(read?.tier).toBeNull();
+    });
+
+    it('marks a market FLAGGED, with the losing-digit reason, when its leading contract is vetoed', () => {
+        const HOT = 'losing digits 52% in the last 100 against 30.0% fair';
+        const base = scanOverUnder({ A: random(1000), B: random(1000) }, ['A', 'B']);
+        const hotA = base.map(r =>
+            r.symbol !== 'A'
+                ? r
+                : {
+                      ...r,
+                      vetoed: true,
+                      tier: null,
+                      risk: { ...r.risk, level: 'HIGH' as const, detail: HOT },
+                      layers: r.layers.map(l => (l.key === 'risk' ? { ...l, ok: false, hard: true, detail: HOT } : l)),
+                  }
+        );
+        const calls = marketCalls(hotA);
+        expect(calls).toHaveLength(2);
+        expect(calls[0]).toMatchObject({ symbol: 'A', level: 'FLAGGED' });
+        expect(calls[0].reason).toContain('losing digits 52%');
+        expect(calls[1].symbol).toBe('B');
+        expect(calls[1].level).not.toBe('FLAGGED');
+    });
+
+    it('never offers a vetoed contract as the verdict', () => {
+        const reads = scanOverUnder({ A: hot(600), B: random(1000) }, ['A', 'B']);
+        const tracker = new StabilityTracker();
+        tracker.observe(reads);
+        const pick = pickOverUnder(reads, tracker);
+        expect(pick).not.toBeNull();
+        const chosen = reads.find(r => r.symbol === pick?.symbol && r.barrier === pick?.barrier && r.side === pick?.contractType);
+        expect(chosen?.vetoed).toBe(false);
+    });
+
+    it('returns no verdict when every contract is vetoed', () => {
+        const reads = scanOverUnder({ A: hot(600) }, ['A']).filter(r => r.vetoed);
+        const tracker = new StabilityTracker();
+        tracker.observe(reads);
+        expect(pickOverUnder(reads, tracker)).toBeNull();
+    });
+});
+
+describe('StabilityTracker', () => {
+    const base = () => scanOverUnder({ A: random(1000) }, ['A'])[0];
+    const strongRead = () => ({ ...base(), tier: 'STRONG' as const, vetoed: false });
+
+    it('calls a contract STRONG only when it held through most of the assessment', () => {
+        const strong = strongRead();
+        const steady = new StabilityTracker();
+        for (let i = 0; i < 5; i += 1) steady.observe([strong]);
+        expect(pickOverUnder([strong], steady)?.tier).toBe('STRONG');
+
+        const flaky = new StabilityTracker();
+        flaky.observe([strong]);
+        for (let i = 0; i < 4; i += 1) flaky.observe([{ ...strong, tier: null, vetoed: true }]);
+        const pick = pickOverUnder([strong], flaky);
+        expect(pick?.tier).toBe('BEST');
+    });
+
+    it('a steady contract outranks one with a higher final score that kept flipping', () => {
+        const [first, second] = scanOverUnder({ A: random(1000), B: random(1000) }, ['A', 'B']);
+        const steady = { ...first, score: 70, tier: 'STRONG' as const, vetoed: false };
+        const flip = { ...second, score: 75, tier: 'STRONG' as const, vetoed: false };
+        const t = new StabilityTracker();
+        for (let i = 0; i < 6; i += 1) t.observe([steady, i % 3 === 0 ? flip : { ...flip, tier: null, vetoed: true }]);
+        const pick = pickOverUnder([steady, flip], t);
+        expect(`${pick?.symbol}:${pick?.barrier}`).toBe(`${steady.symbol}:${steady.barrier}`);
+    });
+
+    it('shares are fractions of the evaluations seen', () => {
+        const read = base();
+        const t = new StabilityTracker();
+        t.observe([{ ...read, tier: 'STRONG' }]);
+        t.observe([{ ...read, tier: 'BEST' }]);
+        t.observe([{ ...read, tier: null }]);
+        t.observe([{ ...read, tier: 'STRONG' }]);
+        expect(t.evaluations).toBe(4);
+        expect(t.share(read)).toEqual({ strong: 0.5, clear: 0.75 });
     });
 });

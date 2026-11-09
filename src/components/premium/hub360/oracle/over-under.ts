@@ -21,7 +21,7 @@
 // Honest limit: Deriv digits are generated randomly. A contract that has been winning is no more likely to win next, and
 // every contract pays less than its fair odds. These engines rank how healthy a contract has been and avoid the moments
 // the operator's tools flag as costly. They cannot create an edge.
-import { type Contract, contractLabel, DEFAULT_BOT, simulateBot } from '../../sixfold/bot';
+import { type Contract, contractLabel, DEFAULT_BOT, simulateBot, winProbability } from '../../sixfold/bot';
 import {
     losingSidePressure,
     multiWindowGate,
@@ -59,11 +59,12 @@ export type LayerKey =
     | 'meter'
     | 'apex'
     | 'viability'
-    | 'vanguard';
+    | 'vanguard'
+    | 'risk';
 
 export type Layer = {
     key: LayerKey;
-    engine: 'Sentinel AI' | 'Sixfold' | 'Apex Intel' | 'Vanguard';
+    engine: 'Sentinel AI' | 'Sixfold' | 'Apex Intel' | 'Vanguard' | 'Oracle';
     label: string;
     ok: boolean;
     /** When true and not ok, the contract is never signalled. */
@@ -78,12 +79,33 @@ export type Layer = {
 
 export type Tier = 'STRONG' | 'BEST';
 
+export type RiskLevel = 'LOW' | 'ELEVATED' | 'HIGH';
+
+/** How fast the digits that LOSE a contract have been printing, against how often they should. */
+export type LossRisk = {
+    level: RiskLevel;
+    /** Share of the last 30 / 100 / 300 ticks that lost the contract. */
+    loss30: number;
+    loss100: number;
+    loss300: number;
+    /** Losing share a fair market gives (1 - win probability). */
+    expected: number;
+    /** Standard errors above expected in each window. */
+    z30: number;
+    z100: number;
+    z300: number;
+    /** Losing share is climbing from the long window to the short one. */
+    building: boolean;
+    detail: string;
+};
+
 export type OverUnderRead = {
     symbol: string;
     contract: Contract;
     side: 'OVER' | 'UNDER';
     barrier: number;
     label: string;
+    risk: LossRisk;
     layers: Layer[];
     /** Weighted 0-100 across the layers that apply. */
     score: number;
@@ -97,10 +119,61 @@ const clamp = (x: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, x));
 const round1 = (x: number) => Math.round(x * 10) / 10;
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
+/**
+ * Risk of the losing digits. A market whose losing digits are printing well above their fair share (in the short window,
+ * the medium one, or all three and climbing) is flagged. HIGH is a hard veto, ELEVATED keeps the contract from STRONG.
+ */
+export function readLossRisk(digits: readonly number[], contract: Contract): LossRisk {
+    const expected = 1 - winProbability(contract);
+    const lossShare = (n: number) => {
+        const w = digits.slice(-n);
+        let lost = 0;
+        for (const d of w) if (contract.side === 'OVER' ? d <= contract.param : d >= contract.param) lost += 1;
+        return { share: w.length ? lost / w.length : expected, n: w.length };
+    };
+    const z = (x: { share: number; n: number }) => (x.n ? (x.share - expected) / Math.sqrt((expected * (1 - expected)) / x.n) : 0);
+    const a = lossShare(30);
+    const b = lossShare(100);
+    const c = lossShare(300);
+    const z30 = z(a);
+    const z100 = z(b);
+    const z300 = z(c);
+    const building = a.share > b.share && b.share > c.share;
+
+    let level: RiskLevel = 'LOW';
+    if (z100 >= 1.6 || z300 >= 2 || (z30 >= 2 && z100 >= 0.8)) level = 'HIGH';
+    else if (z100 >= 0.8 || z30 >= 1.5 || z300 >= 1.2 || (building && z100 >= 0.5)) level = 'ELEVATED';
+
+    const worst = [
+        { n: 30, x: a, z: z30 },
+        { n: 100, x: b, z: z100 },
+        { n: 300, x: c, z: z300 },
+    ].sort((p, q) => q.z - p.z)[0];
+    const detail =
+        level === 'LOW'
+            ? `losing digits ${pct(b.share)} in the last 100 (fair ${pct(expected)})`
+            : `losing digits ${pct(worst.x.share)} in the last ${worst.n} against ${pct(expected)} fair${building ? ', and climbing' : ''}`;
+    return { level, loss30: a.share, loss100: b.share, loss300: c.share, expected, z30, z100, z300, building, detail };
+}
+
 export function readOverUnder(symbol: string, digits: readonly number[], contract: Contract): OverUnderRead | null {
     if (digits.length < OU_MIN_TICKS) return null;
     if (contract.side !== 'OVER' && contract.side !== 'UNDER') return null;
     const layers: Layer[] = [];
+
+    // ---- Oracle: how fast the losing digits are printing
+    const risk = readLossRisk(digits, contract);
+    layers.push({
+        key: 'risk',
+        engine: 'Oracle',
+        label: 'Losing digits are not running hot',
+        ok: risk.level === 'LOW',
+        hard: risk.level === 'HIGH',
+        required: true,
+        score: clamp(100 - 28 * Math.max(0, risk.z30, risk.z100, risk.z300)),
+        weight: 0.1,
+        detail: risk.detail,
+    });
 
     // ---- Sentinel AI: Pulse
     const pulse = readContract(symbol, digits, contract);
@@ -267,6 +340,7 @@ export function readOverUnder(symbol: string, digits: readonly number[], contrac
         side: contract.side,
         barrier: contract.param,
         label: contractLabel(contract),
+        risk,
         layers,
         score,
         vetoed: !!hard,
