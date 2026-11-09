@@ -36,6 +36,18 @@
       "label": "Apex Intel"
     },
     {
+      "id": "elite_prime",
+      "label": "Elite Prime"
+    },
+    {
+      "id": "overlord",
+      "label": "Overlord Pro"
+    },
+    {
+      "id": "signal_tools",
+      "label": "Signal Tools"
+    },
+    {
       "id": "manual_trading",
       "label": "DTrader"
     },
@@ -90,6 +102,9 @@
       "sixfold",
       "vanguard",
       "ai_intel",
+      "elite_prime",
+      "overlord",
+      "signal_tools",
       "manual_trading",
       "manual_trader",
       "tradingview",
