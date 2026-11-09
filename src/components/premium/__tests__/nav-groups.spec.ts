@@ -48,3 +48,12 @@ describe('AI Hub navigation group', () => {
         expect(getGroupForSection('bulk_trader', ZENITH)).toBeNull();
     });
 });
+
+describe('360 hub tabs', () => {
+    it('keeps Elite Prime, Overlord Pro and Signal Tools as their own top-level tabs', () => {
+        const nav: PremiumSection[] = [...ZENITH, 'elite_prime', 'overlord', 'signal_tools'];
+        const ids = buildNavItems(nav).map(item => (item.type === 'group' ? item.group.id : item.id));
+        expect(ids).toEqual(expect.arrayContaining(['elite_prime', 'overlord', 'signal_tools', 'ai_hub']));
+        expect(getGroupForSection('overlord', nav)).toBeNull();
+    });
+});

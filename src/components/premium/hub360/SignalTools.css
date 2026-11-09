@@ -1,0 +1,30 @@
+.hub360-signals__tabs {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    background: #131c2e;
+}
+.hub360-signals__tabs::-webkit-scrollbar { display: none; }
+.hub360-signals__tabs button {
+    flex: 0 0 auto;
+    padding: 10px 22px;
+    border: 1px solid #2c3a52;
+    border-radius: 8px;
+    background: #1b2740;
+    color: #cdd6e6;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.hub360-signals__tabs button.is-active {
+    border-color: #19cba3;
+    background: #0f3a38;
+    color: #5bf0cb;
+}

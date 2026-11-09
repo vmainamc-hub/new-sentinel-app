@@ -1,0 +1,9 @@
+.hub360-elite__tabs { display: flex; gap: 10px; padding: 12px 16px 0; }
+.hub360-elite__tabs button {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 16px; border: 1px solid #cdd7e6; border-radius: 10px;
+    background: #fff; color: #33415a; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.hub360-elite__tabs button.is-active { border-color: #0d9488; background: #0d9488; color: #fff; }
+.hub360-elite__badge { padding: 2px 7px; border-radius: 6px; font-size: 10px; font-weight: 800; background: #fde68a; color: #7c4a03; }
+.hub360-elite__badge--pro { background: #ddd6fe; color: #4c1d95; }

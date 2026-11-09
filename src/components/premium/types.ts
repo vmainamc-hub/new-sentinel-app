@@ -24,4 +24,7 @@ export type PremiumSection =
     | 'digits_analysis'
     | 'sixfold'
     | 'vanguard'
-    | 'ai_intel';
+    | 'ai_intel'
+    | 'overlord'
+    | 'elite_prime'
+    | 'signal_tools';

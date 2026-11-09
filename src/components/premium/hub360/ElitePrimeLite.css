@@ -1,0 +1,39 @@
+/* Elite Prime Lite additions (layout of Trading Mode, Recovery Mode and Markets). */
+.epf-settings-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.epf-field__control--mode { min-height: 44px; }
+
+.epf-recovery {
+    margin: 14px 0;
+    padding: 14px 18px;
+    border: 1px solid #b7e4cf;
+    border-radius: 14px;
+    background: #ecfaf3;
+}
+.epf-recovery__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.epf-recovery__title { font-size: 14px; letter-spacing: 0.04em; color: #0f3d2e; }
+.epf-recovery__hint { margin: 2px 0 0; font-size: 13px; color: #3d6b58; }
+.epf-recovery__controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+.epf-recovery__barrier { max-width: 90px; }
+.epf-switch { position: relative; display: inline-block; width: 54px; height: 30px; flex: 0 0 auto; }
+.epf-switch input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+.epf-switch__track { position: absolute; inset: 0; border-radius: 999px; background: #c5cfdc; transition: background 0.2s; }
+.epf-switch__track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25); transition: transform 0.2s; }
+.epf-switch input:checked + .epf-switch__track { background: #0d9f6e; }
+.epf-switch input:checked + .epf-switch__track::after { transform: translateX(24px); }
+
+.epf-markets { margin-top: 14px; }
+.epf-markets__count { font-size: 13px; font-weight: 800; color: #0f766e; }
+.epf-markets__hint { margin: 0 0 10px; font-size: 13px; color: #5b6678; }
+.epf-markets__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.epf-chip {
+    padding: 8px 14px;
+    border: 1px solid #c5d3e6;
+    border-radius: 999px;
+    background: #fff;
+    color: #33415a;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.epf-chip.is-selected { border-color: #0d9488; background: #0d9488; color: #fff; }
+.epf-chip:disabled { opacity: 0.6; cursor: not-allowed; }

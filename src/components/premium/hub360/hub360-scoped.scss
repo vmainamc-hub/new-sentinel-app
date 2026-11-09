@@ -1,0 +1,52 @@
+@use 'sass:meta';
+
+// Every ported 360 stylesheet is loaded inside .hub360-pane. That keeps their class names from leaking into the rest of
+// the app and, by adding one class of specificity, stops Apex's dark-theme rules for label/input/select/h1-h5 from
+// recolouring these light pages.
+.hub360-pane {
+    position: relative;
+    z-index: 3;
+    min-height: 100%;
+    background: #eef3fa;
+    color: #1b2430;
+    --my-primary: #060548; // defined by the 360 site's global theme, not by the ported stylesheets
+
+  --shub-bg: #f4f6f8;
+  --shub-surface: #ffffff;
+  --shub-border: #bed3f8;
+  --shub-text: #1e2329;
+  --shub-text-muted: #5e6673;
+  --shub-primary: #007aff; /* Stronger Blue for Light Mode */
+  --shub-success: #03a66d;
+  --shub-danger: #cf304a;
+  --shub-accent: #f0b90b;
+  --shub-radius: 4px;
+    @include meta.load-css('Overlord.css');
+    @include meta.load-css('ElitePremium.css');
+    @include meta.load-css('ElitePrimeLite.css');
+    @include meta.load-css('Eliteflow.css');
+    @include meta.load-css('Oracle.css');
+    @include meta.load-css('Higherlower.css');
+    @include meta.load-css('Dualbot.css');
+    @include meta.load-css('AiScan.css');
+    @include meta.load-css('SignalTools.css');
+    @include meta.load-css('ElitePrime.css');
+}
+
+// These pages were laid out for the 360 site's full-height tab. Inside Apex the content area already scrolls, so they
+// grow with their content instead of adding a second scrollbar.
+.hub360-pane .epf-shell,
+.hub360-pane .eliteflow-container {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+}
+.hub360-pane .sh-button-group { grid-template-columns: 1fr; }
+
+// AI Scan is a two-column scanner, so it is not held to the single-card width the Overlord layout uses.
+.hub360-pane .sh-main-container.aiscan {
+    width: min(100%, 1100px);
+    height: auto;
+    overflow: visible;
+}
+.hub360-pane .aiscan-buttons button { min-height: 46px; width: 100%; border-radius: 12px; }

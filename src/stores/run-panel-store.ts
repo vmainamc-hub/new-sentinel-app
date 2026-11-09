@@ -216,8 +216,16 @@ export default class RunPanelStore {
         this.setShowBotStopMessage(false);
     };
 
+    // The ported 360 engines (Overlord, Elite Prime, Signal Tools) manage their own trades and sockets, so a Stop press
+    // is handed to them and the Blockly bot stop below is skipped while one of them is the active trading module.
+    stopHub360Module = () => {
+        observer.emit('hub360.stop');
+        return Boolean(this.root_store.dashboard?.active_trading_module?.startsWith('hub360-'));
+    };
+
     onStopButtonClick = () => {
         this.is_contract_buying_in_progress = false;
+        if (this.stopHub360Module()) return;
         const { is_multiplier } = this.root_store.summary_card;
 
         if (is_multiplier) {
@@ -229,6 +237,7 @@ export default class RunPanelStore {
 
     onStopBotClick = () => {
         this.is_contract_buying_in_progress = false;
+        if (this.stopHub360Module()) return;
 
         const { is_multiplier } = this.root_store.summary_card;
         const { summary_card } = this.root_store;

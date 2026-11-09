@@ -15,6 +15,7 @@ import { getTemplateDomain } from './domain-brand';
 import GlobalAIScannerV2 from './GlobalAIScannerV2';
 import GlobalContractBridge from './GlobalContractBridge';
 import GlobalQuickTrade from './GlobalQuickTrade';
+import Hub360Host from './hub360/Hub360Host';
 import LandingPage from './LandingPage';
 import PremiumHeader from './PremiumHeader';
 import PremiumLoader from './PremiumLoader';
@@ -87,12 +88,14 @@ const validSections: PremiumSection[] = [
     'dashboard', 'bot_ideas', 'quick_bot', 'bot_builder', 'free_bots', 'signal_ai', 'auto_trader', 'sentinel_ai',
     'manual_trading', 'manual_trader', 'bulk_trader', 'batch_trader', 'copy_trading', 'speedbot', 'calculator', 'pro_ai', 'analysis_tools',
     'analysis_hub', 'charts', 'tradingview', 'dtrader', 'ai_bots', 'digits_analysis', 'sixfold', 'vanguard', 'ai_intel',
+    'overlord', 'elite_prime', 'signal_tools',
 ];
 
 const sectionFromHash = (hash: string): PremiumSection => {
     const raw = hash.replace(/^#\/?/, '').split('?')[0];
     // Signal Zone was merged into Sentinel AI: old links and bookmarks land there.
-    const value = (raw === 'signal_zone' ? 'sentinel_ai' : raw) as PremiumSection;
+    // The 360 sites call the Signal Tools page #signals.
+    const value = (raw === 'signal_zone' ? 'sentinel_ai' : raw === 'signals' ? 'signal_tools' : raw) as PremiumSection;
     return validSections.includes(value) ? value : 'dashboard';
 };
 
@@ -252,6 +255,10 @@ const PremiumLayout = observer(() => {
             case 'sixfold': return <Suspense fallback={<PremiumLoader />}><SixfoldPage /></Suspense>;
             case 'vanguard': return <Suspense fallback={<PremiumLoader />}><VanguardPage /></Suspense>;
             case 'ai_intel': return <Suspense fallback={<PremiumLoader />}><AiIntelPage /></Suspense>;
+            // Overlord Pro, Elite Prime and Signal Tools stay mounted once opened (see Hub360Host), so they are not rendered here.
+            case 'overlord':
+            case 'elite_prime':
+            case 'signal_tools': return null;
             default: return null;
         }
     };
@@ -282,6 +289,7 @@ const PremiumLayout = observer(() => {
                 <AiHubTabs label={hubGroup.group.label} members={hubGroup.members} active={section} onChange={changeSection} />
             )}
             {!isBotBuilder && renderSection()}
+            <Hub360Host section={section} />
             <div className={`prodb-bot-builder-host ${isBotBuilder ? 'is-active' : 'is-hidden'}`} data-premium-builder-active={isBotBuilder ? 'true' : 'false'}>
                 <Outlet />
             </div>
