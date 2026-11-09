@@ -7,6 +7,7 @@ import { useStore } from '@/hooks/useStore';
 import { contract_stages } from '@/constants/contract-stage';
 import { run_panel as run_panel_tabs } from '@/constants/run-panel';
 import { observer } from '@/external/bot-skeleton';
+import { isEngineKind, oracleScanner } from './oracle/oracle-engine';
 
 import { FaPlay, FaStop } from "react-icons/fa";
 
@@ -72,6 +73,9 @@ const Oracle = () => {
   const [strongestSignal, setStrongestSignal] = useState(null);
   const [signalTimeLeft, setSignalTimeLeft] = useState(0);
   const [scannedMarketsCount, setScannedMarketsCount] = useState(0);
+  // Result of the last engine scan (Even/Odd, Over/Under) and whether it ended without anything to trade.
+  const [engineScan, setEngineScan] = useState(null);
+  const [scanEmpty, setScanEmpty] = useState(false);
 
   const scanSocketRef = useRef(null);
   const tickData = useRef({});
@@ -157,6 +161,7 @@ const Oracle = () => {
     }
   }, [isRunning, run_panel]);
   useHub360Module('hub360-oracle', isRunning);
+  useEffect(() => () => { oracleScanner.stop(); }, []);
 
   const logMessage = (msg) => {
     setLogs(prev => [msg, ...prev]);
@@ -1178,6 +1183,12 @@ const Oracle = () => {
   };
 
   const startScan = () => {
+    if (isEngineKind(tradeTypeRef.current)) {
+      startEngineScan(tradeTypeRef.current);
+      return;
+    }
+    setEngineScan(null);
+    setScanEmpty(false);
     scanSessionRef.current += 1;
     const currentSession = scanSessionRef.current;
     const scanType = tradeTypeRef.current;
@@ -1209,6 +1220,9 @@ const Oracle = () => {
 
   const stopAll = () => {
     scanSessionRef.current += 1;
+    oracleScanner.stop();
+    setEngineScan(null);
+    setScanEmpty(false);
     scanFinalizedRef.current = false;
     closeScanSockets();
     clearScanTimers();
@@ -1349,113 +1363,168 @@ const syncSignalToBot = (signal) => {
 
   void syncSignalToBot;
 
-  // ===================== FINALIZE BEST SIGNAL =====================
-const finalizeBestSignal = (sessionId = scanSessionRef.current) => {
-  if (sessionId !== scanSessionRef.current) return;
-
-  const sorted = getRankedSignals();
-
-  if (!sorted.length) {
-    stopAll();
-    return;
-  }
-
-  const best = sorted[0];
-  closeScanSockets();
-  setAnalysisStarted(false);
-  setCurrentScanSymbol('');
-  setStrongestSignal(best);
-  setSignalTimeLeft(60);
-
-  let generatedDigit = null;
-
-  // ------------------ PREDICTION DIGIT LOGIC ------------------
-  if (best.contractType === 'OVER') {
-    generatedDigit = Math.floor(Math.random() * 4) + 1; // 1–4
-  } else if (best.contractType === 'UNDER') {
-    generatedDigit = Math.floor(Math.random() * 4) + 5; // 5–8
-  }
-   else if (best.contractType === 'DIFFERS') {
-    generatedDigit = Math.floor(Math.random() * 4) + 5; // 5–8
-  }
-
-  // ------------------ SYNC SIGNAL → BOT (CRITICAL FIX) ------------------
-  symbolRef.current = best.symbol;
-  contractTypeRef.current = best.contractType;
-
-  if (generatedDigit !== null) {
-    predictionDigitRef.current = generatedDigit;
-    setPredictionDigit(generatedDigit); // UI only
-  } else {
-    predictionDigitRef.current = null;
-    setPredictionDigit(null);
-  }
-
-  setSymbol(best.symbol);
-  setContractType(best.contractType);
-
-  try {
-    alertSound.play().catch(() => null);
-  } catch (error) {
-    console.debug("Signal alert playback skipped.", error);
-  }
-
-  if (countdownInterval.current) clearInterval(countdownInterval.current);
-  countdownInterval.current = setInterval(
-    () => setSignalTimeLeft(p => (p <= 1 ? 0 : p - 1)),
-    1000
-  );
-
-  if (signalTimeout.current) clearTimeout(signalTimeout.current);
-  signalTimeout.current = setTimeout(() => {
-    setStrongestSignal(null);
-    setPredictionDigit(null);
-    predictionDigitRef.current = null;
-    setAnalysisStarted(false);
+  // ===================== PRESENT A SIGNAL =====================
+  // Shows the signal, syncs it to the bot and starts the 60 s validity clock. Used by every scan path.
+  const presentSignal = (best, generatedDigit) => {
     closeScanSockets();
-    if (countdownInterval.current) {
-      clearInterval(countdownInterval.current);
-      countdownInterval.current = null;
+    setAnalysisStarted(false);
+    setCurrentScanSymbol('');
+    setStrongestSignal(best);
+    setSignalTimeLeft(60);
+
+    symbolRef.current = best.symbol;
+    contractTypeRef.current = best.contractType;
+
+    if (generatedDigit !== null && generatedDigit !== undefined) {
+      predictionDigitRef.current = generatedDigit;
+      setPredictionDigit(generatedDigit); // UI only
+    } else {
+      predictionDigitRef.current = null;
+      setPredictionDigit(null);
     }
-  }, 60000);
-};
+
+    setSymbol(best.symbol);
+    setContractType(best.contractType);
+
+    try {
+      alertSound.play().catch(() => null);
+    } catch (error) {
+      console.debug("Signal alert playback skipped.", error);
+    }
+
+    if (countdownInterval.current) clearInterval(countdownInterval.current);
+    countdownInterval.current = setInterval(
+      () => setSignalTimeLeft(p => (p <= 1 ? 0 : p - 1)),
+      1000
+    );
+
+    if (signalTimeout.current) clearTimeout(signalTimeout.current);
+    signalTimeout.current = setTimeout(() => {
+      setStrongestSignal(null);
+      setPredictionDigit(null);
+      predictionDigitRef.current = null;
+      setAnalysisStarted(false);
+      closeScanSockets();
+      if (countdownInterval.current) {
+        clearInterval(countdownInterval.current);
+        countdownInterval.current = null;
+      }
+    }, 60000);
+  };
+
+  // ===================== ENGINE SCAN (Even/Odd, Over/Under) =====================
+  // Served by the Oracle engine (./oracle): live digits of every market, the rule sets for each trade type, and the
+  // barrier for Over/Under chosen by the engines instead of at random.
+  const startEngineScan = (kind) => {
+    scanSessionRef.current += 1;
+    const session = scanSessionRef.current;
+    scanFinalizedRef.current = false;
+    closeScanSockets();
+    clearScanTimers();
+    oracleScanner.stop();
+
+    setAnalysisStarted(true);
+    setStrongestSignal(null);
+    setTopScanResult(null);
+    setEngineScan(null);
+    setScanEmpty(false);
+    setScannedMarketsCount(0);
+    setCurrentScanSymbol(symbolNames[volatilityList[0]] || '');
+    setPredictionDigit(null);
+    predictionDigitRef.current = null;
+
+    oracleScanner.start(kind, {
+      onProgress: (scan, current) => {
+        if (session !== scanSessionRef.current) return;
+        setEngineScan(scan);
+        setScannedMarketsCount(scan.ready);
+        setCurrentScanSymbol(current);
+        setTopScanResult({ deviation: scan.topScore });
+      },
+      onSignal: (signal, scan) => {
+        if (session !== scanSessionRef.current) return;
+        setEngineScan(scan);
+        presentSignal(signal, signal.barrier);
+      },
+      onNone: (scan) => {
+        if (session !== scanSessionRef.current) return;
+        setEngineScan(scan);
+        setAnalysisStarted(false);
+        setCurrentScanSymbol('');
+        setScanEmpty(true);
+      },
+    });
+  };
+
+  // ===================== FINALIZE BEST SIGNAL (Rise/Fall, Differs) =====================
+  const finalizeBestSignal = (sessionId = scanSessionRef.current) => {
+    if (sessionId !== scanSessionRef.current) return;
+
+    const sorted = getRankedSignals();
+
+    if (!sorted.length) {
+      stopAll();
+      return;
+    }
+
+    const best = sorted[0];
+
+    let generatedDigit = null;
+    if (best.contractType === 'OVER') {
+      generatedDigit = Math.floor(Math.random() * 4) + 1; // 1–4
+    } else if (best.contractType === 'UNDER') {
+      generatedDigit = Math.floor(Math.random() * 4) + 5; // 5–8
+    } else if (best.contractType === 'DIFFERS') {
+      generatedDigit = Math.floor(Math.random() * 4) + 5; // 5–8
+    }
+
+    presentSignal(best, generatedDigit);
+  };
 
   // The scan's own measured deviation, not a win probability (digit contracts have no 80%+ "confidence").
   const signalConfidence = strongestSignal
     ? Math.min(100, Math.max(0, Number(strongestSignal.deviation || 0)))
     : 0;
-  const scanProgress = Math.min(100, (scannedMarketsCount / volatilityList.length) * 100);
-  const topScanSymbol = topScanResult?.name || "--";
+  const totalMarkets = engineScan?.total ?? volatilityList.length;
+  const scanProgress = Math.min(100, (scannedMarketsCount / totalMarkets) * 100);
   const topScanDeviation = topScanResult?.deviation ?? 0;
-  void topScanSymbol;
+  const closest = engineScan?.closest || null;
+  const isEngineTab = isEngineKind(tradeType);
 
   const signalContractClass = strongestSignal
-    ? `shub-contract-${strongestSignal.contractType.toLowerCase()}`
+    ? `or-contract-${strongestSignal.contractType.toLowerCase()}`
     : '';
+  const statusText = strongestSignal ? 'SIGNAL READY' : analysisStarted ? 'SCANNING LIVE' : 'SYSTEM IDLE';
+  const statusClass = strongestSignal ? 'or-status--ready' : analysisStarted ? 'or-status--active' : '';
 
   return (
-    
-      <div className="shub-shell">
-        <div className="shub-header">
-          <div className="shub-brand">
-           
-            <h2>THE <span className='brand-span'>ORACLE </span></h2>
-            <span className='shub-steps'>Choose Preferred Trade Type, Scan & Execute. </span>
+    <div className="or-shell">
+      <div className="or-panel">
+        <div className="or-header">
+          <div className="or-badge">OR</div>
+          <div className="or-brand">
+            <h2>THE <span>ORACLE</span></h2>
+            <p>Choose a contract type, scan the market flow, and launch with precision.</p>
           </div>
-          <div className={`shub-status ${analysisStarted && !strongestSignal ? 'shub-status--active' : ''}`}>
-            {strongestSignal ? 'SIGNAL READY' : analysisStarted ? 'SCANNING LIVE' : 'SYSTEM IDLE'}
+          <div className={`or-status ${statusClass}`}>
+            <i className="or-status-dot" />
+            {statusText}
           </div>
         </div>
 
-        <div className="shub-tabs" role="tablist" aria-label="Trade type">
+        <div className="or-tabs" role="tablist" aria-label="Trade type">
           {TRADE_TYPE_TABS.map(tab => (
             <button
               key={tab.id}
               type="button"
-              className={`shub-tab ${tradeType === tab.id ? 'shub-tab--active' : ''}`}
+              role="tab"
+              aria-selected={tradeType === tab.id}
+              className={`or-tab ${tradeType === tab.id ? 'or-tab--active' : ''}`}
               onClick={() => {
                 tradeTypeRef.current = tab.id;
                 setTradeType(tab.id);
+                setEngineScan(null);
+                setScanEmpty(false);
                 if (analysisStarted) stopAll();
               }}
             >
@@ -1464,138 +1533,158 @@ const finalizeBestSignal = (sessionId = scanSessionRef.current) => {
           ))}
         </div>
 
-        
-
-        <div className="shub-display">
-          {strongestSignal ? (
-            <div className="shub-signal-card shub-pop">
-              <div className="shub-signal-col shub-signal-col--left">
-                <span className="shub-signal-tag">Signal Found</span>
-                <div className="shub-signal-list">
-                  <div className="shub-signal-row">
-                    <span className="shub-signal-label">Market</span>
-                    <strong className="shub-signal-value shub-signal-market">{symbolNames[strongestSignal.symbol]}</strong>
-                  </div>
-                  <div className="shub-signal-row">
-                    <span className="shub-signal-label">Contract Type</span>
-                    <strong className={`shub-signal-value shub-signal-type ${signalContractClass}`}>
-                      {strongestSignal.contractType} {predictionDigit !== null && (
-                    
-                      <strong className="shub-signal-digit">{predictionDigit}</strong>
-                    
-                  )}
-                    </strong>
-                    
-                  </div>
-                  
-                </div>
-               
-              </div>
-              <div className="shub-signal-col shub-signal-col--right">
-                 <div className="shub-confidence-box" >
-                  <span className="shub-confidence-label">Deviation</span>
-                  <span className="shub-confidence-value">{signalConfidence.toFixed(1)}%</span>
-                  <span className="shub-confidence-bar">
-                    <span style={{ width: `${signalConfidence}%` }} />
-                  </span>
-                </div>
-                <div className="shub-time-box">
-                  <p className="shub-time-value"><span className="shub-time-label">VALID FOR: </span> {signalTimeLeft}s </p>
-                  
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="shub-analysis-card shub-pop">
-              <div className="shub-analysis-col shub-analysis-col--left">
-                <span className="shub-analysis-title">
-                  {analysisStarted ? 'ANALYZING MARKET CONDITIONS' : 'ANALYSIS STANDBY'}
+        {strongestSignal ? (
+          <div className="or-card or-signal or-pop">
+            <div className="or-signal-main">
+              <div className="or-signal-col">
+                <span className="or-signal-tag">
+                  {strongestSignal.tier === 'BEST' ? 'Best Available' : 'Signal Found'}
                 </span>
-                <div className="shub-analysis-stats">
-                  <div className="shub-analysis-row">
-                    <span>Markets scanned</span>
-                    <strong>{analysisStarted ? `${scannedMarketsCount}/${volatilityList.length}` : '--'}</strong>
-                  </div>
-                  <div className="shub-analysis-row">
-                    <span>Scanning now</span>
-                    <strong>{analysisStarted ? currentScanSymbol || '--' : '--'}</strong>
-                  </div>
-                  
-                  <div className="shub-analysis-row">
-                    <span>Best deviation</span>
-                    <strong>{analysisStarted ? `${topScanDeviation.toFixed(1)}%` : '--'}</strong>
-                  </div>
+                <div className="or-signal-row">
+                  <span className="or-label">Market</span>
+                  <strong className="or-value">{symbolNames[strongestSignal.symbol]}</strong>
                 </div>
-                <div className="shub-analysis-progress">
-                  <span style={{ width: `${analysisStarted ? scanProgress : 0}%` }} />
+                <div className="or-signal-row">
+                  <span className="or-label">Contract Type</span>
+                  <strong className={`or-value or-signal-type ${signalContractClass}`}>
+                    {strongestSignal.contractType}{' '}
+                    {predictionDigit !== null && predictionDigit !== undefined && (
+                      <span className="or-signal-digit">{predictionDigit}</span>
+                    )}
+                  </strong>
+                </div>
+              </div>
+              <div className="or-signal-col">
+                <div className="or-box">
+                  <span className="or-label">{isEngineTab ? 'Strength' : 'Deviation'}</span>
+                  <span className="or-big">{signalConfidence.toFixed(1)}%</span>
+                  <span className="or-bar"><span style={{ width: `${signalConfidence}%` }} /></span>
+                </div>
+                <div className="or-box or-box--center">
+                  <span className="or-label">Valid for</span>
+                  <strong className="or-value">{signalTimeLeft}s</strong>
                 </div>
               </div>
             </div>
-          )}
-        </div>
-
-        <div className="shub-actions">
-          <div className="shub-actions-row">
-            <button
-              className={`shub-btn ${analysisStarted ? 'shub-btn--scan-stop' : 'shub-btn--scan'}`}
-              onClick={handleToggleAnalysis}
-            >
-              {analysisStarted ? 'STOP SCAN' : 'SCAN MARKET'}
-            </button>
-            <button
-              onClick={handleBotStart}
-              className={`shub-btn ${isRunning ? 'shub-btn--run-stop' : 'shub-btn--run'}`}
-            >
-              {isRunning ? <FaStop /> : <FaPlay />} {isRunning ? "STOP BOT" : "RUN BOT"}
-            </button>
+            {strongestSignal.checks?.length > 0 && (
+              <ul className="or-checks">
+                {strongestSignal.checks.map(c => (
+                  <li key={c.label} className={c.ok ? 'is-ok' : 'is-fail'}>
+                    <span className="or-check-mark">{c.ok ? '✓' : '✕'}</span>
+                    <span className="or-check-text">
+                      {c.label}
+                      <small>{c.source ? `${c.source} · ` : ''}{c.detail}</small>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
+        ) : (
+          <div className="or-card or-ready or-pop">
+            <div className="or-ready-left">
+              <span className="or-ready-title">MARKET READINESS</span>
+              <div className="or-row">
+                <span>Markets scanned</span>
+                <strong>{analysisStarted || engineScan ? `${scannedMarketsCount}/${totalMarkets}` : '--'}</strong>
+              </div>
+              <div className="or-row">
+                <span>Scanning now</span>
+                <strong>{analysisStarted ? currentScanSymbol || '--' : '--'}</strong>
+              </div>
+              <div className="or-row">
+                <span>Best deviation</span>
+                <strong>{analysisStarted || engineScan ? `${topScanDeviation.toFixed(1)}%` : '--'}</strong>
+              </div>
+            </div>
+            <div className="or-ready-right">
+              <div className="or-progress-head">
+                <span>Progress</span>
+                <strong>{Math.round(analysisStarted ? scanProgress : 0)}%</strong>
+              </div>
+              <span className="or-bar or-bar--thick"><span style={{ width: `${analysisStarted ? scanProgress : 0}%` }} /></span>
+              <div className="or-current">
+                <span>Current market</span>
+                <strong>{analysisStarted ? currentScanSymbol || '--' : '--'}</strong>
+              </div>
+            </div>
+            {isEngineTab && (analysisStarted || scanEmpty) && closest && (
+              <div className="or-closest">
+                {scanEmpty && (
+                  <strong>
+                    {tradeType === 'EVEN/ODD'
+                      ? 'No market meets every Even/Odd rule right now. Scan again in a moment.'
+                      : 'No contract cleared the engines. Scan again in a moment.'}
+                  </strong>
+                )}
+                <span>
+                  Closest: {closest.name} · {closest.contract} ({closest.passed}/{closest.total} checks)
+                  {closest.failing.length > 0 ? ` — waiting on: ${closest.failing.slice(0, 2).join('; ')}` : ''}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="or-actions">
+          <button
+            type="button"
+            className={`or-btn ${analysisStarted ? 'or-btn--scan-stop' : 'or-btn--scan'}`}
+            onClick={handleToggleAnalysis}
+          >
+            {analysisStarted ? 'STOP SCAN' : 'SCAN MARKET'}
+          </button>
+          <button
+            type="button"
+            onClick={handleBotStart}
+            className={`or-btn ${isRunning ? 'or-btn--run-stop' : 'or-btn--run'}`}
+          >
+            {isRunning ? <FaStop /> : <FaPlay />} {isRunning ? 'STOP BOT' : 'RUN BOT'}
+          </button>
         </div>
 
+        <div className="or-card or-settings">
+          <div className="or-settings-grid">
+            <label>
+              Stake
+              <input type="number" value={initialStake} onChange={(e) => setInitialStake(e.target.value)} />
+            </label>
+            <label>
+              Target Profit
+              <input type="number" value={targetProfit} onChange={(e) => setTargetProfit(e.target.value)} />
+            </label>
+            <label>
+              Stop Loss
+              <input type="number" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} />
+            </label>
+          </div>
 
-        <div className="shub-controls">
-          <div className="shub-settings">
-            <div className="shub-settings-grid">
-              <label>
-                Stake
-                <input type="number" value={initialStake} onChange={(e) => setInitialStake(e.target.value)} />
-              </label>
-              <label>
-                Target Profit
-                <input type="number" value={targetProfit} onChange={(e) => setTargetProfit(e.target.value)} />
-              </label>
-              <label>
-                Stop Loss
-                <input type="number" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} />
-              </label>
-            </div>
-
-            <div className="shub-martingale-row">
-              <label className="shub-toggle">
-                <input type="checkbox" checked={useMartingale} onChange={(e) => setUseMartingale(e.target.checked)} />
-                <span className="shub-toggle-track"></span>
-              </label>
-              <label className={`shub-multiplier-field ${useMartingale ? '' : 'shub-multiplier-field--disabled'}`}>
-               Martingale
-                <input
-                  type="number"
-                  step="0.1"
-                  min="1"
-                  value={martingaleMultiplier}
-                  onChange={(e) => setMartingaleMultiplier(e.target.value)}
-                  disabled={!useMartingale}
-                />
-              </label>
-            </div>
+          <div className="or-martingale">
+            <label className="or-toggle">
+              <input type="checkbox" checked={useMartingale} onChange={(e) => setUseMartingale(e.target.checked)} />
+              <span className="or-toggle-track" />
+            </label>
+            <label className={`or-multiplier ${useMartingale ? '' : 'or-multiplier--disabled'}`}>
+              Martingale
+              <input
+                type="number"
+                step="0.1"
+                min="1"
+                value={martingaleMultiplier}
+                onChange={(e) => setMartingaleMultiplier(e.target.value)}
+                disabled={!useMartingale}
+              />
+            </label>
           </div>
         </div>
 
         {proposalError && (
-          <div className="shub-error">
+          <div className="or-error">
             <strong>Error:</strong> {proposalError}
           </div>
         )}
       </div>
-    
+    </div>
   );
 };
 
