@@ -6,7 +6,11 @@ import { TPortfolioPosition, TStores } from '@deriv/stores/types';
 import { TContractInfo } from '../components/summary/summary-card.types';
 import { transaction_elements } from '../constants/transactions';
 import { getStoredItemsByKey, setStoredItemsByKey } from '../utils/session-storage';
-import { removeStalePendingContracts, removeStalePendingFromCache } from '../utils/stale-pending-transactions';
+import {
+    isStalePendingContract,
+    removeStalePendingContracts,
+    removeStalePendingFromCache,
+} from '../utils/stale-pending-transactions';
 import RootStore from './root-store';
 
 type TTransaction = {
@@ -123,6 +127,10 @@ export default class TransactionsStore {
         if (!data?.contract_id) return;
 
         const is_completed = isEnded(data as ProposalOpenContract);
+        // The contract bridge and portfolio recovery keep re-sending old unfinished contracts after every reset.
+        // Refuse them here so they cannot re-enter the list from any source.
+        const incoming = { type: transaction_elements.CONTRACT, data: { is_completed, date_start: data.date_start } };
+        if (isStalePendingContract(incoming)) return;
         const { run_id } = this.root_store.run_panel;
         const current_account = String(data.accountID || this.core?.client?.loginid || this.active_account_id || '');
         if (!current_account) return;
