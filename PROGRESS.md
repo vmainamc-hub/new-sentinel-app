@@ -552,3 +552,8 @@ Branch `feat/elite-recovery-conditions` (not on main; main auto-deploys). File: 
 - [x] Start-time validation of recovery conditions; history buffers sized to include recovery lookbacks.
 - Checked: file transpiles (bun) and the new helpers were run on sample digits. NOT done: `npm run build`, eslint, render test, live/demo run (no node_modules / registry here). NOT done: same change for Elite Prime LITE (`ElitePrimeLite.jsx`) - its builder UI is different, ask if wanted.
 - NEXT: run `npm ci && npm run build`, try on a DEMO account (lose a trade, confirm recovery waits for its own conditions), then merge to main.
+
+## Overlord recovery digit + stuck 10 USD transaction
+- [x] Overlord (`hub360/Overlord.jsx`): recovery digit was only used when the recovery contract TYPE differed from the main one, so OVER 2 -> recovery OVER 3 kept trading OVER 2 (martingale stake only). Now recovering = Recovery on AND last trade lost (RISE/FALL pairs unchanged). Proposal log line shows RECOVERY and the digit sent.
+- [x] Stuck pending row: run-panel transactions are cached in session storage and an unfinished contract (here #37289745799, 2026-11-05, 10 USD) was shown forever. `src/utils/stale-pending-transactions.ts` drops unfinished contracts older than 24 h when the store loads and on every new transaction; 5 tests pass under bun. Finished trades are never touched.
+- NOT verified: npm build, eslint, a live/demo Overlord run. NEXT: after deploy, hard-refresh and run Overlord on Demo: lose one trade, confirm the log says RECOVERY OVER 3.

@@ -376,7 +376,10 @@ const Overlord = () => {
         }
 
         const activeType = getNextContractType();
-        const isRecovering = activeType === recoveryTypeRef.current && activeType !== contractTypeRef.current;
+        // Recovering = Recovery mode is on and the last trade lost. This must NOT depend on the contract type being
+        // different: OVER 2 -> recovery OVER 3 uses the same type but a different digit. (RISE/FALL pairs just swap
+        // direction and have no digit.)
+        const isRecovering = useRecoveryRef.current && lastTradeWasLossRef.current && !isRiseFallRecoveryPair();
         activeContractTypeRef.current = activeType;
 
         const activePrediction = isRecovering ? recoveryPredictionRef.current : predictionDigitRef.current;
@@ -399,11 +402,15 @@ const Overlord = () => {
             proposalPayload.barrier = parseInt(activePrediction, 10);
         }
 
-        logMessage(`📋 Sending proposal: ${derivContractType} on ${symbolRef.current} x${currentStakeRef.current}`);
+        logMessage(
+            `📋 Sending ${isRecovering ? 'RECOVERY ' : ''}proposal: ${derivContractType}${
+                proposalPayload.barrier !== undefined ? ` ${proposalPayload.barrier}` : ''
+            } on ${symbolRef.current} x${currentStakeRef.current}`
+        );
         pendingProposalRef.current = true; // Mark proposal as pending
         run_panel?.setContractStage?.(contract_stages.PURCHASE_SENT);
         wsRef.current.send(JSON.stringify(proposalPayload));
-    }, [client?.currency, duration, getNextContractType, run_panel]);
+    }, [client?.currency, duration, getNextContractType, isRiseFallRecoveryPair, run_panel]);
 
     // ------------------ CENTRAL SOCKET HANDLER ------------------
     const handleSocketMessage = useCallback(

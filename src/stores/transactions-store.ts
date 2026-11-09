@@ -6,6 +6,7 @@ import { TPortfolioPosition, TStores } from '@deriv/stores/types';
 import { TContractInfo } from '../components/summary/summary-card.types';
 import { transaction_elements } from '../constants/transactions';
 import { getStoredItemsByKey, setStoredItemsByKey } from '../utils/session-storage';
+import { removeStalePendingContracts, removeStalePendingFromCache } from '../utils/stale-pending-transactions';
 import RootStore from './root-store';
 
 type TTransaction = {
@@ -25,7 +26,8 @@ export default class TransactionsStore {
     constructor(root_store: RootStore, core: TStores) {
         this.root_store = root_store;
         this.core = core;
-        this.elements = getStoredItemsByKey(this.TRANSACTION_CACHE, {});
+        // Drop unfinished contracts left over from earlier days (they would otherwise be shown on every visit).
+        this.elements = removeStalePendingFromCache(getStoredItemsByKey(this.TRANSACTION_CACHE, {}));
         this.active_account_id = this.core?.client?.loginid || '';
         this.is_transaction_details_modal_open = false;
         this.disposeReactionsFn = this.registerReactions();
@@ -145,6 +147,8 @@ export default class TransactionsStore {
                 [current_account]: [],
             };
         }
+
+        this.elements[current_account] = removeStalePendingContracts(this.elements[current_account]);
 
         const incoming_contract_id = Number(data.contract_id);
         const incoming_buy_id = data.transaction_ids?.buy;
