@@ -147,18 +147,42 @@ const getRecentMoves = (prices, limit = MONITOR_WINDOW) => {
     return moves;
 };
 
-const getMaxDigitHistory = strategies => {
-    const digitWindows = strategies
-        .flatMap(getStrategyConditions)
+// Recovery trades have their own entry conditions (separate from every strategy). Same shape as an extra condition.
+const MAX_RECOVERY_CONDITIONS = 4;
+const createRecoveryCondition = (overrides = {}) => ({
+    id: createStrategyId(),
+    lookback: '3',
+    condition: 'EVEN',
+    conditionBarrier: '',
+    ...overrides,
+});
+
+// Returns the sampled digits / moves when the condition holds right now, otherwise null.
+const checkConditionOn = (item, digitHistory, priceHistory) => {
+    const lookback = normalizeLookback(item.lookback);
+
+    if (isDigitCondition(item.condition)) {
+        const relevantDigits = digitHistory.slice(-lookback);
+        return relevantDigits.length === lookback &&
+            relevantDigits.every(digit => matchesDigitCondition(digit, item.condition, item.conditionBarrier))
+            ? relevantDigits
+            : null;
+    }
+
+    const recentMoves = getRecentMoves(priceHistory, lookback);
+    return recentMoves.length === lookback && recentMoves.every(move => move === item.condition) ? recentMoves : null;
+};
+
+const getMaxDigitHistory = (strategies, recoveryConditions = []) => {
+    const digitWindows = [...strategies.flatMap(getStrategyConditions), ...recoveryConditions]
         .filter(item => isDigitCondition(item.condition))
         .map(item => normalizeLookback(item.lookback));
 
     return Math.max(MONITOR_WINDOW, ...digitWindows, 1);
 };
 
-const getMaxPriceHistory = strategies => {
-    const moveWindows = strategies
-        .flatMap(getStrategyConditions)
+const getMaxPriceHistory = (strategies, recoveryConditions = []) => {
+    const moveWindows = [...strategies.flatMap(getStrategyConditions), ...recoveryConditions]
         .filter(item => isMoveCondition(item.condition))
         .map(item => normalizeLookback(item.lookback) + 1);
 
@@ -177,6 +201,17 @@ const formatStrategySummary = strategy => {
     });
     const ticks = normalizeDuration(strategy.duration, strategy.trade);
     return `If ${clauses.join(' and ')}, trade ${formatTradeLabel(strategy.trade, strategy.barrier)} for ${ticks} ticks.`;
+};
+
+const formatRecoverySummary = (conditions, tradeType, barrier, duration) => {
+    const ticks = normalizeDuration(duration, tradeType);
+    const trade = formatTradeLabel(tradeType, barrier);
+    if (!conditions.length) return `After a loss, trade ${trade} for ${ticks} ticks on the next tick (no entry conditions).`;
+    const clauses = conditions.map(item => {
+        const subject = isMoveCondition(item.condition) ? 'market moves' : 'digits';
+        return `the last ${normalizeLookback(item.lookback)} ${subject} are ${formatCondition(item)}`;
+    });
+    return `After a loss, if ${clauses.join(' and ')}, trade ${trade} for ${ticks} ticks.`;
 };
 
 const formatTokenMove = move => {
@@ -234,7 +269,11 @@ const ElitePremium = () => {
     const [recoveryBarrier, setRecoveryBarrier] = useState('4');
     const [marketMode, setMarketMode] = useState('all');
     const [recoverySetting, setRecoverySetting] = useState('until_win');
+    const [recoveryConditions, setRecoveryConditions] = useState(() => [createRecoveryCondition()]);
+    const [recoveryDuration, setRecoveryDuration] = useState('1');
     const recoverySettingRef = useRef('until_win');
+    const recoveryConditionsRef = useRef(recoveryConditions);
+    const recoveryDurationRef = useRef('1');
     const [selectedSymbols, setSelectedSymbols] = useState(ALL_SYMBOLS);
     const tradingModeRef = useRef('signal');
     const useRecoveryRef = useRef(false);
@@ -275,7 +314,18 @@ const ElitePremium = () => {
         recoveryBarrierRef.current = recoveryBarrier;
         selectedSymbolsRef.current = selectedSymbols;
         recoverySettingRef.current = recoverySetting;
-    }, [tradingMode, useRecovery, recoveryType, recoveryBarrier, selectedSymbols, recoverySetting]);
+        recoveryConditionsRef.current = recoveryConditions;
+        recoveryDurationRef.current = recoveryDuration;
+    }, [
+        tradingMode,
+        useRecovery,
+        recoveryType,
+        recoveryBarrier,
+        selectedSymbols,
+        recoverySetting,
+        recoveryConditions,
+        recoveryDuration,
+    ]);
 
     useEffect(() => {
         stakeRef.current = stake;
@@ -308,8 +358,8 @@ const ElitePremium = () => {
     useEffect(() => {
         strategiesRef.current = strategies;
 
-        const digitLimit = getMaxDigitHistory(strategies);
-        const priceLimit = getMaxPriceHistory(strategies);
+        const digitLimit = getMaxDigitHistory(strategies, recoveryConditions);
+        const priceLimit = getMaxPriceHistory(strategies, recoveryConditions);
         const trimmedDigits = {};
         const trimmedMoves = {};
 
@@ -325,7 +375,7 @@ const ElitePremium = () => {
 
         setLiveDigits(previous => ({ ...previous, ...trimmedDigits }));
         setLiveMoves(previous => ({ ...previous, ...trimmedMoves }));
-    }, [strategies]);
+    }, [strategies, recoveryConditions]);
 
     useEffect(() => {
         if (!isRunning) {
@@ -564,7 +614,7 @@ const ElitePremium = () => {
 
             // "One recovery trade, then back": a recovery trade (win or loss) hands control back to the main strategy.
             lastTradeWasLossRef.current = profit < 0 && !(meta.is_recovery && recoverySettingRef.current === 'once');
-            if (!(profit < 0 && tradingModeRef.current === 'continuous_loss')) continuationRef.current = null;
+            if (!(profit < 0 && tradingModeRef.current === 'continuous_loss') || meta.is_recovery) continuationRef.current = null;
 
             setNextStakeDisplay(nextStakeRef.current);
 
@@ -638,30 +688,24 @@ const ElitePremium = () => {
         const digitHistory = digitHistoryRef.current[symbol] || [];
         const priceHistory = priceHistoryRef.current[symbol] || [];
 
-        // Returns the sampled digits / moves when the condition holds right now, otherwise null.
-        const checkCondition = item => {
-            const lookback = normalizeLookback(item.lookback);
-
-            if (isDigitCondition(item.condition)) {
-                const relevantDigits = digitHistory.slice(-lookback);
-                return relevantDigits.length === lookback &&
-                    relevantDigits.every(digit => matchesDigitCondition(digit, item.condition, item.conditionBarrier))
-                    ? relevantDigits
-                    : null;
-            }
-
-            const recentMoves = getRecentMoves(priceHistory, lookback);
-            return recentMoves.length === lookback && recentMoves.every(move => move === item.condition) ? recentMoves : null;
-        };
-
         for (let index = 0; index < strategiesRef.current.length; index += 1) {
             const strategy = strategiesRef.current[index];
-            const samples = getStrategyConditions(strategy).map(checkCondition);
+            const samples = getStrategyConditions(strategy).map(item => checkConditionOn(item, digitHistory, priceHistory));
 
             if (samples.every(Boolean)) return { strategy, index, sample: samples[0] };
         }
 
         return null;
+    }, []);
+
+    // Recovery entry: only the recovery panel's own conditions are checked (never the strategies' conditions).
+    // With no recovery conditions the recovery trade goes out on the next tick.
+    const findRecoveryMatch = useCallback(symbol => {
+        const digitHistory = digitHistoryRef.current[symbol] || [];
+        const priceHistory = priceHistoryRef.current[symbol] || [];
+        const samples = recoveryConditionsRef.current.map(item => checkConditionOn(item, digitHistory, priceHistory));
+
+        return samples.every(Boolean) ? { sample: samples[0] || [] } : null;
     }, []);
 
     const executeStrategyTrade = useCallback(
@@ -685,9 +729,8 @@ const ElitePremium = () => {
             }
 
             const { strategy, index } = matchedStrategy;
-            const isRecovering = useRecoveryRef.current && lastTradeWasLossRef.current;
-            const tradeType = isRecovering ? recoveryTypeRef.current : strategy.trade;
-            const tradeBarrier = getTradeBarrier(tradeType, isRecovering ? recoveryBarrierRef.current : strategy.barrier);
+            const tradeType = strategy.trade;
+            const tradeBarrier = getTradeBarrier(tradeType, strategy.barrier);
             const currentStake = Number(nextStakeRef.current.toFixed(2));
             const strategyLabel = `Strategy ${index + 1}`;
             const conditionLabel = isMoveCondition(strategy.condition) ? 'market moves' : 'digits';
@@ -711,7 +754,7 @@ const ElitePremium = () => {
                     lookback: normalizeLookback(strategy.lookback),
                     barrier: tradeBarrier,
                     summary_label: summaryLabel,
-                    is_recovery: isRecovering,
+                    is_recovery: false,
                 },
             };
 
@@ -724,10 +767,76 @@ const ElitePremium = () => {
             continuationRef.current = { symbol, matched: matchedStrategy };
             ws.send(JSON.stringify(payload));
             updateLastSignalLabel(
-                `${strategyLabel} on ${formatSymbolDisplay(symbol)}: last ${normalizeLookback(strategy.lookback)} ${conditionLabel} were ${formatCondition(strategy)}${strategy.extras?.length ? ` (+${strategy.extras.length} more)` : ''}.${isRecovering ? ' (recovery trade)' : ''}`
+                `${strategyLabel} on ${formatSymbolDisplay(symbol)}: last ${normalizeLookback(strategy.lookback)} ${conditionLabel} were ${formatCondition(strategy)}${strategy.extras?.length ? ` (+${strategy.extras.length} more)` : ''}.`
             );
             setStatusMessage(
                 `Matched ${strategyLabel} on ${formatSymbolDisplay(symbol)}. Sending ${formatTradeLabel(tradeType, tradeBarrier)} proposal.`
+            );
+        },
+        [client?.currency, updateLastSignalLabel]
+    );
+
+    const executeRecoveryTrade = useCallback(
+        symbol => {
+            const ws = wsRef.current;
+
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                isProcessingRef.current = false;
+                setStatusMessage('WebSocket is not ready yet. Waiting to reconnect.');
+                return;
+            }
+
+            if (!isAuthorizedRef.current) {
+                isProcessingRef.current = false;
+                setStatusMessage('Trading session is not authorized yet. Waiting for secure connection.');
+                return;
+            }
+
+            if (pendingProposalRef.current || activeContractsRef.current.size > 0) {
+                isProcessingRef.current = false;
+                return;
+            }
+
+            const conditions = recoveryConditionsRef.current;
+            const tradeType = recoveryTypeRef.current;
+            const tradeBarrier = getTradeBarrier(tradeType, recoveryBarrierRef.current);
+            const currentStake = Number(nextStakeRef.current.toFixed(2));
+            const summaryLabel = formatRecoverySummary(conditions, tradeType, tradeBarrier, recoveryDurationRef.current);
+            const firstCondition = conditions[0];
+            const payload = {
+                proposal: 1,
+                basis: 'stake',
+                currency: client?.currency || 'USD',
+                underlying_symbol: symbol,
+                duration: normalizeDuration(recoveryDurationRef.current, tradeType),
+                duration_unit: 't',
+                amount: currentStake,
+                contract_type: CONTRACT_TYPE_MAP[tradeType],
+                passthrough: {
+                    symbol,
+                    custom_type: tradeType,
+                    sent_stake: currentStake,
+                    strategy_id: 'recovery',
+                    strategy_label: 'Recovery',
+                    trigger_type: firstCondition ? firstCondition.condition : 'RECOVERY',
+                    lookback: firstCondition ? normalizeLookback(firstCondition.lookback) : 0,
+                    barrier: tradeBarrier,
+                    summary_label: summaryLabel,
+                    is_recovery: true,
+                },
+            };
+
+            if (tradeBarrier !== null) {
+                payload.barrier = tradeBarrier;
+            }
+
+            pendingTradeContextRef.current = payload.passthrough;
+            pendingProposalRef.current = true;
+            continuationRef.current = null;
+            ws.send(JSON.stringify(payload));
+            updateLastSignalLabel(`Recovery on ${formatSymbolDisplay(symbol)}: ${summaryLabel}`);
+            setStatusMessage(
+                `Recovery conditions met on ${formatSymbolDisplay(symbol)}. Sending ${formatTradeLabel(tradeType, tradeBarrier)} proposal.`
             );
         },
         [client?.currency, updateLastSignalLabel]
@@ -740,8 +849,8 @@ const ElitePremium = () => {
             if (!symbol || typeof quote === 'undefined') return;
 
             const currentDigit = Number.parseInt(String(quote).slice(-1), 10);
-            const digitLimit = getMaxDigitHistory(strategiesRef.current);
-            const priceLimit = getMaxPriceHistory(strategiesRef.current);
+            const digitLimit = getMaxDigitHistory(strategiesRef.current, recoveryConditionsRef.current);
+            const priceLimit = getMaxPriceHistory(strategiesRef.current, recoveryConditionsRef.current);
 
             if (!digitHistoryRef.current[symbol]) digitHistoryRef.current[symbol] = [];
             digitHistoryRef.current[symbol].push(currentDigit);
@@ -766,6 +875,26 @@ const ElitePremium = () => {
 
             if (!selectedSymbolsRef.current.includes(symbol)) return;
             if (!isRunningRef.current || activeContractsRef.current.size > 0 || isProcessingRef.current) return;
+
+            // After a loss with Recovery mode on: wait for the RECOVERY conditions (on any selected market) and trade the
+            // recovery contract. The strategies' own conditions play no part until the recovery ends.
+            if (useRecoveryRef.current && lastTradeWasLossRef.current) {
+                if (!findRecoveryMatch(symbol)) return;
+
+                isProcessingRef.current = true;
+                setLastTriggeredSymbol(symbol);
+
+                if (highlightTimeoutRef.current) {
+                    window.clearTimeout(highlightTimeoutRef.current);
+                }
+
+                highlightTimeoutRef.current = window.setTimeout(() => {
+                    setLastTriggeredSymbol(null);
+                }, 1800);
+
+                executeRecoveryTrade(symbol);
+                return;
+            }
 
             // "Trade continuously when there is a loss": after a loss keep trading the same strategy on the same market
             // (no new pattern needed) until a trade wins.
@@ -793,7 +922,7 @@ const ElitePremium = () => {
 
             executeStrategyTrade(symbol, matchedStrategy);
         },
-        [executeStrategyTrade, findMatchedStrategy]
+        [executeRecoveryTrade, executeStrategyTrade, findMatchedStrategy, findRecoveryMatch]
     );
 
     const subscribeToTicks = useCallback(socket => {
@@ -1033,6 +1162,26 @@ const ElitePremium = () => {
             }
         }
 
+        if (useRecoveryRef.current) {
+            for (let index = 0; index < recoveryConditionsRef.current.length; index += 1) {
+                const item = recoveryConditionsRef.current[index];
+                const lookbackValue = Number.parseInt(item.lookback, 10);
+
+                if (!Number.isInteger(lookbackValue) || lookbackValue < 1 || lookbackValue > 10) {
+                    return `Recovery condition ${index + 1} needs a lookback between 1 and 10.`;
+                }
+
+                if (requiresBarrier(item.condition)) {
+                    const digit = Number.parseInt(item.conditionBarrier, 10);
+                    const [minDigit, maxDigit] = getBarrierRange(item.condition);
+
+                    if (!Number.isInteger(digit) || digit < minDigit || digit > maxDigit) {
+                        return `Recovery condition ${index + 1} needs a ${item.condition} digit between ${minDigit} and ${maxDigit}.`;
+                    }
+                }
+            }
+        }
+
         for (let index = 0; index < strategiesRef.current.length; index += 1) {
             const strategy = strategiesRef.current[index];
             const strategyNumber = index + 1;
@@ -1253,6 +1402,35 @@ const ElitePremium = () => {
                     ...strategy,
                     [field]: value,
                 };
+            })
+        );
+    };
+
+    const addRecoveryCondition = () => {
+        setRecoveryConditions(previous =>
+            previous.length >= MAX_RECOVERY_CONDITIONS ? previous : [...previous, createRecoveryCondition()]
+        );
+    };
+
+    const removeRecoveryCondition = conditionId => {
+        setRecoveryConditions(previous => previous.filter(item => item.id !== conditionId));
+    };
+
+    const updateRecoveryCondition = (conditionId, field, value) => {
+        setRecoveryConditions(previous =>
+            previous.map(item => {
+                if (item.id !== conditionId) return item;
+                if (field === 'condition') {
+                    return {
+                        ...item,
+                        condition: value,
+                        conditionBarrier: requiresBarrier(value) ? getDefaultConditionBarrier(value) : '',
+                    };
+                }
+                if (field === 'conditionBarrier') {
+                    return { ...item, conditionBarrier: value === '' ? '' : clampBarrierValue(item.condition, value) };
+                }
+                return { ...item, [field]: value };
             })
         );
     };
@@ -1712,6 +1890,94 @@ const ElitePremium = () => {
                             ))}
                         </select>
                     </div>
+                    <div className='epf-recovery__field'>
+                        <span className='epf-field__label'>Recovery duration (ticks)</span>
+                        <input
+                            aria-label='Recovery duration'
+                            className='epf-field__control epf-recovery__barrier'
+                            type='number'
+                            min={isRunTrade(recoveryType) ? '2' : '1'}
+                            max={isRunTrade(recoveryType) ? '5' : '10'}
+                            value={recoveryDuration}
+                            onChange={event => setRecoveryDuration(event.target.value)}
+                            disabled={isRunning || !useRecovery}
+                        />
+                    </div>
+                </div>
+
+                <div className='epf-recovery__conditions'>
+                    <span className='epf-field__label'>Recovery entry conditions</span>
+                    <p className='epf-recovery__hint'>
+                        Checked only after a loss, on any selected market. The strategy conditions above are not used for
+                        recovery trades. Remove every condition to recover on the very next tick.
+                    </p>
+
+                    {recoveryConditions.map((item, index) => (
+                        <div key={item.id} className='epf-strategy-rule epf-strategy-rule--extra'>
+                            <span className='epf-strategy-rule__text'>{index === 0 ? 'Recover when the last' : 'and the last'}</span>
+                            <input
+                                aria-label={`Recovery condition ${index + 1} lookback`}
+                                className='epf-field__control epf-strategy-rule__control epf-strategy-rule__control--lookback'
+                                type='number'
+                                min='1'
+                                max='10'
+                                value={item.lookback}
+                                onChange={event => updateRecoveryCondition(item.id, 'lookback', event.target.value)}
+                                disabled={isRunning || !useRecovery}
+                            />
+                            <span className='epf-strategy-rule__text'>digits / moves are</span>
+                            <select
+                                aria-label={`Recovery condition ${index + 1} type`}
+                                className='epf-field__control epf-strategy-rule__control epf-strategy-rule__control--condition'
+                                value={item.condition}
+                                onChange={event => updateRecoveryCondition(item.id, 'condition', event.target.value)}
+                                disabled={isRunning || !useRecovery}
+                            >
+                                {CONDITION_TYPES.map(type => (
+                                    <option key={type} value={type}>
+                                        {CONDITION_LABELS[type] || type}
+                                    </option>
+                                ))}
+                            </select>
+                            {requiresBarrier(item.condition) && (
+                                <input
+                                    aria-label={`Recovery condition ${index + 1} ${item.condition} digit`}
+                                    className='epf-field__control epf-strategy-rule__control epf-strategy-rule__control--barrier'
+                                    type='number'
+                                    min={getBarrierRange(item.condition)[0]}
+                                    max={getBarrierRange(item.condition)[1]}
+                                    value={item.conditionBarrier}
+                                    onChange={event => updateRecoveryCondition(item.id, 'conditionBarrier', event.target.value)}
+                                    disabled={isRunning || !useRecovery}
+                                />
+                            )}
+                            <button
+                                type='button'
+                                className='epf-button epf-button--danger'
+                                onClick={() => removeRecoveryCondition(item.id)}
+                                disabled={isRunning || !useRecovery}
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    ))}
+
+                    <button
+                        type='button'
+                        className='epf-button epf-button--secondary epf-strategy-add-condition'
+                        onClick={addRecoveryCondition}
+                        disabled={isRunning || !useRecovery || recoveryConditions.length >= MAX_RECOVERY_CONDITIONS}
+                    >
+                        + CONDITION
+                    </button>
+                    <p className='epf-strategy-preview'>
+                        {formatRecoverySummary(
+                            recoveryConditions,
+                            recoveryType,
+                            requiresBarrier(recoveryType) ? recoveryBarrier : null,
+                            recoveryDuration
+                        )}
+                    </p>
                 </div>
             </div>
 
