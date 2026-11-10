@@ -1,19 +1,19 @@
 <xml xmlns="https://developers.google.com/blockly/xml" is_dbot="true" collection="false">
   <variables>
-    <variable id="6o_9Nu#$3m#.?zV=ahjK">Deixar em 8 ou 9</variable>
-    <variable id="4+UcGJ_mE@7^Z8-d@JaJ">Número de loss ( Não Alterar )</variable>
-    <variable id="RHgF*C%#h{|Ha5u;#5j?">Entrada Inicial</variable>
+    <variable id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</variable>
+    <variable id="4+UcGJ_mE@7^Z8-d@JaJ">Number of losses ( Do Not Change )</variable>
+    <variable id="RHgF*C%#h{|Ha5u;#5j?">Initial Stake</variable>
     <variable id="N5h(uF)6G2cql)h{ZR;h">text</variable>
     <variable id=")-9T~6%gxe29l#C#)qts">text1</variable>
     <variable id="LN}r@t3f(x%mM[7-P|ft">text2</variable>
-    <variable id="FlX%77!9AMWGEu#,)Nme">Parar com perda de</variable>
-    <variable id="a?$LW}C4v+XX:Lc%6-OS">LUCRO DESEJADO</variable>
-    <variable id="kQ+Ke(]*eQpM[qgfd~+g">Contador</variable>
+    <variable id="FlX%77!9AMWGEu#,)Nme">Stop at loss of</variable>
+    <variable id="a?$LW}C4v+XX:Lc%6-OS">DESIRED PROFIT</variable>
+    <variable id="kQ+Ke(]*eQpM[qgfd~+g">Counter</variable>
     <variable id="mx{;!:I,#`.:uIWFiZB[">lost</variable>
-    <variable id="(obU$~2J]hr/k0`hgX8/">ENTRADA AO VENCER</variable>
-    <variable id="rUPB[)tUi3we;byHr`7]">1 ou 2 segundos</variable>
+    <variable id="(obU$~2J]hr/k0`hgX8/">STAKE ON WIN</variable>
+    <variable id="rUPB[)tUi3we;byHr`7]">1 or 2 seconds</variable>
     <variable id="^3d~6DUQ!o8XQTn.XB!c">text3</variable>
-    <variable id="MgsL8H;~`;r/^Tuh1)y=">Gale</variable>
+    <variable id="MgsL8H;~`;r/^Tuh1)y=">Martingale</variable>
   </variables>
   <block type="trade_definition" id="|,wpfgCRK_O,JHE[$xte" deletable="false" x="0" y="60">
     <statement name="TRADE_OPTIONS">
@@ -51,7 +51,7 @@
     </statement>
     <statement name="INITIALIZATION">
       <block type="variables_set" id="$*k6w0w?HoW%@WJ[CQ[G">
-        <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Deixar em 8 ou 9</field>
+        <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
         <value name="VALUE">
           <block type="math_random_int" id="iOeoesA=`9w;]Y?32~j?">
             <value name="FROM">
@@ -68,7 +68,7 @@
         </value>
         <next>
           <block type="variables_set" id="gOH1q(Lqj,Kv4+[K|s=-">
-            <field name="VAR" id="4+UcGJ_mE@7^Z8-d@JaJ">Número de loss ( Não Alterar )</field>
+            <field name="VAR" id="4+UcGJ_mE@7^Z8-d@JaJ">Number of losses ( Do Not Change )</field>
             <value name="VALUE">
               <block type="math_number" id="t`]#Z4#DVjSp^{RXbqGP">
                 <field name="NUM">2</field>
@@ -76,7 +76,7 @@
             </value>
             <next>
               <block type="variables_set" id="0!#{3_;P@j;~oXkHmGY|">
-                <field name="VAR" id="FlX%77!9AMWGEu#,)Nme">Parar com perda de</field>
+                <field name="VAR" id="FlX%77!9AMWGEu#,)Nme">Stop at loss of</field>
                 <value name="VALUE">
                   <block type="math_number" id="49t$ms:#8*kc6Uer8#](">
                     <field name="NUM">1000</field>
@@ -84,7 +84,7 @@
                 </value>
                 <next>
                   <block type="variables_set" id="rY9MYKWTV39sxDv;+kdr">
-                    <field name="VAR" id="a?$LW}C4v+XX:Lc%6-OS">LUCRO DESEJADO</field>
+                    <field name="VAR" id="a?$LW}C4v+XX:Lc%6-OS">DESIRED PROFIT</field>
                     <value name="VALUE">
                       <block type="math_number" id="4cF?LqK#AJV6Jx.44($6">
                         <field name="NUM">1000</field>
@@ -92,7 +92,7 @@
                     </value>
                     <next>
                       <block type="variables_set" id="i,bH`bnP@u(WV|7i!Sz`">
-                        <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Entrada Inicial</field>
+                        <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Initial Stake</field>
                         <value name="VALUE">
                           <block type="math_number" id="7B-XT,+7XN#v|1Aa($uz">
                             <field name="NUM">1</field>
@@ -100,7 +100,7 @@
                         </value>
                         <next>
                           <block type="variables_set" id="IxCR1Na7WMsp2@803{L+">
-                            <field name="VAR" id="(obU$~2J]hr/k0`hgX8/">ENTRADA AO VENCER</field>
+                            <field name="VAR" id="(obU$~2J]hr/k0`hgX8/">STAKE ON WIN</field>
                             <value name="VALUE">
                               <block type="math_number" id="JCmZC^lr+W)d!Wm0(~pL">
                                 <field name="NUM">1</field>
@@ -108,7 +108,7 @@
                             </value>
                             <next>
                               <block type="variables_set" id="CpM6_k*o?xE[xaZ[Q@_-">
-                                <field name="VAR" id="MgsL8H;~`;r/^Tuh1)y=">Gale</field>
+                                <field name="VAR" id="MgsL8H;~`;r/^Tuh1)y=">Martingale</field>
                                 <value name="VALUE">
                                   <block type="math_number" id="`2(cyquM9#yV^pDqZ`gJ">
                                     <field name="NUM">0.8</field>
@@ -158,7 +158,7 @@
         </value>
         <value name="AMOUNT">
           <block type="variables_get" id="IuC0}Qm@Z=mX]d}3?w(3">
-            <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Entrada Inicial</field>
+            <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Initial Stake</field>
           </block>
         </value>
         <value name="PREDICTION">
@@ -166,7 +166,7 @@
             <field name="NUM">1</field>
           </shadow>
           <block type="variables_get" id="+:eFWwjF^q~1G=PBd)#q">
-            <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Deixar em 8 ou 9</field>
+            <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
           </block>
         </value>
       </block>
@@ -219,10 +219,10 @@
                 </value>
                 <next>
                   <block type="variables_set" id="$qa*:ge{6Bl[W~fx545#">
-                    <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Entrada Inicial</field>
+                    <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Initial Stake</field>
                     <value name="VALUE">
                       <block type="variables_get" id="Gkvu^[]/3G:cW|lCmedw">
-                        <field name="VAR" id="(obU$~2J]hr/k0`hgX8/">ENTRADA AO VENCER</field>
+                        <field name="VAR" id="(obU$~2J]hr/k0`hgX8/">STAKE ON WIN</field>
                       </block>
                     </value>
                     <next>
@@ -235,7 +235,7 @@
                         </value>
                         <next>
                           <block type="variables_set" id="?wi*6(=={p4QrTE?E`2~">
-                            <field name="VAR" id="kQ+Ke(]*eQpM[qgfd~+g">Contador</field>
+                            <field name="VAR" id="kQ+Ke(]*eQpM[qgfd~+g">Counter</field>
                             <value name="VALUE">
                               <block type="math_number" id="Yq%a{YtZLKX!w;j1RXP?">
                                 <field name="NUM">0</field>
@@ -243,7 +243,7 @@
                             </value>
                             <next>
                               <block type="variables_set" id="6[t)pQa;ZT2W@-@9v[$u">
-                                <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Deixar em 8 ou 9</field>
+                                <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
                                 <value name="VALUE">
                                   <block type="math_random_int" id="qv4Jj{-.[X-m@Q{k75t2">
                                     <value name="FROM">
@@ -260,7 +260,7 @@
                                 </value>
                                 <next>
                                   <block type="variables_set" id="MQ=0$V5s(xkFcK*yxOA_">
-                                    <field name="VAR" id="rUPB[)tUi3we;byHr`7]">1 ou 2 segundos</field>
+                                    <field name="VAR" id="rUPB[)tUi3we;byHr`7]">1 or 2 seconds</field>
                                     <value name="VALUE">
                                       <block type="math_random_int" id="Td$2ATxd:~e([|ovPL4`">
                                         <value name="FROM">
@@ -338,7 +338,7 @@
                 </value>
                 <next>
                   <block type="math_change" id="0c)nVxs6Nrk$QLnPk)w:">
-                    <field name="VAR" id="kQ+Ke(]*eQpM[qgfd~+g">Contador</field>
+                    <field name="VAR" id="kQ+Ke(]*eQpM[qgfd~+g">Counter</field>
                     <value name="DELTA">
                       <shadow type="math_number" id="*qO$Mp_db8_!D8g#XKBP">
                         <field name="NUM">1</field>
@@ -346,7 +346,7 @@
                     </value>
                     <next>
                       <block type="variables_set" id="2F,Ffs8?a5dKUilg%@i[">
-                        <field name="VAR" id="rUPB[)tUi3we;byHr`7]">1 ou 2 segundos</field>
+                        <field name="VAR" id="rUPB[)tUi3we;byHr`7]">1 or 2 seconds</field>
                         <value name="VALUE">
                           <block type="math_random_int" id="=*Y7qZ1%gUQe:wmSWW=0">
                             <value name="FROM">
@@ -363,7 +363,7 @@
                         </value>
                         <next>
                           <block type="variables_set" id="C?C4r`^,0v,D9e*(h^Iw">
-                            <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Deixar em 8 ou 9</field>
+                            <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
                             <value name="VALUE">
                               <block type="math_random_int" id="3otbegK/)$@Me?xBd-Xx">
                                 <value name="FROM">
@@ -385,12 +385,12 @@
                                     <field name="OP">GTE</field>
                                     <value name="A">
                                       <block type="variables_get" id="BS1Kb/,`O@y}{9Od4rV5">
-                                        <field name="VAR" id="kQ+Ke(]*eQpM[qgfd~+g">Contador</field>
+                                        <field name="VAR" id="kQ+Ke(]*eQpM[qgfd~+g">Counter</field>
                                       </block>
                                     </value>
                                     <value name="B">
                                       <block type="variables_get" id="@L`XIY~OfzFLV?E~`X~Q">
-                                        <field name="VAR" id="4+UcGJ_mE@7^Z8-d@JaJ">Número de loss ( Não Alterar )</field>
+                                        <field name="VAR" id="4+UcGJ_mE@7^Z8-d@JaJ">Number of losses ( Do Not Change )</field>
                                       </block>
                                     </value>
                                   </block>
@@ -442,7 +442,7 @@
                                             </value>
                                             <statement name="DO0">
                                               <block type="math_change" id="R7QtsoT2WFk`*MK0_fy*">
-                                                <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Entrada Inicial</field>
+                                                <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Initial Stake</field>
                                                 <value name="DELTA">
                                                   <shadow type="math_number" id="h(2BZh#T.]odF-bqQKcd">
                                                     <field name="NUM">1</field>
@@ -470,7 +470,7 @@
                                                         <field name="NUM">1</field>
                                                       </shadow>
                                                       <block type="variables_get" id="Z~)63Nf5@3llDqm$7(xT">
-                                                        <field name="VAR" id="MgsL8H;~`;r/^Tuh1)y=">Gale</field>
+                                                        <field name="VAR" id="MgsL8H;~`;r/^Tuh1)y=">Martingale</field>
                                                       </block>
                                                     </value>
                                                   </block>
@@ -540,7 +540,7 @@
                         </value>
                         <value name="B">
                           <block type="variables_get" id="7I/|[$VXtY-)v_kHw=1T">
-                            <field name="VAR" id="a?$LW}C4v+XX:Lc%6-OS">LUCRO DESEJADO</field>
+                            <field name="VAR" id="a?$LW}C4v+XX:Lc%6-OS">DESIRED PROFIT</field>
                           </block>
                         </value>
                       </block>
@@ -579,7 +579,7 @@
                                 </value>
                                 <value name="B">
                                   <block type="variables_get" id="3,3+c=7xscv63o!sg+|7">
-                                    <field name="VAR" id="FlX%77!9AMWGEu#,)Nme">Parar com perda de</field>
+                                    <field name="VAR" id="FlX%77!9AMWGEu#,)Nme">Stop at loss of</field>
                                   </block>
                                 </value>
                               </block>

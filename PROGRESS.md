@@ -581,3 +581,8 @@ Branch `feat/elite-recovery-conditions` (not on main; main auto-deploys). File: 
 - Still outside the repo: Netlify env vars GD_CLIENT_ID / GD_APP_ID / GD_API_KEY on the forwardtraders site (Google Drive), and the redirect URL registered on developers.deriv.com (and Google Cloud origins for Drive).
 - Manual Trader bundle still carries its own fallback login for dbbtradders.netlify.app (same as zenithtraders today); not changed.
 - Checked: registry/customization/free-bots validators pass; simulated host resolution and the oauth-token function for the new host (200, correct redirect_uri; wrong site id is refused). NOT checked: a real login, which needs the redirect URL registered on Deriv first.
+
+## Free Bot 7 (Over 1, Recovery Over 5/Under 4 Premium Bot): Portuguese -> English (2026-11-10)
+- File: `public/free-bots/uploads/apex-sentinel/d5-original-version.xml` (id d5-original-version). Only the NAMES of 9 variables changed (32 lines); the message strings were already English. Variable ids are unchanged, so the logic is identical (checked by parsing both XMLs: same structure once the names are mapped).
+- Deixar em 8 ou 9 -> Leave at 8 or 9 | Número de loss ( Não Alterar ) -> Number of losses ( Do Not Change ) | Entrada Inicial -> Initial Stake | Parar com perda de -> Stop at loss of | LUCRO DESEJADO -> DESIRED PROFIT | Contador -> Counter | ENTRADA AO VENCER -> STAKE ON WIN | 1 ou 2 segundos -> 1 or 2 seconds | Gale -> Martingale
+- Not checked: loading it in a live Bot Builder (no Blockly here). The Manual Trader's own bundled bot app has an unrelated copy of the Portuguese names; not touched.
