@@ -75,7 +75,10 @@ export function tradeWins(type: string, barrier: number | null, digit: number): 
 export function digitOfQuote(quote: unknown, pipSize?: number): number | null {
     const n = Number(quote);
     if (!Number.isFinite(n)) return null;
-    const text = Number.isInteger(pipSize) && (pipSize as number) >= 0 ? n.toFixed(pipSize) : String(quote);
+    const pip = Number(pipSize);
+    // pip_size is a decimal count (3); some feeds send the pip step (0.001). Both mean three decimals.
+    const decimals = pipSize !== undefined && Number.isFinite(pip) && pip >= 0 ? Math.min(20, pip > 0 && pip < 1 ? Math.round(-Math.log10(pip)) : Math.trunc(pip)) : null;
+    const text = decimals === null ? String(quote) : n.toFixed(decimals);
     const last = text.replace(/[^0-9]/g, '').slice(-1);
     return last === '' ? null : Number(last);
 }

@@ -7,6 +7,7 @@ import { useStore } from '@/hooks/useStore';
 import { contract_stages } from '@/constants/contract-stage';
 import { run_panel as run_panel_tabs } from '@/constants/run-panel';
 import { observer } from '@/external/bot-skeleton';
+import { readExecutionSpeed, SLOW_DELAY_MS } from '../execution-speed';
 import { isEngineKind, oracleScanner } from './oracle/oracle-engine';
 import {
   RECOVERY_TYPES, barrierRange, clampBarrier, defaultRecoveryBarrier, digitOfQuote, freshVh, needsBarrier,
@@ -56,6 +57,12 @@ const SCAN_HISTORY_COUNT = 100;
 const SCAN_TIMEOUT_MS = 15000;
 const SCAN_STEP_DELAY_MS = 180;
 const SCAN_SYMBOL_TIMEOUT_MS = 1200;
+// Deriv reports pip_size as a decimal count (3); some feeds give the pip step (0.001). Both mean three decimals.
+const pipDecimals = (pip) => {
+  const n = Number(pip);
+  if (!Number.isFinite(n) || n < 0) return 2;
+  return Math.min(20, Math.max(0, n > 0 && n < 1 ? Math.round(-Math.log10(n)) : Math.trunc(n)));
+};
 const VIRTUAL_ID_BASE = 9_000_000_000_000; // paper trades never share an id with a real contract
 const VIRTUAL_TIMEOUT_MS = 120_000;
 const alertSound = new Audio('/assets/media/announcement.mp3');
@@ -169,7 +176,8 @@ const Oracle = () => {
   const virtualOpenRef = useRef(null);   // the paper trade waiting for its tick(s)
   const virtualTimerRef = useRef(null);
   const virtualCountRef = useRef(0);
-  const vhOpeningRef = useRef(false);    // a Run with the hook on opens on paper until its first paper win
+  const speedGateRef = useRef(false);    // a Slow-mode wait before the next trade is already running
+  const lastTickEpochRef = useRef(null);
   const requestProposalRef = useRef(null);
   const tickSubsRef = useRef({ ws: null, symbols: new Set() });
 
@@ -191,7 +199,6 @@ const Oracle = () => {
     vhConfigRef.current = normalizeVh({ mode: vhMode, enterLosses: vhEnterLosses, returnWins: vhReturnWins, fixedCount: vhFixedCount });
     if (!useVirtualHook) {
       vhStateRef.current = freshVh();
-      vhOpeningRef.current = false;
       setPaperStats(p => (p.active ? { ...p, active: false } : p));
     }
   }, [useVirtualHook, vhMode, vhEnterLosses, vhReturnWins, vhFixedCount]);
@@ -486,12 +493,14 @@ const Oracle = () => {
       symbol: market,
       type: plan.type,
       barrier: plan.barrier,
-      // Like a real contract: the first tick after the purchase is the entry, the exit is `duration` ticks after it.
-      remaining: Math.max(1, parseInt(duration, 10) || 1) + 1,
+      // Same rule as the bot builder's virtual trades: the first tick after the purchase is tick 1 (also for a one-tick
+      // contract), and the trade settles on tick `duration`.
+      remaining: Math.max(1, parseInt(duration, 10) || 1),
       entry: null,
       recovery: plan.recovery,
       row: null,
     };
+    lastTickEpochRef.current = null;
     virtualOpenRef.current.row = {
       contract_id: id,
       display_name: symbolNames[market] || market,
@@ -523,7 +532,7 @@ const Oracle = () => {
     }, VIRTUAL_TIMEOUT_MS);
   }, [client?.currency, duration, pushPaper]);
 
-  const requestProposal = useCallback(() => {
+  const requestProposal = useCallback((opts) => {
     if (!isRunningRef.current) return;
 
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -547,6 +556,21 @@ const Oracle = () => {
     }
 
     if (virtualOpenRef.current) return; // a paper trade is still waiting for its tick
+
+    // The bottom bar's Execution switch: Fast buys at once, Slow waits before each purchase. Real and paper trades both obey it.
+    if (!(opts && opts.skipDelay === true)) {
+      const delay = readExecutionSpeed() === "slow" ? SLOW_DELAY_MS : 0;
+      if (delay) {
+        if (!speedGateRef.current) {
+          speedGateRef.current = true;
+          window.setTimeout(() => {
+            speedGateRef.current = false;
+            if (isRunningRef.current) requestProposalRef.current?.({ skipDelay: true });
+          }, delay);
+        }
+        return;
+      }
+    }
 
     const plan = chooseTrade();
     if (vhOnRef.current && vhStateRef.current.virtual && isEngineKind(tradeTypeRef.current)) {
@@ -661,16 +685,18 @@ const Oracle = () => {
     if (!v || !tick || tick.symbol !== v.symbol) return;
     const digit = digitOfQuote(tick.quote, tick.pip_size);
     if (digit === null) return;
-    const spot = Number.isInteger(tick.pip_size) ? Number(tick.quote).toFixed(tick.pip_size) : String(tick.quote);
+    if (tick.epoch && tick.epoch === lastTickEpochRef.current) return; // the same tick twice counts once
+    lastTickEpochRef.current = tick.epoch;
+    const spot = Number.isFinite(Number(tick.pip_size)) ? Number(tick.quote).toFixed(pipDecimals(tick.pip_size)) : String(tick.quote);
     v.remaining -= 1;
     if (v.entry === null) {
-      // First tick after the "purchase": the entry spot, shown straight away like a real contract's.
       v.entry = spot;
-      v.row = { ...v.row, entry_spot: spot, entry_tick_time: Math.floor(Date.now() / 1000) };
-      pushPaper(v.row);
+      v.row = { ...v.row, entry_spot: spot, entry_tick_time: tick.epoch };
+    }
+    if (v.remaining > 0) {
+      pushPaper(v.row); // still open: show the entry spot
       return;
     }
-    if (v.remaining > 0) return;
 
     virtualOpenRef.current = null;
     if (virtualTimerRef.current) {
@@ -685,27 +711,14 @@ const Oracle = () => {
       status: won ? "won" : "lost",
       virtual_result: won ? "win" : "loss",
       exit_spot: spot,
-      exit_tick_time: Math.floor(Date.now() / 1000),
+      exit_tick_time: tick.epoch,
       transaction_ids: { buy: v.id, sell: v.id },
     });
     logMessage(`Virtual ${v.type}${v.barrier !== null ? ` ${v.barrier}` : ""} ${won ? "won" : "lost"} on paper (digit ${digit}). No money moved.`);
 
-    let nextState;
-    if (vhOpeningRef.current) {
-      // Opening spell (as in the bot builder's Virtual Hook): paper until the first paper win, then real money.
-      if (won) {
-        vhOpeningRef.current = false;
-        nextState = freshVh();
-        logMessage("Opening paper trade won. Real trading starts now.");
-      } else {
-        nextState = { ...vhStateRef.current, virtualDone: vhStateRef.current.virtualDone + 1 };
-        logMessage("Opening paper trade lost. Staying on paper until one wins.");
-      }
-    } else {
-      const step = vhAfterVirtual(vhStateRef.current, won, vhConfigRef.current);
-      nextState = step.state;
-      if (step.event === "returned") logMessage("Virtual Hook: the paper trades did it. Back to real money.");
-    }
+    const step = vhAfterVirtual(vhStateRef.current, won, vhConfigRef.current);
+    const nextState = step.state;
+    if (step.event === "returned") logMessage("Virtual Hook: the paper trades did it. Back to real money.");
     vhStateRef.current = nextState;
     setPaperStats(p => ({ trades: p.trades + 1, wins: p.wins + (won ? 1 : 0), active: nextState.virtual }));
 
@@ -1181,9 +1194,9 @@ const Oracle = () => {
     clearContractTracking();
     lastTradeWasLossRef.current = false;
     realLossStreakRef.current = 0;
-    // With the Virtual Hook on, every Run opens on paper and goes real after its first paper win.
+    speedGateRef.current = false;
+    // With the Virtual Hook on, every Run opens on paper (as the bot builder's Virtual Hook does) and goes real by the hook's own rule.
     const opensOnPaper = vhOnRef.current && isEngineKind(tradeTypeRef.current);
-    vhOpeningRef.current = opensOnPaper;
     vhStateRef.current = opensOnPaper ? { virtual: true, realLosses: 0, virtualWins: 0, virtualDone: 0 } : freshVh();
     virtualOpenRef.current = null;
     if (virtualTimerRef.current) {

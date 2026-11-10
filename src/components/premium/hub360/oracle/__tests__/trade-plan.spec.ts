@@ -49,6 +49,8 @@ describe('paper settlement', () => {
         expect(digitOfQuote(1234.5, 2)).toBe(0);
         expect(digitOfQuote(1234.57, 2)).toBe(7);
         expect(digitOfQuote('987.123', undefined)).toBe(3);
+        expect(digitOfQuote(6022.69, 3)).toBe(0);
+        expect(digitOfQuote(6022.69, 0.001)).toBe(0);
         expect(digitOfQuote('abc', 2)).toBeNull();
     });
 });
