@@ -85,6 +85,25 @@
           "manifest_url": "/free-bots/domains/apex-sentinel.json",
           "base_url": "/free-bots"
         }
+      },
+      {
+        "id": "forward-traders",
+        "hosts": [
+          "forwardtraders.netlify.app"
+        ],
+        "display_domain": "Forward Traders",
+        "website_url": "https://forwardtraders.netlify.app",
+        "redirect_uri": "https://forwardtraders.netlify.app/callback",
+        "client_id": "34BIr72thLXMJHaL9PQxN",
+        "scopes": [
+          "trade"
+        ],
+        "environment": "production",
+        "bot_library": {
+          "title": "Free Bots",
+          "manifest_url": "/free-bots/domains/apex-sentinel.json",
+          "base_url": "/free-bots"
+        }
       }
     ]
   },

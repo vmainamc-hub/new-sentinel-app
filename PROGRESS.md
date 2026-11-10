@@ -573,3 +573,11 @@ Branch `feat/elite-recovery-conditions` (not on main; main auto-deploys). File: 
 - NOTE: every site in brand.config.json (apex-sentinel x3 and zenith-traders) points at this one manifest, so all of them show the new list. To give one site its own list, copy the manifest to `domains/<site-id>.json` and point that site's `bot_library.manifest_url` at it.
 - Checked: `node scripts/validate-free-bots.js` passes (90 assets); diff by id shows exactly 9 renamed, 15 removed, 81 untouched.
 - [x] Free Bots renumbered 1-90 in display order (name prefix and `priority` both updated; ids, files and order unchanged). Earlier numbers in this log (bot 5, 18, ...) refer to the OLD numbering. Old -> new for the ones that were renamed: 1->1, 5->3, 9->5, 10->6, 13->7, 15->8, 17->10, 18->11, 28->13.
+
+## forwardtraders.netlify.app registered (2026-11-10)
+- [x] `brand.config.json`: new site `forward-traders` (host forwardtraders.netlify.app, redirect https://forwardtraders.netlify.app/callback). It reuses the existing Deriv OAuth client_id 34BIr72thLXMJHaL9PQxN; if a NEW Deriv OAuth app is created for this URL, replace `client_id` in this entry with the new one.
+- [x] `public/site-config/domains/forward-traders.json`: copy of zenith-traders (same tabs and colours). Without this file the site would fall back to the 13 default tabs.
+- Same Free Bots list as the other sites (shared manifest).
+- Still outside the repo: Netlify env vars GD_CLIENT_ID / GD_APP_ID / GD_API_KEY on the forwardtraders site (Google Drive), and the redirect URL registered on developers.deriv.com (and Google Cloud origins for Drive).
+- Manual Trader bundle still carries its own fallback login for dbbtradders.netlify.app (same as zenithtraders today); not changed.
+- Checked: registry/customization/free-bots validators pass; simulated host resolution and the oauth-token function for the new host (200, correct redirect_uri; wrong site id is refused). NOT checked: a real login, which needs the redirect URL registered on Deriv first.
