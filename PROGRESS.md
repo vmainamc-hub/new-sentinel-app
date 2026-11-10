@@ -565,3 +565,10 @@ Branch `feat/elite-recovery-conditions` (not on main; main auto-deploys). File: 
 - [x] Even/Odd always answers: STRONG when all six rules hold, else BEST AVAILABLE with a match % (half rules passed, half board strength) and "n of 6 rules". Under 4 of 6 shows a weak-board warning.
 - [x] Layout: card is 460 px wide (was 1240), Scan and Run sit side by side directly under the tabs so the run panel cannot cover Run; subtitle and the long check list are gone (the checks are under "Why this one").
 - Checked: 29 oracle tests pass under bun (11 new: risk, flagging, stability, assessment timing, Even/Odd best available); tsc shows no errors in oracle/; layout rendered in Chromium from the real Oracle.css. NOT done: `npm run build`, eslint/prettier (not installed here), a live run on Deriv. Loss-risk thresholds are untuned.
+
+## Free Bots: renames and removals (2026-11-10)
+- [x] Edited `public/free-bots/domains/apex-sentinel.json` (the manifest zenith-traders uses) and its identical copy `public/free-bots/bots.json`. 105 -> 90 bots, `count` updated.
+- Renamed (number prefix kept, ids and files unchanged so loaders that look bots up by id keep working): 1, 5, 9, 10, 13, 15, 17, 18, 28.
+- Removed from the list: 2, 3, 7, 8, 11, 12, 14, 19, 20, 21, 22, 23, 24, 25, 27. Their XML files are still in `public/free-bots/uploads/` (only the list entries went). Remaining bots keep their original numbers, so the list has gaps.
+- NOTE: every site in brand.config.json (apex-sentinel x3 and zenith-traders) points at this one manifest, so all of them show the new list. To give one site its own list, copy the manifest to `domains/<site-id>.json` and point that site's `bot_library.manifest_url` at it.
+- Checked: `node scripts/validate-free-bots.js` passes (90 assets); diff by id shows exactly 9 renamed, 15 removed, 81 untouched.
