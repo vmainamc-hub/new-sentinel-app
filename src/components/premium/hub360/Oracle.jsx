@@ -8,6 +8,10 @@ import { contract_stages } from '@/constants/contract-stage';
 import { run_panel as run_panel_tabs } from '@/constants/run-panel';
 import { observer } from '@/external/bot-skeleton';
 import { isEngineKind, oracleScanner } from './oracle/oracle-engine';
+import {
+  RECOVERY_TYPES, barrierRange, clampBarrier, defaultRecoveryBarrier, digitOfQuote, freshVh, needsBarrier,
+  nextTrade, normalizeVh, tradeWins, vhAfterReal, vhAfterVirtual,
+} from './oracle/trade-plan';
 
 import { FaPlay, FaStop } from "react-icons/fa";
 
@@ -52,6 +56,8 @@ const SCAN_HISTORY_COUNT = 100;
 const SCAN_TIMEOUT_MS = 15000;
 const SCAN_STEP_DELAY_MS = 180;
 const SCAN_SYMBOL_TIMEOUT_MS = 1200;
+const VIRTUAL_ID_BASE = 9_000_000_000_000; // paper trades never share an id with a real contract
+const VIRTUAL_TIMEOUT_MS = 120_000;
 const alertSound = new Audio('/assets/media/announcement.mp3');
 
 const formatContractSpot = value => {
@@ -105,6 +111,17 @@ const Oracle = () => {
   const [martingaleMultiplier, setMartingaleMultiplier] = useState("2.1");
   const [predictionDigit, setPredictionDigit] = useState("7");
 
+  // Recovery contract after a loss (Over/Under) and Sentinel's Virtual Hook (Even/Odd, Over/Under)
+  const [useRecovery, setUseRecovery] = useState(false);
+  const [recoveryType, setRecoveryType] = useState("OVER");
+  const [recoveryBarrier, setRecoveryBarrier] = useState("3");
+  const [useVirtualHook, setUseVirtualHook] = useState(false);
+  const [vhMode, setVhMode] = useState("STREAK");
+  const [vhEnterLosses, setVhEnterLosses] = useState("2");
+  const [vhReturnWins, setVhReturnWins] = useState("2");
+  const [vhFixedCount, setVhFixedCount] = useState("3");
+  const [paperStats, setPaperStats] = useState({ trades: 0, wins: 0, active: false });
+
   // ------------------ BOT STATE ------------------
   const [isRunning, setIsRunning] = useState(false);
   const [, setLogs] = useState([]);
@@ -144,6 +161,16 @@ const Oracle = () => {
   const stopLossRef = useRef(stopLoss);
   const martingaleMultiplierRef = useRef(martingaleMultiplier);
   const lastTradeWasLossRef = useRef(false);
+  const recoveryRef = useRef({ enabled: false, type: "OVER", barrier: 3 });
+  const vhOnRef = useRef(false);
+  const vhConfigRef = useRef(normalizeVh({}));
+  const vhStateRef = useRef(freshVh());
+  const realLossStreakRef = useRef(0);   // real losses in a row; paper results never change it
+  const virtualOpenRef = useRef(null);   // the paper trade waiting for its tick(s)
+  const virtualTimerRef = useRef(null);
+  const virtualCountRef = useRef(0);
+  const requestProposalRef = useRef(null);
+  const tickSubsRef = useRef({ ws: null, symbols: new Set() });
 
   // ------------------ SYNC REFS ------------------
   useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
@@ -155,6 +182,17 @@ const Oracle = () => {
   useEffect(() => { targetProfitRef.current = targetProfit; }, [targetProfit]);
   useEffect(() => { stopLossRef.current = stopLoss; }, [stopLoss]);
   useEffect(() => { martingaleMultiplierRef.current = martingaleMultiplier; }, [martingaleMultiplier]);
+  useEffect(() => {
+    recoveryRef.current = { enabled: useRecovery, type: recoveryType, barrier: clampBarrier(recoveryType, recoveryBarrier) };
+  }, [useRecovery, recoveryType, recoveryBarrier]);
+  useEffect(() => {
+    vhOnRef.current = useVirtualHook;
+    vhConfigRef.current = normalizeVh({ mode: vhMode, enterLosses: vhEnterLosses, returnWins: vhReturnWins, fixedCount: vhFixedCount });
+    if (!useVirtualHook) {
+      vhStateRef.current = freshVh();
+      setPaperStats(p => (p.active ? { ...p, active: false } : p));
+    }
+  }, [useVirtualHook, vhMode, vhEnterLosses, vhReturnWins, vhFixedCount]);
   useEffect(() => {
     run_panel?.setIsRunning?.(isRunning);
     if (!isRunning && !run_panel?.has_open_contract) {
@@ -401,6 +439,84 @@ const Oracle = () => {
 
   
   // NOTE: requestProposal now uses symbolRef.current and contractTypeRef.current
+  // What the next trade is: the scanned contract, or the recovery contract after a real loss (Over/Under tab).
+  const chooseTrade = useCallback(() => {
+    const kind = tradeTypeRef.current;
+    const type = contractTypeRef.current;
+    const primaryBarrier = BARRIER_CONTRACT_TYPES.includes(type) ? parseInt(predictionDigitRef.current, 10) : null;
+    if (!isEngineKind(kind)) return { type, barrier: primaryBarrier, recovery: false };
+    return nextTrade({ kind, type, barrier: primaryBarrier, recovery: recoveryRef.current, realLossStreak: realLossStreakRef.current });
+  }, []);
+
+  // Paper trades go to the Transactions panel only, flagged virtual: never counted in the real totals, Run Panel or limits.
+  const pushPaper = useCallback((data) => {
+    try {
+      transactions?.pushTransaction?.({ ...data, is_virtual_hook: 1, run_id: run_panel?.run_id });
+    } catch (error) {
+      console.debug("Paper trade row skipped.", error);
+    }
+  }, [transactions, run_panel]);
+
+  const releaseTicks = useCallback(() => {
+    const subs = tickSubsRef.current;
+    if (subs.ws && subs.ws.readyState === WebSocket.OPEN && subs.symbols.size) {
+      subs.ws.send(JSON.stringify({ forget_all: "ticks" }));
+    }
+    tickSubsRef.current = { ws: null, symbols: new Set() };
+  }, []);
+
+  // A paper trade: the same pick as a real one, nothing bought. It settles on the market's real ticks.
+  const startVirtualTrade = useCallback((plan) => {
+    const ws = wsRef.current;
+    const market = symbolRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN || !market || virtualOpenRef.current) return;
+
+    if (tickSubsRef.current.ws !== ws) tickSubsRef.current = { ws, symbols: new Set() };
+    if (!tickSubsRef.current.symbols.has(market)) {
+      ws.send(JSON.stringify({ ticks: market, subscribe: 1 }));
+      tickSubsRef.current.symbols.add(market);
+    }
+
+    const id = VIRTUAL_ID_BASE + (virtualCountRef.current += 1);
+    const derivType = getDerivContractType(plan.type);
+    virtualOpenRef.current = {
+      id,
+      symbol: market,
+      type: plan.type,
+      barrier: plan.barrier,
+      remaining: Math.max(1, parseInt(duration, 10) || 1),
+      recovery: plan.recovery,
+    };
+    pushPaper({
+      contract_id: id,
+      display_name: symbolNames[market] || market,
+      underlying_symbol: market,
+      shortcode: `ORACLE_PAPER_${derivType}_${market}`,
+      contract_type: derivType,
+      currency: client?.currency || "USD",
+      date_start: Math.floor(Date.now() / 1000),
+      is_sold: 0,
+      is_expired: 0,
+      status: "open",
+      buy_price: 0,
+      sell_price: 0,
+      payout: 0,
+      bid_price: 0,
+      profit: 0,
+      barrier: plan.barrier !== null ? String(plan.barrier) : undefined,
+      transaction_ids: { buy: id },
+    });
+    logMessage(`Virtual ${plan.type}${plan.barrier !== null ? ` ${plan.barrier}` : ""}${plan.recovery ? " (recovery)" : ""} on ${symbolNames[market] || market}: paper trade, no money staked.`);
+
+    if (virtualTimerRef.current) clearTimeout(virtualTimerRef.current);
+    virtualTimerRef.current = window.setTimeout(() => {
+      if (virtualOpenRef.current?.id !== id) return;
+      virtualOpenRef.current = null;
+      logMessage("A virtual trade never settled (no ticks arrived); it was dropped.");
+      if (isRunningRef.current) requestProposalRef.current?.();
+    }, VIRTUAL_TIMEOUT_MS);
+  }, [client?.currency, duration, pushPaper]);
+
   const requestProposal = useCallback(() => {
     if (!isRunningRef.current) return;
 
@@ -424,13 +540,19 @@ const Oracle = () => {
       return;
     }
 
-    const activeType = contractTypeRef.current;
+    if (virtualOpenRef.current) return; // a paper trade is still waiting for its tick
+
+    const plan = chooseTrade();
+    if (vhOnRef.current && vhStateRef.current.virtual && isEngineKind(tradeTypeRef.current)) {
+      startVirtualTrade(plan);
+      return;
+    }
+
+    const activeType = plan.type;
     const derivContractType = getDerivContractType(activeType);
     const parsedDuration = Math.max(1, parseInt(duration, 10) || 1);
     const parsedStake = Number(currentStakeRef.current).toFixed(2);
-    const barrier = BARRIER_CONTRACT_TYPES.includes(activeType)
-      ? parseInt(predictionDigitRef.current, 10)
-      : undefined;
+    const barrier = plan.barrier !== null ? plan.barrier : undefined;
     const type = activeType;
     const proposal = {
       proposal: 1,
@@ -457,7 +579,8 @@ const Oracle = () => {
 
     logMessage(`📩 Requesting proposal for ${type}${barrier !== undefined ? ` | Prediction: ${barrier}` : ""} on ${proposal.symbol}`);
     wsRef.current.send(JSON.stringify(proposal));
-  }, [client?.currency, duration, run_panel]);
+  }, [chooseTrade, client?.currency, duration, run_panel, startVirtualTrade]);
+  requestProposalRef.current = requestProposal;
 
   const publishNativeContract = useCallback((contractData) => {
     if (!transactions || !summary_card) return;
@@ -501,6 +624,7 @@ const Oracle = () => {
     if (!preserveOpenContract) {
       clearContractTracking();
     }
+    if (!virtualOpenRef.current) releaseTicks(); // a paper trade in flight still settles, then the ticks are released
 
     run_panel?.setIsRunning?.(false);
     run_panel?.toggleDrawer?.(true);
@@ -515,7 +639,7 @@ const Oracle = () => {
     }
 
     logMessage(reason);
-  }, [clearContractTracking, run_panel]);
+  }, [clearContractTracking, releaseTicks, run_panel]);
 
   const handleStop = useCallback(() => {
     const preserveOpenContract = activeContractsRef.current.size > 0;
@@ -526,6 +650,54 @@ const Oracle = () => {
     );
   }, [stopTradingBotNative]);
 
+  const onVirtualTick = useCallback((tick) => {
+    const v = virtualOpenRef.current;
+    if (!v || !tick || tick.symbol !== v.symbol) return;
+    const digit = digitOfQuote(tick.quote, tick.pip_size);
+    if (digit === null) return;
+    v.remaining -= 1;
+    if (v.remaining > 0) return;
+
+    virtualOpenRef.current = null;
+    if (virtualTimerRef.current) {
+      clearTimeout(virtualTimerRef.current);
+      virtualTimerRef.current = null;
+    }
+    const won = tradeWins(v.type, v.barrier, digit);
+    pushPaper({
+      contract_id: v.id,
+      display_name: symbolNames[v.symbol] || v.symbol,
+      underlying_symbol: v.symbol,
+      contract_type: getDerivContractType(v.type),
+      currency: client?.currency || "USD",
+      is_sold: 1,
+      is_expired: 1,
+      status: won ? "won" : "lost",
+      virtual_result: won ? "win" : "loss",
+      buy_price: 0,
+      sell_price: 0,
+      payout: 0,
+      bid_price: 0,
+      profit: 0,
+      barrier: v.barrier !== null ? String(v.barrier) : undefined,
+      exit_spot: String(digit),
+      exit_tick_time: Math.floor(Date.now() / 1000),
+      transaction_ids: { buy: v.id, sell: v.id },
+    });
+    logMessage(`Virtual ${v.type}${v.barrier !== null ? ` ${v.barrier}` : ""} ${won ? "won" : "lost"} on paper (digit ${digit}). No money moved.`);
+
+    const step = vhAfterVirtual(vhStateRef.current, won, vhConfigRef.current);
+    vhStateRef.current = step.state;
+    setPaperStats(p => ({ trades: p.trades + 1, wins: p.wins + (won ? 1 : 0), active: step.state.virtual }));
+    if (step.event === "returned") logMessage("Virtual Hook: the paper trades did it. Back to real money.");
+
+    if (isRunningRef.current) {
+      window.setTimeout(() => requestProposalRef.current?.(), 0);
+    } else {
+      releaseTicks();
+    }
+  }, [client?.currency, pushPaper, releaseTicks]);
+
   const handleTradeSequence = useCallback((profit) => {
     if (useMartingaleRef.current) {
       currentStakeRef.current =
@@ -535,6 +707,17 @@ const Oracle = () => {
     }
 
     lastTradeWasLossRef.current = profit <= 0;
+
+    const realWin = profit > 0;
+    realLossStreakRef.current = realWin ? 0 : realLossStreakRef.current + 1;
+    if (vhOnRef.current && isEngineKind(tradeTypeRef.current)) {
+      const step = vhAfterReal(vhStateRef.current, realWin, vhConfigRef.current);
+      vhStateRef.current = step.state;
+      if (step.event === "entered") {
+        logMessage(`Virtual Hook: ${vhConfigRef.current.enterLosses} real loss(es) in a row. Trading on paper until it wins again.`);
+        setPaperStats(p => ({ ...p, active: true }));
+      }
+    }
 
     if (!isRunningRef.current) {
       if (activeContractsRef.current.size === 0) {
@@ -560,6 +743,11 @@ const Oracle = () => {
 
   const handleTradingSocketMessage = useCallback((event) => {
     const data = JSON.parse(event.data);
+
+    if (data.msg_type === "tick") {
+      onVirtualTick(data.tick);
+      return;
+    }
 
     if (data.msg_type === "authorize") {
       isAuthorizedRef.current = true;
@@ -847,6 +1035,7 @@ const Oracle = () => {
     client?.currency,
     duration,
     handleTradeSequence,
+    onVirtualTick,
     publishNativeContract,
     publishNativeError,
     publishNativeResult,
@@ -973,6 +1162,14 @@ const Oracle = () => {
 
     clearContractTracking();
     lastTradeWasLossRef.current = false;
+    realLossStreakRef.current = 0;
+    vhStateRef.current = freshVh();
+    virtualOpenRef.current = null;
+    if (virtualTimerRef.current) {
+      clearTimeout(virtualTimerRef.current);
+      virtualTimerRef.current = null;
+    }
+    setPaperStats({ trades: 0, wins: 0, active: false });
     baseStakeRef.current = parseFloat(initialStake) || 0;
     currentStakeRef.current = parseFloat(initialStake) || 0;
     setProposalError("");
@@ -1740,6 +1937,92 @@ const syncSignalToBot = (signal) => {
               />
             </label>
           </div>
+
+          {tradeType === 'OVER/UNDER' && (
+            <div className="or-block">
+              <label className="or-toggle">
+                <input type="checkbox" aria-label="Recovery" checked={useRecovery} onChange={(e) => setUseRecovery(e.target.checked)} />
+                <span className="or-toggle-track" />
+              </label>
+              <div className={`or-block-body ${useRecovery ? '' : 'or-block-body--off'}`}>
+                <strong className="or-block-title">Recovery</strong>
+                <span className="or-block-hint">After a loss, trade this instead until a trade wins (e.g. lose Over 2, recover Over 3).</span>
+                <div className="or-block-fields">
+                  <label>
+                    Recovery contract
+                    <select
+                      value={recoveryType}
+                      disabled={!useRecovery}
+                      onChange={(e) => {
+                        setRecoveryType(e.target.value);
+                        setRecoveryBarrier(String(defaultRecoveryBarrier(e.target.value)));
+                      }}
+                    >
+                      {RECOVERY_TYPES.map(type => (
+                        <option key={type} value={type}>{type.charAt(0) + type.slice(1).toLowerCase()}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {needsBarrier(recoveryType) && (
+                    <label>
+                      Digit
+                      <input
+                        type="number"
+                        min={barrierRange(recoveryType)[0]}
+                        max={barrierRange(recoveryType)[1]}
+                        value={recoveryBarrier}
+                        disabled={!useRecovery}
+                        onChange={(e) => setRecoveryBarrier(e.target.value)}
+                        onBlur={() => setRecoveryBarrier(String(clampBarrier(recoveryType, recoveryBarrier)))}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isEngineTab && (
+            <div className="or-block">
+              <label className="or-toggle">
+                <input type="checkbox" aria-label="Virtual hook" checked={useVirtualHook} onChange={(e) => setUseVirtualHook(e.target.checked)} />
+                <span className="or-toggle-track" />
+              </label>
+              <div className={`or-block-body ${useVirtualHook ? '' : 'or-block-body--off'}`}>
+                <strong className="or-block-title">Virtual hook</strong>
+                <span className="or-block-hint">After real losses, trade on paper (no stake) and go back to real money once it wins again.</span>
+                <div className="or-block-fields">
+                  <label>
+                    Mode
+                    <select value={vhMode} disabled={!useVirtualHook} onChange={(e) => setVhMode(e.target.value)}>
+                      <option value="STREAK">Until paper wins</option>
+                      <option value="FIXED">Fixed paper trades</option>
+                    </select>
+                  </label>
+                  <label>
+                    Go virtual after losses
+                    <input type="number" min="1" max="10" value={vhEnterLosses} disabled={!useVirtualHook} onChange={(e) => setVhEnterLosses(e.target.value)} />
+                  </label>
+                  {vhMode === 'STREAK' ? (
+                    <label>
+                      Back to real after wins
+                      <input type="number" min="1" max="10" value={vhReturnWins} disabled={!useVirtualHook} onChange={(e) => setVhReturnWins(e.target.value)} />
+                    </label>
+                  ) : (
+                    <label>
+                      Paper trades
+                      <input type="number" min="1" max="20" value={vhFixedCount} disabled={!useVirtualHook} onChange={(e) => setVhFixedCount(e.target.value)} />
+                    </label>
+                  )}
+                </div>
+                {useVirtualHook && (isRunning || paperStats.trades > 0) && (
+                  <span className={`or-paper ${paperStats.active ? 'or-paper--on' : ''}`}>
+                    {paperStats.active ? 'Trading on paper now' : 'Trading real money'} · paper {paperStats.wins}/{paperStats.trades} won
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {proposalError && (
