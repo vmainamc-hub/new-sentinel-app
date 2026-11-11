@@ -601,3 +601,10 @@ Branch `feat/elite-recovery-conditions` (not on main; main auto-deploys). File: 
 - Applied the user-supplied patch `overlord-advanced-over-under.patch` unchanged: new `src/components/premium/overlord-engine/` (engine, history, legacy, apex layers, 2 spec files) and edits to `hub360/Overlord.jsx` / `Overlord.css`.
 - Find Market now uses it for Over/Under only (deep 5000-tick history per market, then the engine); Even/Odd keeps the old scan. Optional checkbox lets the engine also pick side and barrier.
 - Checked: patch applied cleanly on main; its 20 tests pass under bun; Overlord.jsx transpiles. NOT checked: live behaviour in the browser, real Deriv history responses, or the earlier "arrow shows Over on an Under trade" report (not yet investigated).
+
+## Free Bot 7: recovery barriers set to Over 4 / Under 5 (2026-11-11)
+- User report: bot should trade Over 1, then recovery Over 4 and Under 5; trades looked wrong (Under placed, arrow showed Over).
+- Finding: the Transactions arrow/label is drawn straight from the contract_type Deriv returns for the bought contract (transaction.tsx -> TradeTypeIcon(contract.contract_type)), and Purchase/selectProposal buy exactly the type the bot asks for, so no display fault found in the app. The bot itself was the mismatch: recovery used a RANDOM barrier 5 or 6 for BOTH sides (after the 1st loss it bought OVER 5/6, after the 2nd+ it bought UNDER 5/6).
+- Fix (XML only, `d5-original-version.xml`): contract choice untouched; barrier now follows the contract: Over 1 first -> after 1st loss OVER 4 -> after the 2nd+ loss UNDER 5. Applies in the loss branch and the partial-win recovery branch; Win Prob for stake sizing uses the same barriers (0.5 each).
+- Checked: XML well-formed, validate-free-bots passes, simulated 40 runs x 3000 trades: only (OVER,1), (OVER,4), (UNDER,5) are ever bought; 0 recovery cycles net negative.
+- Manifest name still says "Over 5/Under 4" (not changed). Not checked live.

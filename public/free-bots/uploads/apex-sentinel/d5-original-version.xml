@@ -338,18 +338,9 @@
                                 <block type="variables_set" id="splitmart_098">
                                   <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
                                   <value name="VALUE">
-                                    <block type="math_random_int" id="splitmart_051">
-                                      <value name="FROM">
-                                        <shadow type="math_number" id="splitmart_052">
-                                          <field name="NUM">5</field>
-                                        </shadow>
-                                      </value>
-                                      <value name="TO">
-                                        <shadow type="math_number" id="splitmart_053">
-                                          <field name="NUM">6</field>
-                                        </shadow>
-                                      </value>
-                                    </block>
+                                    <block type="math_number" id="splitmart_l4b">
+<field name="NUM">4</field>
+</block>
                                   </value>
                                   <next>
                                     <block type="controls_if" id="splitmart_097">
@@ -400,7 +391,15 @@
                                         </block>
                                       </statement>
                                       <statement name="ELSE">
-                                        <block type="variables_set" id="splitmart_066">
+                                        <block type="variables_set" id="splitmart_u5_1">
+<field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
+<value name="VALUE">
+<block type="math_number" id="splitmart_u5n_1">
+<field name="NUM">5</field>
+</block>
+</value>
+<next>
+<block type="variables_set" id="splitmart_066">
                                           <field name="VAR" id="splitmart_var_win_prob">Win Prob</field>
                                           <value name="VALUE">
                                             <block type="math_arithmetic" id="splitmart_065">
@@ -418,6 +417,8 @@
                                             </block>
                                           </value>
                                         </block>
+</next>
+</block>
                                       </statement>
                                       <next>
                                         <block type="variables_set" id="splitmart_096">
@@ -768,18 +769,9 @@
                           <block type="variables_set" id="C?C4r`^,0v,D9e*(h^Iw">
                             <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
                             <value name="VALUE">
-                              <block type="math_random_int" id="3otbegK/)$@Me?xBd-Xx">
-                                <value name="FROM">
-                                  <shadow type="math_number" id="a]~g;M|PNXM%(1Bc4Ka1">
-                                    <field name="NUM">5</field>
-                                  </shadow>
-                                </value>
-                                <value name="TO">
-                                  <shadow type="math_number" id="^r$]Ju,t7W~JU^SmqmUg">
-                                    <field name="NUM">6</field>
-                                  </shadow>
-                                </value>
-                              </block>
+                              <block type="math_number" id="splitmart_l4a">
+<field name="NUM">4</field>
+</block>
                             </value>
                             <next>
                               <block type="controls_if" id="6L?zK,]Qws.xo?*(GemE">
@@ -892,7 +884,15 @@
                                                     </block>
                                                   </statement>
                                                   <statement name="ELSE">
-                                                    <block type="variables_set" id="splitmart_013">
+                                                    <block type="variables_set" id="splitmart_u5_2">
+<field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
+<value name="VALUE">
+<block type="math_number" id="splitmart_u5n_2">
+<field name="NUM">5</field>
+</block>
+</value>
+<next>
+<block type="variables_set" id="splitmart_013">
                                                       <field name="VAR" id="splitmart_var_win_prob">Win Prob</field>
                                                       <value name="VALUE">
                                                         <block type="math_arithmetic" id="splitmart_012">
@@ -910,6 +910,8 @@
                                                         </block>
                                                       </value>
                                                     </block>
+</next>
+</block>
                                                   </statement>
                                                   <next>
                                                     <block type="variables_set" id="splitmart_036">
