@@ -1206,7 +1206,10 @@ input::-webkit-inner-spin-button {
 }
 
 /* v2.3: manual market + Find Market */
-.sh-input-field.market-width { min-width: 150px; flex: 1 1 150px; }
+.sh-input-field.market-width {
+    min-width: 150px;
+    flex: 1 1 150px;
+}
 .ovl-find-market {
     display: flex;
     align-items: center;
@@ -1228,6 +1231,33 @@ input::-webkit-inner-spin-button {
     box-shadow: 0 8px 18px rgba(67, 56, 202, 0.3);
     cursor: pointer;
 }
-.ovl-find-btn.is-scanning { background: linear-gradient(135deg, #b45309, #d97706); }
-.ovl-find-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.sh-button-group .sh-bot-run, .sh-button-group .sh-bot-stop { flex: 1 1 100%; width: 100%; }
+.ovl-find-btn.is-scanning {
+    background: linear-gradient(135deg, #b45309, #d97706);
+}
+.ovl-find-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.sh-button-group .sh-bot-run,
+.sh-button-group .sh-bot-stop {
+    flex: 1 1 100%;
+    width: 100%;
+}
+
+.ovl-smart-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--ovl-text-soft, #60738d);
+    cursor: pointer;
+}
+
+.ovl-eng-reasons {
+    margin: 8px 0 0;
+    padding: 0 0 0 18px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--ovl-text-soft, #60738d);
+}

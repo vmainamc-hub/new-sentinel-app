@@ -596,3 +596,8 @@ Branch `feat/elite-recovery-conditions` (not on main; main auto-deploys). File: 
 - Checked: XML well-formed; validate-free-bots passes; ran the actual XML blocks in a Python interpreter over random digits (60 runs x 3000 trades, payout margin 2.5% and 4%): 0 recovery cycles ended below zero (old bot: 65% of cycles ended negative, avg -1.24 per cycle). Recovery Parts 5 and 8 behaved the same.
 - Cost: stakes in a long losing run get large (last part is a full martingale). Simulated peak stake median ~690 (p99 ~16,000) over 3000 trades with stake 1, because the simulation does NOT apply the Stop at loss of = 1000 limit.
 - Not checked: loading in a live Bot Builder / real Deriv payouts (Blockly not available here).
+
+## Overlord: advanced Over/Under Find Market engine applied from patch (2026-11-11)
+- Applied the user-supplied patch `overlord-advanced-over-under.patch` unchanged: new `src/components/premium/overlord-engine/` (engine, history, legacy, apex layers, 2 spec files) and edits to `hub360/Overlord.jsx` / `Overlord.css`.
+- Find Market now uses it for Over/Under only (deep 5000-tick history per market, then the engine); Even/Odd keeps the old scan. Optional checkbox lets the engine also pick side and barrier.
+- Checked: patch applied cleanly on main; its 20 tests pass under bun; Overlord.jsx transpiles. NOT checked: live behaviour in the browser, real Deriv history responses, or the earlier "arrow shows Over on an Under trade" report (not yet investigated).

@@ -1,13 +1,15 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { getHub360AuthContext, getHub360AuthenticatedUrl } from './auth360';
-import { useHub360Module } from './use-hub360-module';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Swal from 'sweetalert2';
-
-import { WS_SERVERS, isProduction } from '@/components/shared';
+import { isProduction, WS_SERVERS } from '@/components/shared';
 import { contract_stages } from '@/constants/contract-stage';
 import { run_panel as run_panel_tabs } from '@/constants/run-panel';
 import { observer } from '@/external/bot-skeleton';
 import { useStore } from '@/hooks/useStore';
+import { isTradableBarrier, scanOverlord } from '../overlord-engine/engine';
+import { fetchHistories } from '../overlord-engine/history';
+import { legacyPercentage } from '../overlord-engine/legacy';
+import { getHub360AuthContext, getHub360AuthenticatedUrl } from './auth360';
+import { useHub360Module } from './use-hub360-module';
 
 const volatilityList = [
     'R_10',
@@ -81,6 +83,7 @@ const Overlord = () => {
     const [analysisStarted, setAnalysisStarted] = useState(false);
     const [scannedHistory, setScannedHistory] = useState([]);
     const [strongestSignal, setStrongestSignal] = useState(null);
+    const [smartContract, setSmartContract] = useState(false); // Find Market may choose the side and barrier too
 
     const [symbol, setSymbol] = useState('1HZ10V'); // v2.3: a market is always selected, Find Market only suggests a better one
     const [contractType, setContractType] = useState('EVEN');
@@ -1365,6 +1368,93 @@ const Overlord = () => {
         setAnalysisStarted(false);
     };
 
+    // Advanced Over/Under Find Market: deep history for every market, then the harmonised engine
+    // (Overlord's original condition + Oracle's layers + Apex Sentinel's layers) picks one market.
+    const handleFindMarketEngine = async () => {
+        if (analysisStarted) {
+            scanRunIdRef.current = Date.now(); // stop: a newer id makes the running scan abandon its result
+            setAnalysisStarted(false);
+            return;
+        }
+        const side = tradeType;
+        const barrier = parseInt(predictionDigitRef.current, 10);
+        if (!smartContract && !isTradableBarrier(side, barrier)) {
+            showToast(
+                side === 'OVER' ? 'Over needs a prediction from 0 to 8' : 'Under needs a prediction from 1 to 9',
+                'warning'
+            );
+            return;
+        }
+
+        const scanRunId = Date.now();
+        scanRunIdRef.current = scanRunId;
+        const cancelled = () => scanRunIdRef.current !== scanRunId;
+        setAnalysisStarted(true);
+        setScannedHistory([]);
+        setStrongestSignal(null);
+        logMessage(
+            smartContract ? '🚀 Advanced scan: engine picks market, side and barrier...' : '🚀 Advanced scan...'
+        );
+
+        const fetched = await fetchHistories(SCAN_WS_URL, volatilityList, {
+            cancelled,
+            onResult: r => {
+                if (cancelled()) return;
+                const read = r.series ? legacyPercentage(r.series.digits, side, barrier) : null;
+                setScannedHistory(prev => [
+                    ...prev.filter(item => item.id !== r.symbol),
+                    { id: r.symbol, name: symbolNames[r.symbol], percentage: read, status: r.status },
+                ]);
+            },
+        });
+        if (cancelled()) return;
+
+        const series = {};
+        fetched.forEach(r => {
+            if (r.series) series[r.symbol] = r.series;
+        });
+        await new Promise(resolve => setTimeout(resolve, 0)); // let the progress card paint before the CPU-heavy part
+        if (cancelled()) return;
+
+        const scan = scanOverlord({
+            series,
+            symbols: volatilityList,
+            side,
+            barrier: Number.isFinite(barrier) ? barrier : 2,
+            mode: smartContract ? 'smart' : 'selected',
+        });
+
+        const best = scan.best;
+        if (best) {
+            setSymbol(best.symbol);
+            if (smartContract) {
+                setPredictionDigit(String(best.barrier));
+                predictionDigitRef.current = String(best.barrier);
+                setTradeType(best.side);
+            }
+            setContractType(best.side);
+            setStrongestSignal({
+                id: best.symbol,
+                name: symbolNames[best.symbol],
+                confidence: Number(best.legacyPct ?? 0).toFixed(1),
+                engine: best,
+                legacyOnly: scan.legacyOnly,
+            });
+            logMessage(`✅ ${best.tier}: ${symbolNames[best.symbol]} ${best.label} (score ${best.score})`);
+            try {
+                alertSound.play().catch(() => {});
+            } catch {}
+        } else {
+            logMessage('Scan incomplete: no market returned enough ticks. Try again.');
+        }
+        setAnalysisStarted(false);
+    };
+
+    const handleFindMarket = () => {
+        if (tradeType === 'OVER' || tradeType === 'UNDER') return handleFindMarketEngine();
+        return handleFetchSignalGuaranteed();
+    };
+
     const handleReset = () => {
         setResults([]);
         setWins(0);
@@ -1467,11 +1557,22 @@ const Overlord = () => {
                         <button
                             type='button'
                             className={analysisStarted ? 'ovl-find-btn is-scanning' : 'ovl-find-btn'}
-                            onClick={handleFetchSignalGuaranteed}
+                            onClick={handleFindMarket}
                             disabled={isRunning}
                         >
                             {analysisStarted ? 'SCANNING… TAP TO STOP' : 'FIND MARKET'}
                         </button>
+                        {(tradeType === 'OVER' || tradeType === 'UNDER') && (
+                            <label className='ovl-smart-toggle'>
+                                <input
+                                    type='checkbox'
+                                    checked={smartContract}
+                                    onChange={e => setSmartContract(e.target.checked)}
+                                    disabled={isRunning || analysisStarted}
+                                />
+                                <span>Let the engine also choose the side and barrier (Over 1-4 / Under 5-8)</span>
+                            </label>
+                        )}
                     </div>
                     {/* RECOVERY MODE UI SECTION */}
                     <div className='st-recovery-dashboard-row'>
@@ -1565,6 +1666,47 @@ const Overlord = () => {
                                 </div>
                             </div>
                         </div>
+                    ) : strongestSignal?.engine ? (
+                        <div className='sh-result-ui'>
+                            <div className='sh-result-main'>
+                                <div className='sh-result-info'>
+                                    <span className='sh-res-label'>
+                                        {
+                                            {
+                                                STRONG: 'PERFECT MARKET FOUND',
+                                                BEST: 'BEST MARKET AVAILABLE',
+                                                CAUTION: 'NO MARKET CLEARED, LEAST RISKY SHOWN',
+                                                LEGACY: 'MARKET FOUND (BASIC SCAN)',
+                                            }[strongestSignal.engine.tier]
+                                        }
+                                    </span>
+                                    <h3 className='sh-res-vol'>
+                                        {strongestSignal.name} · {strongestSignal.engine.label}
+                                    </h3>
+                                </div>
+                                <div className='sh-res-stat'>
+                                    <span className='sh-res-perc'>⚡ {strongestSignal.engine.score}</span>
+                                    <span className='sh-res-type'>
+                                        {strongestSignal.engine.agree}/{strongestSignal.engine.applied} CHECKS AGREE
+                                    </span>
+                                </div>
+                            </div>
+                            <ul className='ovl-eng-reasons'>
+                                {strongestSignal.engine.reasons.map((reason, i) => (
+                                    <li key={i}>{reason}</li>
+                                ))}
+                            </ul>
+                            <div className='sh-res-footer'>
+                                <span className='sh-res-status'>
+                                    {strongestSignal.engine.vetoed
+                                        ? '⚠️ A SAFETY CHECK OBJECTS'
+                                        : '🛡️ NO SAFETY CHECK OBJECTS'}
+                                </span>
+                                <span className='sh-res-timestamp'>
+                                    {strongestSignal.confidence}% OF LAST 50 TICKS WON
+                                </span>
+                            </div>
+                        </div>
                     ) : strongestSignal ? (
                         <div className='sh-result-ui'>
                             <div className='sh-result-main'>
@@ -1585,7 +1727,8 @@ const Overlord = () => {
                     ) : (
                         <div className='sh-standby-ui'>
                             <p>
-                                Trading on <span style={{ fontWeight: 800 }}>{symbolNames[symbol] || symbol}</span>. Run now or find another market.
+                                Trading on <span style={{ fontWeight: 800 }}>{symbolNames[symbol] || symbol}</span>. Run
+                                now or find another market.
                             </p>
                         </div>
                     )}
