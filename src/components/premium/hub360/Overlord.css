@@ -1261,3 +1261,10 @@ input::-webkit-inner-spin-button {
     line-height: 1.45;
     color: var(--ovl-text-soft, #60738d);
 }
+
+.ovl-auto-market {
+    display: flex;
+    align-items: center;
+    cursor: default;
+    font-weight: 700;
+}

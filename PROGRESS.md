@@ -608,3 +608,10 @@ Branch `feat/elite-recovery-conditions` (not on main; main auto-deploys). File: 
 - Fix (XML only, `d5-original-version.xml`): contract choice untouched; barrier now follows the contract: Over 1 first -> after 1st loss OVER 4 -> after the 2nd+ loss UNDER 5. Applies in the loss branch and the partial-win recovery branch; Win Prob for stake sizing uses the same barriers (0.5 each).
 - Checked: XML well-formed, validate-free-bots passes, simulated 40 runs x 3000 trades: only (OVER,1), (OVER,4), (UNDER,5) are ever bought; 0 recovery cycles net negative.
 - Manifest name still says "Over 5/Under 4" (not changed). Not checked live.
+
+## Overlord: "Any market" toggle + engines judge every candidate (2026-11-11)
+- `Overlord.jsx` (Over/Under only): new checkbox "Any market: the engines pick it for me". When on, the market dropdown is replaced by a read-only "engine picks" box, the button reads FIND ANY MARKET, and RUN scans and picks the market itself first (reuses a pick made less than 90 s ago). Setting is remembered per browser (localStorage, optional). The existing checkbox still lets the engine choose side and barrier too.
+- Run handler now reads symbol/contract from refs (set directly after a pick) so the first trade uses the picked market even though the pick happens in the same tick.
+- Slow walk-forward model engine now runs on EVERY candidate (selected mode: all 11 markets; smart mode: top 24) instead of top 6.
+- Measured on random 5000-tick data (like Deriv synthetics), 40 scans (Over 2, selected mode): best tier BEST 39 / STRONG 1; 69% of candidate readings hit a hard veto (signal-life/Kalman most often, then Apex edge, risk); pick equals the old lowest-share pick 0/40 and equals pure score order 88%; next-500-tick win rate engine 70.05% vs old rule 69.92% vs random market 70.17% (fair 70%): no measurable edge, as expected for random digits.
+- Not checked in a browser; Even/Odd, Rise/Fall, Matches/Differs still use the old scan.

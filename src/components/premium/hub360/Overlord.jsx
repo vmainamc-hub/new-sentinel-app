@@ -55,6 +55,7 @@ const getDerivContractType = type => CONTRACT_TYPE_MAP[type] || type;
 const DERIV_PUBLIC_WS_URL = isProduction() ? WS_SERVERS.PRODUCTION : WS_SERVERS.STAGING;
 const DERIV_OPTIONS_API_URL = DERIV_PUBLIC_WS_URL.replace(/ws\/public$/, '');
 const SCAN_WS_URL = DERIV_PUBLIC_WS_URL;
+const ENGINE_PICK_FRESH_MS = 90 * 1000; // a market picked less than this long ago is reused by Run
 const SCAN_TIMEOUT_MS = 6000;
 const SCAN_MAX_RETRIES = 3;
 
@@ -84,6 +85,23 @@ const Overlord = () => {
     const [scannedHistory, setScannedHistory] = useState([]);
     const [strongestSignal, setStrongestSignal] = useState(null);
     const [smartContract, setSmartContract] = useState(false); // Find Market may choose the side and barrier too
+    // Any market: the engines choose the market, nothing has to be selected first, and Run picks one by itself.
+    const [anyMarket, setAnyMarket] = useState(() => {
+        try {
+            return window.localStorage.getItem('overlord_any_market') === '1';
+        } catch {
+            return false;
+        }
+    });
+    const toggleAnyMarket = on => {
+        setAnyMarket(on);
+        try {
+            window.localStorage.setItem('overlord_any_market', on ? '1' : '0');
+        } catch {}
+    };
+    const lastEnginePickRef = useRef(0); // when the engines last picked a market
+    const scanBusyRef = useRef(false);
+    const runEngineScanRef = useRef(null);
 
     const [symbol, setSymbol] = useState('1HZ10V'); // v2.3: a market is always selected, Find Market only suggests a better one
     const [contractType, setContractType] = useState('EVEN');
@@ -1002,7 +1020,24 @@ const Overlord = () => {
             handleStop();
             return;
         }
-        if (!symbol) {
+        if (anyMarket && (tradeType === 'OVER' || tradeType === 'UNDER')) {
+            // Any market: the engines pick the market (and the side and barrier when that toggle is on) before the first trade.
+            if (scanBusyRef.current) return;
+            if (Date.now() - lastEnginePickRef.current > ENGINE_PICK_FRESH_MS) {
+                scanBusyRef.current = true;
+                let picked = null;
+                try {
+                    picked = await runEngineScanRef.current?.();
+                } finally {
+                    scanBusyRef.current = false;
+                }
+                if (!picked) {
+                    showToast('No market could be picked. Try again.', 'warning');
+                    return;
+                }
+            }
+        }
+        if (!symbolRef.current) {
             showToast('No Signal , Please Scan First', 'warning');
             return;
         }
@@ -1021,7 +1056,7 @@ const Overlord = () => {
         stopLossRef.current = parsedStopLoss.toString();
         totalProfitRef.current = 0;
         lastTradeWasLossRef.current = false; // Reset recovery on clean start
-        activeContractTypeRef.current = contractType;
+        activeContractTypeRef.current = contractTypeRef.current;
         contractMetaRef.current = {};
         lastProcessedContractIdRef.current = null;
         completedContractsRef.current.clear();
@@ -1075,6 +1110,8 @@ const Overlord = () => {
             run_panel?.setContractStage?.(contract_stages.NOT_RUNNING);
         }
     }, [
+        anyMarket,
+        tradeType,
         connectTradingSocket,
         contractType,
         getStoredAuthContext,
@@ -1376,6 +1413,11 @@ const Overlord = () => {
             setAnalysisStarted(false);
             return;
         }
+        await runEngineScan();
+    };
+
+    // Returns the engine's pick, or null (stopped, invalid input, or no market returned enough ticks).
+    const runEngineScan = async () => {
         const side = tradeType;
         const barrier = parseInt(predictionDigitRef.current, 10);
         if (!smartContract && !isTradableBarrier(side, barrier)) {
@@ -1383,7 +1425,7 @@ const Overlord = () => {
                 side === 'OVER' ? 'Over needs a prediction from 0 to 8' : 'Under needs a prediction from 1 to 9',
                 'warning'
             );
-            return;
+            return null;
         }
 
         const scanRunId = Date.now();
@@ -1407,14 +1449,14 @@ const Overlord = () => {
                 ]);
             },
         });
-        if (cancelled()) return;
+        if (cancelled()) return null;
 
         const series = {};
         fetched.forEach(r => {
             if (r.series) series[r.symbol] = r.series;
         });
         await new Promise(resolve => setTimeout(resolve, 0)); // let the progress card paint before the CPU-heavy part
-        if (cancelled()) return;
+        if (cancelled()) return null;
 
         const scan = scanOverlord({
             series,
@@ -1422,10 +1464,16 @@ const Overlord = () => {
             side,
             barrier: Number.isFinite(barrier) ? barrier : 2,
             mode: smartContract ? 'smart' : 'selected',
+            // Every market gets the slow walk-forward model engine too (the full set of engines judges each candidate).
+            ensembleTop: smartContract ? 24 : 99,
         });
 
         const best = scan.best;
         if (best) {
+            // Refs are set directly as well: Run may start in the same tick, before the effects copy state into refs.
+            symbolRef.current = best.symbol;
+            contractTypeRef.current = best.side;
+            lastEnginePickRef.current = Date.now();
             setSymbol(best.symbol);
             if (smartContract) {
                 setPredictionDigit(String(best.barrier));
@@ -1448,7 +1496,9 @@ const Overlord = () => {
             logMessage('Scan incomplete: no market returned enough ticks. Try again.');
         }
         setAnalysisStarted(false);
+        return best ?? null;
     };
+    runEngineScanRef.current = runEngineScan;
 
     const handleFindMarket = () => {
         if (tradeType === 'OVER' || tradeType === 'UNDER') return handleFindMarketEngine();
@@ -1465,6 +1515,7 @@ const Overlord = () => {
         logMessage('🔄 Stats reset.');
     };
 
+    const autoMarket = anyMarket && (tradeType === 'OVER' || tradeType === 'UNDER');
     const currentScanningId = volatilityList.find(id => !scannedHistory.some(item => item.id === id));
     const isAllComplete = scannedHistory.length === volatilityList.length;
     const fifoQueue = scannedHistory.slice(-4);
@@ -1536,19 +1587,32 @@ const Overlord = () => {
 
                         <div className='sh-input-field market-width'>
                             <label>MARKET</label>
-                            <span className='sh-question'>You can use the Find Market button below.</span>
-                            <select
-                                value={symbol}
-                                onChange={e => setSymbol(e.target.value)}
-                                disabled={isRunning}
-                                className='st-instrument-select'
-                            >
-                                {volatilityList.map(id => (
-                                    <option key={id} value={id}>
-                                        {symbolNames[id]}
-                                    </option>
-                                ))}
-                            </select>
+                            {autoMarket ? (
+                                <>
+                                    <span className='sh-question'>The engines pick it. Nothing to select.</span>
+                                    <div className='st-instrument-select ovl-auto-market'>
+                                        {strongestSignal?.engine
+                                            ? `${symbolNames[symbol] || symbol} (engine pick)`
+                                            : 'Any market (engine picks)'}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <span className='sh-question'>You can use the Find Market button below.</span>
+                                    <select
+                                        value={symbol}
+                                        onChange={e => setSymbol(e.target.value)}
+                                        disabled={isRunning}
+                                        className='st-instrument-select'
+                                    >
+                                        {volatilityList.map(id => (
+                                            <option key={id} value={id}>
+                                                {symbolNames[id]}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </>
+                            )}
                         </div>
                     </div>
 
@@ -1560,8 +1624,19 @@ const Overlord = () => {
                             onClick={handleFindMarket}
                             disabled={isRunning}
                         >
-                            {analysisStarted ? 'SCANNING… TAP TO STOP' : 'FIND MARKET'}
+                            {analysisStarted ? 'SCANNING… TAP TO STOP' : autoMarket ? 'FIND ANY MARKET' : 'FIND MARKET'}
                         </button>
+                        {(tradeType === 'OVER' || tradeType === 'UNDER') && (
+                            <label className='ovl-smart-toggle'>
+                                <input
+                                    type='checkbox'
+                                    checked={anyMarket}
+                                    onChange={e => toggleAnyMarket(e.target.checked)}
+                                    disabled={isRunning || analysisStarted}
+                                />
+                                <span>Any market: the engines pick it for me (Run picks one by itself)</span>
+                            </label>
+                        )}
                         {(tradeType === 'OVER' || tradeType === 'UNDER') && (
                             <label className='ovl-smart-toggle'>
                                 <input
