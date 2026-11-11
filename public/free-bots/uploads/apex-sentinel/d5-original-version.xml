@@ -13,7 +13,11 @@
     <variable id="(obU$~2J]hr/k0`hgX8/">STAKE ON WIN</variable>
     <variable id="rUPB[)tUi3we;byHr`7]">1 or 2 seconds</variable>
     <variable id="^3d~6DUQ!o8XQTn.XB!c">text3</variable>
-    <variable id="MgsL8H;~`;r/^Tuh1)y=">Martingale</variable>
+    <variable id="MgsL8H;~`;r/^Tuh1)y=">Recovery Parts</variable>
+    <variable id="splitmart_var_total_loss">Total Loss</variable>
+    <variable id="splitmart_var_parts_left">Parts Left</variable>
+    <variable id="splitmart_var_win_prob">Win Prob</variable>
+    <variable id="splitmart_var_payout_margin">Payout Margin</variable>
   </variables>
   <block type="trade_definition" id="|,wpfgCRK_O,JHE[$xte" deletable="false" x="0" y="60">
     <statement name="TRADE_OPTIONS">
@@ -108,10 +112,10 @@
                             </value>
                             <next>
                               <block type="variables_set" id="CpM6_k*o?xE[xaZ[Q@_-">
-                                <field name="VAR" id="MgsL8H;~`;r/^Tuh1)y=">Martingale</field>
+                                <field name="VAR" id="MgsL8H;~`;r/^Tuh1)y=">Recovery Parts</field>
                                 <value name="VALUE">
                                   <block type="math_number" id="`2(cyquM9#yV^pDqZ`gJ">
-                                    <field name="NUM">0.8</field>
+                                    <field name="NUM">3</field>
                                   </block>
                                 </value>
                                 <next>
@@ -122,6 +126,46 @@
                                         <field name="NUM">0</field>
                                       </block>
                                     </value>
+                                    <next>
+                                      <block type="variables_set" id="splitmart_133">
+                                        <field name="VAR" id="splitmart_var_total_loss">Total Loss</field>
+                                        <value name="VALUE">
+                                          <block type="math_number" id="splitmart_126">
+                                            <field name="NUM">0</field>
+                                          </block>
+                                        </value>
+                                        <next>
+                                          <block type="variables_set" id="splitmart_132">
+                                            <field name="VAR" id="splitmart_var_parts_left">Parts Left</field>
+                                            <value name="VALUE">
+                                              <block type="variables_get" id="splitmart_127">
+                                                <field name="VAR" id="MgsL8H;~`;r/^Tuh1)y=">Recovery Parts</field>
+                                              </block>
+                                            </value>
+                                            <next>
+                                              <block type="variables_set" id="splitmart_131">
+                                                <field name="VAR" id="splitmart_var_payout_margin">Payout Margin</field>
+                                                <value name="VALUE">
+                                                  <block type="math_number" id="splitmart_128">
+                                                    <field name="NUM">0.025</field>
+                                                  </block>
+                                                </value>
+                                                <next>
+                                                  <block type="variables_set" id="splitmart_130">
+                                                    <field name="VAR" id="splitmart_var_win_prob">Win Prob</field>
+                                                    <value name="VALUE">
+                                                      <block type="math_number" id="splitmart_129">
+                                                        <field name="NUM">0.4</field>
+                                                      </block>
+                                                    </value>
+                                                  </block>
+                                                </next>
+                                              </block>
+                                            </next>
+                                          </block>
+                                        </next>
+                                      </block>
+                                    </next>
                                   </block>
                                 </next>
                               </block>
@@ -218,81 +262,440 @@
                   </block>
                 </value>
                 <next>
-                  <block type="variables_set" id="$qa*:ge{6Bl[W~fx545#">
-                    <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Initial Stake</field>
-                    <value name="VALUE">
-                      <block type="variables_get" id="Gkvu^[]/3G:cW|lCmedw">
-                        <field name="VAR" id="(obU$~2J]hr/k0`hgX8/">STAKE ON WIN</field>
-                      </block>
-                    </value>
-                    <next>
-                      <block type="variables_set" id="gKHF_ZZ@Ia#VjD-yO-Hp">
-                        <field name="VAR" id="mx{;!:I,#`.:uIWFiZB[">lost</field>
-                        <value name="VALUE">
-                          <block type="math_number" id="jJ+p3qxP}XSF_w+%hB0/">
-                            <field name="NUM">0</field>
-                          </block>
-                        </value>
-                        <next>
-                          <block type="variables_set" id="?wi*6(=={p4QrTE?E`2~">
-                            <field name="VAR" id="kQ+Ke(]*eQpM[qgfd~+g">Counter</field>
-                            <value name="VALUE">
-                              <block type="math_number" id="Yq%a{YtZLKX!w;j1RXP?">
-                                <field name="NUM">0</field>
-                              </block>
-                            </value>
-                            <next>
-                              <block type="variables_set" id="6[t)pQa;ZT2W@-@9v[$u">
-                                <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
-                                <value name="VALUE">
-                                  <block type="math_random_int" id="qv4Jj{-.[X-m@Q{k75t2">
-                                    <value name="FROM">
-                                      <shadow type="math_number" id=";tE?w8e2o^lP{aFZhrE_">
-                                        <field name="NUM">1</field>
-                                      </shadow>
-                                    </value>
-                                    <value name="TO">
-                                      <shadow type="math_number" id="Z`+?XS{Zn|v.jal#C}.P">
-                                        <field name="NUM">1</field>
-                                      </shadow>
-                                    </value>
-                                  </block>
-                                </value>
-                                <next>
-                                  <block type="variables_set" id="MQ=0$V5s(xkFcK*yxOA_">
-                                    <field name="VAR" id="rUPB[)tUi3we;byHr`7]">1 or 2 seconds</field>
-                                    <value name="VALUE">
-                                      <block type="math_random_int" id="Td$2ATxd:~e([|ovPL4`">
-                                        <value name="FROM">
-                                          <shadow type="math_number" id="NSM{Tj`Fr_9S,4ahp)Y!">
-                                            <field name="NUM">1</field>
-                                          </shadow>
-                                        </value>
-                                        <value name="TO">
-                                          <shadow type="math_number" id="dYtfx^X[An#33(ERc7d4">
-                                            <field name="NUM">5</field>
-                                          </shadow>
-                                        </value>
-                                      </block>
-                                    </value>
-                                    <next>
-                                      <block type="trade_again" id="cw].p*FJWZBupT$eqR!M"></block>
-                                    </next>
-                                  </block>
-                                </next>
-                              </block>
-                            </next>
-                          </block>
-                        </next>
-                      </block>
-                    </next>
-                  </block>
+                    <block type="variables_set" id="splitmart_120">
+                      <field name="VAR" id="splitmart_var_total_loss">Total Loss</field>
+                      <value name="VALUE">
+                        <block type="math_arithmetic" id="splitmart_040">
+                          <field name="OP">MINUS</field>
+                          <value name="A">
+                            <block type="variables_get" id="splitmart_038">
+                              <field name="VAR" id="splitmart_var_total_loss">Total Loss</field>
+                            </block>
+                          </value>
+                          <value name="B">
+                            <block type="read_details" id="splitmart_039">
+                              <field name="DETAIL_INDEX">4</field>
+                            </block>
+                          </value>
+                        </block>
+                      </value>
+                      <next>
+                        <block type="controls_if" id="splitmart_119">
+                          <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                          <value name="IF0">
+                            <block type="logic_compare" id="splitmart_043">
+                              <field name="OP">GT</field>
+                              <value name="A">
+                                <block type="variables_get" id="splitmart_041">
+                                  <field name="VAR" id="splitmart_var_total_loss">Total Loss</field>
+                                </block>
+                              </value>
+                              <value name="B">
+                                <block type="math_number" id="splitmart_042">
+                                  <field name="NUM">0.005</field>
+                                </block>
+                              </value>
+                            </block>
+                          </value>
+                          <statement name="DO0">
+                            <block type="controls_if" id="splitmart_099">
+                              <value name="IF0">
+                                <block type="logic_compare" id="splitmart_046">
+                                  <field name="OP">GT</field>
+                                  <value name="A">
+                                    <block type="variables_get" id="splitmart_044">
+                                      <field name="VAR" id="splitmart_var_parts_left">Parts Left</field>
+                                    </block>
+                                  </value>
+                                  <value name="B">
+                                    <block type="math_number" id="splitmart_045">
+                                      <field name="NUM">1</field>
+                                    </block>
+                                  </value>
+                                </block>
+                              </value>
+                              <statement name="DO0">
+                                <block type="variables_set" id="splitmart_050">
+                                  <field name="VAR" id="splitmart_var_parts_left">Parts Left</field>
+                                  <value name="VALUE">
+                                    <block type="math_arithmetic" id="splitmart_049">
+                                      <field name="OP">MINUS</field>
+                                      <value name="A">
+                                        <block type="variables_get" id="splitmart_047">
+                                          <field name="VAR" id="splitmart_var_parts_left">Parts Left</field>
+                                        </block>
+                                      </value>
+                                      <value name="B">
+                                        <block type="math_number" id="splitmart_048">
+                                          <field name="NUM">1</field>
+                                        </block>
+                                      </value>
+                                    </block>
+                                  </value>
+                                </block>
+                              </statement>
+                              <next>
+                                <block type="variables_set" id="splitmart_098">
+                                  <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
+                                  <value name="VALUE">
+                                    <block type="math_random_int" id="splitmart_051">
+                                      <value name="FROM">
+                                        <shadow type="math_number" id="splitmart_052">
+                                          <field name="NUM">5</field>
+                                        </shadow>
+                                      </value>
+                                      <value name="TO">
+                                        <shadow type="math_number" id="splitmart_053">
+                                          <field name="NUM">6</field>
+                                        </shadow>
+                                      </value>
+                                    </block>
+                                  </value>
+                                  <next>
+                                    <block type="controls_if" id="splitmart_097">
+                                      <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                      <value name="IF0">
+                                        <block type="logic_compare" id="splitmart_056">
+                                          <field name="OP">EQ</field>
+                                          <value name="A">
+                                            <block type="variables_get" id="splitmart_054">
+                                              <field name="VAR" id="mx{;!:I,#`.:uIWFiZB[">lost</field>
+                                            </block>
+                                          </value>
+                                          <value name="B">
+                                            <block type="math_number" id="splitmart_055">
+                                              <field name="NUM">0</field>
+                                            </block>
+                                          </value>
+                                        </block>
+                                      </value>
+                                      <statement name="DO0">
+                                        <block type="variables_set" id="splitmart_062">
+                                          <field name="VAR" id="splitmart_var_win_prob">Win Prob</field>
+                                          <value name="VALUE">
+                                            <block type="math_arithmetic" id="splitmart_061">
+                                              <field name="OP">DIVIDE</field>
+                                              <value name="A">
+                                                <block type="math_arithmetic" id="splitmart_059">
+                                                  <field name="OP">MINUS</field>
+                                                  <value name="A">
+                                                    <block type="math_number" id="splitmart_057">
+                                                      <field name="NUM">9</field>
+                                                    </block>
+                                                  </value>
+                                                  <value name="B">
+                                                    <block type="variables_get" id="splitmart_058">
+                                                      <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
+                                                    </block>
+                                                  </value>
+                                                </block>
+                                              </value>
+                                              <value name="B">
+                                                <block type="math_number" id="splitmart_060">
+                                                  <field name="NUM">10</field>
+                                                </block>
+                                              </value>
+                                            </block>
+                                          </value>
+                                        </block>
+                                      </statement>
+                                      <statement name="ELSE">
+                                        <block type="variables_set" id="splitmart_066">
+                                          <field name="VAR" id="splitmart_var_win_prob">Win Prob</field>
+                                          <value name="VALUE">
+                                            <block type="math_arithmetic" id="splitmart_065">
+                                              <field name="OP">DIVIDE</field>
+                                              <value name="A">
+                                                <block type="variables_get" id="splitmart_063">
+                                                  <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
+                                                </block>
+                                              </value>
+                                              <value name="B">
+                                                <block type="math_number" id="splitmart_064">
+                                                  <field name="NUM">10</field>
+                                                </block>
+                                              </value>
+                                            </block>
+                                          </value>
+                                        </block>
+                                      </statement>
+                                      <next>
+                                        <block type="variables_set" id="splitmart_096">
+                                          <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Initial Stake</field>
+                                          <value name="VALUE">
+                                            <block type="math_arithmetic" id="splitmart_082">
+                                              <field name="OP">DIVIDE</field>
+                                              <value name="A">
+                                                <block type="math_round" id="splitmart_080">
+                                                  <field name="OP">ROUNDUP</field>
+                                                  <value name="NUM">
+                                                    <block type="math_arithmetic" id="splitmart_079">
+                                                      <field name="OP">MULTIPLY</field>
+                                                      <value name="A">
+                                                        <block type="math_arithmetic" id="splitmart_077">
+                                                          <field name="OP">DIVIDE</field>
+                                                          <value name="A">
+                                                            <block type="math_arithmetic" id="splitmart_076">
+                                                              <field name="OP">DIVIDE</field>
+                                                              <value name="A">
+                                                                <block type="variables_get" id="splitmart_074">
+                                                                  <field name="VAR" id="splitmart_var_total_loss">Total Loss</field>
+                                                                </block>
+                                                              </value>
+                                                              <value name="B">
+                                                                <block type="variables_get" id="splitmart_075">
+                                                                  <field name="VAR" id="splitmart_var_parts_left">Parts Left</field>
+                                                                </block>
+                                                              </value>
+                                                            </block>
+                                                          </value>
+                                                          <value name="B">
+                                                            <block type="math_arithmetic" id="splitmart_073">
+                                                              <field name="OP">MINUS</field>
+                                                              <value name="A">
+                                                                <block type="math_arithmetic" id="splitmart_071">
+                                                                  <field name="OP">DIVIDE</field>
+                                                                  <value name="A">
+                                                                    <block type="math_arithmetic" id="splitmart_069">
+                                                                      <field name="OP">MINUS</field>
+                                                                      <value name="A">
+                                                                        <block type="math_number" id="splitmart_067">
+                                                                          <field name="NUM">1</field>
+                                                                        </block>
+                                                                      </value>
+                                                                      <value name="B">
+                                                                        <block type="variables_get" id="splitmart_068">
+                                                                          <field name="VAR" id="splitmart_var_payout_margin">Payout Margin</field>
+                                                                        </block>
+                                                                      </value>
+                                                                    </block>
+                                                                  </value>
+                                                                  <value name="B">
+                                                                    <block type="variables_get" id="splitmart_070">
+                                                                      <field name="VAR" id="splitmart_var_win_prob">Win Prob</field>
+                                                                    </block>
+                                                                  </value>
+                                                                </block>
+                                                              </value>
+                                                              <value name="B">
+                                                                <block type="math_number" id="splitmart_072">
+                                                                  <field name="NUM">1</field>
+                                                                </block>
+                                                              </value>
+                                                            </block>
+                                                          </value>
+                                                        </block>
+                                                      </value>
+                                                      <value name="B">
+                                                        <block type="math_number" id="splitmart_078">
+                                                          <field name="NUM">100</field>
+                                                        </block>
+                                                      </value>
+                                                    </block>
+                                                  </value>
+                                                </block>
+                                              </value>
+                                              <value name="B">
+                                                <block type="math_number" id="splitmart_081">
+                                                  <field name="NUM">100</field>
+                                                </block>
+                                              </value>
+                                            </block>
+                                          </value>
+                                          <next>
+                                            <block type="controls_if" id="splitmart_095">
+                                              <value name="IF0">
+                                                <block type="logic_compare" id="splitmart_085">
+                                                  <field name="OP">LT</field>
+                                                  <value name="A">
+                                                    <block type="variables_get" id="splitmart_083">
+                                                      <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Initial Stake</field>
+                                                    </block>
+                                                  </value>
+                                                  <value name="B">
+                                                    <block type="variables_get" id="splitmart_084">
+                                                      <field name="VAR" id="(obU$~2J]hr/k0`hgX8/">STAKE ON WIN</field>
+                                                    </block>
+                                                  </value>
+                                                </block>
+                                              </value>
+                                              <statement name="DO0">
+                                                <block type="variables_set" id="splitmart_087">
+                                                  <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Initial Stake</field>
+                                                  <value name="VALUE">
+                                                    <block type="variables_get" id="splitmart_086">
+                                                      <field name="VAR" id="(obU$~2J]hr/k0`hgX8/">STAKE ON WIN</field>
+                                                    </block>
+                                                  </value>
+                                                </block>
+                                              </statement>
+                                              <next>
+                                                <block type="text_join" id="splitmart_088">
+                                                  <field name="VARIABLE" id="N5h(uF)6G2cql)h{ZR;h">text</field>
+                                                  <statement name="STACK">
+                                                    <block type="text_statement" id="splitmart_089">
+                                                      <value name="TEXT">
+                                                        <block type="text" id="splitmart_090">
+                                                          <field name="TEXT">Recovery part done. Still to recover: </field>
+                                                        </block>
+                                                      </value>
+                                                      <next>
+                                                        <block type="text_statement" id="splitmart_091">
+                                                          <value name="TEXT">
+                                                            <block type="variables_get" id="splitmart_092">
+                                                              <field name="VAR" id="splitmart_var_total_loss">Total Loss</field>
+                                                            </block>
+                                                          </value>
+                                                        </block>
+                                                      </next>
+                                                    </block>
+                                                  </statement>
+                                                  <next>
+                                                    <block type="notify" id="splitmart_093">
+                                                      <field name="NOTIFICATION_TYPE">info</field>
+                                                      <field name="NOTIFICATION_SOUND">silent</field>
+                                                      <value name="MESSAGE">
+                                                        <block type="variables_get" id="splitmart_094">
+                                                          <field name="VAR" id="N5h(uF)6G2cql)h{ZR;h">text</field>
+                                                        </block>
+                                                      </value>
+                                                    </block>
+                                                  </next>
+                                                </block>
+                                              </next>
+                                            </block>
+                                          </next>
+                                        </block>
+                                      </next>
+                                    </block>
+                                  </next>
+                                </block>
+                              </next>
+                            </block>
+                          </statement>
+                          <statement name="ELSE">
+                            <block type="variables_set" id="splitmart_113">
+                              <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Initial Stake</field>
+                              <value name="VALUE">
+                                <block type="variables_get" id="splitmart_100">
+                                  <field name="VAR" id="(obU$~2J]hr/k0`hgX8/">STAKE ON WIN</field>
+                                </block>
+                              </value>
+                              <next>
+                                <block type="variables_set" id="splitmart_112">
+                                  <field name="VAR" id="mx{;!:I,#`.:uIWFiZB[">lost</field>
+                                  <value name="VALUE">
+                                    <block type="math_number" id="splitmart_101">
+                                      <field name="NUM">0</field>
+                                    </block>
+                                  </value>
+                                  <next>
+                                    <block type="variables_set" id="splitmart_111">
+                                      <field name="VAR" id="kQ+Ke(]*eQpM[qgfd~+g">Counter</field>
+                                      <value name="VALUE">
+                                        <block type="math_number" id="splitmart_102">
+                                          <field name="NUM">0</field>
+                                        </block>
+                                      </value>
+                                      <next>
+                                        <block type="variables_set" id="splitmart_110">
+                                          <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
+                                          <value name="VALUE">
+                                            <block type="math_random_int" id="splitmart_103">
+                                              <value name="FROM">
+                                                <shadow type="math_number" id="splitmart_104">
+                                                  <field name="NUM">1</field>
+                                                </shadow>
+                                              </value>
+                                              <value name="TO">
+                                                <shadow type="math_number" id="splitmart_105">
+                                                  <field name="NUM">1</field>
+                                                </shadow>
+                                              </value>
+                                            </block>
+                                          </value>
+                                          <next>
+                                            <block type="variables_set" id="splitmart_109">
+                                              <field name="VAR" id="splitmart_var_total_loss">Total Loss</field>
+                                              <value name="VALUE">
+                                                <block type="math_number" id="splitmart_106">
+                                                  <field name="NUM">0</field>
+                                                </block>
+                                              </value>
+                                              <next>
+                                                <block type="variables_set" id="splitmart_108">
+                                                  <field name="VAR" id="splitmart_var_parts_left">Parts Left</field>
+                                                  <value name="VALUE">
+                                                    <block type="variables_get" id="splitmart_107">
+                                                      <field name="VAR" id="MgsL8H;~`;r/^Tuh1)y=">Recovery Parts</field>
+                                                    </block>
+                                                  </value>
+                                                </block>
+                                              </next>
+                                            </block>
+                                          </next>
+                                        </block>
+                                      </next>
+                                    </block>
+                                  </next>
+                                </block>
+                              </next>
+                            </block>
+                          </statement>
+                          <next>
+                            <block type="variables_set" id="splitmart_118">
+                              <field name="VAR" id="rUPB[)tUi3we;byHr`7]">1 or 2 seconds</field>
+                              <value name="VALUE">
+                                <block type="math_random_int" id="splitmart_114">
+                                  <value name="FROM">
+                                    <shadow type="math_number" id="splitmart_115">
+                                      <field name="NUM">1</field>
+                                    </shadow>
+                                  </value>
+                                  <value name="TO">
+                                    <shadow type="math_number" id="splitmart_116">
+                                      <field name="NUM">5</field>
+                                    </shadow>
+                                  </value>
+                                </block>
+                              </value>
+                              <next>
+                                <block type="trade_again" id="splitmart_117"></block>
+                              </next>
+                            </block>
+                          </next>
+                        </block>
+                      </next>
+                    </block>
                 </next>
               </block>
             </next>
           </block>
         </statement>
         <statement name="ELSE">
+                    <block type="variables_set" id="splitmart_125">
+                      <field name="VAR" id="splitmart_var_total_loss">Total Loss</field>
+                      <value name="VALUE">
+                        <block type="math_arithmetic" id="splitmart_124">
+                          <field name="OP">ADD</field>
+                          <value name="A">
+                            <block type="variables_get" id="splitmart_121">
+                              <field name="VAR" id="splitmart_var_total_loss">Total Loss</field>
+                            </block>
+                          </value>
+                          <value name="B">
+                            <block type="math_single" id="splitmart_123">
+                              <field name="OP">ABS</field>
+                              <value name="NUM">
+                                <block type="read_details" id="splitmart_122">
+                                  <field name="DETAIL_INDEX">4</field>
+                                </block>
+                              </value>
+                            </block>
+                          </value>
+                        </block>
+                      </value>
+                      <next>
           <block type="text_join" id=":4hsJB@ruUmH-fJS,4m0">
             <field name="VARIABLE" id=")-9T~6%gxe29l#C#)qts">text1</field>
             <statement name="STACK">
@@ -441,41 +844,188 @@
                                               </block>
                                             </value>
                                             <statement name="DO0">
-                                              <block type="math_change" id="R7QtsoT2WFk`*MK0_fy*">
-                                                <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Initial Stake</field>
-                                                <value name="DELTA">
-                                                  <shadow type="math_number" id="h(2BZh#T.]odF-bqQKcd">
-                                                    <field name="NUM">1</field>
-                                                  </shadow>
-                                                  <block type="math_arithmetic" id="Gl2+IAN)5b!-?RayfW3W">
-                                                    <field name="OP">MULTIPLY</field>
-                                                    <value name="A">
-                                                      <shadow type="math_number" id="3J6xZNy/`wRJZUYz4DLX">
-                                                        <field name="NUM">1</field>
-                                                      </shadow>
-                                                      <block type="math_single" id="Dnw,PYK`H_I-M2voTUTl">
-                                                        <field name="OP">ABS</field>
-                                                        <value name="NUM">
-                                                          <shadow type="math_number" id="F8ts_dw*D9O8R7_^C/Mq">
-                                                            <field name="NUM">9</field>
-                                                          </shadow>
-                                                          <block type="read_details" id="cj527u@:f[5O%EPU/jOk">
-                                                            <field name="DETAIL_INDEX">4</field>
-                                                          </block>
-                                                        </value>
-                                                      </block>
-                                                    </value>
-                                                    <value name="B">
-                                                      <shadow type="math_number" id=");k~+=ZUM,8V7ovDrIH/">
-                                                        <field name="NUM">1</field>
-                                                      </shadow>
-                                                      <block type="variables_get" id="Z~)63Nf5@3llDqm$7(xT">
-                                                        <field name="VAR" id="MgsL8H;~`;r/^Tuh1)y=">Martingale</field>
-                                                      </block>
-                                                    </value>
-                                                  </block>
-                                                </value>
-                                              </block>
+                                                <block type="controls_if" id="splitmart_037">
+                                                  <mutation xmlns="http://www.w3.org/1999/xhtml" else="1"></mutation>
+                                                  <value name="IF0">
+                                                    <block type="logic_compare" id="splitmart_003">
+                                                      <field name="OP">EQ</field>
+                                                      <value name="A">
+                                                        <block type="variables_get" id="splitmart_001">
+                                                          <field name="VAR" id="mx{;!:I,#`.:uIWFiZB[">lost</field>
+                                                        </block>
+                                                      </value>
+                                                      <value name="B">
+                                                        <block type="math_number" id="splitmart_002">
+                                                          <field name="NUM">0</field>
+                                                        </block>
+                                                      </value>
+                                                    </block>
+                                                  </value>
+                                                  <statement name="DO0">
+                                                    <block type="variables_set" id="splitmart_009">
+                                                      <field name="VAR" id="splitmart_var_win_prob">Win Prob</field>
+                                                      <value name="VALUE">
+                                                        <block type="math_arithmetic" id="splitmart_008">
+                                                          <field name="OP">DIVIDE</field>
+                                                          <value name="A">
+                                                            <block type="math_arithmetic" id="splitmart_006">
+                                                              <field name="OP">MINUS</field>
+                                                              <value name="A">
+                                                                <block type="math_number" id="splitmart_004">
+                                                                  <field name="NUM">9</field>
+                                                                </block>
+                                                              </value>
+                                                              <value name="B">
+                                                                <block type="variables_get" id="splitmart_005">
+                                                                  <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
+                                                                </block>
+                                                              </value>
+                                                            </block>
+                                                          </value>
+                                                          <value name="B">
+                                                            <block type="math_number" id="splitmart_007">
+                                                              <field name="NUM">10</field>
+                                                            </block>
+                                                          </value>
+                                                        </block>
+                                                      </value>
+                                                    </block>
+                                                  </statement>
+                                                  <statement name="ELSE">
+                                                    <block type="variables_set" id="splitmart_013">
+                                                      <field name="VAR" id="splitmart_var_win_prob">Win Prob</field>
+                                                      <value name="VALUE">
+                                                        <block type="math_arithmetic" id="splitmart_012">
+                                                          <field name="OP">DIVIDE</field>
+                                                          <value name="A">
+                                                            <block type="variables_get" id="splitmart_010">
+                                                              <field name="VAR" id="6o_9Nu#$3m#.?zV=ahjK">Leave at 8 or 9</field>
+                                                            </block>
+                                                          </value>
+                                                          <value name="B">
+                                                            <block type="math_number" id="splitmart_011">
+                                                              <field name="NUM">10</field>
+                                                            </block>
+                                                          </value>
+                                                        </block>
+                                                      </value>
+                                                    </block>
+                                                  </statement>
+                                                  <next>
+                                                    <block type="variables_set" id="splitmart_036">
+                                                      <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Initial Stake</field>
+                                                      <value name="VALUE">
+                                                        <block type="math_arithmetic" id="splitmart_029">
+                                                          <field name="OP">DIVIDE</field>
+                                                          <value name="A">
+                                                            <block type="math_round" id="splitmart_027">
+                                                              <field name="OP">ROUNDUP</field>
+                                                              <value name="NUM">
+                                                                <block type="math_arithmetic" id="splitmart_026">
+                                                                  <field name="OP">MULTIPLY</field>
+                                                                  <value name="A">
+                                                                    <block type="math_arithmetic" id="splitmart_024">
+                                                                      <field name="OP">DIVIDE</field>
+                                                                      <value name="A">
+                                                                        <block type="math_arithmetic" id="splitmart_023">
+                                                                          <field name="OP">DIVIDE</field>
+                                                                          <value name="A">
+                                                                            <block type="variables_get" id="splitmart_021">
+                                                                              <field name="VAR" id="splitmart_var_total_loss">Total Loss</field>
+                                                                            </block>
+                                                                          </value>
+                                                                          <value name="B">
+                                                                            <block type="variables_get" id="splitmart_022">
+                                                                              <field name="VAR" id="splitmart_var_parts_left">Parts Left</field>
+                                                                            </block>
+                                                                          </value>
+                                                                        </block>
+                                                                      </value>
+                                                                      <value name="B">
+                                                                        <block type="math_arithmetic" id="splitmart_020">
+                                                                          <field name="OP">MINUS</field>
+                                                                          <value name="A">
+                                                                            <block type="math_arithmetic" id="splitmart_018">
+                                                                              <field name="OP">DIVIDE</field>
+                                                                              <value name="A">
+                                                                                <block type="math_arithmetic" id="splitmart_016">
+                                                                                  <field name="OP">MINUS</field>
+                                                                                  <value name="A">
+                                                                                    <block type="math_number" id="splitmart_014">
+                                                                                      <field name="NUM">1</field>
+                                                                                    </block>
+                                                                                  </value>
+                                                                                  <value name="B">
+                                                                                    <block type="variables_get" id="splitmart_015">
+                                                                                      <field name="VAR" id="splitmart_var_payout_margin">Payout Margin</field>
+                                                                                    </block>
+                                                                                  </value>
+                                                                                </block>
+                                                                              </value>
+                                                                              <value name="B">
+                                                                                <block type="variables_get" id="splitmart_017">
+                                                                                  <field name="VAR" id="splitmart_var_win_prob">Win Prob</field>
+                                                                                </block>
+                                                                              </value>
+                                                                            </block>
+                                                                          </value>
+                                                                          <value name="B">
+                                                                            <block type="math_number" id="splitmart_019">
+                                                                              <field name="NUM">1</field>
+                                                                            </block>
+                                                                          </value>
+                                                                        </block>
+                                                                      </value>
+                                                                    </block>
+                                                                  </value>
+                                                                  <value name="B">
+                                                                    <block type="math_number" id="splitmart_025">
+                                                                      <field name="NUM">100</field>
+                                                                    </block>
+                                                                  </value>
+                                                                </block>
+                                                              </value>
+                                                            </block>
+                                                          </value>
+                                                          <value name="B">
+                                                            <block type="math_number" id="splitmart_028">
+                                                              <field name="NUM">100</field>
+                                                            </block>
+                                                          </value>
+                                                        </block>
+                                                      </value>
+                                                      <next>
+                                                        <block type="controls_if" id="splitmart_035">
+                                                          <value name="IF0">
+                                                            <block type="logic_compare" id="splitmart_032">
+                                                              <field name="OP">LT</field>
+                                                              <value name="A">
+                                                                <block type="variables_get" id="splitmart_030">
+                                                                  <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Initial Stake</field>
+                                                                </block>
+                                                              </value>
+                                                              <value name="B">
+                                                                <block type="variables_get" id="splitmart_031">
+                                                                  <field name="VAR" id="(obU$~2J]hr/k0`hgX8/">STAKE ON WIN</field>
+                                                                </block>
+                                                              </value>
+                                                            </block>
+                                                          </value>
+                                                          <statement name="DO0">
+                                                            <block type="variables_set" id="splitmart_034">
+                                                              <field name="VAR" id="RHgF*C%#h{|Ha5u;#5j?">Initial Stake</field>
+                                                              <value name="VALUE">
+                                                                <block type="variables_get" id="splitmart_033">
+                                                                  <field name="VAR" id="(obU$~2J]hr/k0`hgX8/">STAKE ON WIN</field>
+                                                                </block>
+                                                              </value>
+                                                            </block>
+                                                          </statement>
+                                                        </block>
+                                                      </next>
+                                                    </block>
+                                                  </next>
+                                                </block>
                                             </statement>
                                           </block>
                                         </next>
@@ -494,6 +1044,8 @@
               </block>
             </next>
           </block>
+          </next>
+        </block>
         </statement>
         <next>
           <block type="text_join" id="fS~U8K1ETkV}kGezbOad" collapsed="true">
