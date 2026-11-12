@@ -7,3 +7,6 @@ src/hooks/useDerivStream.ts
 
 # Sentinel AI engine (zip copy, isolated), vendored byte-for-byte except import paths. See src/sentinel-engine/README.md
 src/sentinel-engine/
+
+# Precision Parity AI engine (copy from the Precision Parity tool), vendored except five unused-declaration lines. See src/components/premium/overlord-engine/parity/README.md
+src/components/premium/overlord-engine/parity/

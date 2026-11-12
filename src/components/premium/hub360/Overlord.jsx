@@ -10,6 +10,8 @@ import { ASSESS_MS, assessOverlord } from '../overlord-engine/assess';
 import { isTradableBarrier } from '../overlord-engine/engine';
 import { fetchHistories } from '../overlord-engine/history';
 import { legacyPercentage } from '../overlord-engine/legacy';
+import { assessParity, PARITY_ASSESS_MS } from '../overlord-engine/parity-assess';
+import { legacyParityPct } from '../overlord-engine/parity-engine';
 import { getHub360AuthContext, getHub360AuthenticatedUrl } from './auth360';
 import { useHub360Module } from './use-hub360-module';
 
@@ -108,6 +110,7 @@ const Overlord = () => {
     const lastEnginePickRef = useRef(0); // when the engines last picked a market
     const scanBusyRef = useRef(false);
     const runEngineScanRef = useRef(null);
+    const runParityScanRef = useRef(null);
 
     const [symbol, setSymbol] = useState('1HZ10V'); // v2.3: a market is always selected, Find Market only suggests a better one
     const [contractType, setContractType] = useState('EVEN');
@@ -1087,14 +1090,15 @@ const Overlord = () => {
             handleStop();
             return;
         }
-        if (anyMarket && (tradeType === 'OVER' || tradeType === 'UNDER')) {
+        const parityTrade = tradeType === 'EVEN' || tradeType === 'ODD';
+        if (anyMarket && (tradeType === 'OVER' || tradeType === 'UNDER' || parityTrade)) {
             // Any market: the engines pick the market (and the side and barrier when that toggle is on) before the first trade.
             if (scanBusyRef.current) return;
             if (Date.now() - lastEnginePickRef.current > ENGINE_PICK_FRESH_MS) {
                 scanBusyRef.current = true;
                 let picked = null;
                 try {
-                    picked = await runEngineScanRef.current?.();
+                    picked = await (parityTrade ? runParityScanRef : runEngineScanRef).current?.();
                 } finally {
                     scanBusyRef.current = false;
                 }
@@ -1587,8 +1591,129 @@ const Overlord = () => {
     };
     runEngineScanRef.current = runEngineScan;
 
+    // Even/Odd Find Market: deep history for every market, then the whole Precision Parity tool reads each one. Only a market
+    // Parity marks READY can be picked. When Parity has no READY market for the parity, nothing is selected and the closest
+    // developing market is shown for information only.
+    const handleFindMarketParity = async () => {
+        if (analysisStarted) {
+            scanRunIdRef.current = Date.now(); // stop: a newer id makes the running scan abandon its result
+            setAnalysisStarted(false);
+            return;
+        }
+        await runParityScan();
+    };
+
+    // Returns Parity's pick, or null (stopped, no market returned enough ticks, or Parity has no READY market).
+    const runParityScan = async () => {
+        const side = tradeType; // 'EVEN' or 'ODD'
+        const scanRunId = Date.now();
+        scanRunIdRef.current = scanRunId;
+        const cancelled = () => scanRunIdRef.current !== scanRunId;
+        setAnalysisStarted(true);
+        setScannedHistory([]);
+        setStrongestSignal(null);
+        logMessage(
+            smartContract
+                ? '🚀 Parity scan: Precision Parity picks market and side...'
+                : `🚀 Parity scan for ${side === 'EVEN' ? 'Even' : 'Odd'}...`
+        );
+
+        const fetched = await fetchHistories(SCAN_WS_URL, volatilityList, {
+            cancelled,
+            onResult: r => {
+                if (cancelled()) return;
+                const read = r.series ? legacyParityPct(r.series.digits, side) : null;
+                setScannedHistory(prev => [
+                    ...prev.filter(item => item.id !== r.symbol),
+                    { id: r.symbol, name: symbolNames[r.symbol], percentage: read, status: r.status },
+                ]);
+            },
+        });
+        if (cancelled()) return null;
+
+        const series = {};
+        fetched.forEach(r => {
+            if (r.series) series[r.symbol] = r.series;
+        });
+        await new Promise(resolve => setTimeout(resolve, 0)); // let the progress card paint before the CPU-heavy part
+        if (cancelled()) return null;
+
+        // The markets are watched live for a few seconds and Parity is re-run every refresh before any market is shown.
+        logMessage(`👀 Watching ${Object.keys(series).length} markets live for ${Math.round(PARITY_ASSESS_MS / 1000)}s...`);
+        setAssessInfo({ elapsedMs: 0, assessMs: PARITY_ASSESS_MS, ticks: 0, rounds: 0, leader: null, flagged: 0 });
+        let assessed;
+        try {
+            assessed = await assessParity({
+                series,
+                symbols: volatilityList,
+                side: smartContract ? null : side,
+                names: symbolNames,
+                url: SCAN_WS_URL,
+                cancelled,
+                onProgress: p => {
+                    if (!cancelled()) setAssessInfo(p);
+                },
+            });
+        } finally {
+            setAssessInfo(null);
+        }
+        if (cancelled() || assessed.cancelled) return null;
+        if (!assessed.liveTicks) logMessage('Live ticks were not available, so the answer comes from the history only.');
+        const scan = assessed.scan;
+
+        const best = scan.best;
+        if (best) {
+            // Refs are set directly as well: Run may start in the same tick, before the effects copy state into refs.
+            symbolRef.current = best.symbol;
+            contractTypeRef.current = best.side;
+            lastEnginePickRef.current = Date.now();
+            setSymbol(best.symbol);
+            if (smartContract) setTradeType(best.side);
+            setContractType(best.side);
+            setStrongestSignal({
+                id: best.symbol,
+                name: symbolNames[best.symbol],
+                confidence: Number(best.legacyPct ?? 0).toFixed(1),
+                engine: best,
+                legacyOnly: scan.legacyOnly,
+            });
+            logMessage(
+                best.thin
+                    ? `✅ ${symbolNames[best.symbol]} ${best.label} (basic scan: too few ticks for Precision Parity)`
+                    : `✅ ${best.tier}: ${symbolNames[best.symbol]} ${best.label}, Precision Parity READY at ${best.score}%`
+            );
+            try {
+                alertSound.play().catch(() => {});
+            } catch {}
+        } else if (scan.evaluated > 0) {
+            // Parity has no READY market. Nothing is selected and nothing changes on screen except this note.
+            const watch = scan.watch;
+            if (watch) {
+                setStrongestSignal({
+                    id: watch.symbol,
+                    name: symbolNames[watch.symbol],
+                    confidence: Number(watch.legacyPct ?? 0).toFixed(1),
+                    engine: watch,
+                    legacyOnly: false,
+                    watchOnly: true,
+                });
+            }
+            const wanted = smartContract ? 'Even or Odd' : side === 'EVEN' ? 'Even' : 'Odd';
+            const other = scan.opposite
+                ? ` It does see ${scan.opposite.label} on ${symbolNames[scan.opposite.symbol]} (${scan.opposite.score}%).`
+                : '';
+            logMessage(`⏸ Precision Parity has no READY market for ${wanted} right now.${other} Try again shortly.`);
+        } else {
+            logMessage('Scan incomplete: no market returned enough ticks. Try again.');
+        }
+        setAnalysisStarted(false);
+        return best ?? null;
+    };
+    runParityScanRef.current = runParityScan;
+
     const handleFindMarket = () => {
         if (tradeType === 'OVER' || tradeType === 'UNDER') return handleFindMarketEngine();
+        if (tradeType === 'EVEN' || tradeType === 'ODD') return handleFindMarketParity();
         return handleFetchSignalGuaranteed();
     };
 
@@ -1603,7 +1728,8 @@ const Overlord = () => {
     };
 
     const isOuTrade = tradeType === 'OVER' || tradeType === 'UNDER';
-    const autoMarket = anyMarket && isOuTrade;
+    const isParityTrade = tradeType === 'EVEN' || tradeType === 'ODD';
+    const autoMarket = anyMarket && (isOuTrade || isParityTrade);
     const currentScanningId = volatilityList.find(id => !scannedHistory.some(item => item.id === id));
     const isAllComplete = scannedHistory.length === volatilityList.length;
     const fifoQueue = scannedHistory.slice(-4);
@@ -1688,8 +1814,12 @@ const Overlord = () => {
                                 disabled={isRunning || analysisStarted}
                                 className='st-instrument-select'
                             >
-                                {isOuTrade && <option value='any'>Any market (engine picks)</option>}
-                                {isOuTrade && <option value='all'>Any market, side and barrier</option>}
+                                {(isOuTrade || isParityTrade) && <option value='any'>Any market (engine picks)</option>}
+                                {(isOuTrade || isParityTrade) && (
+                                    <option value='all'>
+                                        {isOuTrade ? 'Any market, side and barrier' : 'Any market and side'}
+                                    </option>
+                                )}
                                 {volatilityList.map(id => (
                                     <option key={id} value={id}>
                                         {symbolNames[id]}
@@ -1835,7 +1965,8 @@ const Overlord = () => {
                                                 BEST: 'BEST MARKET AVAILABLE',
                                                 CAUTION: 'NO MARKET CLEARED, LEAST RISKY SHOWN',
                                                 LEGACY: 'MARKET FOUND (BASIC SCAN)',
-                                            }[strongestSignal.engine.tier]
+                                                WATCH: 'NO READY MARKET, CLOSEST SHOWN (NOT SELECTED)',
+                                            }[strongestSignal.watchOnly ? 'WATCH' : strongestSignal.engine.tier]
                                         }
                                     </span>
                                     <h3 className='sh-res-vol'>
@@ -1869,6 +2000,36 @@ const Overlord = () => {
                                     <span>Stability {strongestSignal.engine.apexNotes.instability}</span>
                                     <span>Direction {strongestSignal.engine.apexNotes.direction}</span>
                                     <span>Fluctuation {strongestSignal.engine.apexNotes.fluctuation}</span>
+                                </div>
+                            )}
+                            {strongestSignal.engine.parity && (
+                                <div className='ovl-eng-notes'>
+                                    {strongestSignal.engine.steady && (
+                                        <span>
+                                            Ready in {Math.round(strongestSignal.engine.steady.clearShare * 100)}% of{' '}
+                                            {strongestSignal.engine.steady.rounds} live checks
+                                        </span>
+                                    )}
+                                    <span>Parity {strongestSignal.engine.parity.state.toLowerCase()}</span>
+                                    {strongestSignal.engine.parity.grade && (
+                                        <span>Grade {strongestSignal.engine.parity.grade}</span>
+                                    )}
+                                    <span>Regime {strongestSignal.engine.parity.regime}</span>
+                                    {strongestSignal.engine.parity.stability && (
+                                        <span>Stability {strongestSignal.engine.parity.stability}</span>
+                                    )}
+                                    {strongestSignal.engine.parity.chief && (
+                                        <span>Chief {strongestSignal.engine.parity.chief}</span>
+                                    )}
+                                    {strongestSignal.engine.parity.contrarian && (
+                                        <span>Contrarian {strongestSignal.engine.parity.contrarian}</span>
+                                    )}
+                                    {strongestSignal.engine.parity.survival && (
+                                        <span>DBot {strongestSignal.engine.parity.survival}</span>
+                                    )}
+                                    {strongestSignal.engine.parity.recommendedRuns !== null && (
+                                        <span>Runs {strongestSignal.engine.parity.recommendedRuns}</span>
+                                    )}
                                 </div>
                             )}
                             <ul className='ovl-eng-reasons'>
