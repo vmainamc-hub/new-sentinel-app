@@ -1290,3 +1290,15 @@ input::-webkit-inner-spin-button {
     font-size: 12px;
     opacity: 0.8;
 }
+
+.ovl-paper {
+    display: block;
+    margin-top: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ovl-text-soft, #60738d);
+}
+
+.ovl-paper.is-on {
+    color: var(--ovl-primary-deep, #0a66c2);
+}

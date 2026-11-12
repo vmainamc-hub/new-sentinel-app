@@ -6,6 +6,7 @@ import { run_panel as run_panel_tabs } from '@/constants/run-panel';
 import { observer } from '@/external/bot-skeleton';
 import { isRateLimitError, planRateLimitRetry, reconnectDelayMs } from './rate-limit';
 import { useStore } from '@/hooks/useStore';
+import { readExecutionSpeed, SLOW_DELAY_MS } from '../execution-speed';
 import { ASSESS_MS, assessOverlord } from '../overlord-engine/assess';
 import { isTradableBarrier } from '../overlord-engine/engine';
 import { fetchHistories } from '../overlord-engine/history';
@@ -13,6 +14,7 @@ import { legacyPercentage } from '../overlord-engine/legacy';
 import { assessParity, PARITY_ASSESS_MS } from '../overlord-engine/parity-assess';
 import { legacyParityPct } from '../overlord-engine/parity-engine';
 import { getHub360AuthContext, getHub360AuthenticatedUrl } from './auth360';
+import { digitOfQuote, freshVh, normalizeVh, tradeWins, vhAfterReal, vhAfterVirtual } from './oracle/trade-plan';
 import { useHub360Module } from './use-hub360-module';
 
 const volatilityList = [
@@ -64,6 +66,16 @@ const SCAN_TIMEOUT_MS = 6000;
 const SCAN_MAX_RETRIES = 3;
 
 const alertSound = new Audio('/assets/media/announcement.mp3');
+
+// Virtual Hook (same rules as the Oracle and Sentinel AI): only digit contracts can be settled on paper.
+const DIGIT_TYPES = ['EVEN', 'ODD', 'OVER', 'UNDER'];
+const VIRTUAL_ID_BASE = 9_000_000_000_000; // paper trades never share an id with a real contract
+const VIRTUAL_TIMEOUT_MS = 120_000;
+const pipDecimals = pip => {
+    const n = Number(pip);
+    if (!Number.isFinite(n) || n < 0) return 2;
+    return n > 0 && n < 1 ? Math.round(-Math.log10(n)) : Math.trunc(n);
+};
 
 const parseSessionNumber = (value, fallback) => {
     const parsed = Number.parseFloat(value);
@@ -127,6 +139,12 @@ const Overlord = () => {
     const [recoveryPrediction, setRecoveryPrediction] = useState('4'); // Upgrade: Recovery Prediction State
 
     const [isRunning, setIsRunning] = useState(false);
+    const [useVirtualHook, setUseVirtualHook] = useState(false);
+    const [vhMode, setVhMode] = useState('STREAK');
+    const [vhEnterLosses, setVhEnterLosses] = useState('2');
+    const [vhReturnWins, setVhReturnWins] = useState('2');
+    const [vhFixedCount, setVhFixedCount] = useState('3');
+    const [paperStats, setPaperStats] = useState({ trades: 0, wins: 0, active: false });
     const [logs, setLogs] = useState([]);
     const [results, setResults] = useState([]);
     const [wins, setWins] = useState(0);
@@ -155,7 +173,16 @@ const Overlord = () => {
     const reconnectAttemptRef = useRef(0);
     const nextConnectAtRef = useRef(0);
     const connectTradingSocketRef = useRef(null);
+    const vhOnRef = useRef(false);
+    const vhConfigRef = useRef(normalizeVh({}));
+    const vhStateRef = useRef(freshVh());
+    const virtualOpenRef = useRef(null); // the paper trade waiting for its tick(s)
+    const virtualTimerRef = useRef(null);
+    const virtualCountRef = useRef(0);
+    const speedGateRef = useRef(false); // a Slow-mode wait before the next trade is already running
+    const lastTickEpochRef = useRef(null);
     const requestProposalRef = useRef(null);
+    const tickSubsRef = useRef({ ws: null, symbols: new Set() });
     const socketRequiresAuthRef = useRef(false);
     const contractMetaRef = useRef({});
     const lastProcessedContractIdRef = useRef(null);
@@ -228,6 +255,20 @@ const Overlord = () => {
     useEffect(() => {
         recoveryPredictionRef.current = recoveryPrediction;
     }, [recoveryPrediction]); // Upgrade: Sync Recovery Prediction
+
+    useEffect(() => {
+        vhOnRef.current = useVirtualHook;
+        vhConfigRef.current = normalizeVh({
+            mode: vhMode,
+            enterLosses: vhEnterLosses,
+            returnWins: vhReturnWins,
+            fixedCount: vhFixedCount,
+        });
+        if (!useVirtualHook) {
+            vhStateRef.current = freshVh();
+            setPaperStats(p => (p.active ? { ...p, active: false } : p));
+        }
+    }, [useVirtualHook, vhMode, vhEnterLosses, vhReturnWins, vhFixedCount]);
 
     const isRiseFallRecoveryPair = useCallback(() => {
         const types = [contractTypeRef.current, recoveryTypeRef.current];
@@ -339,6 +380,26 @@ const Overlord = () => {
         [journal]
     );
 
+    // Paper trades go to the Transactions panel only, flagged virtual: never counted in the real totals or limits.
+    const pushPaper = useCallback(
+        data => {
+            try {
+                transactions?.pushTransaction?.({ ...data, is_virtual_hook: 1, run_id: run_panel?.run_id });
+            } catch (error) {
+                console.debug('Paper trade row skipped.', error);
+            }
+        },
+        [transactions, run_panel]
+    );
+
+    const releaseTicks = useCallback(() => {
+        const subs = tickSubsRef.current;
+        if (subs.ws && subs.ws.readyState === WebSocket.OPEN && subs.symbols.size) {
+            subs.ws.send(JSON.stringify({ forget_all: 'ticks' }));
+        }
+        tickSubsRef.current = { ws: null, symbols: new Set() };
+    }, []);
+
     const stopTradingBot = useCallback(
         (reason = 'Bot stopped.', options = {}) => {
             const { preserveOpenContract = Boolean(run_panel?.has_open_contract) } = options;
@@ -366,6 +427,8 @@ const Overlord = () => {
                 transactionRecoveryTimeoutsRef.current.clear();
             }
 
+            if (!virtualOpenRef.current) releaseTicks(); // a paper trade in flight still settles, then the ticks are released
+
             run_panel?.setIsRunning?.(false);
             run_panel?.toggleDrawer?.(true);
             run_panel?.setActiveTabIndex?.(run_panel_tabs.TRANSACTIONS);
@@ -379,95 +442,255 @@ const Overlord = () => {
 
             logMessage(reason);
         },
-        [run_panel]
+        [releaseTicks, run_panel]
     );
 
     const handleStop = useCallback(() => {
         stopTradingBot('Bot stopped.');
     }, [stopTradingBot]);
 
-    const requestProposal = useCallback(() => {
-        if (!isRunningRef.current) {
-            return;
-        }
+    // A paper trade: the same pick as a real one, nothing bought. It settles on the market's real ticks.
+    const startVirtualTrade = useCallback(
+        plan => {
+            const ws = wsRef.current;
+            const market = symbolRef.current;
+            if (!ws || ws.readyState !== WebSocket.OPEN || !market || virtualOpenRef.current) return;
 
-        // Deriv told us to slow down: come back when the pause is over instead of sending into the limit again.
-        const cooldownMs = cooldownUntilRef.current - Date.now();
-        if (cooldownMs > 0) {
-            if (!rateLimitTimerRef.current) {
-                logMessage(`⏳ Waiting ${(cooldownMs / 1000).toFixed(1)}s for Deriv's rate limit to clear`);
-                rateLimitTimerRef.current = window.setTimeout(() => {
-                    rateLimitTimerRef.current = null;
-                    requestProposalRef.current?.();
-                }, cooldownMs);
+            if (tickSubsRef.current.ws !== ws) tickSubsRef.current = { ws, symbols: new Set() };
+            if (!tickSubsRef.current.symbols.has(market)) {
+                ws.send(JSON.stringify({ ticks: market, subscribe: 1 }));
+                tickSubsRef.current.symbols.add(market);
             }
-            return;
-        }
 
-        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-            logMessage('⚠️ WebSocket not ready for proposal request');
-            return;
-        }
+            const id = VIRTUAL_ID_BASE + (virtualCountRef.current += 1);
+            const derivType = getDerivContractType(plan.type);
+            // Same rule as the bot builder's virtual trades: the first tick after the purchase is tick 1 (also for a
+            // one-tick contract), and the trade settles on tick `duration`.
+            virtualOpenRef.current = {
+                id,
+                symbol: market,
+                type: plan.type,
+                barrier: plan.barrier,
+                remaining: Math.max(1, parseInt(duration, 10) || 1),
+                entry: null,
+                row: null,
+            };
+            lastTickEpochRef.current = null;
+            virtualOpenRef.current.row = {
+                contract_id: id,
+                display_name: symbolNames[market] || market,
+                underlying_symbol: market,
+                shortcode: `OVERLORD_PAPER_${derivType}_${market}`,
+                contract_type: derivType,
+                currency: client?.currency || 'USD',
+                date_start: Math.floor(Date.now() / 1000),
+                is_sold: 0,
+                is_expired: 0,
+                status: 'open',
+                buy_price: 0,
+                sell_price: 0,
+                payout: 0,
+                bid_price: 0,
+                profit: 0,
+                barrier: plan.barrier !== null ? String(plan.barrier) : undefined,
+                transaction_ids: { buy: id },
+            };
+            pushPaper(virtualOpenRef.current.row);
+            logMessage(
+                `Virtual ${plan.type}${plan.barrier !== null ? ` ${plan.barrier}` : ''}${
+                    plan.recovery ? ' (recovery)' : ''
+                } on ${symbolNames[market] || market}: paper trade, no money staked.`
+            );
 
-        if (!isAuthorizedRef.current) {
-            logMessage('⚠️ Not authorized yet, cannot request proposal');
-            return;
-        }
+            if (virtualTimerRef.current) clearTimeout(virtualTimerRef.current);
+            virtualTimerRef.current = window.setTimeout(() => {
+                if (virtualOpenRef.current?.id !== id) return;
+                virtualOpenRef.current = null;
+                logMessage('A virtual trade never settled (no ticks arrived); it was dropped.');
+                if (isRunningRef.current) requestProposalRef.current?.();
+            }, VIRTUAL_TIMEOUT_MS);
+        },
+        [client?.currency, duration, pushPaper]
+    );
 
-        // Prevent multiple simultaneous proposals
-        if (pendingProposalRef.current) {
-            logMessage(`⏳ Waiting for pending proposal/trade to complete`);
-            return;
-        }
+    const onVirtualTick = useCallback(
+        tick => {
+            const v = virtualOpenRef.current;
+            if (!v || !tick || tick.symbol !== v.symbol) return;
+            const digit = digitOfQuote(tick.quote, tick.pip_size);
+            if (digit === null) return;
+            if (tick.epoch && tick.epoch === lastTickEpochRef.current) return; // the same tick twice counts once
+            lastTickEpochRef.current = tick.epoch;
+            const spot = Number.isFinite(Number(tick.pip_size))
+                ? Number(tick.quote).toFixed(pipDecimals(tick.pip_size))
+                : String(tick.quote);
+            v.remaining -= 1;
+            if (v.entry === null) {
+                v.entry = spot;
+                v.row = { ...v.row, entry_spot: spot, entry_tick_time: tick.epoch };
+            }
+            if (v.remaining > 0) {
+                pushPaper(v.row); // still open: show the entry spot
+                return;
+            }
 
-        // Ensure we're not making multiple simultaneous proposals
-        if (activeContractsRef.current.size > 0) {
-            logMessage(`⏳ Waiting for ${activeContractsRef.current.size} active contract(s) to resolve`);
-            return;
-        }
+            virtualOpenRef.current = null;
+            if (virtualTimerRef.current) {
+                clearTimeout(virtualTimerRef.current);
+                virtualTimerRef.current = null;
+            }
+            const won = tradeWins(v.type, v.barrier, digit);
+            pushPaper({
+                ...v.row,
+                is_sold: 1,
+                is_expired: 1,
+                status: won ? 'won' : 'lost',
+                virtual_result: won ? 'win' : 'loss',
+                exit_spot: spot,
+                exit_tick_time: tick.epoch,
+                transaction_ids: { buy: v.id, sell: v.id },
+            });
+            logMessage(
+                `Virtual ${v.type}${v.barrier !== null ? ` ${v.barrier}` : ''} ${won ? 'won' : 'lost'} on paper (digit ${digit}). No money moved.`
+            );
 
-        const activeType = getNextContractType();
-        // Recovering = Recovery mode is on and the last trade lost. This must NOT depend on the contract type being
-        // different: OVER 2 -> recovery OVER 3 uses the same type but a different digit. (RISE/FALL pairs just swap
-        // direction and have no digit.)
-        const isRecovering = useRecoveryRef.current && lastTradeWasLossRef.current && !isRiseFallRecoveryPair();
-        activeContractTypeRef.current = activeType;
+            const step = vhAfterVirtual(vhStateRef.current, won, vhConfigRef.current);
+            if (step.event === 'returned') logMessage('Virtual Hook: the paper trades did it. Back to real money.');
+            vhStateRef.current = step.state;
+            setPaperStats(p => ({ trades: p.trades + 1, wins: p.wins + (won ? 1 : 0), active: step.state.virtual }));
 
-        const activePrediction = isRecovering ? recoveryPredictionRef.current : predictionDigitRef.current;
-        const parsedDuration = Math.max(1, parseInt(duration, 10) || 1);
+            if (isRunningRef.current) {
+                window.setTimeout(() => requestProposalRef.current?.(), 0);
+            } else {
+                releaseTicks();
+            }
+        },
+        [pushPaper, releaseTicks]
+    );
 
-        const derivContractType = getDerivContractType(activeType);
+    const requestProposal = useCallback(
+        opts => {
+            if (!isRunningRef.current) {
+                return;
+            }
 
-        const proposalPayload = {
-            proposal: 1,
-            amount: Number(currentStakeRef.current).toFixed(2),
-            basis: 'stake',
-            contract_type: derivContractType,
-            currency: client?.currency || 'USD',
-            underlying_symbol: symbolRef.current,
-            duration: parsedDuration,
-            duration_unit: 't',
-        };
+            // Deriv told us to slow down: come back when the pause is over instead of sending into the limit again.
+            const cooldownMs = cooldownUntilRef.current - Date.now();
+            if (cooldownMs > 0) {
+                if (!rateLimitTimerRef.current) {
+                    logMessage(`⏳ Waiting ${(cooldownMs / 1000).toFixed(1)}s for Deriv's rate limit to clear`);
+                    rateLimitTimerRef.current = window.setTimeout(() => {
+                        rateLimitTimerRef.current = null;
+                        requestProposalRef.current?.();
+                    }, cooldownMs);
+                }
+                return;
+            }
 
-        if (['OVER', 'UNDER', 'MATCHES', 'DIFFERS'].includes(activeType)) {
-            proposalPayload.barrier = parseInt(activePrediction, 10);
-        }
+            if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+                logMessage('⚠️ WebSocket not ready for proposal request');
+                return;
+            }
 
-        logMessage(
-            `📋 Sending ${isRecovering ? 'RECOVERY ' : ''}proposal: ${derivContractType}${
-                proposalPayload.barrier !== undefined ? ` ${proposalPayload.barrier}` : ''
-            } on ${symbolRef.current} x${currentStakeRef.current}`
-        );
-        pendingProposalRef.current = true; // Mark proposal as pending
-        run_panel?.setContractStage?.(contract_stages.PURCHASE_SENT);
-        wsRef.current.send(JSON.stringify(proposalPayload));
-    }, [client?.currency, duration, getNextContractType, isRiseFallRecoveryPair, run_panel]);
+            if (!isAuthorizedRef.current) {
+                logMessage('⚠️ Not authorized yet, cannot request proposal');
+                return;
+            }
+
+            // Prevent multiple simultaneous proposals
+            if (pendingProposalRef.current) {
+                logMessage(`⏳ Waiting for pending proposal/trade to complete`);
+                return;
+            }
+
+            // Ensure we're not making multiple simultaneous proposals
+            if (activeContractsRef.current.size > 0) {
+                logMessage(`⏳ Waiting for ${activeContractsRef.current.size} active contract(s) to resolve`);
+                return;
+            }
+
+            if (virtualOpenRef.current) return; // a paper trade is still waiting for its tick
+
+            // The bottom bar's Execution switch: Fast buys at once, Slow waits before each purchase. Real and paper trades both obey it.
+            if (!(opts && opts.skipDelay === true)) {
+                const delay = readExecutionSpeed() === 'slow' ? SLOW_DELAY_MS : 0;
+                if (delay) {
+                    if (!speedGateRef.current) {
+                        speedGateRef.current = true;
+                        window.setTimeout(() => {
+                            speedGateRef.current = false;
+                            if (isRunningRef.current) requestProposalRef.current?.({ skipDelay: true });
+                        }, delay);
+                    }
+                    return;
+                }
+            }
+
+            const activeType = getNextContractType();
+            // Recovering = Recovery mode is on and the last trade lost. This must NOT depend on the contract type being
+            // different: OVER 2 -> recovery OVER 3 uses the same type but a different digit. (RISE/FALL pairs just swap
+            // direction and have no digit.)
+            const isRecovering = useRecoveryRef.current && lastTradeWasLossRef.current && !isRiseFallRecoveryPair();
+            activeContractTypeRef.current = activeType;
+
+            const activePrediction = isRecovering ? recoveryPredictionRef.current : predictionDigitRef.current;
+            const parsedDuration = Math.max(1, parseInt(duration, 10) || 1);
+
+            // Virtual Hook: while it is paper time, the same pick is traded on paper and nothing is bought.
+            if (
+                vhOnRef.current &&
+                vhStateRef.current.virtual &&
+                DIGIT_TYPES.includes(contractTypeRef.current) &&
+                DIGIT_TYPES.includes(activeType)
+            ) {
+                const needsBarrier = activeType === 'OVER' || activeType === 'UNDER';
+                startVirtualTrade({
+                    type: activeType,
+                    barrier: needsBarrier ? parseInt(activePrediction, 10) : null,
+                    recovery: isRecovering,
+                });
+                return;
+            }
+
+            const derivContractType = getDerivContractType(activeType);
+
+            const proposalPayload = {
+                proposal: 1,
+                amount: Number(currentStakeRef.current).toFixed(2),
+                basis: 'stake',
+                contract_type: derivContractType,
+                currency: client?.currency || 'USD',
+                underlying_symbol: symbolRef.current,
+                duration: parsedDuration,
+                duration_unit: 't',
+            };
+
+            if (['OVER', 'UNDER', 'MATCHES', 'DIFFERS'].includes(activeType)) {
+                proposalPayload.barrier = parseInt(activePrediction, 10);
+            }
+
+            logMessage(
+                `📋 Sending ${isRecovering ? 'RECOVERY ' : ''}proposal: ${derivContractType}${
+                    proposalPayload.barrier !== undefined ? ` ${proposalPayload.barrier}` : ''
+                } on ${symbolRef.current} x${currentStakeRef.current}`
+            );
+            pendingProposalRef.current = true; // Mark proposal as pending
+            run_panel?.setContractStage?.(contract_stages.PURCHASE_SENT);
+            wsRef.current.send(JSON.stringify(proposalPayload));
+        },
+        [client?.currency, duration, getNextContractType, isRiseFallRecoveryPair, run_panel, startVirtualTrade]
+    );
     requestProposalRef.current = requestProposal;
 
     // ------------------ CENTRAL SOCKET HANDLER ------------------
     const handleSocketMessage = useCallback(
         event => {
             const data = JSON.parse(event.data);
+
+            if (data.msg_type === 'tick') {
+                onVirtualTick(data.tick);
+                return;
+            }
 
             if (data.msg_type === 'authorize') {
                 if (!isAuthorizedRef.current) {
@@ -837,6 +1060,17 @@ const Overlord = () => {
                 totalProfitRef.current += profit;
                 lastTradeWasLossRef.current = profit <= 0;
 
+                if (vhOnRef.current && DIGIT_TYPES.includes(contractTypeRef.current)) {
+                    const step = vhAfterReal(vhStateRef.current, profit > 0, vhConfigRef.current);
+                    vhStateRef.current = step.state;
+                    if (step.event === 'entered') {
+                        logMessage(
+                            `Virtual Hook: ${vhConfigRef.current.enterLosses} real loss(es) in a row. Trading on paper until it wins again.`
+                        );
+                        setPaperStats(p => ({ ...p, active: true }));
+                    }
+                }
+
                 if (useRecoveryRef.current && isRiseFallRecoveryPair() && profit <= 0) {
                     activeContractTypeRef.current = activeContractTypeRef.current === 'RISE' ? 'FALL' : 'RISE';
                 }
@@ -889,6 +1123,7 @@ const Overlord = () => {
         [
             client?.currency,
             isRiseFallRecoveryPair,
+            onVirtualTick,
             publishNativeContract,
             publishNativeError,
             publishNativeResult,
@@ -1133,6 +1368,14 @@ const Overlord = () => {
         completedContractsRef.current.clear();
         activeContractsRef.current.clear();
         pendingProposalRef.current = false; // Clear pending flag on fresh start
+        speedGateRef.current = false;
+        // The hook opens on paper (like Sentinel AI's) and goes to real money by its own return rule.
+        vhStateRef.current =
+            vhOnRef.current && DIGIT_TYPES.includes(contractTypeRef.current)
+                ? { virtual: true, realLosses: 0, virtualWins: 0, virtualDone: 0 }
+                : freshVh();
+        virtualOpenRef.current = null;
+        setPaperStats({ trades: 0, wins: 0, active: vhStateRef.current.virtual });
 
         // Clear any pending timeouts from previous session (including allowance timeouts)
         contractTimeoutsRef.current.forEach(timeoutId => clearTimeout(timeoutId));
@@ -1556,7 +1799,8 @@ const Overlord = () => {
             setAssessInfo(null);
         }
         if (cancelled() || assessed.cancelled) return null;
-        if (!assessed.liveTicks) logMessage('Live ticks were not available, so the answer comes from the history only.');
+        if (!assessed.liveTicks)
+            logMessage('Live ticks were not available, so the answer comes from the history only.');
         const scan = assessed.scan;
 
         const best = scan.best;
@@ -1639,7 +1883,9 @@ const Overlord = () => {
         if (cancelled()) return null;
 
         // The markets are watched live for a few seconds and Parity is re-run every refresh before any market is shown.
-        logMessage(`👀 Watching ${Object.keys(series).length} markets live for ${Math.round(PARITY_ASSESS_MS / 1000)}s...`);
+        logMessage(
+            `👀 Watching ${Object.keys(series).length} markets live for ${Math.round(PARITY_ASSESS_MS / 1000)}s...`
+        );
         setAssessInfo({ elapsedMs: 0, assessMs: PARITY_ASSESS_MS, ticks: 0, rounds: 0, leader: null, flagged: 0 });
         let assessed;
         try {
@@ -1658,7 +1904,8 @@ const Overlord = () => {
             setAssessInfo(null);
         }
         if (cancelled() || assessed.cancelled) return null;
-        if (!assessed.liveTicks) logMessage('Live ticks were not available, so the answer comes from the history only.');
+        if (!assessed.liveTicks)
+            logMessage('Live ticks were not available, so the answer comes from the history only.');
         const scan = assessed.scan;
 
         const best = scan.best;
@@ -1892,6 +2139,81 @@ const Overlord = () => {
                         )}
                     </div>
 
+                    {DIGIT_TYPES.includes(tradeType) && (
+                        <div className='st-recovery-dashboard-row ovl-vh-row'>
+                            <div className='st-recovery-cell toggle-cell'>
+                                <label className='st-switch'>
+                                    <input
+                                        type='checkbox'
+                                        aria-label='Virtual hook'
+                                        checked={useVirtualHook}
+                                        onChange={e => setUseVirtualHook(e.target.checked)}
+                                    />
+                                    <span className='st-slider'></span>
+                                </label>
+                                <span className='st-cell-title'>VIRTUAL HOOK</span>
+                            </div>
+
+                            {useVirtualHook && (
+                                <div className='st-recovery-controls'>
+                                    <div className='st-control-group'>
+                                        <label className='st-micro-label'>MODE</label>
+                                        <select
+                                            value={vhMode}
+                                            onChange={e => setVhMode(e.target.value)}
+                                            className='st-instrument-select'
+                                        >
+                                            <option value='STREAK'>UNTIL PAPER WINS</option>
+                                            <option value='FIXED'>FIXED PAPER TRADES</option>
+                                        </select>
+                                    </div>
+                                    <div className='st-control-group'>
+                                        <label className='st-micro-label'>GO VIRTUAL AFTER LOSSES</label>
+                                        <input
+                                            type='number'
+                                            min='1'
+                                            max='10'
+                                            value={vhEnterLosses}
+                                            onChange={e => setVhEnterLosses(e.target.value)}
+                                            className='st-instrument-input'
+                                        />
+                                    </div>
+                                    {vhMode === 'STREAK' ? (
+                                        <div className='st-control-group'>
+                                            <label className='st-micro-label'>BACK TO REAL AFTER WINS</label>
+                                            <input
+                                                type='number'
+                                                min='1'
+                                                max='10'
+                                                value={vhReturnWins}
+                                                onChange={e => setVhReturnWins(e.target.value)}
+                                                className='st-instrument-input'
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className='st-control-group'>
+                                            <label className='st-micro-label'>PAPER TRADES</label>
+                                            <input
+                                                type='number'
+                                                min='1'
+                                                max='20'
+                                                value={vhFixedCount}
+                                                onChange={e => setVhFixedCount(e.target.value)}
+                                                className='st-instrument-input'
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {useVirtualHook && DIGIT_TYPES.includes(tradeType) && (isRunning || paperStats.trades > 0) && (
+                        <span className={`ovl-paper ${paperStats.active ? 'is-on' : ''}`}>
+                            {paperStats.active ? 'Trading on paper now' : 'Trading real money'} · paper{' '}
+                            {paperStats.wins}/{paperStats.trades} won
+                        </span>
+                    )}
+
                     <div className='sh-button-group'>
                         <button className={isRunning ? 'sh-bot-stop' : 'sh-bot-run'} onClick={handleStart}>
                             {isRunning ? '⏹ STOP BOT' : '▶ RUN BOT'}
@@ -1917,12 +2239,15 @@ const Overlord = () => {
                                     <div className='active-scan-card'>
                                         <span className='live-tag'>ASSESSING LIVE</span>
                                         <h3 className='active-symbol-name'>
-                                            {Math.round(assessInfo.elapsedMs / 1000)}s / {Math.round(assessInfo.assessMs / 1000)}s
+                                            {Math.round(assessInfo.elapsedMs / 1000)}s /{' '}
+                                            {Math.round(assessInfo.assessMs / 1000)}s
                                         </h3>
                                         <div className='loading-bar-container'>
                                             <div
                                                 className='ovl-assess-fill'
-                                                style={{ width: `${Math.min(100, (assessInfo.elapsedMs / assessInfo.assessMs) * 100)}%` }}
+                                                style={{
+                                                    width: `${Math.min(100, (assessInfo.elapsedMs / assessInfo.assessMs) * 100)}%`,
+                                                }}
                                             ></div>
                                         </div>
                                         <div className='ovl-assess-line'>
@@ -2072,7 +2397,8 @@ const Overlord = () => {
                                     'The best market is picked when you run.'
                                 ) : (
                                     <>
-                                        Trading on <span style={{ fontWeight: 800 }}>{symbolNames[symbol] || symbol}</span>.
+                                        Trading on{' '}
+                                        <span style={{ fontWeight: 800 }}>{symbolNames[symbol] || symbol}</span>.
                                     </>
                                 )}
                             </p>
