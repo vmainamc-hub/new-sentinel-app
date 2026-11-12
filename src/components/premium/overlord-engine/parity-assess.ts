@@ -12,6 +12,7 @@
 import { fallbackDecimals, lastDigit } from './legacy';
 import {
     compareParity,
+    oracleOk,
     DEFAULT_PARITY_SETTINGS,
     type ParityInput,
     pickFromReads,
@@ -37,9 +38,11 @@ export class ParityAssessment {
     private ready = new Map<string, number>();
     private top = new Map<string, number>();
     private readonly chosen: ParitySide | null;
+    private readonly requireOracle: boolean;
 
-    constructor(chosen: ParitySide | null) {
+    constructor(chosen: ParitySide | null, requireOracle = false) {
         this.chosen = chosen;
+        this.requireOracle = requireOracle;
     }
 
     get rounds(): number {
@@ -50,7 +53,13 @@ export class ParityAssessment {
     observe(scan: ParityScan): void {
         if (scan.legacyOnly) return;
         this.n += 1;
-        const matching = scan.reads.filter(r => !r.thin && r.ready && (this.chosen === null || r.side === this.chosen));
+        const matching = scan.reads.filter(
+            r =>
+                !r.thin &&
+                r.ready &&
+                (!this.requireOracle || oracleOk(r)) &&
+                (this.chosen === null || r.side === this.chosen)
+        );
         for (const r of matching) this.ready.set(keyOf(r), (this.ready.get(keyOf(r)) ?? 0) + 1);
         for (const r of matching.slice(0, LEADERS)) this.top.set(keyOf(r), (this.top.get(keyOf(r)) ?? 0) + 1);
     }
@@ -66,13 +75,13 @@ export class ParityAssessment {
         if (scan.legacyOnly || this.n < 2) return scan;
         const reads = scan.reads.map(r => {
             // Only READY markets carry a tier from the rounds; Parity's other states are left exactly as Parity gave them.
-            if (r.thin || !r.ready) return r;
+            if (r.thin || !r.ready || (this.requireOracle && !oracleOk(r))) return r;
             const s = this.share(r);
             const tier = s.clear >= PARITY_STEADY_SHARE ? ('STRONG' as const) : ('BEST' as const);
             return { ...r, tier, steady: { rounds: this.n, clearShare: s.clear, topShare: s.top } };
         });
         reads.sort(compareParity);
-        return { reads, ...pickFromReads(reads, this.chosen) };
+        return { reads, ...pickFromReads(reads, this.chosen, this.requireOracle) };
     }
 }
 
@@ -196,13 +205,14 @@ export async function assessParity(opts: ParityAssessOptions): Promise<ParityAss
         opts.createSocket
     );
 
-    const assessment = new ParityAssessment(opts.side);
+    const assessment = new ParityAssessment(opts.side, opts.requireOracle);
     const input = (): ParityInput => ({
         series: live,
         symbols: opts.symbols,
         side: opts.side,
         names: opts.names,
         settings: opts.settings,
+        requireOracle: opts.requireOracle,
     });
     const started = Date.now();
     let cancelled = false;

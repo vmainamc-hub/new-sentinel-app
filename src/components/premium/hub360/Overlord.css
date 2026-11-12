@@ -1313,3 +1313,32 @@ input::-webkit-inner-spin-button {
     width: 100%;
     min-width: 0;
 }
+
+.ovl-oracle {
+    margin: 6px 0;
+    font-size: 11px;
+}
+
+.ovl-oracle ul {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+}
+
+.ovl-oracle li {
+    padding: 2px 0;
+}
+
+.ovl-oracle li.is-ok {
+    color: #22c55e;
+}
+
+.ovl-oracle li.is-no {
+    color: #ef4444;
+}
+
+.ovl-oracle li em {
+    display: block;
+    font-style: normal;
+    opacity: 0.75;
+}

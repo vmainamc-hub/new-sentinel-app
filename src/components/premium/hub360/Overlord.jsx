@@ -141,6 +141,7 @@ const Overlord = () => {
 
     const [isRunning, setIsRunning] = useState(false);
     const [useVirtualHook, setUseVirtualHook] = useState(false);
+    const [requireOracle, setRequireOracle] = useState(true); // Even/Odd Find Market also needs the Oracle's six conditions
     const [vhMode, setVhMode] = useState('STREAK');
     const [vhEnterLosses, setVhEnterLosses] = useState('2');
     const [vhReturnWins, setVhReturnWins] = useState('2');
@@ -1915,6 +1916,7 @@ const Overlord = () => {
                 series,
                 symbols: volatilityList,
                 side: smartContract ? null : side,
+                requireOracle,
                 names: symbolNames,
                 url: SCAN_WS_URL,
                 cancelled,
@@ -1949,7 +1951,9 @@ const Overlord = () => {
             logMessage(
                 best.thin
                     ? `✅ ${symbolNames[best.symbol]} ${best.label} (basic scan: too few ticks for Precision Parity)`
-                    : `✅ ${best.tier}: ${symbolNames[best.symbol]} ${best.label}, Precision Parity READY at ${best.score}%`
+                    : `✅ ${best.tier}: ${symbolNames[best.symbol]} ${best.label}, Precision Parity READY at ${best.score}%${
+                          best.oracle ? `, Oracle ${best.oracle.passed}/${best.oracle.total} conditions` : ''
+                      }`
             );
             try {
                 alertSound.play().catch(() => {});
@@ -1971,7 +1975,13 @@ const Overlord = () => {
             const other = scan.opposite
                 ? ` It does see ${scan.opposite.label} on ${symbolNames[scan.opposite.symbol]} (${scan.opposite.score}%).`
                 : '';
-            logMessage(`⏸ Precision Parity has no READY market for ${wanted} right now.${other} Try again shortly.`);
+            const blocked = requireOracle ? scan.reads.filter(r => !r.thin && r.ready && r.oracle && !r.oracle.ok) : [];
+            const oracleNote = blocked.length
+                ? ` Parity was READY on ${blocked.length} market(s) but the Oracle conditions did not all hold (best ${Math.max(
+                      ...blocked.map(r => r.oracle.passed)
+                  )}/6).`
+                : '';
+            logMessage(`⏸ No market passes for ${wanted} right now.${oracleNote}${other} Try again shortly.`);
         } else {
             logMessage('Scan incomplete: no market returned enough ticks. Try again.');
         }
@@ -2109,6 +2119,21 @@ const Overlord = () => {
                             {analysisStarted ? 'SCANNING… TAP TO STOP' : 'FIND MARKET'}
                         </button>
                     </div>
+                    {isParityTrade && (
+                        <label className='ovl-smart-toggle'>
+                            <input
+                                type='checkbox'
+                                aria-label='Require Oracle conditions'
+                                checked={requireOracle}
+                                onChange={e => setRequireOracle(e.target.checked)}
+                                disabled={isRunning || analysisStarted}
+                            />
+                            <span>
+                                Also require the Oracle Even/Odd conditions (rising digits, 2nd most, most increasing,
+                                red bars, recent digits)
+                            </span>
+                        </label>
+                    )}
                     {/* RECOVERY MODE UI SECTION */}
                     <div className='st-recovery-dashboard-row'>
                         {/* TOGGLE GROUP */}
@@ -2348,6 +2373,21 @@ const Overlord = () => {
                                     <span>Stability {strongestSignal.engine.apexNotes.instability}</span>
                                     <span>Direction {strongestSignal.engine.apexNotes.direction}</span>
                                     <span>Fluctuation {strongestSignal.engine.apexNotes.fluctuation}</span>
+                                </div>
+                            )}
+                            {strongestSignal.engine.oracle && (
+                                <div className='ovl-oracle'>
+                                    <strong>
+                                        Oracle conditions {strongestSignal.engine.oracle.passed}/
+                                        {strongestSignal.engine.oracle.total}
+                                    </strong>
+                                    <ul>
+                                        {strongestSignal.engine.oracle.checks.map(c => (
+                                            <li key={c.key} className={c.ok ? 'is-ok' : 'is-no'}>
+                                                {c.ok ? '✓' : '✗'} {c.label} <em>{c.detail}</em>
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </div>
                             )}
                             {strongestSignal.engine.parity && (

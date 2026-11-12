@@ -11,8 +11,13 @@
 // Overlord's original Even / Odd condition (the share of the last 50 digits that were even / odd, Find Market picked the
 // LOWEST) is kept as a number on every read, and as the fallback when no market has enough history for Parity to read.
 //
+// The Oracle's Even / Odd conditions (hub360/oracle/even-odd: rising digits, 2nd most, most increasing, red bars, red bars
+// rising, recent digits) are read on every market as well. They never change what Parity says; with `requireOracle` a market
+// is only picked when Parity says READY AND all six Oracle conditions hold for its parity.
+//
 // Honest limit: Deriv digits are generated randomly. Parity ranks how healthy and persistent a parity structure has been and
 // avoids the moments its own analysts flag as costly. It cannot create an edge or predict the next tick.
+import { readEvenOdd } from '../hub360/oracle/even-odd';
 import { LEGACY_WINDOW } from './legacy';
 import { analyseMarketParity, DEFAULT_PARITY_SETTINGS, type ParitySettings } from './parity/engine';
 import type { MarketParityReport } from './parity/types';
@@ -56,6 +61,15 @@ export type ParityNotes = {
     opposite: number;
 };
 
+/** The Oracle's six Even / Odd conditions for the side of a read. */
+export type OracleNotes = {
+    ok: boolean;
+    passed: number;
+    total: number;
+    score: number;
+    checks: { key: string; label: string; ok: boolean; detail: string }[];
+};
+
 export type ParityRead = {
     symbol: string;
     name: string;
@@ -83,6 +97,8 @@ export type ParityRead = {
     agree: number;
     applied: number;
     parity: ParityNotes | null;
+    /** The Oracle's Even / Odd conditions on the same digits; null when there are too few ticks to read them. */
+    oracle: OracleNotes | null;
     /** Set after an assessment: how the market held up over the live rounds. */
     steady?: { rounds: number; clearShare: number; topShare: number };
 };
@@ -94,6 +110,8 @@ export type ParityInput = {
     side: ParitySide | null;
     names?: Readonly<Record<string, string>>;
     settings?: ParitySettings;
+    /** Only pick a market whose Oracle Even / Odd conditions all hold (as well as Parity READY). */
+    requireOracle?: boolean;
 };
 
 export type ParityScan = {
@@ -139,8 +157,24 @@ export const toParityTicks = (digits: readonly number[], max = PARITY_MAX_TICKS)
 };
 
 /** Compares reads: ready first, then STRONG before BEST, then Parity's own confidence. */
+/** The Oracle conditions hold, or could not be read (too few ticks), which never blocks a market. */
+export const oracleOk = (r: ParityRead): boolean => !r.oracle || r.oracle.ok;
+
+const oracleOf = (digits: readonly number[], side: ParitySide): OracleNotes | null => {
+    const read = readEvenOdd(digits, side);
+    if (!read) return null;
+    return {
+        ok: read.ok,
+        passed: read.passed,
+        total: read.total,
+        score: read.score,
+        checks: read.checks.map(c => ({ key: c.key, label: c.label, ok: c.ok, detail: c.detail })),
+    };
+};
+
 export const compareParity = (a: ParityRead, b: ParityRead): number =>
     Number(b.ready) - Number(a.ready) ||
+    Number(b.ready && oracleOk(b)) - Number(a.ready && oracleOk(a)) ||
     Number(a.thin) - Number(b.thin) ||
     TIER_RANK[a.tier] - TIER_RANK[b.tier] ||
     b.score - a.score;
@@ -160,10 +194,13 @@ const thinRead = (symbol: string, name: string, digits: readonly number[], side:
     legacyPct: legacyParityPct(digits, side),
     thin: true,
     ticks: digits.length,
-    reasons: [`Only ${digits.length} ticks, too few for Precision Parity; only the original ${labelOf(side)} count could be read.`],
+    reasons: [
+        `Only ${digits.length} ticks, too few for Precision Parity; only the original ${labelOf(side)} count could be read.`,
+    ],
     agree: 0,
     applied: 0,
     parity: null,
+    oracle: null,
 });
 
 const notesOf = (report: MarketParityReport, side: ParitySide): ParityNotes => {
@@ -202,7 +239,11 @@ const readFromReport = (
     const ready = v.state === 'READY' && v.recommendation !== 'NO_TRADE';
     // The side is what Parity recommends; when it recommends nothing, the parity it leans to (or the one chosen on screen).
     const side: ParitySide =
-        v.recommendation !== 'NO_TRADE' ? sideOf(v.recommendation) : lean ? sideOf(lean.contract) : (requested ?? 'EVEN');
+        v.recommendation !== 'NO_TRADE'
+            ? sideOf(v.recommendation)
+            : lean
+              ? sideOf(lean.contract)
+              : (requested ?? 'EVEN');
     const hyp = side === 'ODD' ? hOdd : hEven;
     const score = round1(v.confidence);
     const vetoed = v.state === 'REJECTED';
@@ -229,6 +270,7 @@ const readFromReport = (
         agree: hyp ? hyp.supports.length : 0,
         applied: hyp ? hyp.supports.length + hyp.conflicts.length : 0,
         parity: notesOf(report, side),
+        oracle: oracleOf(digits, side),
     };
 };
 
@@ -238,7 +280,8 @@ const readFromReport = (
  */
 export function pickFromReads(
     reads: readonly ParityRead[],
-    chosen: ParitySide | null
+    chosen: ParitySide | null,
+    requireOracle = false
 ): Pick<ParityScan, 'best' | 'watch' | 'opposite' | 'legacyOnly' | 'evaluated'> {
     const deep = reads.filter(r => !r.thin);
     if (deep.length === 0) {
@@ -247,10 +290,15 @@ export function pickFromReads(
         return { best: thin[0] ?? null, watch: null, opposite: null, legacyOnly: reads.length > 0, evaluated: 0 };
     }
     const matches = (r: ParityRead) => chosen === null || r.side === chosen;
-    const best = deep.find(r => r.ready && matches(r)) ?? null;
+    const eligible = (r: ParityRead) => r.ready && matches(r) && (!requireOracle || oracleOk(r));
+    const best = deep.find(eligible) ?? null;
     if (best) return { best, watch: null, opposite: null, legacyOnly: false, evaluated: deep.length };
-    const watch = deep.filter(r => !r.ready && !r.vetoed && matches(r)).sort((a, b) => b.score - a.score)[0] ?? null;
-    const opposite = chosen === null ? null : (deep.find(r => r.ready && r.side !== chosen) ?? null);
+    const watch =
+        deep.filter(r => !eligible(r) && !r.vetoed && matches(r)).sort((a, b) => b.score - a.score)[0] ?? null;
+    const opposite =
+        chosen === null
+            ? null
+            : (deep.find(r => r.ready && r.side !== chosen && (!requireOracle || oracleOk(r))) ?? null);
     return { best: null, watch, opposite, legacyOnly: false, evaluated: deep.length };
 }
 
@@ -270,5 +318,5 @@ export function scanParity(input: ParityInput): ParityScan {
         reads.push(readFromReport(report, series.digits, input.side));
     }
     reads.sort(compareParity);
-    return { reads, ...pickFromReads(reads, input.side) };
+    return { reads, ...pickFromReads(reads, input.side, input.requireOracle) };
 }

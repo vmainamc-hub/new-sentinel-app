@@ -2,6 +2,7 @@ import { lastDigit as parityLastDigit } from '@/lib/analytics';
 import { resetParityMemory } from '../parity/engine';
 import {
     compareParity,
+    oracleOk,
     legacyParityPct,
     type ParityRead,
     type ParitySeries,
@@ -93,7 +94,11 @@ describe('scanParity', () => {
             const digits = Array.from({ length: 100 }, (_, i) => (i < evenShare ? 2 : 3));
             return { prices: digits, digits, decimals: 2 };
         };
-        const scan = scanParity({ series: { A: mk(70), B: mk(30), C: mk(55) }, symbols: ['A', 'B', 'C'], side: 'EVEN' });
+        const scan = scanParity({
+            series: { A: mk(70), B: mk(30), C: mk(55) },
+            symbols: ['A', 'B', 'C'],
+            side: 'EVEN',
+        });
         expect(scan.legacyOnly).toBe(true);
         expect(scan.evaluated).toBe(0);
         expect(scan.best?.symbol).toBe('B');
@@ -182,6 +187,7 @@ describe('pickFromReads and compareParity', () => {
         agree: 5,
         applied: 6,
         parity: null,
+        oracle: null,
         ...over,
     });
 
@@ -211,5 +217,32 @@ describe('pickFromReads and compareParity', () => {
         const picked = pickFromReads([rej, dev], 'EVEN');
         expect(picked.best).toBeNull();
         expect(picked.watch?.symbol).toBe('d');
+    });
+
+    describe('Oracle Even / Odd conditions', () => {
+        const oracle = (ok: boolean) => ({ ok, passed: ok ? 6 : 3, total: 6, score: 50, checks: [] });
+
+        it('only picks a READY market whose Oracle conditions hold when requireOracle is on', () => {
+            const failing = base({ symbol: 'A', score: 90, oracle: oracle(false) });
+            const passing = base({ symbol: 'B', score: 60, oracle: oracle(true) });
+            const reads = [failing, passing].sort(compareParity);
+            expect(pickFromReads(reads, 'EVEN', true).best?.symbol).toBe('B');
+            expect(pickFromReads([failing], 'EVEN', true).best).toBeNull();
+            expect(pickFromReads([failing], 'EVEN', true).watch?.symbol).toBe('A');
+        });
+
+        it('leaves the pick to Parity alone when requireOracle is off, and never blocks a read it could not make', () => {
+            const failing = base({ symbol: 'A', score: 90, oracle: oracle(false) });
+            expect(pickFromReads([failing], 'EVEN', false).best?.symbol).toBe('A');
+            const unread = base({ symbol: 'C', oracle: null });
+            expect(oracleOk(unread)).toBe(true);
+            expect(pickFromReads([unread], 'EVEN', true).best?.symbol).toBe('C');
+        });
+
+        it('ranks a READY market that passes the Oracle conditions ahead of one that does not', () => {
+            const failing = base({ symbol: 'A', score: 90, oracle: oracle(false) });
+            const passing = base({ symbol: 'B', score: 60, oracle: oracle(true) });
+            expect([failing, passing].sort(compareParity)[0].symbol).toBe('B');
+        });
     });
 });
