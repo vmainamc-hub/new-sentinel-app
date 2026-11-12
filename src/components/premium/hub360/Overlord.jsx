@@ -4,6 +4,7 @@ import { isProduction, WS_SERVERS } from '@/components/shared';
 import { contract_stages } from '@/constants/contract-stage';
 import { run_panel as run_panel_tabs } from '@/constants/run-panel';
 import { observer } from '@/external/bot-skeleton';
+import { isRateLimitError, planRateLimitRetry, reconnectDelayMs } from './rate-limit';
 import { useStore } from '@/hooks/useStore';
 import { ASSESS_MS, assessOverlord } from '../overlord-engine/assess';
 import { isTradableBarrier } from '../overlord-engine/engine';
@@ -144,6 +145,14 @@ const Overlord = () => {
     const reconnectTimeoutRef = useRef(null);
     const shouldReconnectRef = useRef(true);
     const skipReconnectRef = useRef(false);
+    // Rate-limit pause, reconnect backoff, and always-current copies of the two callbacks the timers need.
+    const rateLimitAttemptRef = useRef(0);
+    const cooldownUntilRef = useRef(0);
+    const rateLimitTimerRef = useRef(null);
+    const reconnectAttemptRef = useRef(0);
+    const nextConnectAtRef = useRef(0);
+    const connectTradingSocketRef = useRef(null);
+    const requestProposalRef = useRef(null);
     const socketRequiresAuthRef = useRef(false);
     const contractMetaRef = useRef({});
     const lastProcessedContractIdRef = useRef(null);
@@ -379,6 +388,19 @@ const Overlord = () => {
             return;
         }
 
+        // Deriv told us to slow down: come back when the pause is over instead of sending into the limit again.
+        const cooldownMs = cooldownUntilRef.current - Date.now();
+        if (cooldownMs > 0) {
+            if (!rateLimitTimerRef.current) {
+                logMessage(`⏳ Waiting ${(cooldownMs / 1000).toFixed(1)}s for Deriv's rate limit to clear`);
+                rateLimitTimerRef.current = window.setTimeout(() => {
+                    rateLimitTimerRef.current = null;
+                    requestProposalRef.current?.();
+                }, cooldownMs);
+            }
+            return;
+        }
+
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
             logMessage('⚠️ WebSocket not ready for proposal request');
             return;
@@ -437,6 +459,7 @@ const Overlord = () => {
         run_panel?.setContractStage?.(contract_stages.PURCHASE_SENT);
         wsRef.current.send(JSON.stringify(proposalPayload));
     }, [client?.currency, duration, getNextContractType, isRiseFallRecoveryPair, run_panel]);
+    requestProposalRef.current = requestProposal;
 
     // ------------------ CENTRAL SOCKET HANDLER ------------------
     const handleSocketMessage = useCallback(
@@ -460,6 +483,13 @@ const Overlord = () => {
     }
 
     */
+            if (!data.error && ['proposal', 'buy', 'proposal_open_contract'].includes(data.msg_type)) {
+                rateLimitAttemptRef.current = 0;
+                if (data.msg_type === 'buy') {
+                    setProposalError(previous => (previous.startsWith('Deriv asked us to slow down') ? '' : previous));
+                }
+            }
+
             if (data.msg_type === 'proposal' && !data.error) {
                 if (!isRunningRef.current) {
                     return;
@@ -479,6 +509,38 @@ const Overlord = () => {
             }
 
             if (data.error) {
+                // Rate limit: pause, then repeat what was refused (a contract's updates, or a fresh trade cycle).
+                // Never leave the bot waiting on a reply that Deriv already refused to send.
+                if (isRateLimitError(data)) {
+                    const plan = planRateLimitRetry(data, {
+                        attempt: rateLimitAttemptRef.current,
+                        isRunning: isRunningRef.current,
+                        isContractActive: id => activeContractsRef.current.has(String(id)),
+                    });
+                    rateLimitAttemptRef.current += 1;
+                    cooldownUntilRef.current = Date.now() + plan.delayMs;
+                    const slowDownMessage = `Deriv asked us to slow down (${plan.callName}). Retrying in ${(plan.delayMs / 1000).toFixed(1)}s.`;
+                    setProposalError(slowDownMessage);
+                    logMessage(`⏳ ${slowDownMessage}`);
+                    pendingProposalRef.current = false;
+
+                    if (plan.kind === 'resend_contract') {
+                        window.setTimeout(() => {
+                            const stillOpen = activeContractsRef.current.has(String(plan.payload.contract_id));
+                            if (stillOpen && wsRef.current?.readyState === WebSocket.OPEN) {
+                                wsRef.current.send(JSON.stringify(plan.payload));
+                            }
+                        }, plan.delayMs);
+                    } else if (plan.kind === 'new_proposal') {
+                        if (rateLimitTimerRef.current) window.clearTimeout(rateLimitTimerRef.current);
+                        rateLimitTimerRef.current = window.setTimeout(() => {
+                            rateLimitTimerRef.current = null;
+                            if (activeContractsRef.current.size === 0) requestProposalRef.current?.();
+                        }, plan.delayMs);
+                    }
+                    return;
+                }
+
                 const errorCode = data.error.code;
                 const errorMessage = data.error.message;
                 const openPositionLimitReached =
@@ -833,6 +895,14 @@ const Overlord = () => {
         ]
     );
 
+    // Failed or dropped connections are retried 1 s, 2 s, 4 s ... (max 30 s) apart, never in a tight loop.
+    const noteConnectFailure = useCallback(() => {
+        const delay = reconnectDelayMs(reconnectAttemptRef.current);
+        reconnectAttemptRef.current += 1;
+        nextConnectAtRef.current = Date.now() + delay;
+        return delay;
+    }, []);
+
     const connectTradingSocket = useCallback(
         async (options = {}) => {
             const { requireAuth = false, forceReconnect = false } = options;
@@ -866,6 +936,7 @@ const Overlord = () => {
 
                 if (requireAuth && !authenticatedUrl) {
                     setProposalError('Unable to create an authenticated Deriv session.');
+                    noteConnectFailure();
                     return false;
                 }
 
@@ -878,6 +949,8 @@ const Overlord = () => {
                         isAuthenticatedSocket ? 'Trading socket connected' : 'Trading socket connected (public)'
                     );
                     setProposalError('');
+                    reconnectAttemptRef.current = 0;
+                    nextConnectAtRef.current = 0;
                     isAuthorizedRef.current = isAuthenticatedSocket;
 
                     if (isAuthenticatedSocket) {
@@ -905,7 +978,13 @@ const Overlord = () => {
                     logMessage('Trading socket error');
                     console.error(event);
                 };
+                const thisSocket = wsRef.current;
                 wsRef.current.onclose = () => {
+                    // An older socket that closes late must not wipe out the newer one that replaced it.
+                    if (wsRef.current && wsRef.current !== thisSocket) {
+                        skipReconnectRef.current = false;
+                        return;
+                    }
                     logMessage('Trading socket closed');
                     isAuthorizedRef.current = false;
                     wsRef.current = null;
@@ -917,8 +996,10 @@ const Overlord = () => {
 
                     if (shouldReconnect) {
                         reconnectTimeoutRef.current = window.setTimeout(() => {
-                            connectTradingSocket({ requireAuth: socketRequiresAuthRef.current });
-                        }, 1000);
+                            // Only a bot that is running (or still settling a contract) needs its session back.
+                            if (!isRunningRef.current && activeContractsRef.current.size === 0) return;
+                            connectTradingSocketRef.current?.({ requireAuth: socketRequiresAuthRef.current });
+                        }, noteConnectFailure());
                     }
                 };
 
@@ -926,33 +1007,57 @@ const Overlord = () => {
             } catch (error) {
                 logMessage(`Trading connection failed: ${error.message}`);
                 setProposalError(error.message);
+                noteConnectFailure();
                 return false;
             } finally {
                 isConnectingRef.current = false;
             }
         },
-        [getAuthenticatedUrl, handleSocketMessage, requestProposal]
+        [getAuthenticatedUrl, handleSocketMessage, noteConnectFailure, requestProposal]
     );
+    connectTradingSocketRef.current = connectTradingSocket;
 
+    // The trading session exists only while the bot is running (or still has a contract to settle): Run opens it, and the
+    // watchdog releases it once the bot is idle. Dependencies are empty on purpose: a new callback identity (for example
+    // after editing the duration) must never close a running session.
     useEffect(() => {
         shouldReconnectRef.current = true;
-        const shouldRequireAuth = Boolean(getStoredAuthContext());
-        connectTradingSocket({ requireAuth: shouldRequireAuth });
 
         const watchdogId = window.setInterval(() => {
             if (!shouldReconnectRef.current) return;
-            connectTradingSocket({ requireAuth: socketRequiresAuthRef.current });
+
+            const isBusy = isRunningRef.current || activeContractsRef.current.size > 0;
+            if (!isBusy) {
+                if (wsRef.current?.readyState === WebSocket.OPEN && !pendingProposalRef.current) {
+                    skipReconnectRef.current = true;
+                    try {
+                        wsRef.current.close();
+                    } catch {
+                        /* already closing */
+                    }
+                }
+                return;
+            }
+
+            if (Date.now() < nextConnectAtRef.current) return;
+            connectTradingSocketRef.current?.({ requireAuth: socketRequiresAuthRef.current });
         }, 1500);
 
         return () => {
             shouldReconnectRef.current = false;
             window.clearInterval(watchdogId);
-            if (reconnectTimeoutRef.current) {
-                window.clearTimeout(reconnectTimeoutRef.current);
-                reconnectTimeoutRef.current = null;
+            [reconnectTimeoutRef, rateLimitTimerRef].forEach(timerRef => {
+                if (timerRef.current) {
+                    window.clearTimeout(timerRef.current);
+                    timerRef.current = null;
+                }
+            });
+            if (wsRef.current) {
+                wsRef.current.close();
+                wsRef.current = null;
             }
         };
-    }, [connectTradingSocket, getStoredAuthContext]);
+    }, []);
 
     useEffect(() => {
         const handleExternalStop = () => {
@@ -975,49 +1080,6 @@ const Overlord = () => {
             }
         };
     }, [run_panel?.has_open_contract, stopTradingBot]);
-
-    // ------------------ AUTO-CONNECT ON MOUNT ------------------
-    useEffect(() => {
-        if (!wsRef.current) {
-            connectTradingSocket({ requireAuth: Boolean(getStoredAuthContext()) });
-        }
-
-        return () => {
-            if (wsRef.current) {
-                wsRef.current.close();
-                wsRef.current = null;
-            }
-        };
-        /*
-
-    const token = null;
-    if (!wsRef.current) {
-      wsRef.current = new WebSocket(SCAN_WS_URL);
-      wsRef.current.onopen = () => {
-        logMessage("🔌 Connected to Deriv (Auto)");
-        const openToken = token;
-        if (openToken) {
-          wsRef.current.send(JSON.stringify({ authorize: openToken }));
-        }
-      };
-      wsRef.current.onmessage = handleSocketMessage;
-      wsRef.current.onerror = (event) => {
-        logMessage("⚠️ WebSocket error");
-        console.error(event);
-      };
-      wsRef.current.onclose = () => {
-        logMessage("🔌 WebSocket connection closed");
-        isAuthorizedRef.current = false;
-      };
-    }
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-    };
-    */
-    }, [connectTradingSocket, getStoredAuthContext]);
 
     // ------------------ BOT CONTROL ------------------
     const handleStart = useCallback(async () => {
@@ -1095,6 +1157,10 @@ const Overlord = () => {
 
         setIsRunning(true);
         isRunningRef.current = true;
+        rateLimitAttemptRef.current = 0;
+        cooldownUntilRef.current = 0;
+        reconnectAttemptRef.current = 0;
+        nextConnectAtRef.current = 0;
 
         const wsReady = wsRef.current?.readyState;
         if (wsRef.current && wsReady === WebSocket.OPEN && isAuthorizedRef.current) {

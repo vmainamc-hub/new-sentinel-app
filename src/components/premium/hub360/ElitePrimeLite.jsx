@@ -9,6 +9,7 @@ import { useStore } from '@/hooks/useStore';
 import { contract_stages } from '@/constants/contract-stage';
 import { run_panel as run_panel_tabs } from '@/constants/run-panel';
 import { observer } from '@/external/bot-skeleton';
+import { isRateLimitError, planRateLimitRetry, reconnectDelayMs } from './rate-limit';
 
 
 const DERIV_PUBLIC_WS_URL = isProduction() ? WS_SERVERS.PRODUCTION : WS_SERVERS.STAGING;
@@ -243,6 +244,12 @@ const ElitePrimeLite = () => {
     const selectedSymbolsRef = useRef(ONE_S_SYMBOLS);
     const lastTradeWasLossRef = useRef(false);
     const continuationRef = useRef(null);
+    // Rate-limit pause, reconnect backoff, and an always-current copy of the connect function for the timers.
+    const rateLimitAttemptRef = useRef(0);
+    const cooldownUntilRef = useRef(0);
+    const reconnectAttemptRef = useRef(0);
+    const nextConnectAtRef = useRef(0);
+    const connectTradingSocketRef = useRef(null);
 
     const stakeRef = useRef('1');
     const targetProfitRef = useRef('100');
@@ -766,6 +773,7 @@ const ElitePrimeLite = () => {
 
             if (!selectedSymbolsRef.current.includes(symbol)) return;
             if (!isRunningRef.current || activeContractsRef.current.size > 0 || isProcessingRef.current) return;
+            if (Date.now() < cooldownUntilRef.current) return;
 
             // "Trade continuously when there is a loss": after a loss keep trading the same strategy on the same market
             // (no new pattern needed) until a trade wins.
@@ -817,6 +825,41 @@ const ElitePrimeLite = () => {
             }
 
             if (data.error) {
+                // Rate limit: pause, then ask again for what was refused. A contract whose updates were refused would
+                // otherwise stay "live" forever and block every later trade.
+                if (isRateLimitError(data)) {
+                    const plan = planRateLimitRetry(data, {
+                        attempt: rateLimitAttemptRef.current,
+                        isRunning: isRunningRef.current,
+                        isContractActive: id => activeContractsRef.current.has(String(id)),
+                    });
+                    rateLimitAttemptRef.current += 1;
+                    cooldownUntilRef.current = Date.now() + plan.delayMs;
+                    const slowDownMessage = `Deriv asked us to slow down (${plan.callName}). Retrying in ${(plan.delayMs / 1000).toFixed(1)}s.`;
+                    publishNativeError(slowDownMessage);
+                    setStatusMessage(slowDownMessage);
+                    pendingProposalRef.current = false;
+                    pendingTradeContextRef.current = null;
+
+                    if (activeContractsRef.current.size === 0) {
+                        isProcessingRef.current = false;
+                        run_panel?.setHasOpenContract?.(false);
+                        run_panel?.setContractStage?.(
+                            isRunningRef.current ? contract_stages.CONTRACT_CLOSED : contract_stages.NOT_RUNNING
+                        );
+                    }
+
+                    if (plan.kind === 'resend_contract') {
+                        window.setTimeout(() => {
+                            const stillOpen = activeContractsRef.current.has(String(plan.payload.contract_id));
+                            if (stillOpen && wsRef.current?.readyState === WebSocket.OPEN) {
+                                wsRef.current.send(JSON.stringify(plan.payload));
+                            }
+                        }, plan.delayMs);
+                    }
+                    return;
+                }
+
                 const errorCode = data.error.code;
                 const errorMessage = data.error.message;
                 const openPositionLimitReached =
@@ -863,6 +906,10 @@ const ElitePrimeLite = () => {
                 return;
             }
 
+            if (['proposal', 'buy', 'proposal_open_contract'].includes(data.msg_type)) {
+                rateLimitAttemptRef.current = 0;
+            }
+
             if (data.msg_type === 'tick') handleTick(data.tick);
 
             if (data.msg_type === 'proposal_open_contract') {
@@ -899,6 +946,14 @@ const ElitePrimeLite = () => {
         [handleBuy, handleContractCompletion, handleProposal, handleTick, publishNativeError, run_panel, stopTradingBot]
     );
 
+    // Failed or dropped connections are retried 1 s, 2 s, 4 s ... (max 30 s) apart, never in a tight loop.
+    const noteConnectFailure = useCallback(() => {
+        const delay = reconnectDelayMs(reconnectAttemptRef.current);
+        reconnectAttemptRef.current += 1;
+        nextConnectAtRef.current = Date.now() + delay;
+        return delay;
+    }, []);
+
     const connectTradingSocket = useCallback(
         async (options = {}) => {
             const { requireAuth = false, forceReconnect = false } = options;
@@ -932,6 +987,7 @@ const ElitePrimeLite = () => {
 
                 if (requireAuth && !authenticatedUrl) {
                     setStatusMessage('Unable to create an authenticated Deriv session.');
+                    noteConnectFailure();
                     return false;
                 }
 
@@ -943,6 +999,9 @@ const ElitePrimeLite = () => {
 
                 socket.onopen = () => {
                     if (wsRef.current !== socket) return;
+
+                    reconnectAttemptRef.current = 0;
+                    nextConnectAtRef.current = 0;
 
                     subscribeToTicks(socket);
                     isAuthorizedRef.current = isAuthenticatedSocket;
@@ -963,6 +1022,11 @@ const ElitePrimeLite = () => {
                 };
 
                 socket.onclose = () => {
+                    // An older socket that closes late must not wipe out the newer one that replaced it.
+                    if (wsRef.current && wsRef.current !== socket) {
+                        skipReconnectRef.current = false;
+                        return;
+                    }
                     if (wsRef.current === socket) {
                         wsRef.current = null;
                     }
@@ -973,30 +1037,51 @@ const ElitePrimeLite = () => {
 
                     if (shouldReconnect) {
                         reconnectTimeoutRef.current = window.setTimeout(() => {
-                            connectTradingSocket({ requireAuth: socketRequiresAuthRef.current });
-                        }, 700);
+                            connectTradingSocketRef.current?.({ requireAuth: socketRequiresAuthRef.current });
+                        }, noteConnectFailure());
                     }
                 };
 
                 return true;
             } catch (error) {
                 setStatusMessage(`Trading connection failed: ${error.message}`);
+                noteConnectFailure();
                 return false;
             } finally {
                 isConnectingRef.current = false;
             }
         },
-        [getAuthenticatedUrl, handleSocketMessage, subscribeToTicks]
+        [getAuthenticatedUrl, handleSocketMessage, noteConnectFailure, subscribeToTicks]
     );
+    connectTradingSocketRef.current = connectTradingSocket;
 
+    // While idle only the public tick feed is connected (the live digits board keeps working, no account session is held).
+    // Run upgrades to the authenticated session (handleStart); once the bot has stopped and no contract is left, the
+    // watchdog drops back to the public feed. Dependencies are empty on purpose: a new callback identity must never
+    // close a running session.
     useEffect(() => {
         shouldReconnectRef.current = true;
-        const shouldRequireAuth = Boolean(getStoredAuthContext());
-        connectTradingSocket({ requireAuth: shouldRequireAuth });
+        connectTradingSocketRef.current?.({ requireAuth: false });
 
         const watchdogId = window.setInterval(() => {
             if (!shouldReconnectRef.current) return;
-            connectTradingSocket({ requireAuth: socketRequiresAuthRef.current });
+            const connect = connectTradingSocketRef.current;
+            if (!connect) return;
+
+            if (
+                !isRunningRef.current &&
+                socketRequiresAuthRef.current &&
+                activeContractsRef.current.size === 0 &&
+                !pendingProposalRef.current &&
+                !isConnectingRef.current &&
+                wsRef.current?.readyState === WebSocket.OPEN
+            ) {
+                connect({ requireAuth: false, forceReconnect: true });
+                return;
+            }
+
+            if (Date.now() < nextConnectAtRef.current) return;
+            connect({ requireAuth: socketRequiresAuthRef.current });
         }, 1500);
 
         return () => {
@@ -1018,7 +1103,7 @@ const ElitePrimeLite = () => {
                 wsRef.current = null;
             }
         };
-    }, [connectTradingSocket, getStoredAuthContext]);
+    }, []);
 
     const validateBeforeStart = useCallback(() => {
         if (normalizeMoney(stakeRef.current, 0) <= 0) return 'Enter a valid stake.';
@@ -1107,6 +1192,10 @@ const ElitePrimeLite = () => {
 
         setIsRunning(true);
         isRunningRef.current = true;
+        rateLimitAttemptRef.current = 0;
+        cooldownUntilRef.current = 0;
+        reconnectAttemptRef.current = 0;
+        nextConnectAtRef.current = 0;
 
         const wsReady = wsRef.current?.readyState;
         if (wsRef.current && wsReady === WebSocket.OPEN && isAuthorizedRef.current) {
