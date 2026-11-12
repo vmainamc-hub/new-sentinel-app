@@ -1262,12 +1262,6 @@ input::-webkit-inner-spin-button {
     color: var(--ovl-text-soft, #60738d);
 }
 
-.ovl-auto-market {
-    display: flex;
-    align-items: center;
-    cursor: default;
-    font-weight: 700;
-}
 
 .ovl-eng-notes {
     display: flex;

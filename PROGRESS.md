@@ -622,3 +622,7 @@ Branch `feat/elite-recovery-conditions` (not on main; main auto-deploys). File: 
 - NOT ported, on purpose: engines that read Apex's live paper-trade ledger (simulator, entry-condition lab, market profiles, combination learning, analogue memory, engine effectiveness). A one-shot scan has no ledger. Stage 2 setup was ported then dropped: it is multiplied by ledger sample size, so it reads ~0 for every contract.
 - UI: result card shows Engines / Psychology / Stability / Direction / Fluctuation readings.
 - Checked: tsc clean on overlord-engine files; 23 tests pass (3 new); selected scan 11x5000 ticks ~0.5 s, smart scan ~1.3 s on this machine. On random data ~78% of readings are vetoed and ~10% of scans end CAUTION (every contract vetoed). Copied Apex files keep their original formatting (prettier unavailable here). Not checked in a browser.
+
+## Overlord: one market dropdown instead of the checkbox texts (2026-11-12)
+- The "Any market" and "choose side and barrier" checkboxes did not render as controls on the live page (only their text showed). Replaced with ONE dropdown in the MARKET field: "Any market (engine picks)", "Any market, side and barrier", then each market. Selecting a market keeps the old behaviour. Removed the helper sentences ("Don't know which market...", "The engines pick it...", "What do you want to trade?"). Choice is remembered per browser. Over/Under only; other trade types show only the markets.
+- Not checked in a browser.

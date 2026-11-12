@@ -84,21 +84,24 @@ const Overlord = () => {
     const [analysisStarted, setAnalysisStarted] = useState(false);
     const [scannedHistory, setScannedHistory] = useState([]);
     const [strongestSignal, setStrongestSignal] = useState(null);
-    const [smartContract, setSmartContract] = useState(false); // Find Market may choose the side and barrier too
-    // Any market: the engines choose the market, nothing has to be selected first, and Run picks one by itself.
-    const [anyMarket, setAnyMarket] = useState(() => {
+    // Market choice, one dropdown: 'one' = the market selected, 'any' = the engines pick the market, 'all' = the engines
+    // pick the market, side and barrier. In 'any' and 'all' nothing has to be selected, and Run picks by itself.
+    const [marketMode, setMarketModeState] = useState(() => {
         try {
-            return window.localStorage.getItem('overlord_any_market') === '1';
+            const saved = window.localStorage.getItem('overlord_market_mode');
+            return saved === 'any' || saved === 'all' ? saved : 'one';
         } catch {
-            return false;
+            return 'one';
         }
     });
-    const toggleAnyMarket = on => {
-        setAnyMarket(on);
+    const setMarketMode = mode => {
+        setMarketModeState(mode);
         try {
-            window.localStorage.setItem('overlord_any_market', on ? '1' : '0');
+            window.localStorage.setItem('overlord_market_mode', mode);
         } catch {}
     };
+    const anyMarket = marketMode !== 'one';
+    const smartContract = marketMode === 'all'; // the engine may choose the side and barrier too
     const lastEnginePickRef = useRef(0); // when the engines last picked a market
     const scanBusyRef = useRef(false);
     const runEngineScanRef = useRef(null);
@@ -1515,7 +1518,8 @@ const Overlord = () => {
         logMessage('🔄 Stats reset.');
     };
 
-    const autoMarket = anyMarket && (tradeType === 'OVER' || tradeType === 'UNDER');
+    const isOuTrade = tradeType === 'OVER' || tradeType === 'UNDER';
+    const autoMarket = anyMarket && isOuTrade;
     const currentScanningId = volatilityList.find(id => !scannedHistory.some(item => item.id === id));
     const isAllComplete = scannedHistory.length === volatilityList.length;
     const fifoQueue = scannedHistory.slice(-4);
@@ -1558,7 +1562,6 @@ const Overlord = () => {
                     <div className='sh-input-wrapper'>
                         <div className='sh-input-field'>
                             <label>⚙️ Contract Type</label>
-                            <span className='sh-question'>What do you want to trade?</span>
                             <select
                                 value={tradeType}
                                 onChange={e => setTradeType(e.target.value)}
@@ -1587,67 +1590,40 @@ const Overlord = () => {
 
                         <div className='sh-input-field market-width'>
                             <label>MARKET</label>
-                            {autoMarket ? (
-                                <>
-                                    <span className='sh-question'>The engines pick it. Nothing to select.</span>
-                                    <div className='st-instrument-select ovl-auto-market'>
-                                        {strongestSignal?.engine
-                                            ? `${symbolNames[symbol] || symbol} (engine pick)`
-                                            : 'Any market (engine picks)'}
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    <span className='sh-question'>You can use the Find Market button below.</span>
-                                    <select
-                                        value={symbol}
-                                        onChange={e => setSymbol(e.target.value)}
-                                        disabled={isRunning}
-                                        className='st-instrument-select'
-                                    >
-                                        {volatilityList.map(id => (
-                                            <option key={id} value={id}>
-                                                {symbolNames[id]}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </>
-                            )}
+                            <select
+                                value={autoMarket ? marketMode : symbol}
+                                onChange={e => {
+                                    const v = e.target.value;
+                                    if (v === 'any' || v === 'all') {
+                                        setMarketMode(v);
+                                    } else {
+                                        setMarketMode('one');
+                                        setSymbol(v);
+                                    }
+                                }}
+                                disabled={isRunning || analysisStarted}
+                                className='st-instrument-select'
+                            >
+                                {isOuTrade && <option value='any'>Any market (engine picks)</option>}
+                                {isOuTrade && <option value='all'>Any market, side and barrier</option>}
+                                {volatilityList.map(id => (
+                                    <option key={id} value={id}>
+                                        {symbolNames[id]}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
                     </div>
 
                     <div className='ovl-find-market'>
-                        <span>Don&apos;t know which market to trade on?</span>
                         <button
                             type='button'
                             className={analysisStarted ? 'ovl-find-btn is-scanning' : 'ovl-find-btn'}
                             onClick={handleFindMarket}
                             disabled={isRunning}
                         >
-                            {analysisStarted ? 'SCANNING… TAP TO STOP' : autoMarket ? 'FIND ANY MARKET' : 'FIND MARKET'}
+                            {analysisStarted ? 'SCANNING… TAP TO STOP' : 'FIND MARKET'}
                         </button>
-                        {(tradeType === 'OVER' || tradeType === 'UNDER') && (
-                            <label className='ovl-smart-toggle'>
-                                <input
-                                    type='checkbox'
-                                    checked={anyMarket}
-                                    onChange={e => toggleAnyMarket(e.target.checked)}
-                                    disabled={isRunning || analysisStarted}
-                                />
-                                <span>Any market: the engines pick it for me (Run picks one by itself)</span>
-                            </label>
-                        )}
-                        {(tradeType === 'OVER' || tradeType === 'UNDER') && (
-                            <label className='ovl-smart-toggle'>
-                                <input
-                                    type='checkbox'
-                                    checked={smartContract}
-                                    onChange={e => setSmartContract(e.target.checked)}
-                                    disabled={isRunning || analysisStarted}
-                                />
-                                <span>Let the engine also choose the side and barrier (Over 1-4 / Under 5-8)</span>
-                            </label>
-                        )}
                     </div>
                     {/* RECOVERY MODE UI SECTION */}
                     <div className='st-recovery-dashboard-row'>
@@ -1811,8 +1787,13 @@ const Overlord = () => {
                     ) : (
                         <div className='sh-standby-ui'>
                             <p>
-                                Trading on <span style={{ fontWeight: 800 }}>{symbolNames[symbol] || symbol}</span>. Run
-                                now or find another market.
+                                {autoMarket ? (
+                                    'The best market is picked when you run.'
+                                ) : (
+                                    <>
+                                        Trading on <span style={{ fontWeight: 800 }}>{symbolNames[symbol] || symbol}</span>.
+                                    </>
+                                )}
                             </p>
                         </div>
                     )}
