@@ -61,7 +61,7 @@ const getDerivContractType = type => CONTRACT_TYPE_MAP[type] || type;
 const DERIV_PUBLIC_WS_URL = isProduction() ? WS_SERVERS.PRODUCTION : WS_SERVERS.STAGING;
 const DERIV_OPTIONS_API_URL = DERIV_PUBLIC_WS_URL.replace(/ws\/public$/, '');
 const SCAN_WS_URL = DERIV_PUBLIC_WS_URL;
-const ENGINE_PICK_FRESH_MS = 90 * 1000; // a market picked less than this long ago is reused by Run
+const ENGINE_PICK_FRESH_MS = 15 * 60 * 1000; // a market picked less than this long ago is reused by Run (no second scan)
 const SCAN_TIMEOUT_MS = 6000;
 const SCAN_MAX_RETRIES = 3;
 
@@ -122,6 +122,7 @@ const Overlord = () => {
     const lastEnginePickRef = useRef(0); // when the engines last picked a market
     const scanBusyRef = useRef(false);
     const runEngineScanRef = useRef(null);
+    const scanPromiseRef = useRef(null); // the scan in flight, so Run waits for it instead of starting another
     const runParityScanRef = useRef(null);
 
     const [symbol, setSymbol] = useState('1HZ10V'); // v2.3: a market is always selected, Find Market only suggests a better one
@@ -1329,6 +1330,17 @@ const Overlord = () => {
         if (anyMarket && (tradeType === 'OVER' || tradeType === 'UNDER' || parityTrade)) {
             // Any market: the engines pick the market (and the side and barrier when that toggle is on) before the first trade.
             if (scanBusyRef.current) return;
+            // A scan you started with Find Market is still running: let it finish and use its pick, never start a second one.
+            if (scanPromiseRef.current) {
+                scanBusyRef.current = true;
+                try {
+                    await scanPromiseRef.current;
+                } catch {
+                    // the scan reports its own errors
+                } finally {
+                    scanBusyRef.current = false;
+                }
+            }
             if (Date.now() - lastEnginePickRef.current > ENGINE_PICK_FRESH_MS) {
                 scanBusyRef.current = true;
                 let picked = null;
@@ -1735,7 +1747,7 @@ const Overlord = () => {
     };
 
     // Returns the engine's pick, or null (stopped, invalid input, or no market returned enough ticks).
-    const runEngineScan = async () => {
+    const runEngineScanInner = async () => {
         const side = tradeType;
         const barrier = parseInt(predictionDigitRef.current, 10);
         if (!smartContract && !isTradableBarrier(side, barrier)) {
@@ -1833,6 +1845,16 @@ const Overlord = () => {
         setAnalysisStarted(false);
         return best ?? null;
     };
+    const trackScan = run => {
+        const promise = run();
+        scanPromiseRef.current = promise;
+        const clear = () => {
+            if (scanPromiseRef.current === promise) scanPromiseRef.current = null;
+        };
+        promise.then(clear, clear);
+        return promise;
+    };
+    const runEngineScan = () => trackScan(runEngineScanInner);
     runEngineScanRef.current = runEngineScan;
 
     // Even/Odd Find Market: deep history for every market, then the whole Precision Parity tool reads each one. Only a market
@@ -1848,7 +1870,7 @@ const Overlord = () => {
     };
 
     // Returns Parity's pick, or null (stopped, no market returned enough ticks, or Parity has no READY market).
-    const runParityScan = async () => {
+    const runParityScanInner = async () => {
         const side = tradeType; // 'EVEN' or 'ODD'
         const scanRunId = Date.now();
         scanRunIdRef.current = scanRunId;
@@ -1956,6 +1978,7 @@ const Overlord = () => {
         setAnalysisStarted(false);
         return best ?? null;
     };
+    const runParityScan = () => trackScan(runParityScanInner);
     runParityScanRef.current = runParityScan;
 
     const handleFindMarket = () => {
