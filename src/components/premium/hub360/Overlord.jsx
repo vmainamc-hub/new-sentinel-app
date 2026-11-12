@@ -13,6 +13,7 @@ import { fetchHistories } from '../overlord-engine/history';
 import { legacyPercentage } from '../overlord-engine/legacy';
 import { assessParity, PARITY_ASSESS_MS } from '../overlord-engine/parity-assess';
 import { legacyParityPct } from '../overlord-engine/parity-engine';
+import { assessRiseFall, RF_ASSESS_MS } from '../overlord-engine/rise-fall-run';
 import { getHub360AuthContext, getHub360AuthenticatedUrl } from './auth360';
 import { digitOfQuote, freshVh, normalizeVh, tradeWins, vhAfterReal, vhAfterVirtual } from './oracle/trade-plan';
 import { useHub360Module } from './use-hub360-module';
@@ -123,6 +124,7 @@ const Overlord = () => {
     const runEngineScanRef = useRef(null);
     const scanPromiseRef = useRef(null); // the scan in flight, so Run waits for it instead of starting another
     const runParityScanRef = useRef(null);
+    const runRiseFallScanRef = useRef(null);
 
     const [symbol, setSymbol] = useState('1HZ10V'); // v2.3: a market is always selected, Find Market only suggests a better one
     const [contractType, setContractType] = useState('EVEN');
@@ -1327,7 +1329,8 @@ const Overlord = () => {
             return;
         }
         const parityTrade = tradeType === 'EVEN' || tradeType === 'ODD';
-        if (anyMarket && (tradeType === 'OVER' || tradeType === 'UNDER' || parityTrade)) {
+        const riseFallTrade = tradeType === 'RISE' || tradeType === 'FALL';
+        if (anyMarket && (tradeType === 'OVER' || tradeType === 'UNDER' || parityTrade || riseFallTrade)) {
             // Any market: the engines pick the market (and the side and barrier when that toggle is on) before the first trade.
             if (scanBusyRef.current) return;
             // A scan you started with Find Market is still running: let it finish and use its pick, never start a second one.
@@ -1342,11 +1345,12 @@ const Overlord = () => {
                 }
             }
             // Once a market has been scanned for this kind of trade, Run trades it however long ago it was: no second scan.
-            if (lastEnginePickRef.current !== (parityTrade ? 'parity' : 'over-under')) {
+            const pickKind = riseFallTrade ? 'rise-fall' : parityTrade ? 'parity' : 'over-under';
+            if (lastEnginePickRef.current !== pickKind) {
                 scanBusyRef.current = true;
                 let picked = null;
                 try {
-                    picked = await (parityTrade ? runParityScanRef : runEngineScanRef).current?.();
+                    picked = await (riseFallTrade ? runRiseFallScanRef : parityTrade ? runParityScanRef : runEngineScanRef).current?.();
                 } finally {
                     scanBusyRef.current = false;
                 }
@@ -2003,7 +2007,89 @@ const Overlord = () => {
     const runParityScan = () => trackScan(runParityScanInner);
     runParityScanRef.current = runParityScan;
 
+    // Rise / Fall Find Market: the last 1-minute candles of every market are read with six indicators (Bollinger, Stoch RSI, RSI,
+    // MACD, Momentum, Connors RSI), watched live for a few seconds, and the market with the most indicators agreeing is the
+    // best available. It is always shown, with how many indicators agree.
+    const runRiseFallScanInner = async () => {
+        const scanRunId = Date.now();
+        scanRunIdRef.current = scanRunId;
+        const cancelled = () => scanRunIdRef.current !== scanRunId;
+        setAnalysisStarted(true);
+        setScannedHistory(volatilityList.map(id => ({ id, name: symbolNames[id], percentage: null, status: 'success' })));
+        setStrongestSignal(null);
+        logMessage(
+            smartContract ? '🚀 Rise/Fall scan: indicators pick market and side...' : `🚀 Rise/Fall scan for ${tradeType === 'RISE' ? 'Rise' : 'Fall'}...`
+        );
+        setAssessInfo({ elapsedMs: 0, assessMs: RF_ASSESS_MS, ticks: 0, rounds: 0, leader: null, flagged: 0, rf: true, loaded: 0, total: volatilityList.length });
+        let assessed;
+        try {
+            assessed = await assessRiseFall({
+                symbols: volatilityList,
+                url: SCAN_WS_URL,
+                side: smartContract ? null : tradeType,
+                names: symbolNames,
+                cancelled,
+                onProgress: p => {
+                    if (!cancelled())
+                        setAssessInfo({
+                            elapsedMs: p.elapsedMs,
+                            assessMs: p.assessMs,
+                            ticks: 0,
+                            rounds: p.rounds,
+                            leader: p.leader ? { symbol: p.leader.symbol, label: p.leader.label, score: p.leader.agree } : null,
+                            flagged: 0,
+                            rf: true,
+                            loaded: p.loaded,
+                            total: p.total,
+                        });
+                },
+            });
+        } finally {
+            setAssessInfo(null);
+        }
+        if (cancelled() || assessed.cancelled) return null;
+        const best = assessed.scan.best;
+        if (best) {
+            symbolRef.current = best.symbol;
+            contractTypeRef.current = best.side;
+            lastEnginePickRef.current = 'rise-fall';
+            setSymbol(best.symbol);
+            if (smartContract) setTradeType(best.side);
+            setContractType(best.side);
+            setStrongestSignal({
+                id: best.symbol,
+                name: symbolNames[best.symbol],
+                confidence: String(best.score),
+                riseFall: best,
+            });
+            logMessage(
+                `✅ ${symbolNames[best.symbol]} ${best.label}: ${best.agree} of ${best.total} indicators agree${
+                    best.against ? `, ${best.against} against` : ''
+                } (${best.tier})`
+            );
+            try {
+                alertSound.play().catch(() => {});
+            } catch {}
+        } else {
+            logMessage('Scan incomplete: no market returned enough candles. Try again.');
+        }
+        setAnalysisStarted(false);
+        return best ?? null;
+    };
+    const runRiseFallScan = () => trackScan(runRiseFallScanInner);
+    runRiseFallScanRef.current = runRiseFallScan;
+
+    const handleFindMarketRiseFall = async () => {
+        if (analysisStarted) {
+            scanRunIdRef.current = Date.now();
+            setAnalysisStarted(false);
+            return;
+        }
+        await runRiseFallScan();
+    };
+
     const handleFindMarket = () => {
+        if (tradeType === 'RISE' || tradeType === 'FALL') return handleFindMarketRiseFall();
         if (tradeType === 'OVER' || tradeType === 'UNDER') return handleFindMarketEngine();
         if (tradeType === 'EVEN' || tradeType === 'ODD') return handleFindMarketParity();
         return handleFetchSignalGuaranteed();
@@ -2021,7 +2107,8 @@ const Overlord = () => {
 
     const isOuTrade = tradeType === 'OVER' || tradeType === 'UNDER';
     const isParityTrade = tradeType === 'EVEN' || tradeType === 'ODD';
-    const autoMarket = anyMarket && (isOuTrade || isParityTrade);
+    const isRiseFallTrade = tradeType === 'RISE' || tradeType === 'FALL';
+    const autoMarket = anyMarket && (isOuTrade || isParityTrade || isRiseFallTrade);
     const currentScanningId = volatilityList.find(id => !scannedHistory.some(item => item.id === id));
     const isAllComplete = scannedHistory.length === volatilityList.length;
     const fifoQueue = scannedHistory.slice(-4);
@@ -2106,8 +2193,8 @@ const Overlord = () => {
                                 disabled={isRunning || analysisStarted}
                                 className='st-instrument-select'
                             >
-                                {(isOuTrade || isParityTrade) && <option value='any'>Any market (engine picks)</option>}
-                                {(isOuTrade || isParityTrade) && (
+                                {(isOuTrade || isParityTrade || isRiseFallTrade) && <option value='any'>Any market (engine picks)</option>}
+                                {(isOuTrade || isParityTrade || isRiseFallTrade) && (
                                     <option value='all'>
                                         {isOuTrade ? 'Any market, side and barrier' : 'Any market and side'}
                                     </option>
@@ -2311,7 +2398,13 @@ const Overlord = () => {
                                             ></div>
                                         </div>
                                         <div className='ovl-assess-line'>
-                                            {assessInfo.rounds > 0
+                                            {assessInfo.rf
+                                                ? `${assessInfo.loaded}/${assessInfo.total} markets loaded${
+                                                      assessInfo.leader
+                                                          ? ` · leading: ${symbolNames[assessInfo.leader.symbol] || assessInfo.leader.symbol} (${assessInfo.leader.score}/6)`
+                                                          : ''
+                                                  }`
+                                                : assessInfo.rounds > 0
                                                 ? `${assessInfo.flagged} flagged · leading: ${
                                                       assessInfo.leader
                                                           ? `${symbolNames[assessInfo.leader.symbol] || assessInfo.leader.symbol}`
@@ -2337,6 +2430,42 @@ const Overlord = () => {
                                         </div>
                                     ))}
                                 </div>
+                            </div>
+                        </div>
+                    ) : strongestSignal?.riseFall ? (
+                        <div className='sh-result-ui'>
+                            <div className='sh-result-main'>
+                                <div className='sh-result-info'>
+                                    <span className='sh-res-label'>
+                                        {
+                                            {
+                                                STRONG: 'PERFECT MARKET FOUND',
+                                                BEST: 'BEST MARKET AVAILABLE',
+                                                WEAK: 'NO STRONG MARKET, BEST AVAILABLE SHOWN',
+                                            }[strongestSignal.riseFall.tier]
+                                        }
+                                    </span>
+                                    <h3 className='sh-res-vol'>
+                                        {strongestSignal.name} · {strongestSignal.riseFall.label}
+                                    </h3>
+                                </div>
+                                <div className='sh-res-stat'>
+                                    <span className='sh-res-perc'>⚡ {strongestSignal.riseFall.score}</span>
+                                    <span className='sh-res-type'>
+                                        {strongestSignal.riseFall.agree}/{strongestSignal.riseFall.total} INDICATORS AGREE
+                                    </span>
+                                </div>
+                            </div>
+                            <div className='ovl-eng-notes'>
+                                {strongestSignal.riseFall.votes.map(v => (
+                                    <span key={v.name}>
+                                        {v.vote === strongestSignal.riseFall.side ? '✓' : v.vote ? '✗' : '–'} {v.name}: {v.detail}
+                                    </span>
+                                ))}
+                                <span>
+                                    Held its side in {Math.round(strongestSignal.riseFall.steady * 100)}% of{' '}
+                                    {strongestSignal.riseFall.rounds} live checks
+                                </span>
                             </div>
                         </div>
                     ) : strongestSignal?.engine ? (

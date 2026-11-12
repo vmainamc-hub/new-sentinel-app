@@ -654,3 +654,9 @@ Deriv gives `proposal`, `proposal_open_contract`, `buy`, `sell` ONE shared budge
 
 ## Overlord Even/Odd: Run trades the closest market instead of scanning again (2026-11-12)
 - Cause found: when Precision Parity had no READY market, the scan showed the closest market "for information only" and selected nothing, so no pick was recorded and Run started a second scan. Now the closest market shown is selected and recorded; Run trades it with no scan. The card says "NO READY MARKET, CLOSEST SHOWN (RUN TRADES IT)".
+
+## Overlord: Rise / Fall mode with six indicators (2026-11-12)
+- New `overlord-engine/rise-fall.ts` (Bollinger 20/2, Stoch RSI 14/14/3/3, RSI 14, MACD 12/26/9, Momentum 10, Connors RSI 3/2/100 on 1-minute candles; each votes RISE/FALL/none, needing the reading on one side AND turning that way) and `rise-fall-run.ts` (one socket: `ticks_history` candles, granularity 60, subscribed so the forming candle updates live; re-read every 3 s for 15 s).
+- Best available market = most indicators agreeing, fewest against; card shows "X/6 INDICATORS AGREE", each indicator's vote, and how steadily the market held its side during the watch. Tiers: STRONG (5+ agree, steady), BEST (4+), WEAK (best available shown).
+- Overlord: choosing Rise or Fall and Find Market runs it; market dropdown offers Any market / Any market and side; Run trades the pick without a second scan. Contract length is the existing Duration field (1 tick by default).
+- 11 new tests; engine tests 72 pass; Overlord.jsx compiles. Not checked in a browser or against Deriv. Honest limit: indicators describe recent price, they do not predict the next tick.
