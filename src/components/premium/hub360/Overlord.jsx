@@ -14,6 +14,7 @@ import { legacyPercentage } from '../overlord-engine/legacy';
 import { assessParity, PARITY_ASSESS_MS } from '../overlord-engine/parity-assess';
 import { legacyParityPct } from '../overlord-engine/parity-engine';
 import { assessRiseFall, RF_ASSESS_MS } from '../overlord-engine/rise-fall-run';
+import { DEFAULT_EVIDENCE_RUN } from '../overlord-engine/evidence';
 import { getHub360AuthContext, getHub360AuthenticatedUrl } from './auth360';
 import { digitOfQuote, freshVh, normalizeVh, tradeWins, vhAfterReal, vhAfterVirtual } from './oracle/trade-plan';
 import { useHub360Module } from './use-hub360-module';
@@ -141,7 +142,8 @@ const Overlord = () => {
     };
     const rfStyleRef = useRef(rfStyle);
     rfStyleRef.current = rfStyle;
-    const noReversalRef = useRef(false); // the last Rise/Fall scan found no reversal point: Run does not trade it
+    const noReversalRef = useRef(false); // the last Rise/Fall scan found no signal (no reversal point, or no evidence in the latest ticks): Run does not trade it
+    const noEvidenceRef = useRef(false); // the last Even/Odd scan only found a market whose latest digits do not show the run: Run does not trade it
 
     const [symbol, setSymbol] = useState('1HZ10V'); // v2.3: a market is always selected, Find Market only suggests a better one
     const [contractType, setContractType] = useState('EVEN');
@@ -160,6 +162,8 @@ const Overlord = () => {
     const [isRunning, setIsRunning] = useState(false);
     const [useVirtualHook, setUseVirtualHook] = useState(false);
     const [requireOracle, setRequireOracle] = useState(true); // Even/Odd Find Market also needs the Oracle's six conditions
+    // Rise/Fall and Even/Odd Find Market only give a signal when the latest ticks already show it (FFFF / RRRR, EEEEE / OOOOO).
+    const [requireEvidence, setRequireEvidence] = useState(true);
     const [vhMode, setVhMode] = useState('STREAK');
     const [vhEnterLosses, setVhEnterLosses] = useState('2');
     const [vhReturnWins, setVhReturnWins] = useState('2');
@@ -1378,7 +1382,17 @@ const Overlord = () => {
             }
         }
         if (riseFallTrade && anyMarket && noReversalRef.current) {
-            showToast('No reversal point was found. Press Find Market again shortly.', 'warning');
+            showToast(
+                'No signal: no reversal point was found, or the latest ticks do not show the required run. Press Find Market again shortly.',
+                'warning'
+            );
+            return;
+        }
+        if (parityTrade && anyMarket && noEvidenceRef.current) {
+            showToast(
+                'No signal: the latest digits do not show the required run of Even/Odd. Press Find Market again shortly.',
+                'warning'
+            );
             return;
         }
         if (!symbolRef.current) {
@@ -1842,6 +1856,7 @@ const Overlord = () => {
         const scan = assessed.scan;
 
         const best = scan.best;
+        noEvidenceRef.current = false;
         if (best) {
             // Refs are set directly as well: Run may start in the same tick, before the effects copy state into refs.
             symbolRef.current = best.symbol;
@@ -1942,6 +1957,7 @@ const Overlord = () => {
                 symbols: volatilityList,
                 side: smartContract ? null : side,
                 requireOracle,
+                requireEvidence,
                 names: symbolNames,
                 url: SCAN_WS_URL,
                 cancelled,
@@ -1978,7 +1994,7 @@ const Overlord = () => {
                     ? `✅ ${symbolNames[best.symbol]} ${best.label} (basic scan: too few ticks for Precision Parity)`
                     : `✅ ${best.tier}: ${symbolNames[best.symbol]} ${best.label}, Precision Parity READY at ${best.score}%${
                           best.oracle ? `, Oracle ${best.oracle.passed}/${best.oracle.total} conditions` : ''
-                      }`
+                      }${best.evidence ? `. ${best.evidence.text}` : ''}`
             );
             try {
                 alertSound.play().catch(() => {});
@@ -1986,15 +2002,20 @@ const Overlord = () => {
         } else if (scan.evaluated > 0) {
             // Parity has no READY market. Nothing is selected and nothing changes on screen except this note.
             const watch = scan.watch;
+            // With the evidence rule on, a market whose latest digits do not show the run is never traded, even as "closest".
+            const watchBlocked = Boolean(watch) && requireEvidence && !(watch.evidence && watch.evidence.ok);
             if (watch) {
                 // The market shown is the one Run trades: pressing Run must not start another scan just because Parity has
                 // no READY market. It is the closest one, and the card says so.
-                symbolRef.current = watch.symbol;
-                contractTypeRef.current = watch.side;
                 lastEnginePickRef.current = 'parity';
-                setSymbol(watch.symbol);
-                if (smartContract) setTradeType(watch.side);
-                setContractType(watch.side);
+                noEvidenceRef.current = watchBlocked;
+                if (!watchBlocked) {
+                    symbolRef.current = watch.symbol;
+                    contractTypeRef.current = watch.side;
+                    setSymbol(watch.symbol);
+                    if (smartContract) setTradeType(watch.side);
+                    setContractType(watch.side);
+                }
                 setStrongestSignal({
                     id: watch.symbol,
                     name: symbolNames[watch.symbol],
@@ -2002,11 +2023,18 @@ const Overlord = () => {
                     engine: watch,
                     legacyOnly: false,
                     watchOnly: true,
+                    blockedByEvidence: watchBlocked,
                 });
             }
             const wanted = smartContract ? 'Even or Odd' : side === 'EVEN' ? 'Even' : 'Odd';
             const other = scan.opposite
                 ? ` It does see ${scan.opposite.label} on ${symbolNames[scan.opposite.symbol]} (${scan.opposite.score}%).`
+                : '';
+            const evidenceBlocked = requireEvidence
+                ? scan.reads.filter(r => !r.thin && r.ready && r.evidence && !r.evidence.ok && (!requireOracle || !r.oracle || r.oracle.ok))
+                : [];
+            const evidenceNote = evidenceBlocked.length
+                ? ` Parity was READY on ${evidenceBlocked.length} market(s) but the latest digits do not show the run (${evidenceBlocked[0].evidence.text.replace('No evidence: ', '')}).`
                 : '';
             const blocked = requireOracle ? scan.reads.filter(r => !r.thin && r.ready && r.oracle && !r.oracle.ok) : [];
             const oracleNote = blocked.length
@@ -2015,10 +2043,16 @@ const Overlord = () => {
                   )}/6).`
                 : '';
             logMessage(
-                `⏸ No market is READY for ${wanted} right now.${oracleNote}${other}${
-                    watch ? ` Run will trade the closest: ${symbolNames[watch.symbol]} ${watch.label}.` : ' Try again shortly.'
+                `⏸ No market is READY for ${wanted} right now.${oracleNote}${evidenceNote}${other}${
+                    watch
+                        ? watchBlocked
+                            ? ` Closest: ${symbolNames[watch.symbol]} ${watch.label}, but its latest digits do not show the run, so Run will not trade it.`
+                            : ` Run will trade the closest: ${symbolNames[watch.symbol]} ${watch.label}.`
+                        : ' Try again shortly.'
                 }`
             );
+        } else if (scan.legacyOnly && requireEvidence) {
+            logMessage('⏸ No market shows the required run of Even/Odd in its latest digits. Try again shortly.');
         } else {
             logMessage('Scan incomplete: no market returned enough ticks. Try again.');
         }
@@ -2049,6 +2083,7 @@ const Overlord = () => {
                 url: SCAN_WS_URL,
                 side: smartContract ? null : tradeType,
                 style: rfStyleRef.current,
+                requireEvidence,
                 names: symbolNames,
                 cancelled,
                 onProgress: p => {
@@ -2075,7 +2110,7 @@ const Overlord = () => {
             symbolRef.current = best.symbol;
             contractTypeRef.current = best.side;
             lastEnginePickRef.current = 'rise-fall';
-            noReversalRef.current = best.style === 'reversal' && !best.setup;
+            noReversalRef.current = !best.setup;
             setSymbol(best.symbol);
             if (smartContract) setTradeType(best.side);
             setContractType(best.side);
@@ -2086,11 +2121,13 @@ const Overlord = () => {
                 riseFall: best,
             });
             logMessage(
-                best.style === 'reversal' && !best.setup
-                    ? `⏸ No reversal point right now. Closest: ${symbolNames[best.symbol]} ${best.label}, ${best.agree} of ${best.total} indicators. Run will not trade it; press Find Market again shortly.`
-                    : `✅ ${symbolNames[best.symbol]} ${best.label}${best.style === 'reversal' ? ' (reversal)' : ''}: ${best.agree} of ${best.total} indicators agree${
-                          best.against ? `, ${best.against} against` : ''
-                      } (${best.tier})`
+                best.blockedByEvidence
+                    ? `⏸ No signal. The indicators lean ${best.label} on ${symbolNames[best.symbol]} (${best.agree} of ${best.total}) but the latest ticks do not show it. ${best.evidence.text} Run will not trade it; press Find Market again shortly.`
+                    : !best.setup
+                      ? `⏸ No reversal point right now. Closest: ${symbolNames[best.symbol]} ${best.label}, ${best.agree} of ${best.total} indicators. Run will not trade it; press Find Market again shortly.`
+                      : `✅ ${symbolNames[best.symbol]} ${best.label}${best.style === 'reversal' ? ' (reversal)' : ''}: ${best.agree} of ${best.total} indicators agree${
+                            best.against ? `, ${best.against} against` : ''
+                        } (${best.tier})${best.evidence ? `. ${best.evidence.text}` : ''}`
             );
             try {
                 alertSound.play().catch(() => {});
@@ -2256,6 +2293,24 @@ const Overlord = () => {
                                 <option value='trend'>With the indicators</option>
                             </select>
                         </div>
+                    )}
+                    {(isRiseFallTrade || isParityTrade) && (
+                        <label className='ovl-smart-toggle'>
+                            <input
+                                type='checkbox'
+                                aria-label='Require evidence in the latest ticks'
+                                checked={requireEvidence}
+                                onChange={e => setRequireEvidence(e.target.checked)}
+                                disabled={isRunning || analysisStarted}
+                            />
+                            <span>
+                                Only give a signal when the latest ticks already show it (
+                                {isRiseFallTrade
+                                    ? `${'F'.repeat(DEFAULT_EVIDENCE_RUN.FALL)} for Fall, ${'R'.repeat(DEFAULT_EVIDENCE_RUN.RISE)} for Rise`
+                                    : `${'E'.repeat(DEFAULT_EVIDENCE_RUN.EVEN)} for Even, ${'O'.repeat(DEFAULT_EVIDENCE_RUN.ODD)} for Odd`}
+                                )
+                            </span>
+                        </label>
                     )}
                     {isParityTrade && (
                         <label className='ovl-smart-toggle'>
@@ -2482,10 +2537,11 @@ const Overlord = () => {
                                                 BEST: 'BEST MARKET AVAILABLE',
                                                 WEAK: 'NO STRONG MARKET, BEST AVAILABLE SHOWN',
                                             }[
-                                                strongestSignal.riseFall.style === 'reversal' && !strongestSignal.riseFall.setup
-                                                    ? 'NONE'
-                                                    : strongestSignal.riseFall.tier
-                                            ] || 'NO REVERSAL POINT RIGHT NOW (NOT TRADED)'
+                                                !strongestSignal.riseFall.setup ? 'NONE' : strongestSignal.riseFall.tier
+                                            ] ||
+                                            (strongestSignal.riseFall.blockedByEvidence
+                                                ? 'NO EVIDENCE IN THE LATEST TICKS (NOT TRADED)'
+                                                : 'NO REVERSAL POINT RIGHT NOW (NOT TRADED)')
                                         }
                                     </span>
                                     <h3 className='sh-res-vol'>
@@ -2513,6 +2569,12 @@ const Overlord = () => {
                                     Held its side in {Math.round(strongestSignal.riseFall.steady * 100)}% of{' '}
                                     {strongestSignal.riseFall.rounds} live checks
                                 </span>
+                                {strongestSignal.riseFall.evidence && (
+                                    <span>
+                                        {strongestSignal.riseFall.evidence.ok ? '✓' : '✗'}{' '}
+                                        {strongestSignal.riseFall.evidence.text}
+                                    </span>
+                                )}
                             </div>
                         </div>
                     ) : strongestSignal?.engine ? (
@@ -2527,7 +2589,14 @@ const Overlord = () => {
                                                 CAUTION: 'NO MARKET CLEARED, LEAST RISKY SHOWN',
                                                 LEGACY: 'MARKET FOUND (BASIC SCAN)',
                                                 WATCH: 'NO READY MARKET, CLOSEST SHOWN (RUN TRADES IT)',
-                                            }[strongestSignal.watchOnly ? 'WATCH' : strongestSignal.engine.tier]
+                                                BLOCKED: 'NO EVIDENCE IN THE LATEST DIGITS (NOT TRADED)',
+                                            }[
+                                                strongestSignal.blockedByEvidence
+                                                    ? 'BLOCKED'
+                                                    : strongestSignal.watchOnly
+                                                      ? 'WATCH'
+                                                      : strongestSignal.engine.tier
+                                            ]
                                         }
                                     </span>
                                     <h3 className='sh-res-vol'>
@@ -2606,6 +2675,14 @@ const Overlord = () => {
                                     {strongestSignal.engine.parity.recommendedRuns !== null && (
                                         <span>Runs {strongestSignal.engine.parity.recommendedRuns}</span>
                                     )}
+                                </div>
+                            )}
+                            {requireEvidence && strongestSignal.engine.evidence && (
+                                <div className='ovl-eng-notes'>
+                                    <span>
+                                        {strongestSignal.engine.evidence.ok ? '✓' : '✗'}{' '}
+                                        {strongestSignal.engine.evidence.text}
+                                    </span>
                                 </div>
                             )}
                             <ul className='ovl-eng-reasons'>

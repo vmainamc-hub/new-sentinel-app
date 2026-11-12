@@ -7,6 +7,9 @@ export const RF_CANDLES = 200;
 export const RF_GRANULARITY = 60;
 export const RF_ASSESS_MS = 15_000;
 export const RF_ROUND_MS = 3_000;
+/** Latest ticks asked for and kept per market, for the evidence rule (a run of FFFF / RRRR at the end). */
+export const RF_TICKS = 40;
+const TICK_REQ_BASE = 1000;
 
 type SocketLike = Pick<WebSocket, 'send' | 'close'> & {
     onopen: ((ev: unknown) => void) | null;
@@ -30,6 +33,10 @@ export type RiseFallOptions = {
     side?: Direction | null;
     style?: RiseFallStyle;
     names?: Record<string, string>;
+    /** A side is only a signal when the latest ticks already end in a run of it (FFFF / RRRR). */
+    requireEvidence?: boolean;
+    /** Run the latest ticks must show; defaults to the evidence module's own. */
+    evidenceRun?: number;
     assessMs?: number;
     roundMs?: number;
     cancelled?: () => boolean;
@@ -47,6 +54,15 @@ const toCandle = (c: Record<string, unknown>, time: unknown): Candle | null => {
     return Object.values(out).every(Number.isFinite) ? out : null;
 };
 
+/** Pure: appends one live tick quote to a market's latest ticks, keeping at most RF_TICKS. Returns false for an unusable quote. */
+export const appendTick = (ticks: number[], quote: unknown): boolean => {
+    const price = Number(quote);
+    if (quote === null || quote === '' || !Number.isFinite(price)) return false;
+    ticks.push(price);
+    if (ticks.length > RF_TICKS) ticks.shift();
+    return true;
+};
+
 /** Pure: applies one live ohlc update to a market's candles (replaces the forming candle or starts the next one). */
 export const applyOhlc = (candles: Candle[], ohlc: Record<string, unknown>): void => {
     const c = toCandle(ohlc, ohlc.open_time);
@@ -62,7 +78,9 @@ export async function assessRiseFall(opts: RiseFallOptions): Promise<RiseFallAss
     const roundMs = Math.max(50, opts.roundMs ?? RF_ROUND_MS);
     const wait = opts.wait ?? sleep;
     const candles: Record<string, Candle[]> = {};
+    const ticks: Record<string, number[]> = {};
     const byReq = new Map<number, string>();
+    const byTickReq = new Map<number, string>();
     let ws: SocketLike | null = null;
     try {
         ws = opts.createSocket ? opts.createSocket(opts.url) : (new WebSocket(opts.url) as unknown as SocketLike);
@@ -84,10 +102,30 @@ export async function assessRiseFall(opts: RiseFallOptions): Promise<RiseFallAss
                         req_id: i + 1,
                     })
                 );
+                if (opts.requireEvidence) {
+                    // The latest ticks of the same market, for the evidence rule: their history first, then every new tick.
+                    byTickReq.set(TICK_REQ_BASE + i, symbol);
+                    ws?.send(
+                        JSON.stringify({
+                            ticks_history: symbol,
+                            style: 'ticks',
+                            count: RF_TICKS,
+                            end: 'latest',
+                            subscribe: 1,
+                            req_id: TICK_REQ_BASE + i,
+                        })
+                    );
+                }
             });
         };
         ws.onmessage = ev => {
-            let msg: { req_id?: number; candles?: Record<string, unknown>[]; ohlc?: Record<string, unknown> };
+            let msg: {
+                req_id?: number;
+                candles?: Record<string, unknown>[];
+                ohlc?: Record<string, unknown>;
+                history?: { prices?: unknown[] };
+                tick?: { symbol?: unknown; quote?: unknown };
+            };
             try {
                 msg = JSON.parse(String(ev.data));
             } catch {
@@ -102,6 +140,15 @@ export async function assessRiseFall(opts: RiseFallOptions): Promise<RiseFallAss
             } else if (msg.ohlc && typeof msg.ohlc.symbol === 'string') {
                 const list = candles[msg.ohlc.symbol];
                 if (list) applyOhlc(list, msg.ohlc);
+            } else if (Array.isArray(msg.history?.prices) && msg.req_id !== undefined) {
+                const symbol = byTickReq.get(msg.req_id);
+                if (!symbol) return;
+                const list: number[] = [];
+                for (const quote of msg.history.prices) appendTick(list, quote);
+                ticks[symbol] = list;
+            } else if (msg.tick && typeof msg.tick.symbol === 'string') {
+                // A tick can arrive before the tick history of its market; it is kept and the history replaces it.
+                appendTick((ticks[msg.tick.symbol] ??= []), msg.tick.quote);
             }
         };
     }
@@ -111,7 +158,16 @@ export async function assessRiseFall(opts: RiseFallOptions): Promise<RiseFallAss
     let cancelled = false;
     let leader: RiseFallProgress['leader'] = null;
     const loaded = () => Object.values(candles).filter(c => c.length >= MIN_CANDLES).length;
-    const read = () => scanRiseFall({ candles, names: opts.names, side: opts.side ?? null, style: opts.style });
+    const read = () =>
+        scanRiseFall({
+            candles,
+            names: opts.names,
+            side: opts.side ?? null,
+            style: opts.style,
+            ticks,
+            requireEvidence: opts.requireEvidence,
+            evidenceRun: opts.evidenceRun,
+        });
     const report = () =>
         opts.onProgress?.({
             elapsedMs: Math.min(assessMs, Date.now() - started),

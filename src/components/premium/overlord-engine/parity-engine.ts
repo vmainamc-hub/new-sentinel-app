@@ -15,9 +15,13 @@
 // rising, recent digits) are read on every market as well. They never change what Parity says; with `requireOracle` a market
 // is only picked when Parity says READY AND all six Oracle conditions hold for its parity.
 //
+// With `requireEvidence` a market is also only picked when the latest digits already show a run of the side's parity (EEEEE for
+// Even, OOOOO for Odd; see evidence.ts). Without that run the market is shown with the reason, never as a signal.
+//
 // Honest limit: Deriv digits are generated randomly. Parity ranks how healthy and persistent a parity structure has been and
 // avoids the moments its own analysts flag as costly. It cannot create an edge or predict the next tick.
 import { readEvenOdd } from '../hub360/oracle/even-odd';
+import { digitEvidence, type Evidence } from './evidence';
 import { LEGACY_WINDOW } from './legacy';
 import { analyseMarketParity, DEFAULT_PARITY_SETTINGS, type ParitySettings } from './parity/engine';
 import type { MarketParityReport } from './parity/types';
@@ -99,6 +103,8 @@ export type ParityRead = {
     parity: ParityNotes | null;
     /** The Oracle's Even / Odd conditions on the same digits; null when there are too few ticks to read them. */
     oracle: OracleNotes | null;
+    /** What the latest digits show for the side (a run of its parity at the end); null on a read made without digits. */
+    evidence: Evidence | null;
     /** Set after an assessment: how the market held up over the live rounds. */
     steady?: { rounds: number; clearShare: number; topShare: number };
 };
@@ -112,6 +118,8 @@ export type ParityInput = {
     settings?: ParitySettings;
     /** Only pick a market whose Oracle Even / Odd conditions all hold (as well as Parity READY). */
     requireOracle?: boolean;
+    /** Only pick a market whose latest digits already end in a run of the side's parity (EEEEE / OOOOO). */
+    requireEvidence?: boolean;
 };
 
 export type ParityScan = {
@@ -160,6 +168,9 @@ export const toParityTicks = (digits: readonly number[], max = PARITY_MAX_TICKS)
 /** The Oracle conditions hold, or could not be read (too few ticks), which never blocks a market. */
 export const oracleOk = (r: ParityRead): boolean => !r.oracle || r.oracle.ok;
 
+/** The latest digits show the run the side needs. A read with no evidence attached never passes. */
+export const evidenceOk = (r: ParityRead): boolean => Boolean(r.evidence?.ok);
+
 const oracleOf = (digits: readonly number[], side: ParitySide): OracleNotes | null => {
     const read = readEvenOdd(digits, side);
     if (!read) return null;
@@ -201,6 +212,7 @@ const thinRead = (symbol: string, name: string, digits: readonly number[], side:
     applied: 0,
     parity: null,
     oracle: null,
+    evidence: digitEvidence(digits, side),
 });
 
 const notesOf = (report: MarketParityReport, side: ParitySide): ParityNotes => {
@@ -271,6 +283,7 @@ const readFromReport = (
         applied: hyp ? hyp.supports.length + hyp.conflicts.length : 0,
         parity: notesOf(report, side),
         oracle: oracleOf(digits, side),
+        evidence: digitEvidence(digits, side),
     };
 };
 
@@ -281,16 +294,20 @@ const readFromReport = (
 export function pickFromReads(
     reads: readonly ParityRead[],
     chosen: ParitySide | null,
-    requireOracle = false
+    requireOracle = false,
+    requireEvidence = false
 ): Pick<ParityScan, 'best' | 'watch' | 'opposite' | 'legacyOnly' | 'evaluated'> {
     const deep = reads.filter(r => !r.thin);
     if (deep.length === 0) {
         // Nothing could be read by Parity: the original condition decides, exactly as it always has (lowest share wins).
-        const thin = reads.filter(r => r.legacyPct !== null).sort((a, b) => (a.legacyPct ?? 0) - (b.legacyPct ?? 0));
+        const thin = reads
+            .filter(r => r.legacyPct !== null && (!requireEvidence || evidenceOk(r)))
+            .sort((a, b) => (a.legacyPct ?? 0) - (b.legacyPct ?? 0));
         return { best: thin[0] ?? null, watch: null, opposite: null, legacyOnly: reads.length > 0, evaluated: 0 };
     }
     const matches = (r: ParityRead) => chosen === null || r.side === chosen;
-    const eligible = (r: ParityRead) => r.ready && matches(r) && (!requireOracle || oracleOk(r));
+    const eligible = (r: ParityRead) =>
+        r.ready && matches(r) && (!requireOracle || oracleOk(r)) && (!requireEvidence || evidenceOk(r));
     const best = deep.find(eligible) ?? null;
     if (best) return { best, watch: null, opposite: null, legacyOnly: false, evaluated: deep.length };
     const watch =
@@ -298,7 +315,9 @@ export function pickFromReads(
     const opposite =
         chosen === null
             ? null
-            : (deep.find(r => r.ready && r.side !== chosen && (!requireOracle || oracleOk(r))) ?? null);
+            : (deep.find(
+                  r => r.ready && r.side !== chosen && (!requireOracle || oracleOk(r)) && (!requireEvidence || evidenceOk(r))
+              ) ?? null);
     return { best: null, watch, opposite, legacyOnly: false, evaluated: deep.length };
 }
 
@@ -318,5 +337,5 @@ export function scanParity(input: ParityInput): ParityScan {
         reads.push(readFromReport(report, series.digits, input.side));
     }
     reads.sort(compareParity);
-    return { reads, ...pickFromReads(reads, input.side, input.requireOracle) };
+    return { reads, ...pickFromReads(reads, input.side, input.requireOracle, input.requireEvidence) };
 }

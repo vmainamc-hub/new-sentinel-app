@@ -188,6 +188,7 @@ describe('pickFromReads and compareParity', () => {
         applied: 6,
         parity: null,
         oracle: null,
+        evidence: null,
         ...over,
     });
 

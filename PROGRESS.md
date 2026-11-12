@@ -2,6 +2,13 @@
 
 Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main only after build + tests pass; main auto-deploys to Netlify). Module dir: `src/components/premium/ai-intel/`.
 
+## Overlord: evidence rule for Rise/Fall and Even/Odd signals (latest)
+- [x] A signal is only given when the latest ticks already show its side: Fall needs FFFF, Rise needs RRRR (last 4 ticks), Even needs EEEEE, Odd needs OOOOO (last 5 digits). A flat tick breaks a run. Without the run the market is shown with the reason ("need FFFF, they show RFRF"), is never presented as a signal, and Run refuses to trade it. Run lengths: `DEFAULT_EVIDENCE_RUN` in `overlord-engine/evidence.ts`.
+- [x] Rise/Fall: `rise-fall-run.ts` now also subscribes to each market's live ticks (only when the rule is on); `scanRiseFall` takes `ticks` + `requireEvidence`; a market that has a setup sorts ahead of one that does not. Even/Odd: `ParityRead.evidence`, `requireEvidence` in `scanParity` / `pickFromReads` / `ParityAssessment` (same pattern as the Oracle conditions); an Even/Odd "closest market" with no run is shown but not traded.
+- [x] Page: switch "Only give a signal when the latest ticks already show it" (default ON) for Rise/Fall and Even/Odd, evidence line on the result card and in the log.
+- Checked: 29 new tests (`__tests__/evidence.spec.ts`) + the 105 existing Overlord-engine tests pass under bun; strict tsc clean on the touched engine files; Overlord.jsx parses. NOT done here: `npm run build` / jest / a browser run (no network in this workspace). Fails closed: if live ticks do not arrive the rule shows "no latest ticks to check" and gives no signal.
+- Honest limit: this makes signals stricter, it does not make ticks predictable.
+
 ## Audit findings (real repo, commit e361ede)
 - Stack: React 18 + TS, rsbuild, jest (`npm test`), MobX stores, SCSS. Premium tabs lazy-loaded in `PremiumLayout.tsx` (`case 'sixfold'` pattern); nav catalog in `public/site-config/*`.
 - Sixfold simulation rules live in `entry-lab.ts` `walkForward` (trigger at i, exit at i+duration, next trigger search resumes at exit+1, one contract at a time, decisions use only past ticks) and `runner.ts` `virtualTick`/`executeVirtual` (win = `winningDigits(contract)`). `virtual-hook.ts` is the Virtual Hook state machine, NOT the simulator. Entry modes in `bot.ts`: ANY, SETUP, SMART, CUSTOM (explicit digit set), plus BRAIN (entry-brain.ts). Tests: entry-lab.spec, runner.spec exist.
