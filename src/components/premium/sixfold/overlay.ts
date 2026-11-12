@@ -22,6 +22,15 @@ export type OverlayCall = {
     note: string;
 };
 
+/** A per-market entry digit that IS the trigger (Sentinel AI): the trade is placed on the first NEW tick that shows it. */
+export type EntryTrigger = {
+    digit: number;
+    /** 'confirmed': the digit also held on the newest part of the history. 'weak': the best digit found, but none stands out (a timing choice, not an edge). */
+    strength: 'confirmed' | 'weak';
+    /** Plain words for the log and the page: how the digit did when the contract was entered right after it. */
+    note: string;
+};
+
 export type TradeNotice = {
     contractId: number;
     symbol: string;
@@ -54,6 +63,15 @@ export type RunnerOverlay = {
     call: (cell: Cell, ctx: { recovering: boolean; now: number }) => OverlayCall;
     /** Entry digits to wait for instead of the runner's own, or null to let the runner choose. */
     entryDigits?: (cell: Cell, ctx: { recovering: boolean }) => number[] | null;
+    /**
+     * The entry digit of one market for the contract that WOULD be bought (the recovery barrier after a loss), worked out from that
+     * market's previous ticks. When it returns a digit it is the trigger: the buy goes out on the first NEW tick showing it, in place of
+     * the "run of winning digits" rule, with these protections kept: the market is never entered in a red run (the digits just before
+     * the trigger are not all losers), a market with too many losses in its last 10 is dropped, and every other gate still holds.
+     * Null (too little history, a contract it does not read) leaves the runner's usual entry in force. The result should be stable
+     * between scans (cache it): the runner asks on every scan while a contract is armed.
+     */
+    entryTrigger?: (symbol: string, traded: Contract, series: readonly number[], ctx: { duration: number; now: number }) => EntryTrigger | null;
     /**
      * A mandatory hold, read on the tick a trade would be bought (and again when armed). `traded` is the contract that WOULD be
      * bought (the recovery barrier after a loss). Returning ok:false stops the buy; the runner drops the arm and looks elsewhere.

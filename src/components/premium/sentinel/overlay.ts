@@ -4,7 +4,8 @@
 // signal at the strength the mode asks for, an easier bar for a strong signal, a higher bar for a watch signal, and an ordering
 // bonus by Pulse score. The scanner, Meter, loss shield and money rules are Sixfold's. Pulse decides when to look, it cannot create
 // an edge on random digits, and the app says so.
-import type { RunnerOverlay } from '../sixfold/overlay';
+import { discoverEntry, type EntryPick, SCAN_SPECS } from '../bulk-scan';
+import type { EntryTrigger, RunnerOverlay } from '../sixfold/overlay';
 import type { EdgeInfluence } from './edge/influence';
 import type { PulseRead, PulseSnapshot, PulseTier } from './pulse';
 import { contractsFor, type EngineSettings } from './settings';
@@ -39,6 +40,23 @@ export type EngineFunnel = {
     /** Contracts the mode lets onto the board. */
     board: number;
     error: string | null;
+};
+
+/**
+ * How long a market's entry digit is kept before it is worked out again from the newest ticks. The digit is found by replaying the
+ * market's own history (the Bulk Trader's engine, see bulk-scan.ts `discoverEntry`); a minute keeps it steady while it is waited
+ * for, and the replay still follows the market.
+ */
+export const ENTRY_DIGIT_TTL_MS = 60_000;
+
+/** The entry digit of one contract on one market, from the Bulk Trader's replay. Null when the history is too short or the contract is not one of the six. */
+export const entryTriggerOf = (series: readonly number[], side: string, param: number, duration: number): { trigger: EntryTrigger; pick: EntryPick } | null => {
+    if (side !== 'OVER' && side !== 'UNDER') return null; // the replay reads the six Over / Under contracts only
+    const spec = SCAN_SPECS.find(s => s.contract === (side === 'OVER' ? 'DIGITOVER' : 'DIGITUNDER') && s.barrier === param);
+    if (!spec) return null;
+    const pick = discoverEntry(series, spec, duration);
+    if (!pick) return null;
+    return { trigger: { digit: pick.digit, strength: pick.strength, note: pick.note }, pick };
 };
 
 export const keyOf = (symbol: string, side: string, param: number) =>
@@ -121,6 +139,8 @@ export const createSentinelOverlay = (opts: {
     const index = new Map<string, BoardRow>();
     const clock = opts.now ?? Date.now;
     let lastActivity = clock();
+    // Each market's entry digit per contract, kept for ENTRY_DIGIT_TTL_MS so the digit being waited for does not change every scan.
+    const entryCache = new Map<string, { at: number; trigger: EntryTrigger | null }>();
 
     const baseCall: RunnerOverlay['call'] = (cell, ctx) => {
         // MANDATORY special-digit rule (digit 1 for Over, digit 8 for Under): applies in every mode, the Hunter included.
@@ -181,6 +201,20 @@ export const createSentinelOverlay = (opts: {
         contracts: () => contractsFor(opts.getEngine()),
         onStart: now => {
             lastActivity = now;
+            entryCache.clear(); // a new session works the digits out afresh from the newest ticks
+        },
+        entryTrigger: (symbol, traded, series, ctx) => {
+            const key = `${symbol}|${traded.side}:${traded.param}|${ctx.duration}`;
+            const hit = entryCache.get(key);
+            if (hit && ctx.now - hit.at < ENTRY_DIGIT_TTL_MS && (hit.trigger || ctx.now - hit.at < 5_000)) return hit.trigger;
+            let trigger: EntryTrigger | null = null;
+            try {
+                trigger = entryTriggerOf(series, traded.side, traded.param, ctx.duration)?.trigger ?? null;
+            } catch {
+                trigger = null; // an entry digit that cannot be worked out leaves the usual entry in force
+            }
+            entryCache.set(key, { at: ctx.now, trigger });
+            return trigger;
         },
         onBought: notice => {
             lastActivity = clock();

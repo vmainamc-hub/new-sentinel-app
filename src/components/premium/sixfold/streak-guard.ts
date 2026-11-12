@@ -33,3 +33,18 @@ export function streakRead(series: readonly number[], contract: Contract, need: 
     const enough = tail.length >= Math.min(STREAK_WINDOW, Math.max(need, 1));
     return { run, losses, abortAt, ok: enough && run >= need && losses < abortAt, abort: tail.length >= STREAK_WINDOW && losses >= abortAt };
 }
+
+/** How many losing digits in a row, just before the entry digit, count as a red run that blocks an entry-digit trade. */
+export const RED_RUN_BEFORE = 2;
+
+/**
+ * True when the `k` digits BEFORE the latest tick are all losing digits for the contract: the market is in a red run. Used where
+ * the latest tick is the entry digit itself (it may be a losing digit by nature), so the check looks at what came before it.
+ * A history too short to hold k + 1 digits is not a red run (the caller has its own minimum).
+ */
+export function redRunBeforeLast(series: readonly number[], contract: Contract, k: number = RED_RUN_BEFORE): boolean {
+    if (k < 1 || series.length < k + 1) return false;
+    const win = new Set(winningDigits(contract));
+    for (let i = series.length - 2; i >= series.length - 1 - k; i -= 1) if (win.has(series[i])) return false;
+    return true;
+}

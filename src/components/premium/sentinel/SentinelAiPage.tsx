@@ -57,15 +57,20 @@ const SentinelAiPage = () => {
         set({ markets: s.markets.includes(symbol) ? s.markets.filter(m => m !== symbol) : [...s.markets, symbol] });
 
     // One line: what it is doing now. When it is looking but not trading, the first thing in the way (from the analysis).
+    const trig = sx.armed?.trigger ?? null;
     const status = sx.armed
-        ? `${sx.armed.label} · ${shortName(sx.armed.symbol)} · waiting for entry`
+        ? `${sx.armed.label} · ${shortName(sx.armed.symbol)} · ${
+              trig ? `waiting for entry digit ${trig.digit}${trig.strength === 'weak' ? ' (weak)' : ''}` : 'waiting for entry'
+          }`
         : sx.running
           ? PHASE_LABEL[sx.phase]
           : (sx.stopReason ?? `${sx.readyMarkets} of ${s.markets.length} markets ready`);
     const reason =
         sx.running && !sx.armed && sx.phase !== 'connecting'
             ? describeFunnel(sentinelOverlay.funnel(), sx.funnel, false).verdict
-            : null;
+            : trig
+              ? `Buys the moment ${trig.digit} prints on this market (and it is not in a red run). ${trig.note}.`
+              : null;
 
     const [more, setMore] = useState(false);
     const feedTone = feed.mode === 'live' ? feed.status : 'warn';

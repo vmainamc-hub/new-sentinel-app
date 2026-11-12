@@ -1362,3 +1362,151 @@ describe('SixfoldRunner with the edge gates (Sixfold / Vanguard)', () => {
     });
 });
 
+
+describe('SixfoldRunner with an entry-digit trigger (Sentinel AI)', () => {
+    const trigger = { digit: 1, strength: 'confirmed' as const, note: 'after a 1 the contract won 80% of 90 (fair 70%)' };
+    const overlay = (over: Partial<RunnerOverlay> = {}): RunnerOverlay => ({
+        moduleId: 'sentinel-ai',
+        name: 'Sentinel AI',
+        contracts: () => [{ side: 'OVER', param: 2 }],
+        call: () => ({ allow: true, bump: 0, rank: 0, note: '' }),
+        entryTrigger: () => trigger,
+        ...over,
+    });
+    /** A calm market: nine winning digits, then the new tick the feed would have appended. */
+    const calm = (h: ReturnType<typeof harness>, latest: number) => {
+        h.series.P.splice(-10, 10, 7, 7, 7, 7, 7, 7, 7, 7, 7, latest);
+    };
+    const logs = (h: ReturnType<typeof harness>) => h.runner.getSnapshot().log.map(l => l.text).join('\n');
+
+    it('arms the market with its own entry digit and says which one it waits for', () => {
+        const h = harness({}, { overlay: overlay() });
+        h.runner.start();
+        const armed = h.runner.getSnapshot().armed!;
+        expect(armed.label).toBe('Over 2');
+        expect(armed.trigger).toEqual(trigger);
+        expect(armed.entryDigits).toEqual([1]);
+        expect(logs(h)).toContain('entry digit 1 (confirmed)');
+        expect(h.calls.buy).toHaveLength(0); // arming itself never buys: the digit has to print on a NEW tick
+    });
+
+    it('buys at once when the entry digit prints on a calm market, and not on any other digit', async () => {
+        const h = harness({}, { overlay: overlay() });
+        h.runner.start();
+        calm(h, 5);
+        h.runner.handleFeedTick('P', 5); // not the entry digit
+        h.runner.handleFeedTick('Q', 1); // another market printing it
+        await flush();
+        expect(h.calls.buy).toHaveLength(0);
+        calm(h, 1);
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+        expect(h.calls.buy[0].parameters).toMatchObject({ symbol: 'P', contract_type: 'DIGITOVER', barrier: '2' });
+        expect(logs(h)).toContain("entry digit 1 (its trigger, confirmed)");
+    });
+
+    it('is the trigger even though the win-streak guard is on: a losing entry digit is not blocked by it', async () => {
+        const h = harness({ winStreakGate: true, winStreak: 3 }, { overlay: overlay() });
+        calm(h, 5); // a calm market to arm (the guard rejects a market already running cold)
+        h.runner.start();
+        expect(h.runner.getSnapshot().armed?.trigger).toEqual(trigger);
+        calm(h, 1); // the latest digit 1 loses Over 2: the old "3 winning digits in a row" rule could never have fired here
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+    });
+
+    it('never buys in a red run: the digits just before the entry digit are both losers', async () => {
+        const h = harness({}, { overlay: overlay() });
+        h.runner.start();
+        h.series.P.splice(-10, 10, 7, 7, 7, 7, 7, 7, 7, 0, 1, 1); // 0, 1 then the entry digit 1
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(0);
+        // The very next entry digit, once the market is no longer in a red run, goes through.
+        h.series.P.splice(-10, 10, 7, 7, 7, 7, 7, 0, 1, 7, 7, 1);
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+    });
+
+    it('never buys in a market with too many losses in its last 10, even with a calm run just before', async () => {
+        const h = harness({}, { overlay: overlay() });
+        h.runner.start();
+        h.series.P.splice(-10, 10, 1, 7, 1, 7, 1, 7, 7, 7, 7, 1); // four losers of ten: the limit for Over 2 is 4
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(0);
+    });
+
+    it('a mandatory overlay guard still stops the trade on the entry digit', async () => {
+        const h = harness({}, { overlay: overlay({ guard: () => ({ ok: false, note: 'digit 8 is building' }) }) });
+        h.runner.start();
+        calm(h, 1);
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(0);
+    });
+
+    it('does not buy during the cool-down or while another trade is open', async () => {
+        const h = harness({ takeProfit: 0 }, { overlay: overlay() });
+        h.runner.start();
+        calm(h, 1);
+        h.runner.handleFeedTick('P', 1);
+        h.runner.handleFeedTick('P', 1); // second one while the first is in flight
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+    });
+
+    it('with no entry digit available it falls back to the usual entry', async () => {
+        const h = harness({}, { overlay: overlay({ entryTrigger: () => null }) });
+        h.runner.start();
+        expect(h.runner.getSnapshot().armed?.trigger).toBeNull();
+        h.runner.handleFeedTick('P', 1); // the runner's own learned digit
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+    });
+
+    it('an entry-digit hook that throws, or returns nonsense, falls back to the usual entry', () => {
+        const thrown = harness({}, { overlay: overlay({ entryTrigger: () => { throw new Error('boom'); } }) });
+        thrown.runner.start();
+        expect(thrown.runner.getSnapshot().armed?.trigger).toBeNull();
+        const nonsense = harness({}, { overlay: overlay({ entryTrigger: () => ({ ...trigger, digit: 42 }) }) });
+        nonsense.runner.start();
+        expect(nonsense.runner.getSnapshot().armed?.trigger).toBeNull();
+    });
+
+    it('is ignored when the entry rule is "any tick"', async () => {
+        const h = harness({ entry: 'ANY' }, { overlay: overlay() });
+        h.runner.start();
+        expect(h.runner.getSnapshot().armed?.trigger ?? null).toBeNull();
+        h.runner.handleFeedTick('P', 4); // not the entry digit: "any tick" buys on whatever prints
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+    });
+
+    it('a runner with no entry-trigger overlay behaves exactly as before', async () => {
+        const h = harness();
+        h.runner.start();
+        expect(h.runner.getSnapshot().armed?.trigger ?? null).toBeNull();
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+    });
+
+    it('first-to-qualify mode: the market whose entry digit prints first is bought, red runs still blocked', async () => {
+        const h = harness({ execution: 'FIRST' }, { overlay: overlay() });
+        h.runner.start();
+        h.runner.tick();
+        h.series.P.splice(-10, 10, 7, 7, 7, 7, 7, 7, 7, 0, 1, 1);
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(0);
+        calm(h, 1);
+        h.runner.handleFeedTick('P', 1);
+        await flush();
+        expect(h.calls.buy).toHaveLength(1);
+        expect(h.calls.buy[0].parameters.symbol).toBe('P');
+    });
+});

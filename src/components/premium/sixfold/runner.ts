@@ -31,13 +31,13 @@ import {
     stopReason,
     tradeContract,
 } from './money';
-import { type RunnerOverlay, type TradeNotice } from './overlay';
+import { type EntryTrigger, type RunnerOverlay, type TradeNotice } from './overlay';
 import { losingSidePressure, multiWindowGate, multiWindowHealth, pressureGate, winningSideGate, winningSidePressure } from './pressure';
 import { computeRegime, regimeCell, type RegimeSummary } from './regime';
 import { type Cell, eligibility, type OffersFn, type Pick, pickBest, rankedPicks, type ScanResult, scanMarkets } from './scanner';
 import { mulberry32, profitMultiple } from './stats';
 import type { RunnerStores, StoreWatcher } from './stores';
-import { streakRead } from './streak-guard';
+import { redRunBeforeLast, streakRead } from './streak-guard';
 import { freshVh, vhAfterReal, vhAfterVirtual, type VhConfig, type VhState } from './virtual-hook';
 
 export const MODULE_ID = 'sixfold';
@@ -94,6 +94,8 @@ export type Armed = {
     plan: Plan | null;
     planTried: ArmId[];
     planAt: number;
+    /** Sentinel AI's entry digit for this market: when set, it is the trigger (see `RunnerOverlay.entryTrigger`). */
+    trigger?: EntryTrigger | null;
 };
 
 export type TradeRecord = {
@@ -638,7 +640,7 @@ export class SixfoldRunner {
             const verdict = cell
                 ? eligibility(cell, this.settings.selectivity, Math.max(0, this.pickyBump(now) + (call?.bump ?? 0) - ARMED_HYSTERESIS))
                 : null;
-            const streak = cell && this.settings.winStreakGate ? this.streakOf(cell.symbol, cell) : null;
+            const streak = cell && (this.settings.winStreakGate || this.armed.trigger) ? this.streakOf(cell.symbol, cell) : null;
             if (cell && streak?.abort) {
                 this.addLog('info', `${this.armed.label} on ${this.armed.name} dropped: ${streak.losses} losing digits in the last 10 (limit ${streak.abortAt}).`);
                 this.armed = null;
@@ -649,12 +651,17 @@ export class SixfoldRunner {
                 this.addLog('info', `${this.armed.label} on ${this.armed.name} dropped: ${verdict?.reason ?? 'no longer scanned'}.`);
                 this.armed = null;
             } else {
+                const trigger = this.scanMode() === 'ANY' ? null : this.triggerFor(this.armed.symbol, cell);
+                if (trigger && this.armed.trigger && trigger.digit !== this.armed.trigger.digit) {
+                    this.addLog('info', `Entry digit for ${this.armed.label} on ${this.armed.name} is now ${trigger.digit} (was ${this.armed.trigger.digit}): ${trigger.note}.`);
+                }
                 this.armed = {
                     ...this.armed,
                     score: cell.score,
                     edgePts: cell.edgePts,
                     significant: cell.significant,
-                    entryDigits: this.entryDigitsFor(this.armed.symbol, cell, this.armed.entryDigits),
+                    entryDigits: trigger ? [trigger.digit] : this.entryDigitsFor(this.armed.symbol, cell, this.armed.entryDigits),
+                    trigger,
                 };
                 this.maybeRotatePlan(now);
             }
@@ -674,9 +681,15 @@ export class SixfoldRunner {
         if (this.settings.execution === 'FIRST') return this.handleFirstToQualify(symbol, digit);
         if (!this.running || this.tradeInFlight || !this.armed || this.armed.symbol !== symbol) return;
         if (this.io.now() < this.cooldownUntil) return;
-        // With the streak guard on, the winning streak IS the entry: the old "wait for a losing digit" setups do not apply.
-        if (!this.settings.winStreakGate && this.settings.entry !== 'ANY' && !this.brainGoverns() && !this.armed.entryDigits.includes(digit)) return;
-        if (!this.streakFresh(symbol)) return;
+        if (this.armed.trigger) {
+            // The market's own entry digit IS the trigger: it must be the NEW tick, and the market must not be in a red run.
+            if (digit !== this.armed.trigger.digit) return;
+            if (!this.triggerGate(symbol)) return;
+        } else {
+            // With the streak guard on, the winning streak IS the entry: the old "wait for a losing digit" setups do not apply.
+            if (!this.settings.winStreakGate && this.settings.entry !== 'ANY' && !this.brainGoverns() && !this.armed.entryDigits.includes(digit)) return;
+            if (!this.streakFresh(symbol)) return;
+        }
         if (!this.recoveryFormOk(symbol)) return;
         if (!this.brainOk(symbol)) return;
         if (!this.meterFresh(symbol)) return;
@@ -710,7 +723,7 @@ export class SixfoldRunner {
                               if (!guarded) return false;
                               const read = this.streakOf(cell.symbol, cell);
                               // Never a market that is losing; first choice is one already part-way into a run of wins.
-                              return read.abort || (building && read.run < Math.ceil(this.settings.winStreak / 2));
+                              return read.abort || (building && !this.triggerActive() && read.run < Math.ceil(this.settings.winStreak / 2));
                           },
                       }
                     : undefined
@@ -721,9 +734,12 @@ export class SixfoldRunner {
         this.armed = this.buildArmed(pick, now);
         if (this.brainGoverns()) this.assignPlan(now);
         const planned = this.armed?.plan ?? null;
+        const trig = this.armed.trigger;
         const entry = planned
             ? `entry plan: ${planned.label}. ${planned.why}`
-            : this.settings.entry === 'ANY'
+            : trig
+              ? `waiting for its entry digit ${trig.digit} (${trig.strength}): ${trig.note}`
+              : this.settings.entry === 'ANY'
               ? 'buying on the next tick'
               : `waiting for digit ${this.armed.entryDigits.join(' / ')}${this.settings.entry === 'SMART' ? ' (learned from this market)' : ''}`;
         const gate =
@@ -803,6 +819,7 @@ export class SixfoldRunner {
     /** The armed record for a picked contract (not yet armed: the caller decides where it lives). */
     private buildArmed(pick: Pick, now: number): Armed {
         const { cell } = pick;
+        const trigger = this.scanMode() === 'ANY' ? null : this.triggerFor(cell.symbol, cell);
         return {
             symbol: cell.symbol,
             name: marketName(cell.symbol),
@@ -810,7 +827,8 @@ export class SixfoldRunner {
             score: cell.score,
             edgePts: cell.edgePts,
             significant: cell.significant,
-            entryDigits: this.scanMode() === 'ANY' ? [] : this.entryDigitsFor(cell.symbol, cell, pick.entryDigits),
+            entryDigits: this.scanMode() === 'ANY' ? [] : trigger ? [trigger.digit] : this.entryDigitsFor(cell.symbol, cell, pick.entryDigits),
+            trigger,
             why: pick.why,
             since: now,
             expiresAt: now + this.settings.waitSeconds * 1000,
@@ -863,13 +881,15 @@ export class SixfoldRunner {
         for (const pick of picks) {
             const key = keyOf(pick.cell);
             const prev = this.watch.get(key);
+            const trigger = prev && this.scanMode() !== 'ANY' ? this.triggerFor(prev.symbol, pick.cell) : null;
             let armed: Armed = prev
                 ? {
                       ...prev,
                       score: pick.cell.score,
                       edgePts: pick.cell.edgePts,
                       significant: pick.cell.significant,
-                      entryDigits: this.scanMode() === 'ANY' ? [] : this.entryDigitsFor(prev.symbol, pick.cell, prev.entryDigits),
+                      entryDigits: this.scanMode() === 'ANY' ? [] : trigger ? [trigger.digit] : this.entryDigitsFor(prev.symbol, pick.cell, prev.entryDigits),
+                      trigger,
                   }
                 : this.buildArmed(pick, now);
             if (this.brainGoverns()) {
@@ -898,9 +918,13 @@ export class SixfoldRunner {
         const candidates = [...this.watch.values()].filter(a => a.symbol === symbol).sort((a, b) => b.score - a.score);
         for (const candidate of candidates) {
             this.armed = candidate;
-            const entryOk = this.settings.entry === 'ANY' || this.brainGoverns() || candidate.entryDigits.includes(digit);
-            // The win-streak guard holds here too: never buy while the market is not on a run of winning digits.
-            const streakOk = !this.settings.winStreakGate || this.streakHolds(symbol, candidate.cellKey);
+            const triggered = Boolean(candidate.trigger);
+            const entryOk = triggered
+                ? digit === candidate.trigger!.digit
+                : this.settings.entry === 'ANY' || this.brainGoverns() || candidate.entryDigits.includes(digit);
+            // The win-streak guard holds here too: never buy while the market is not on a run of winning digits. With the market's own
+            // entry digit as the trigger, the red-run protection takes its place (see `triggerGate`).
+            const streakOk = triggered ? entryOk && this.triggerGate(symbol) : !this.settings.winStreakGate || this.streakHolds(symbol, candidate.cellKey);
             if (!entryOk || !streakOk || !this.recoveryFormOk(symbol) || !this.brainOk(symbol) || !this.meterFresh(symbol)) {
                 this.armed = null; // (meterFresh already blocked and cleared a contract that went cold)
                 continue;
@@ -1042,6 +1066,38 @@ export class SixfoldRunner {
         if (!traded) return false;
         const plan = this.armed?.plan ?? fallbackPlan(this.brainStrict());
         return planFires(plan, findCell(this.brain, symbol, traded), this.io.feed.getLiveSeries()[symbol] ?? [], traded);
+    }
+
+    /** True when the overlay supplies each market's entry digit as the trigger, and the entry rule in force lets it (not "any tick" or the Brain). */
+    private triggerActive(): boolean {
+        return Boolean(this.io.overlay?.entryTrigger) && this.settings.entry !== 'ANY' && !this.brainGoverns();
+    }
+
+    /** The overlay's entry digit for the contract that would be bought on this market now (the recovery barrier after a loss), or null. */
+    private triggerFor(symbol: string, cell: Cell): EntryTrigger | null {
+        const hook = this.io.overlay?.entryTrigger;
+        if (!hook || !this.triggerActive()) return null;
+        const traded = tradeContract(cell.contract, this.session.consecutiveLosses, this.settings).contract;
+        try {
+            const out = hook(symbol, traded, this.io.feed.getLiveSeries()[symbol] ?? [], { duration: this.settings.duration, now: this.io.now() });
+            return out && Number.isInteger(out.digit) && out.digit >= 0 && out.digit <= 9 ? out : null;
+        } catch {
+            return null; // an entry digit that cannot be read leaves the usual entry in force
+        }
+    }
+
+    /**
+     * The protection that stays when the entry digit is the trigger. The latest tick IS the entry digit (it can be a losing digit by
+     * nature), so the market is judged on what came before it: not in a red run (the digits just before are not all losers), and not
+     * a market with too many losses in its last 10. No side effects: the scan's own check drops a cold market.
+     */
+    private triggerGate(symbol: string): boolean {
+        if (!this.armed || !this.scan) return false;
+        const cell = this.scan.cells.find(c => c.symbol === symbol && c.key === this.armed!.cellKey);
+        if (!cell) return false;
+        if (this.streakOf(symbol, cell).abort) return false;
+        const traded = tradeContract(cell.contract, this.session.consecutiveLosses, this.settings).contract;
+        return !redRunBeforeLast(this.io.feed.getLiveSeries()[symbol] ?? [], traded);
     }
 
     private streakOf(symbol: string, cell: Cell) {
@@ -1566,7 +1622,7 @@ export class SixfoldRunner {
             }
             this.addLog(
                 'trade',
-                `Bought ${bought.label}${bought.recovery ? ' (recovery)' : ''} on ${armed.name}, stake ${stake.toFixed(2)}${entryDigit === null ? '' : `, entry digit ${entryDigit}`}${this.brainGoverns() && armed.plan ? `, plan: ${armed.plan.label}` : ''}. Sent ${Math.max(0, Math.round(tickAgeMs))} ms after the trigger tick, confirmed in ${Math.max(0, Math.round(buyMs))} ms.`
+                `Bought ${bought.label}${bought.recovery ? ' (recovery)' : ''} on ${armed.name}, stake ${stake.toFixed(2)}${entryDigit === null ? '' : `, entry digit ${entryDigit}${armed.trigger ? ` (its trigger, ${armed.trigger.strength})` : ''}`}${this.brainGoverns() && armed.plan ? `, plan: ${armed.plan.label}` : ''}. Sent ${Math.max(0, Math.round(tickAgeMs))} ms after the trigger tick, confirmed in ${Math.max(0, Math.round(buyMs))} ms.`
             );
             if (token !== this.runToken) {
                 this.tradeInFlight = false;

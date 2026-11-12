@@ -1,4 +1,4 @@
-import { streakRead } from '../streak-guard';
+import { redRunBeforeLast, streakRead } from '../streak-guard';
 import type { Contract } from '../bot';
 
 const over2: Contract = { side: 'OVER', param: 2 }; // wins on 3-9, expects 3 losses in 10
@@ -22,5 +22,28 @@ describe('streak guard', () => {
 
     it('refuses to buy on a short history', () => {
         expect(streakRead([5, 6], over2, 6, 1).ok).toBe(false);
+    });
+});
+
+describe('red run before the entry digit', () => {
+    it('is a red run when the digits just before the latest tick are all losers', () => {
+        expect(redRunBeforeLast([7, 8, 0, 1, 1], over2)).toBe(true); // 0, 1 before the latest 1
+        expect(redRunBeforeLast([7, 8, 2, 0, 5], over2)).toBe(true); // the latest (5) is not looked at
+    });
+    it('is not a red run when one of them won', () => {
+        expect(redRunBeforeLast([7, 8, 1, 7, 1], over2)).toBe(false);
+        expect(redRunBeforeLast([7, 8, 7, 1, 1], over2)).toBe(false);
+    });
+    it('does not judge the latest tick: a losing entry digit can still be entered', () => {
+        expect(redRunBeforeLast([7, 7, 7, 1], over2)).toBe(false);
+    });
+    it('needs k + 1 digits and a positive k', () => {
+        expect(redRunBeforeLast([1, 1], over2)).toBe(false);
+        expect(redRunBeforeLast([1, 1, 1], over2, 0)).toBe(false);
+        expect(redRunBeforeLast([1, 1, 1, 1], over2, 3)).toBe(true);
+    });
+    it('uses the contract being bought: for Under 7 the losers are 7, 8, 9', () => {
+        expect(redRunBeforeLast([1, 8, 9, 3], { side: 'UNDER', param: 7 })).toBe(true);
+        expect(redRunBeforeLast([1, 8, 2, 3], { side: 'UNDER', param: 7 })).toBe(false);
     });
 });
