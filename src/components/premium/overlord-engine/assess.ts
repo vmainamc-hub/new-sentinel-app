@@ -49,21 +49,66 @@ export class OverlordAssessment {
         return { clear: (this.clear.get(keyOf(r)) ?? 0) / this.n, top: (this.top.get(keyOf(r)) ?? 0) / this.n };
     }
 
-    /** Re-ranks the final scan with what was seen during the assessment. Unchanged when fewer than two rounds were seen. */
-    finalize(scan: OverlordScan): OverlordScan {
-        if (scan.legacyOnly || this.n < 2) return scan;
+    /**
+     * Re-ranks the final scan with what was seen during the assessment: the rounds, and the live ticks themselves
+     * (`live` = the digits that arrived per market during the window). Unchanged when there was nothing to learn from.
+     */
+    finalize(scan: OverlordScan, live: Readonly<Record<string, readonly number[]>> = {}): OverlordScan {
+        const anyLive = Object.values(live).some(d => d.length > 0);
+        if (scan.legacyOnly || (this.n < 2 && !anyLive)) return scan;
         const reads = scan.reads.map(r => {
             if (r.thin) return r;
-            const s = this.share(r);
-            const score = round1(0.6 * r.score + 0.25 * s.top * 100 + 0.15 * s.clear * 100);
-            const tier = r.tier === 'STRONG' && s.clear < STEADY_SHARE ? ('BEST' as const) : r.tier;
-            return { ...r, score, tier, steady: { rounds: this.n, clearShare: s.clear, topShare: s.top } };
+            const s = this.n >= 2 ? this.share(r) : { clear: r.vetoed ? 0 : 1, top: 0 };
+            const ev = liveEvidence(live[r.symbol] ?? [], r.side, r.barrier);
+            // Live ticks count once there are enough of them to say anything; before that the weights are the original ones.
+            const score = round1(
+                ev.n >= MIN_LIVE_TICKS
+                    ? 0.5 * r.score + 0.2 * s.top * 100 + 0.1 * s.clear * 100 + 0.2 * liveScore(ev)
+                    : 0.6 * r.score + 0.25 * s.top * 100 + 0.15 * s.clear * 100
+            );
+            const against = ev.n >= MIN_LIVE_TICKS && ev.z <= LIVE_AGAINST_Z;
+            let tier = r.tier === 'STRONG' && (s.clear < STEADY_SHARE || ev.z < 0) ? ('BEST' as const) : r.tier;
+            let vetoed = r.vetoed;
+            let vetoReason = r.vetoReason;
+            if (against && !r.vetoed) {
+                vetoed = true;
+                tier = 'CAUTION';
+                vetoReason = `Live ticks: only ${ev.wins} of ${ev.n} won, expected about ${ev.expected.toFixed(1)}`;
+            }
+            return {
+                ...r,
+                score,
+                tier,
+                vetoed,
+                vetoReason,
+                live: ev.n > 0 ? ev : undefined,
+                steady: { rounds: this.n, clearShare: s.clear, topShare: s.top },
+            };
         });
         reads.sort(compareReads);
         const deep = reads.filter(r => !r.thin);
         return { ...scan, reads, best: deep[0] ?? scan.best };
     }
 }
+
+/** Fewer live ticks than this say nothing, so they carry no weight. */
+export const MIN_LIVE_TICKS = 5;
+/** Live ticks this far below what the contract needs (in standard deviations) flag the contract as going against us. */
+export const LIVE_AGAINST_Z = -1.8;
+
+export type LiveEvidence = { n: number; wins: number; expected: number; z: number };
+
+/** What the ticks that arrived during the assessment say about one contract: wins against what chance alone gives. */
+export const liveEvidence = (digits: readonly number[], side: 'OVER' | 'UNDER', barrier: number): LiveEvidence => {
+    const fair = side === 'OVER' ? (9 - barrier) / 10 : barrier / 10;
+    const n = digits.length;
+    const wins = digits.filter(d => (side === 'OVER' ? d > barrier : d < barrier)).length;
+    const sd = Math.sqrt(Math.max(1e-9, n * fair * (1 - fair)));
+    return { n, wins, expected: n * fair, z: n > 0 ? (wins - n * fair) / sd : 0 };
+};
+
+/** 0-100: 50 when the live ticks won as often as chance gives, more when they won more, less when they lost more. */
+const liveScore = (ev: LiveEvidence) => Math.max(0, Math.min(100, 50 + 15 * ev.z));
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Live ticks
@@ -168,12 +213,16 @@ export async function assessOverlord(opts: AssessOptions): Promise<Assessed> {
     for (const [symbol, s] of Object.entries(opts.series))
         live[symbol] = { prices: [...s.prices], digits: [...s.digits], decimals: s.decimals };
     let ticks = 0;
+    const liveCount: Record<string, number> = {};
     const stream = openTickStream(
         opts.url,
         opts.symbols,
         (symbol, quote, pip) => {
             const s = live[symbol];
-            if (s && appendTick(s, symbol, quote, pip)) ticks += 1;
+            if (s && appendTick(s, symbol, quote, pip)) {
+                ticks += 1;
+                liveCount[symbol] = (liveCount[symbol] ?? 0) + 1;
+            }
         },
         opts.createSocket
     );
@@ -224,5 +273,7 @@ export async function assessOverlord(opts: AssessOptions): Promise<Assessed> {
         return { scan: { reads: [], best: null, legacyOnly: false, evaluated: 0 }, ticks, rounds: assessment.rounds, liveTicks: ticks > 0, cancelled };
     }
     const final = scanOverlord({ ...opts, series: live });
-    return { scan: assessment.finalize(final), ticks, rounds: assessment.rounds, liveTicks: ticks > 0, cancelled };
+    const liveDigits: Record<string, number[]> = {};
+    for (const [symbol, n] of Object.entries(liveCount)) liveDigits[symbol] = live[symbol].digits.slice(-n);
+    return { scan: assessment.finalize(final, liveDigits), ticks, rounds: assessment.rounds, liveTicks: ticks > 0, cancelled };
 }

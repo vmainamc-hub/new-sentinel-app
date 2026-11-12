@@ -96,6 +96,8 @@ export type OverlordRead = {
     apexNotes: ApexNotes | null;
     /** Set after an assessment: how the contract held up over the live rounds. */
     steady?: { rounds: number; clearShare: number; topShare: number };
+    /** The live ticks that arrived during the assessment: how many won, how many chance alone would give. */
+    live?: { n: number; wins: number; expected: number; z: number };
 };
 
 export type MarketSeries = { prices: readonly number[]; digits: readonly number[]     /** Decimal places Deriv reports for the market (pip_size), so live ticks keep their trailing zero. */

@@ -1803,6 +1803,7 @@ const Overlord = () => {
                                                           : 'none clear'
                                                   }`
                                                 : 'Watching live ticks'}
+                                            {assessInfo.ticks > 0 ? ` · ${assessInfo.ticks} live ticks in` : ''}
                                         </div>
                                     </div>
                                 ) : (
@@ -1850,6 +1851,13 @@ const Overlord = () => {
                             </div>
                             {strongestSignal.engine.apexNotes && (
                                 <div className='ovl-eng-notes'>
+                                    {strongestSignal.engine.live && (
+                                        <span>
+                                            Live ticks: {strongestSignal.engine.live.wins} of{' '}
+                                            {strongestSignal.engine.live.n} won (about{' '}
+                                            {strongestSignal.engine.live.expected.toFixed(1)} expected)
+                                        </span>
+                                    )}
                                     {strongestSignal.engine.steady && (
                                         <span>
                                             Clear in {Math.round(strongestSignal.engine.steady.clearShare * 100)}% of{' '}

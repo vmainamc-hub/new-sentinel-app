@@ -1,5 +1,5 @@
 import { mulberry32 } from '../../sixfold/stats';
-import { appendTick, assessOverlord, OverlordAssessment, STEADY_SHARE } from '../assess';
+import { appendTick, assessOverlord, liveEvidence, OverlordAssessment, STEADY_SHARE } from '../assess';
 import { type MarketSeries, type OverlordRead, type OverlordScan, scanOverlord } from '../engine';
 import { lastDigit } from '../legacy';
 
@@ -152,5 +152,51 @@ describe('assessOverlord', () => {
         });
         expect(out.cancelled).toBe(true);
         expect(out.scan.best).toBeNull();
+    });
+});
+
+describe('live evidence', () => {
+    it('counts the live ticks that won against what chance alone gives', () => {
+        const ev = liveEvidence([3, 4, 5, 9, 0, 1], 'OVER', 2); // wins: 3,4,5,9 = 4 of 6; fair 70%
+        expect(ev.n).toBe(6);
+        expect(ev.wins).toBe(4);
+        expect(ev.expected).toBeCloseTo(4.2, 5);
+        expect(liveEvidence([], 'UNDER', 7).z).toBe(0);
+    });
+
+    it('lets a market whose live ticks support the contract overtake the leader whose live ticks go against it', () => {
+        const six = Array.from({ length: 24 }, (_, i) => `M${i}`); // most readings are vetoed, so use enough markets
+        const series = Object.fromEntries(six.map((s, i) => [s, market(70 + i, 1500)]));
+        const scan = scanOverlord({ series, symbols: six, side: 'OVER', barrier: 2, fluctuationTop: 0 });
+        const clear = scan.reads.filter(r => !r.thin && !r.vetoed);
+        expect(clear.length).toBeGreaterThanOrEqual(2);
+        const [first, second] = clear;
+        const a = new OverlordAssessment();
+        a.observe(scan);
+        a.observe(scan);
+        const out = a.finalize(scan, {
+            [first.symbol]: [0, 1, 0, 2, 1, 0, 0, 1, 2, 0], // none win Over 2
+            [second.symbol]: [5, 9, 7, 3, 8, 6, 4, 9, 5, 7], // all win Over 2
+        });
+        const f = out.reads.find(r => r.symbol === first.symbol)!;
+        const s = out.reads.find(r => r.symbol === second.symbol)!;
+        expect(f.live?.wins).toBe(0);
+        expect(f.vetoed).toBe(true);
+        expect(f.tier).toBe('CAUTION');
+        expect(f.vetoReason).toContain('Live ticks');
+        expect(s.live?.wins).toBe(10);
+        expect(out.best?.vetoed).toBe(false);
+        expect(out.best?.symbol).not.toBe(first.symbol);
+    });
+
+    it('ignores live evidence below the minimum number of ticks', () => {
+        const scan = scanOverlord({ series: data(), symbols: SYMBOLS, side: 'UNDER', barrier: 7, fluctuationTop: 0 });
+        const a = new OverlordAssessment();
+        a.observe(scan);
+        a.observe(scan);
+        const top = scan.reads.find(r => !r.thin)!;
+        const out = a.finalize(scan, { [top.symbol]: [9, 9, 9] });
+        const read = out.reads.find(r => r.symbol === top.symbol && r.side === top.side && r.barrier === top.barrier)!;
+        expect(read.vetoed).toBe(top.vetoed);
     });
 });

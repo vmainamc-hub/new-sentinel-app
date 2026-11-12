@@ -642,3 +642,9 @@ Deriv gives `proposal`, `proposal_open_contract`, `buy`, `sell` ONE shared budge
 - NOT verified: npm build, eslint, any live/demo run (no network). Cause is inferred from code + Deriv's published limits, not measured.
 - NEXT: hard-refresh, run Overlord and Elite Prime on Demo together with a Bot Builder bot; if "slow down" still shows up constantly, note which tabs were running (each cycle = proposal + buy + contract stream, about 3 calls; several bots at once add up).
 - Also noticed, NOT changed: `DerivWSAccountsService.fetchOTPWebSocketURL` hands concurrent callers (within 100 ms) the same session URL, but Deriv says each URL works once.
+
+## Overlord: live ticks now count as evidence, and the stronger market after assessment is the one shown (2026-11-12)
+- During the 15 s assessment the ticks that arrive per market are counted against each contract (wins vs what chance gives, as a z-score). Needs at least 5 live ticks per market to count. Blend with live ticks: 50% final scan, 20% leader share, 10% clear share, 20% live support. A contract whose live ticks clearly go against it (z <= -1.8) is vetoed (CAUTION, reason shown). STRONG drops to BEST if the live ticks are below expectation.
+- The list is re-ranked after the blend, so a market that looked weaker at the start (e.g. 10 1s) can be overtaken by one that holds up live (e.g. 100 1s); the one on top is presented.
+- UI: result card shows "Live ticks: X of N won (about Y expected)"; progress line shows live ticks received.
+- The fake socket exists only in automated tests; the app uses the real Deriv WebSocket. 34 tests pass; Overlord.jsx compiles. Not checked in a browser or against the live feed. Sample is small (about 15 ticks on a 1s market in 15 s): it is evidence, not a prediction.
