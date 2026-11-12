@@ -94,9 +94,13 @@ export type OverlordRead = {
     applied: number;
     /** Apex Sentinel's agreement / stability / fluctuation / direction / psychology readings, in words. */
     apexNotes: ApexNotes | null;
+    /** Set after an assessment: how the contract held up over the live rounds. */
+    steady?: { rounds: number; clearShare: number; topShare: number };
 };
 
-export type MarketSeries = { prices: readonly number[]; digits: readonly number[] };
+export type MarketSeries = { prices: readonly number[]; digits: readonly number[]     /** Decimal places Deriv reports for the market (pip_size), so live ticks keep their trailing zero. */
+    decimals?: number;
+};
 
 export type OverlordInput = {
     series: Readonly<Record<string, MarketSeries>>;

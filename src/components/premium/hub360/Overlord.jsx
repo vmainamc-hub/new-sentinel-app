@@ -5,7 +5,8 @@ import { contract_stages } from '@/constants/contract-stage';
 import { run_panel as run_panel_tabs } from '@/constants/run-panel';
 import { observer } from '@/external/bot-skeleton';
 import { useStore } from '@/hooks/useStore';
-import { isTradableBarrier, scanOverlord } from '../overlord-engine/engine';
+import { ASSESS_MS, assessOverlord } from '../overlord-engine/assess';
+import { isTradableBarrier } from '../overlord-engine/engine';
 import { fetchHistories } from '../overlord-engine/history';
 import { legacyPercentage } from '../overlord-engine/legacy';
 import { getHub360AuthContext, getHub360AuthenticatedUrl } from './auth360';
@@ -84,6 +85,7 @@ const Overlord = () => {
     const [analysisStarted, setAnalysisStarted] = useState(false);
     const [scannedHistory, setScannedHistory] = useState([]);
     const [strongestSignal, setStrongestSignal] = useState(null);
+    const [assessInfo, setAssessInfo] = useState(null); // live assessment progress, null when not assessing
     // Market choice, one dropdown: 'one' = the market selected, 'any' = the engines pick the market, 'all' = the engines
     // pick the market, side and barrier. In 'any' and 'all' nothing has to be selected, and Run picks by itself.
     const [marketMode, setMarketModeState] = useState(() => {
@@ -1461,15 +1463,31 @@ const Overlord = () => {
         await new Promise(resolve => setTimeout(resolve, 0)); // let the progress card paint before the CPU-heavy part
         if (cancelled()) return null;
 
-        const scan = scanOverlord({
-            series,
-            symbols: volatilityList,
-            side,
-            barrier: Number.isFinite(barrier) ? barrier : 2,
-            mode: smartContract ? 'smart' : 'selected',
-            // Every market gets the slow walk-forward model engine too (the full set of engines judges each candidate).
-            ensembleTop: smartContract ? 24 : 99,
-        });
+        // The markets are watched live for a few seconds and re-scanned before any market is shown.
+        logMessage(`👀 Watching ${Object.keys(series).length} markets live for ${Math.round(ASSESS_MS / 1000)}s...`);
+        setAssessInfo({ elapsedMs: 0, assessMs: ASSESS_MS, ticks: 0, rounds: 0, leader: null, flagged: 0 });
+        let assessed;
+        try {
+            assessed = await assessOverlord({
+                series,
+                symbols: volatilityList,
+                side,
+                barrier: Number.isFinite(barrier) ? barrier : 2,
+                mode: smartContract ? 'smart' : 'selected',
+                // Every market gets the slow walk-forward model engine too (the full set of engines judges each candidate).
+                ensembleTop: smartContract ? 24 : 99,
+                url: SCAN_WS_URL,
+                cancelled,
+                onProgress: p => {
+                    if (!cancelled()) setAssessInfo(p);
+                },
+            });
+        } finally {
+            setAssessInfo(null);
+        }
+        if (cancelled() || assessed.cancelled) return null;
+        if (!assessed.liveTicks) logMessage('Live ticks were not available, so the answer comes from the history only.');
+        const scan = assessed.scan;
 
         const best = scan.best;
         if (best) {
@@ -1699,6 +1717,28 @@ const Overlord = () => {
                                             <div className='loading-bar-fill'></div>
                                         </div>
                                     </div>
+                                ) : assessInfo ? (
+                                    <div className='active-scan-card'>
+                                        <span className='live-tag'>ASSESSING LIVE</span>
+                                        <h3 className='active-symbol-name'>
+                                            {Math.round(assessInfo.elapsedMs / 1000)}s / {Math.round(assessInfo.assessMs / 1000)}s
+                                        </h3>
+                                        <div className='loading-bar-container'>
+                                            <div
+                                                className='ovl-assess-fill'
+                                                style={{ width: `${Math.min(100, (assessInfo.elapsedMs / assessInfo.assessMs) * 100)}%` }}
+                                            ></div>
+                                        </div>
+                                        <div className='ovl-assess-line'>
+                                            {assessInfo.rounds > 0
+                                                ? `${assessInfo.flagged} flagged · leading: ${
+                                                      assessInfo.leader
+                                                          ? `${symbolNames[assessInfo.leader.symbol] || assessInfo.leader.symbol}`
+                                                          : 'none clear'
+                                                  }`
+                                                : 'Watching live ticks'}
+                                        </div>
+                                    </div>
                                 ) : (
                                     <div className='active-scan-card complete'>
                                         <span className='live-tag'>READY</span>
@@ -1744,6 +1784,12 @@ const Overlord = () => {
                             </div>
                             {strongestSignal.engine.apexNotes && (
                                 <div className='ovl-eng-notes'>
+                                    {strongestSignal.engine.steady && (
+                                        <span>
+                                            Clear in {Math.round(strongestSignal.engine.steady.clearShare * 100)}% of{' '}
+                                            {strongestSignal.engine.steady.rounds} live checks
+                                        </span>
+                                    )}
                                     <span>Engines {strongestSignal.engine.apexNotes.agreement}</span>
                                     <span>Psychology {strongestSignal.engine.apexNotes.psychology}</span>
                                     <span>Stability {strongestSignal.engine.apexNotes.instability}</span>

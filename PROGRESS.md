@@ -626,3 +626,9 @@ Branch `feat/elite-recovery-conditions` (not on main; main auto-deploys). File: 
 ## Overlord: one market dropdown instead of the checkbox texts (2026-11-12)
 - The "Any market" and "choose side and barrier" checkboxes did not render as controls on the live page (only their text showed). Replaced with ONE dropdown in the MARKET field: "Any market (engine picks)", "Any market, side and barrier", then each market. Selecting a market keeps the old behaviour. Removed the helper sentences ("Don't know which market...", "The engines pick it...", "What do you want to trade?"). Choice is remembered per browser. Over/Under only; other trade types show only the markets.
 - Not checked in a browser.
+
+## Overlord: Find Market assesses live for 15 s before answering (2026-11-12)
+- Complaint: results appeared ~2 s after the click and could not be trusted (Oracle takes several seconds).
+- New `overlord-engine/assess.ts`: after the 5000-tick history arrives, the 11 markets are watched LIVE (one socket, ticks subscription) for 15 s. Every 3 s the whole scan is re-run on history + new ticks (fast engines; slow model engine and fluctuation replay only in the final scan). Each contract is scored on how often it was clear of every veto and how often it was among the top 3; verdict = 60% final scan + 25% leader share + 15% clear share. STRONG is kept only if clear in >= 60% of rounds. If no live tick arrives within a third of the window it answers from the history (and says so in the log).
+- UI: while assessing, the card shows "ASSESSING LIVE", seconds, a progress bar, number flagged and current leader; result card shows "Clear in X% of N live checks". Stop works during the assessment.
+- Checked: 31 tests pass (8 new, fake socket); Overlord.jsx compiles. Not checked in a browser or against the real Deriv feed. Honest limit: this watches whether a contract's health holds; it does not predict the next tick.

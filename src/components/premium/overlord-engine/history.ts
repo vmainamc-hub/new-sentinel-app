@@ -33,7 +33,7 @@ export const seriesFromHistory = (
     if (prices.length === 0) return null;
     const pip = Number(data.pip_size);
     const decimals = Number.isInteger(pip) && pip >= 0 && pip <= 8 ? pip : fallbackDecimals(symbol);
-    return { prices, digits: prices.map(p => lastDigit(p, decimals)) };
+    return { prices, digits: prices.map(p => lastDigit(p, decimals)), decimals };
 };
 
 const fetchRound = (
