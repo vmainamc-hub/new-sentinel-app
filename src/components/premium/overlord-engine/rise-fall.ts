@@ -171,6 +171,108 @@ export const readVotes = (candles: readonly Candle[]): Vote[] | null => {
     return votes;
 };
 
+export type RiseFallStyle = 'trend' | 'reversal';
+
+const opposite = (d: Direction): Direction => (d === 'RISE' ? 'FALL' : 'RISE');
+
+/** Fewer candles than this carry no trend to reverse. */
+const TREND_BARS = 9;
+/** The move over TREND_BARS must be at least this many average candle ranges for there to be something to reverse. */
+const TREND_ATR = 1.5;
+
+/**
+ * REVERSAL votes. The prevailing move is found first (what price did over the last candles, in units of the average candle
+ * range). Every indicator then votes for the OPPOSITE side only when it shows that move running out of steam, and for the
+ * move's own side when it is still gathering strength (that counts against a reversal). Seven readings:
+ *  - MACD: the histogram still on the move's side but shrinking (the bars fading), or already across the zero line;
+ *  - Momentum: still positive on an up move, but lower than a bar ago;
+ *  - RSI, Stoch RSI, Connors RSI: still on the move's side of the middle but turning down from it (the same, mirrored, for a fall);
+ *  - Bollinger: price in the move's half of the band but the last candle closed back against the move;
+ *  - Candle slowing: the latest candles are small next to the candles of the move, or closed against it.
+ * Returns null prior when there is no move to reverse.
+ */
+export const readReversalVotes = (candles: readonly Candle[]): { votes: Vote[]; prior: Direction | null } | null => {
+    if (candles.length < MIN_CANDLES) return null;
+    const closes = candles.map(c => c.close);
+    const n = closes.length;
+    const atr = candles.slice(-14).reduce((s, c) => s + (c.high - c.low), 0) / 14 || 1e-9;
+    // The move is read as it stood three candles ago too, so a move that has already started to stall is still seen.
+    const now = closes[n - 1] - closes[n - 1 - TREND_BARS];
+    const before = closes[n - 4] - closes[n - 4 - TREND_BARS];
+    const net = Math.abs(before) > Math.abs(now) ? before : now;
+    const prior: Direction | null = Math.abs(net) >= TREND_ATR * atr ? (net > 0 ? 'RISE' : 'FALL') : null;
+    const s = net >= 0 ? 1 : -1; // +1: the move was up, so a reversal is a fall
+    const rev = opposite(net >= 0 ? 'RISE' : 'FALL');
+    const cont: Direction = net >= 0 ? 'RISE' : 'FALL';
+    const pick = (exhausted: boolean, continuing: boolean): Direction | null => (exhausted ? rev : continuing ? cont : null);
+    const votes: Vote[] = [];
+
+    const m = macd(closes);
+    const h = s * last(m.hist);
+    const hp = s * last(m.hist, 2);
+    votes.push({
+        name: 'MACD',
+        vote: pick(h < hp || h <= 0, h > hp && h > 0),
+        detail: h <= 0 ? 'crossed against the move' : h < hp ? 'bars fading' : 'bars growing',
+    });
+
+    const mo = momentum(closes, 10);
+    const mv = s * last(mo);
+    const mp = s * last(mo, 2);
+    votes.push({
+        name: 'Momentum',
+        vote: pick(mv < mp, mv > mp && mv > 0),
+        detail: mv < mp ? 'slowing' : 'still gaining',
+    });
+
+    const osc = (name: string, series: readonly number[], hiLine: number, hot = 60) => {
+        const v = s > 0 ? last(series) : 100 - last(series);
+        const p = s > 0 ? last(series, 2) : 100 - last(series, 2);
+        votes.push({
+            name,
+            vote: pick(v > hiLine - 5 && v < p, v >= hot && v > p),
+            detail: `${name === 'RSI' ? 'RSI' : name === 'Connors RSI' ? 'CRSI' : 'K'} ${last(series).toFixed(0)} ${v < p ? 'turning back' : 'still pushing'}`,
+        });
+    };
+    osc('RSI', rsi(closes, 14), 55);
+    const st = stochRsi(closes);
+    {
+        const k = s > 0 ? last(st.k) : 100 - last(st.k);
+        const d = s > 0 ? last(st.d) : 100 - last(st.d);
+        votes.push({
+            name: 'Stoch RSI',
+            vote: pick(k > 55 && k < d, k > d && k >= 60),
+            detail: `K ${last(st.k).toFixed(0)} / D ${last(st.d).toFixed(0)}`,
+        });
+    }
+    osc('Connors RSI', connorsRsi(closes), 60);
+
+    const band = last(bollinger(closes));
+    const pctB = band.upper === band.lower ? 0.5 : (last(closes) - band.lower) / (band.upper - band.lower);
+    const p = s > 0 ? pctB : 1 - pctB;
+    const stepped = s * (last(closes) - last(closes, 2));
+    votes.push({
+        name: 'Bollinger',
+        vote: pick(p >= 0.6 && stepped < 0, p >= 0.6 && stepped > 0),
+        detail: `price at ${Math.round(pctB * 100)}% of the band`,
+    });
+
+    const body = (c: Candle) => Math.abs(c.close - c.open);
+    const moveBodies = candles.slice(-TREND_BARS - 1, -3).map(body);
+    const avgBody = moveBodies.reduce((a, b) => a + b, 0) / Math.max(1, moveBodies.length) || 1e-9;
+    const recent = candles.slice(-2);
+    const recentBody = recent.reduce((a, c) => a + body(c), 0) / 2;
+    const lastC = last(candles);
+    const against = s * (lastC.close - lastC.open) < 0;
+    votes.push({
+        name: 'Candle slowing',
+        vote: pick(recentBody < 0.6 * avgBody || against, recentBody >= avgBody && !against),
+        detail: against ? 'last candle closed against the move' : recentBody < 0.6 * avgBody ? 'candles shrinking' : 'candles full size',
+    });
+
+    return { votes, prior };
+};
+
 export type RiseFallRead = {
     symbol: string;
     label: string;
@@ -185,6 +287,10 @@ export type RiseFallRead = {
     steady: number;
     rounds: number;
     tier: 'STRONG' | 'BEST' | 'WEAK';
+    style: RiseFallStyle;
+    /** Reversal style: the move being reversed (null when the market is not moving), and whether there is a reversal point. */
+    prior: Direction | null;
+    setup: boolean;
 };
 
 /** Pure: one market's read for one side. */
@@ -206,6 +312,8 @@ export type RiseFallInput = {
     names?: Record<string, string>;
     /** RISE or FALL to be read only for that side, null for the engine to pick the side too. */
     side?: Direction | null;
+    /** 'trend' (the default) votes with the indicators; 'reversal' looks for the move running out of steam. */
+    style?: RiseFallStyle;
 };
 
 export type RiseFallScan = { reads: RiseFallRead[]; best: RiseFallRead | null; evaluated: number };
@@ -215,11 +323,26 @@ export const compareRiseFall = (a: RiseFallRead, b: RiseFallRead) =>
 
 export const scanRiseFall = (input: RiseFallInput): RiseFallScan => {
     const reads: RiseFallRead[] = [];
+    const style = input.style ?? 'trend';
     for (const [symbol, candles] of Object.entries(input.candles)) {
-        const votes = readVotes(candles);
-        if (!votes) continue;
-        const side = sideOf(votes, input.side);
-        const s = scoreSide(votes, side);
+        let votes: Vote[] | null;
+        let prior: Direction | null = null;
+        let side: Direction;
+        if (style === 'reversal') {
+            const r = readReversalVotes(candles);
+            if (!r) continue;
+            votes = r.votes;
+            prior = r.prior;
+            // The side of a reversal is the opposite of the move. A forced side that is not that is simply not a reversal point.
+            side = input.side ?? (prior ? opposite(prior) : sideOf(votes));
+        } else {
+            votes = readVotes(candles);
+            if (!votes) continue;
+            side = sideOf(votes, input.side);
+        }
+        let s = scoreSide(votes, side);
+        const reversalHere = style === 'reversal' && prior !== null && side === opposite(prior);
+        if (style === 'reversal' && !reversalHere) s = { agree: 0, against: s.against, score: 0 };
         reads.push({
             symbol,
             label: side === 'RISE' ? 'Rise' : 'Fall',
@@ -232,6 +355,9 @@ export const scanRiseFall = (input: RiseFallInput): RiseFallScan => {
             steady: 1,
             rounds: 0,
             tier: 'WEAK',
+            style,
+            prior,
+            setup: style === 'trend' ? true : reversalHere && s.agree >= 3 && s.agree > s.against,
         });
     }
     reads.sort(compareRiseFall);
@@ -264,7 +390,13 @@ export class RiseFallAssessment {
             const steady = rounds === 0 ? 1 : (this.held.get(r.symbol) ?? 0) / rounds;
             const score = Math.round(0.7 * r.score + 0.3 * steady * 100);
             const tier: RiseFallRead['tier'] =
-                r.agree >= 5 && steady >= 0.6 ? 'STRONG' : r.agree >= 4 && steady >= 0.4 ? 'BEST' : 'WEAK';
+                !r.setup
+                    ? 'WEAK'
+                    : r.agree >= 5 && steady >= 0.6
+                      ? 'STRONG'
+                      : r.agree >= 4 && steady >= 0.4
+                        ? 'BEST'
+                        : 'WEAK';
             return { ...r, steady, rounds: this.n, score, tier };
         });
         reads.sort(compareRiseFall);

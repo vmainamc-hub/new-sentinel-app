@@ -125,6 +125,23 @@ const Overlord = () => {
     const scanPromiseRef = useRef(null); // the scan in flight, so Run waits for it instead of starting another
     const runParityScanRef = useRef(null);
     const runRiseFallScanRef = useRef(null);
+    // Rise/Fall style: 'reversal' looks for a move running out of steam and trades against it, 'trend' trades with the indicators.
+    const [rfStyle, setRfStyleState] = useState(() => {
+        try {
+            return window.localStorage.getItem('overlord_rf_style') === 'trend' ? 'trend' : 'reversal';
+        } catch {
+            return 'reversal';
+        }
+    });
+    const setRfStyle = style => {
+        setRfStyleState(style);
+        try {
+            window.localStorage.setItem('overlord_rf_style', style);
+        } catch {}
+    };
+    const rfStyleRef = useRef(rfStyle);
+    rfStyleRef.current = rfStyle;
+    const noReversalRef = useRef(false); // the last Rise/Fall scan found no reversal point: Run does not trade it
 
     const [symbol, setSymbol] = useState('1HZ10V'); // v2.3: a market is always selected, Find Market only suggests a better one
     const [contractType, setContractType] = useState('EVEN');
@@ -1360,6 +1377,10 @@ const Overlord = () => {
                 }
             }
         }
+        if (riseFallTrade && anyMarket && noReversalRef.current) {
+            showToast('No reversal point was found. Press Find Market again shortly.', 'warning');
+            return;
+        }
         if (!symbolRef.current) {
             showToast('No Signal , Please Scan First', 'warning');
             return;
@@ -2027,6 +2048,7 @@ const Overlord = () => {
                 symbols: volatilityList,
                 url: SCAN_WS_URL,
                 side: smartContract ? null : tradeType,
+                style: rfStyleRef.current,
                 names: symbolNames,
                 cancelled,
                 onProgress: p => {
@@ -2053,6 +2075,7 @@ const Overlord = () => {
             symbolRef.current = best.symbol;
             contractTypeRef.current = best.side;
             lastEnginePickRef.current = 'rise-fall';
+            noReversalRef.current = best.style === 'reversal' && !best.setup;
             setSymbol(best.symbol);
             if (smartContract) setTradeType(best.side);
             setContractType(best.side);
@@ -2063,9 +2086,11 @@ const Overlord = () => {
                 riseFall: best,
             });
             logMessage(
-                `✅ ${symbolNames[best.symbol]} ${best.label}: ${best.agree} of ${best.total} indicators agree${
-                    best.against ? `, ${best.against} against` : ''
-                } (${best.tier})`
+                best.style === 'reversal' && !best.setup
+                    ? `⏸ No reversal point right now. Closest: ${symbolNames[best.symbol]} ${best.label}, ${best.agree} of ${best.total} indicators. Run will not trade it; press Find Market again shortly.`
+                    : `✅ ${symbolNames[best.symbol]} ${best.label}${best.style === 'reversal' ? ' (reversal)' : ''}: ${best.agree} of ${best.total} indicators agree${
+                          best.against ? `, ${best.against} against` : ''
+                      } (${best.tier})`
             );
             try {
                 alertSound.play().catch(() => {});
@@ -2218,6 +2243,20 @@ const Overlord = () => {
                             {analysisStarted ? 'SCANNING… TAP TO STOP' : 'FIND MARKET'}
                         </button>
                     </div>
+                    {isRiseFallTrade && (
+                        <div className='st-input-box'>
+                            <label>Rise / Fall style</label>
+                            <select
+                                value={rfStyle}
+                                onChange={e => setRfStyle(e.target.value)}
+                                disabled={isRunning || analysisStarted}
+                                className='st-instrument-select'
+                            >
+                                <option value='reversal'>Reversal (trade against a fading move)</option>
+                                <option value='trend'>With the indicators</option>
+                            </select>
+                        </div>
+                    )}
                     {isParityTrade && (
                         <label className='ovl-smart-toggle'>
                             <input
@@ -2442,17 +2481,25 @@ const Overlord = () => {
                                                 STRONG: 'PERFECT MARKET FOUND',
                                                 BEST: 'BEST MARKET AVAILABLE',
                                                 WEAK: 'NO STRONG MARKET, BEST AVAILABLE SHOWN',
-                                            }[strongestSignal.riseFall.tier]
+                                            }[
+                                                strongestSignal.riseFall.style === 'reversal' && !strongestSignal.riseFall.setup
+                                                    ? 'NONE'
+                                                    : strongestSignal.riseFall.tier
+                                            ] || 'NO REVERSAL POINT RIGHT NOW (NOT TRADED)'
                                         }
                                     </span>
                                     <h3 className='sh-res-vol'>
                                         {strongestSignal.name} · {strongestSignal.riseFall.label}
+                                        {strongestSignal.riseFall.style === 'reversal' && strongestSignal.riseFall.prior
+                                            ? ` (after a ${strongestSignal.riseFall.prior === 'RISE' ? 'rise' : 'fall'})`
+                                            : ''}
                                     </h3>
                                 </div>
                                 <div className='sh-res-stat'>
                                     <span className='sh-res-perc'>⚡ {strongestSignal.riseFall.score}</span>
                                     <span className='sh-res-type'>
-                                        {strongestSignal.riseFall.agree}/{strongestSignal.riseFall.total} INDICATORS AGREE
+                                        {strongestSignal.riseFall.agree}/{strongestSignal.riseFall.total}{' '}
+                                        {strongestSignal.riseFall.style === 'reversal' ? 'SAY REVERSAL' : 'INDICATORS AGREE'}
                                     </span>
                                 </div>
                             </div>

@@ -1,7 +1,7 @@
 // Rise / Fall assessment run. One socket asks for the last 1-minute candles of every market and stays subscribed, so the
 // candle that is still forming keeps updating with the live ticks. The candles are read at once, then every few seconds
 // while they are watched, and the market that holds its side and agreement through the watch is the one presented.
-import { type Candle, type Direction, RiseFallAssessment, type RiseFallScan, scanRiseFall, MIN_CANDLES } from './rise-fall';
+import { type Candle, type Direction, RiseFallAssessment, type RiseFallStyle, type RiseFallScan, scanRiseFall, MIN_CANDLES } from './rise-fall';
 
 export const RF_CANDLES = 200;
 export const RF_GRANULARITY = 60;
@@ -28,6 +28,7 @@ export type RiseFallOptions = {
     symbols: readonly string[];
     url: string;
     side?: Direction | null;
+    style?: RiseFallStyle;
     names?: Record<string, string>;
     assessMs?: number;
     roundMs?: number;
@@ -110,7 +111,7 @@ export async function assessRiseFall(opts: RiseFallOptions): Promise<RiseFallAss
     let cancelled = false;
     let leader: RiseFallProgress['leader'] = null;
     const loaded = () => Object.values(candles).filter(c => c.length >= MIN_CANDLES).length;
-    const read = () => scanRiseFall({ candles, names: opts.names, side: opts.side ?? null });
+    const read = () => scanRiseFall({ candles, names: opts.names, side: opts.side ?? null, style: opts.style });
     const report = () =>
         opts.onProgress?.({
             elapsedMs: Math.min(assessMs, Date.now() - started),

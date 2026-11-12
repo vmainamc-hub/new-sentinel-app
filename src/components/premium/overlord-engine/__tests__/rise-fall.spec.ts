@@ -5,6 +5,7 @@ import {
     connorsRsi,
     macd,
     momentum,
+    readReversalVotes,
     readVotes,
     rsi,
     scanRiseFall,
@@ -131,5 +132,46 @@ describe('live candles', () => {
         const result = await assessRiseFall({ symbols: ['A'], url: 'ws://x', assessMs: 900, roundMs: 100, createSocket: create as any });
         expect(result.scan.best).toBeNull();
         expect(Date.now() - t0).toBeLessThan(800);
+    });
+});
+
+describe('reversal style', () => {
+    // A steady climb that then slows: small candles, then a candle closing against the move.
+    const climbThenStall = () => {
+        const closes = [...trend(100, 0.5), ...[0.45, 0.4, 0.3, 0.2, 0.1, 0.05, -0.1, -0.05, 0.0].map((d, i) => 149.5 + d * (i + 1) * 0.1)];
+        return closes.map((c, i, a) => {
+            const prev = i ? a[i - 1] : c;
+            const big = i < 100 ? 0.5 : 0.1;
+            return { open: prev, close: c, high: Math.max(prev, c) + big * 0.2, low: Math.min(prev, c) - big * 0.2, time: i * 60 };
+        });
+    };
+    const climbForever = () => {
+        const closes = trend(120, 0.6);
+        return closes.map((c, i, a) => ({ open: i ? a[i - 1] : c, close: c, high: c + 0.1, low: (i ? a[i - 1] : c) - 0.1, time: i * 60 }));
+    };
+
+    test('a stalling climb reads as a FALL reversal with several indicators agreeing', () => {
+        const r = readReversalVotes(climbThenStall())!;
+        expect(r.prior).toBe('RISE');
+        expect(r.votes).toHaveLength(7);
+        expect(scoreSide(r.votes, 'FALL').agree).toBeGreaterThanOrEqual(3);
+        const scan = scanRiseFall({ candles: { A: climbThenStall() }, style: 'reversal' });
+        expect(scan.best!.side).toBe('FALL');
+        expect(scan.best!.setup).toBe(true);
+    });
+    test('a climb still gathering pace is not a reversal point', () => {
+        const scan = scanRiseFall({ candles: { A: climbForever() }, style: 'reversal' });
+        expect(scan.best!.setup).toBe(false);
+        expect(scan.best!.agree).toBeLessThan(3);
+    });
+    test('a forced side that is the same as the move is never a reversal point', () => {
+        const scan = scanRiseFall({ candles: { A: climbThenStall() }, style: 'reversal', side: 'RISE' });
+        expect(scan.best!.setup).toBe(false);
+        expect(scan.best!.agree).toBe(0);
+    });
+    test('a flat market has no move to reverse', () => {
+        const flat = Array.from({ length: 120 }, (_, i) => ({ open: 100, close: 100 + (i % 2 ? 0.01 : -0.01), high: 100.2, low: 99.8, time: i * 60 }));
+        expect(readReversalVotes(flat)!.prior).toBeNull();
+        expect(scanRiseFall({ candles: { A: flat }, style: 'reversal' }).best!.setup).toBe(false);
     });
 });
