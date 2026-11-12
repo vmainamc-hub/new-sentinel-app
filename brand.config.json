@@ -104,6 +104,25 @@
           "manifest_url": "/free-bots/domains/apex-sentinel.json",
           "base_url": "/free-bots"
         }
+      },
+      {
+        "id": "ultimate-profits",
+        "hosts": [
+          "ultimateprofits.netlify.app"
+        ],
+        "display_domain": "Ultimate Profits",
+        "website_url": "https://ultimateprofits.netlify.app",
+        "redirect_uri": "https://ultimateprofits.netlify.app/callback",
+        "client_id": "34BIr72thLXMJHaL9PQxN",
+        "scopes": [
+          "trade"
+        ],
+        "environment": "production",
+        "bot_library": {
+          "title": "Free Bots",
+          "manifest_url": "/free-bots/domains/apex-sentinel.json",
+          "base_url": "/free-bots"
+        }
       }
     ]
   },
