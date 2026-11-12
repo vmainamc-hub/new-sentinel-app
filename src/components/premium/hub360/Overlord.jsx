@@ -1962,6 +1962,14 @@ const Overlord = () => {
             // Parity has no READY market. Nothing is selected and nothing changes on screen except this note.
             const watch = scan.watch;
             if (watch) {
+                // The market shown is the one Run trades: pressing Run must not start another scan just because Parity has
+                // no READY market. It is the closest one, and the card says so.
+                symbolRef.current = watch.symbol;
+                contractTypeRef.current = watch.side;
+                lastEnginePickRef.current = 'parity';
+                setSymbol(watch.symbol);
+                if (smartContract) setTradeType(watch.side);
+                setContractType(watch.side);
                 setStrongestSignal({
                     id: watch.symbol,
                     name: symbolNames[watch.symbol],
@@ -1981,7 +1989,11 @@ const Overlord = () => {
                       ...blocked.map(r => r.oracle.passed)
                   )}/6).`
                 : '';
-            logMessage(`⏸ No market passes for ${wanted} right now.${oracleNote}${other} Try again shortly.`);
+            logMessage(
+                `⏸ No market is READY for ${wanted} right now.${oracleNote}${other}${
+                    watch ? ` Run will trade the closest: ${symbolNames[watch.symbol]} ${watch.label}.` : ' Try again shortly.'
+                }`
+            );
         } else {
             logMessage('Scan incomplete: no market returned enough ticks. Try again.');
         }
@@ -2338,7 +2350,7 @@ const Overlord = () => {
                                                 BEST: 'BEST MARKET AVAILABLE',
                                                 CAUTION: 'NO MARKET CLEARED, LEAST RISKY SHOWN',
                                                 LEGACY: 'MARKET FOUND (BASIC SCAN)',
-                                                WATCH: 'NO READY MARKET, CLOSEST SHOWN (NOT SELECTED)',
+                                                WATCH: 'NO READY MARKET, CLOSEST SHOWN (RUN TRADES IT)',
                                             }[strongestSignal.watchOnly ? 'WATCH' : strongestSignal.engine.tier]
                                         }
                                     </span>

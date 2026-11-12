@@ -651,3 +651,6 @@ Deriv gives `proposal`, `proposal_open_contract`, `buy`, `sell` ONE shared budge
 
 ## Overlord: Run never rescans once a market has been scanned (2026-11-12)
 - Run used to rescan when the pick was older than 15 min. Now a market picked by Find Market (Over/Under or Even/Odd) is traded whenever Run is pressed, however long after; Run scans only when nothing has been scanned yet for that kind of trade. Press Find Market again for a new pick.
+
+## Overlord Even/Odd: Run trades the closest market instead of scanning again (2026-11-12)
+- Cause found: when Precision Parity had no READY market, the scan showed the closest market "for information only" and selected nothing, so no pick was recorded and Run started a second scan. Now the closest market shown is selected and recorded; Run trades it with no scan. The card says "NO READY MARKET, CLOSEST SHOWN (RUN TRADES IT)".
