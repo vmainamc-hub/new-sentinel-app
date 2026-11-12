@@ -648,3 +648,6 @@ Deriv gives `proposal`, `proposal_open_contract`, `buy`, `sell` ONE shared budge
 - The list is re-ranked after the blend, so a market that looked weaker at the start (e.g. 10 1s) can be overtaken by one that holds up live (e.g. 100 1s); the one on top is presented.
 - UI: result card shows "Live ticks: X of N won (about Y expected)"; progress line shows live ticks received.
 - The fake socket exists only in automated tests; the app uses the real Deriv WebSocket. 34 tests pass; Overlord.jsx compiles. Not checked in a browser or against the live feed. Sample is small (about 15 ticks on a 1s market in 15 s): it is evidence, not a prediction.
+
+## Overlord: Run never rescans once a market has been scanned (2026-11-12)
+- Run used to rescan when the pick was older than 15 min. Now a market picked by Find Market (Over/Under or Even/Odd) is traded whenever Run is pressed, however long after; Run scans only when nothing has been scanned yet for that kind of trade. Press Find Market again for a new pick.

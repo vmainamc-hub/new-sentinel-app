@@ -61,7 +61,6 @@ const getDerivContractType = type => CONTRACT_TYPE_MAP[type] || type;
 const DERIV_PUBLIC_WS_URL = isProduction() ? WS_SERVERS.PRODUCTION : WS_SERVERS.STAGING;
 const DERIV_OPTIONS_API_URL = DERIV_PUBLIC_WS_URL.replace(/ws\/public$/, '');
 const SCAN_WS_URL = DERIV_PUBLIC_WS_URL;
-const ENGINE_PICK_FRESH_MS = 15 * 60 * 1000; // a market picked less than this long ago is reused by Run (no second scan)
 const SCAN_TIMEOUT_MS = 6000;
 const SCAN_MAX_RETRIES = 3;
 
@@ -119,7 +118,7 @@ const Overlord = () => {
     };
     const anyMarket = marketMode !== 'one';
     const smartContract = marketMode === 'all'; // the engine may choose the side and barrier too
-    const lastEnginePickRef = useRef(0); // when the engines last picked a market
+    const lastEnginePickRef = useRef(''); // what the engines last picked a market for: 'over-under' or 'parity' (+ market mode)
     const scanBusyRef = useRef(false);
     const runEngineScanRef = useRef(null);
     const scanPromiseRef = useRef(null); // the scan in flight, so Run waits for it instead of starting another
@@ -1342,7 +1341,8 @@ const Overlord = () => {
                     scanBusyRef.current = false;
                 }
             }
-            if (Date.now() - lastEnginePickRef.current > ENGINE_PICK_FRESH_MS) {
+            // Once a market has been scanned for this kind of trade, Run trades it however long ago it was: no second scan.
+            if (lastEnginePickRef.current !== (parityTrade ? 'parity' : 'over-under')) {
                 scanBusyRef.current = true;
                 let picked = null;
                 try {
@@ -1821,7 +1821,7 @@ const Overlord = () => {
             // Refs are set directly as well: Run may start in the same tick, before the effects copy state into refs.
             symbolRef.current = best.symbol;
             contractTypeRef.current = best.side;
-            lastEnginePickRef.current = Date.now();
+            lastEnginePickRef.current = 'over-under';
             setSymbol(best.symbol);
             if (smartContract) {
                 setPredictionDigit(String(best.barrier));
@@ -1937,7 +1937,7 @@ const Overlord = () => {
             // Refs are set directly as well: Run may start in the same tick, before the effects copy state into refs.
             symbolRef.current = best.symbol;
             contractTypeRef.current = best.side;
-            lastEnginePickRef.current = Date.now();
+            lastEnginePickRef.current = 'parity';
             setSymbol(best.symbol);
             if (smartContract) setTradeType(best.side);
             setContractType(best.side);
