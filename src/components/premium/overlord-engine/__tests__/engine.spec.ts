@@ -174,4 +174,38 @@ describe('scanOverlord', () => {
         expect(scan.best).not.toBeNull();
         expect(ms).toBeLessThan(20000);
     });
+
+    it('carries the Apex stage engines: agreement, stability, clearance, direction and composed danger', () => {
+        const scan = scanOverlord({ series: series(), symbols: ['R_10'], side: 'OVER', barrier: 2, fluctuationTop: 0 });
+        const keys = scan.reads[0].layers.map(l => l.key);
+        for (const k of ['apexAgreement', 'apexStability', 'apexClearance', 'apexDirection', 'apexStageDanger'])
+            expect(keys).toContain(k);
+        const notes = scan.reads[0].apexNotes;
+        expect(notes).not.toBeNull();
+        expect(['support', 'neutral', 'conflict', 'strong conflict']).toContain(notes?.agreement);
+    });
+
+    it('vetoes a contract the Apex engines call a STRONG CONFLICT, whatever its score', () => {
+        const syms = Array.from({ length: 8 }, (_, i) => `A${i}`);
+        const many = Object.fromEntries(syms.map((s, i) => [s, market(900 + i, 1500)]));
+        const scan = scanOverlord({ series: many, symbols: syms, side: 'OVER', barrier: 2, fluctuationTop: 0 });
+        const conflicted = scan.reads.filter(r => r.layers.some(l => l.key === 'apexAgreement' && l.hard && !l.ok));
+        expect(conflicted.length).toBeGreaterThan(0);
+        for (const r of conflicted) {
+            expect(r.vetoed).toBe(true);
+            expect(r.tier).toBe('CAUTION');
+        }
+        const best = scan.best;
+        if (best && !best.vetoed) for (const r of conflicted) expect(r.score <= best.score || r.tier === 'CAUTION').toBe(true);
+    });
+
+    it('measures fluctuation on the leading markets only, and only when asked', () => {
+        const syms = ['F0', 'F1', 'F2', 'F3', 'F4'];
+        const data = Object.fromEntries(syms.map((s, i) => [s, market(300 + i, 1500)]));
+        const on = scanOverlord({ series: data, symbols: syms, side: 'UNDER', barrier: 7, fluctuationTop: 2 });
+        const measured = new Set(on.reads.filter(r => r.apexNotes && r.apexNotes.fluctuation !== 'not measured').map(r => r.symbol));
+        expect(measured.size).toBe(2);
+        const off = scanOverlord({ series: data, symbols: syms, side: 'UNDER', barrier: 7, fluctuationTop: 0 });
+        expect(off.reads.every(r => r.apexNotes?.fluctuation === 'not measured')).toBe(true);
+    });
 });

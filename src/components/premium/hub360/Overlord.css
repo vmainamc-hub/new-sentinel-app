@@ -1268,3 +1268,18 @@ input::-webkit-inner-spin-button {
     cursor: default;
     font-weight: 700;
 }
+
+.ovl-eng-notes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    margin: 6px 0;
+    font-size: 11px;
+}
+
+.ovl-eng-notes span {
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.07);
+    white-space: nowrap;
+}

@@ -1766,6 +1766,15 @@ const Overlord = () => {
                                     </span>
                                 </div>
                             </div>
+                            {strongestSignal.engine.apexNotes && (
+                                <div className='ovl-eng-notes'>
+                                    <span>Engines {strongestSignal.engine.apexNotes.agreement}</span>
+                                    <span>Psychology {strongestSignal.engine.apexNotes.psychology}</span>
+                                    <span>Stability {strongestSignal.engine.apexNotes.instability}</span>
+                                    <span>Direction {strongestSignal.engine.apexNotes.direction}</span>
+                                    <span>Fluctuation {strongestSignal.engine.apexNotes.fluctuation}</span>
+                                </div>
+                            )}
                             <ul className='ovl-eng-reasons'>
                                 {strongestSignal.engine.reasons.map((reason, i) => (
                                     <li key={i}>{reason}</li>

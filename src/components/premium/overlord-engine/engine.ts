@@ -5,9 +5,11 @@
 //   OVERLORD  the existing condition, unchanged: how often the contract's digits showed up in the last 50 ticks.
 //   ORACLE    the Over / Under layers of Oracle (Pulse, Kalman, special digits 1/8, Sixfold pressure + meter + viability,
 //             Apex Intel regime, Vanguard) exactly as Oracle computes them (hub360/oracle/over-under).
-//   APEX      Apex Sentinel's quantitative engines ported from the Apex Sentinel tool: composite edge + fake-edge
-//             interrogation, losing-digit threat, losing-digit exposure / burst risk, special-digit risk 0/1/8/9, statistics,
-//             walk-forward models and digit psychology.
+//   APEX      Apex Sentinel's engines ported from the Apex Sentinel tool: composite edge + fake-edge interrogation,
+//             losing-digit threat, losing-digit exposure / burst risk, special-digit risk 0/1/8/9, statistics, walk-forward
+//             models, digit psychology, ENGINE AGREEMENT, instability ("rogue market"), danger clearance, fluctuation and the
+//             staged verdict (direction, composed danger). Not ported: the engines that need Apex's live paper-trade
+//             ledger (simulator, entry-condition lab, market profiles, combination learning); a one-shot scan has none.
 //
 // Every layer returns ok / hard / required / 0-100 score / reason. A HARD layer that says no vetoes the contract:
 //   STRONG   not vetoed and every required layer agrees.
@@ -20,6 +22,7 @@
 // flag as costly. They cannot create an edge, and no tier is a prediction.
 import { OU_CONTRACTS, OU_MIN_TICKS, type OverUnderRead, readOverUnder } from '../hub360/oracle/over-under';
 import type { Contract } from '../sixfold/bot';
+import type { FluctuationReport } from './apex/fluctuation';
 import { DEFAULT_REFINEMENT } from './apex/settings';
 import {
     APEX_MIN_TICKS,
@@ -29,6 +32,7 @@ import {
     buildApexMarket,
     readApexContract,
 } from './apex-read';
+import { type ApexStages, readApexStages, replayFluctuation } from './apex-stages';
 import { fairShare, legacyPercentage, type OuSide } from './legacy';
 
 export type EngineName =
@@ -58,6 +62,14 @@ export type OverlordLayer = {
     detail: string;
 };
 
+export type ApexNotes = {
+    agreement: string;
+    instability: string;
+    fluctuation: string;
+    direction: string;
+    psychology: string;
+};
+
 export type OverlordRead = {
     symbol: string;
     side: OuSide;
@@ -80,6 +92,8 @@ export type OverlordRead = {
     /** Number of layers that agree / that apply. */
     agree: number;
     applied: number;
+    /** Apex Sentinel's agreement / stability / fluctuation / direction / psychology readings, in words. */
+    apexNotes: ApexNotes | null;
 };
 
 export type MarketSeries = { prices: readonly number[]; digits: readonly number[] };
@@ -93,6 +107,8 @@ export type OverlordInput = {
     mode?: ScanMode;
     /** How many top candidates also get the (slow) walk-forward model ensemble. */
     ensembleTop?: number;
+    /** How many leading markets get the fluctuation replay (default 4, 0 = off). */
+    fluctuationTop?: number;
 };
 
 export type OverlordScan = {
@@ -261,6 +277,94 @@ const apexLayers = (read: ApexRead, market: ApexMarket, side: OuSide): OverlordL
     return out;
 };
 
+/** Apex Sentinel's staged engines: engine agreement, instability, clearance, fluctuation, direction, danger. */
+const stageLayers = (st: ApexStages | null): OverlordLayer[] => {
+    if (!st) return [];
+    const L = (l: Omit<OverlordLayer, 'engine'>): OverlordLayer => ({ engine: 'Apex Sentinel', ...l });
+    const out: OverlordLayer[] = [];
+    const ag = st.agreement;
+    out.push(
+        L({
+            key: 'apexAgreement',
+            label: 'Apex: the engines agree with each other',
+            ok: ag === 'SUPPORT' || ag === 'NEUTRAL',
+            hard: ag === 'STRONG CONFLICT',
+            required: true,
+            score: ag === 'SUPPORT' ? 88 : ag === 'NEUTRAL' ? 60 : ag === 'CONFLICT' ? 28 : 4,
+            weight: 0.1,
+            detail: `engine agreement ${ag}`,
+        })
+    );
+    const inst = st.clearance.instability;
+    out.push(
+        L({
+            key: 'apexStability',
+            label: 'Apex: market is not unstable',
+            ok: inst.label === 'CALM' || inst.label === 'NORMAL',
+            hard: inst.label === 'ROGUE',
+            required: false,
+            score: clamp(100 - inst.score),
+            weight: 0.08,
+            detail: `${inst.label.toLowerCase()} (${inst.score}/100)${inst.drivers[0] ? `, ${inst.drivers[0]}` : ''}`,
+        })
+    );
+    const blocked = st.clearance.state === 'BLOCKED';
+    out.push(
+        L({
+            key: 'apexClearance',
+            label: 'Apex: danger clearance',
+            ok: !blocked && st.clearance.state !== 'UNSTABLE',
+            hard: blocked,
+            required: false,
+            score: clamp(100 - st.clearance.risk),
+            weight: 0.06,
+            detail: st.clearance.blockers[0]?.text ?? st.clearance.cautions[0]?.text ?? `risk ${st.clearance.risk}/100`,
+        })
+    );
+    const dir = st.direction;
+    out.push(
+        L({
+            key: 'apexDirection',
+            label: 'Apex: staged direction score',
+            ok: dir.label === 'STRONG' || dir.label === 'MODERATE',
+            hard: false,
+            required: false,
+            score: clamp(dir.score),
+            weight: 0.1,
+            detail: `${dir.label.toLowerCase()} ${dir.score.toFixed(0)}/100, ${dir.disagreement.toFixed(0)}% disagreement`,
+        })
+    );
+    const autoBlock = st.danger.autoBlock[0];
+    out.push(
+        L({
+            key: 'apexStageDanger',
+            label: 'Apex: composed danger is acceptable',
+            ok: !autoBlock && (st.danger.level === 'LOW' || st.danger.level === 'MILD' || st.danger.level === 'MODERATE'),
+            hard: !!autoBlock,
+            required: false,
+            score: clamp(100 - st.danger.total),
+            weight: 0.08,
+            detail: autoBlock ? autoBlock.detail : `${st.danger.level.toLowerCase()} danger ${st.danger.total.toFixed(0)}/100`,
+        })
+    );
+    if (st.fluctuation) {
+        const f = st.fluctuation;
+        out.push(
+            L({
+                key: 'apexFluctuation',
+                label: 'Apex: evidence holds still',
+                ok: f.state === 'CALM' || f.state === 'SETTLED',
+                hard: false,
+                required: false,
+                score: clamp(100 - f.score),
+                weight: 0.05,
+                detail: `${f.state.toLowerCase()} ${f.score.toFixed(0)}/100, flicker ${(f.signalFlickerRate * 100).toFixed(0)}%`,
+            })
+        );
+    }
+    return out;
+};
+
 /** Rescales each group so the Overlord / Oracle / Apex shares hold whichever groups were available. */
 const balance = (groups: { share: number; layers: OverlordLayer[] }[]): OverlordLayer[] => {
     const present = groups.filter(g => g.layers.length > 0);
@@ -301,7 +405,8 @@ export function assessContract(
     side: OuSide,
     barrier: number,
     market: ApexMarket | null,
-    withEnsemble = false
+    withEnsemble = false,
+    fluct: FluctuationReport | null = null
 ): OverlordRead {
     const digits = series.digits;
     const contract: Contract = { side, param: barrier };
@@ -315,10 +420,11 @@ export function assessContract(
             ? readApexContract(market, side, barrier, withEnsemble ? apexEnsemble(digits, side, barrier) : null)
             : null;
 
+    const stages = apex && market ? readApexStages(symbol, market, side, barrier, fluct) : null;
     const layers = balance([
         { share: GROUP_SHARE.overlord, layers: [overlord] },
         { share: GROUP_SHARE.oracle, layers: oracle ? oracleLayers(oracle) : [] },
-        { share: GROUP_SHARE.apex, layers: apex && market ? apexLayers(apex, market, side) : [] },
+        { share: GROUP_SHARE.apex, layers: apex && market ? [...apexLayers(apex, market, side), ...stageLayers(stages)] : [] },
     ]);
 
     const thin = !oracle && !apex;
@@ -355,6 +461,21 @@ export function assessContract(
         reasons,
         agree,
         applied: applicable.length,
+        apexNotes:
+            stages && market
+                ? {
+                      agreement: stages.agreement.toLowerCase(),
+                      instability: `${stages.clearance.instability.label.toLowerCase()} (${stages.clearance.instability.score}/100)`,
+                      fluctuation: stages.fluctuation
+                          ? `${stages.fluctuation.state.toLowerCase()} (${stages.fluctuation.score.toFixed(0)}/100)`
+                          : 'not measured',
+                      direction: `${stages.direction.label.toLowerCase()} ${stages.direction.score.toFixed(0)}/100`,
+                      psychology: (() => {
+                          const p = side === 'OVER' ? market.psychology.over : market.psychology.under;
+                          return `${p.score.toFixed(0)}/100 formed, confidence ${p.confidence.toFixed(0)}`;
+                      })(),
+                  }
+                : null,
     };
 }
 
@@ -391,6 +512,7 @@ export function scanOverlord(input: OverlordInput): OverlordScan {
     }
 
     // Second pass: the walk-forward model ensemble is the slow engine, so only the leaders are given it.
+    const ensembleKeys: string[] = [];
     if (ensembleTop > 0) {
         const leaders = new Set(
             [...reads]
@@ -399,6 +521,7 @@ export function scanOverlord(input: OverlordInput): OverlordScan {
                 .slice(0, ensembleTop)
                 .map(r => `${r.symbol}:${r.side}:${r.barrier}`)
         );
+        for (const k of leaders) ensembleKeys.push(k);
         reads = reads.map(r =>
             leaders.has(`${r.symbol}:${r.side}:${r.barrier}`)
                 ? assessContract(
@@ -408,6 +531,35 @@ export function scanOverlord(input: OverlordInput): OverlordScan {
                       r.barrier,
                       markets.get(r.symbol) ?? null,
                       true
+                  )
+                : r
+        );
+    }
+
+    // Third pass: fluctuation replays the market ~18 times, so only the leading markets get it, and each market once.
+    const fluctTop = input.fluctuationTop ?? 4;
+    if (fluctTop > 0) {
+        const marketsByLead: string[] = [];
+        for (const r of [...reads].filter(x => !x.thin).sort(compareReads)) {
+            if (!marketsByLead.includes(r.symbol)) marketsByLead.push(r.symbol);
+            if (marketsByLead.length >= fluctTop) break;
+        }
+        const fluct = new Map<string, FluctuationReport | null>();
+        for (const symbol of marketsByLead) {
+            const s = input.series[symbol];
+            fluct.set(symbol, replayFluctuation(s.prices, s.digits));
+        }
+        const ens = new Set(ensembleKeys);
+        reads = reads.map(r =>
+            fluct.get(r.symbol)
+                ? assessContract(
+                      r.symbol,
+                      input.series[r.symbol],
+                      r.side,
+                      r.barrier,
+                      markets.get(r.symbol) ?? null,
+                      ens.has(`${r.symbol}:${r.side}:${r.barrier}`),
+                      fluct.get(r.symbol) ?? null
                   )
                 : r
         );
