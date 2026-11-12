@@ -4,8 +4,8 @@
 // stretching further does not vote. The market with the most indicators agreeing is the best available; how many agree is
 // always shown.
 //
-// With `requireEvidence` a side is also only a signal when the latest ticks already end in a run of that side (FFFF for Fall,
-// RRRR for Rise; see evidence.ts). The indicators can say what they like: without that run there is no signal.
+// With `requireEvidence` a side is also only a signal when the latest ticks already show it dominating (6 of the last 10 ticks
+// were falls for a Fall, rises for a Rise; see evidence.ts). The indicators can say what they like: without that there is no signal.
 //
 // Honest limit: Deriv's synthetic indices are random. These indicators describe what price has just done; they do not
 // predict the next tick, so a high agreement is a description of the market, not a promise.
@@ -298,7 +298,7 @@ export type RiseFallRead = {
     setup: boolean;
     /** What the latest ticks show for `side`; null when evidence was not asked for. */
     evidence: Evidence | null;
-    /** The indicators found a setup but the latest ticks do not show the run of `side`, so it is not a signal. */
+    /** The indicators found a setup but the latest ticks do not show `side` dominating, so it is not a signal. */
     blockedByEvidence: boolean;
 };
 
@@ -325,10 +325,10 @@ export type RiseFallInput = {
     style?: RiseFallStyle;
     /** The latest ticks (prices, oldest first) of each market. Only needed with requireEvidence. */
     ticks?: Record<string, readonly number[]>;
-    /** A side is only a signal when the latest ticks already end in a run of it (FFFF / RRRR). */
+    /** A side is only a signal when the latest ticks already show it dominating. */
     requireEvidence?: boolean;
-    /** Run the latest ticks must show; defaults to DEFAULT_EVIDENCE_RUN. */
-    evidenceRun?: number;
+    /** How many of the last 10 ticks must be the side; defaults to EVIDENCE_MIN. */
+    evidenceMin?: number;
 };
 
 export type RiseFallScan = { reads: RiseFallRead[]; best: RiseFallRead | null; evaluated: number };
@@ -359,7 +359,7 @@ export const scanRiseFall = (input: RiseFallInput): RiseFallScan => {
         let s = scoreSide(votes, side);
         const reversalHere = style === 'reversal' && prior !== null && side === opposite(prior);
         if (style === 'reversal' && !reversalHere) s = { agree: 0, against: s.against, score: 0 };
-        const evidence = input.requireEvidence ? moveEvidence(input.ticks?.[symbol] ?? [], side, input.evidenceRun) : null;
+        const evidence = input.requireEvidence ? moveEvidence(input.ticks?.[symbol] ?? [], side, input.evidenceMin) : null;
         const indicatorsSetup = style === 'trend' ? true : reversalHere && s.agree >= 3 && s.agree > s.against;
         reads.push({
             symbol,

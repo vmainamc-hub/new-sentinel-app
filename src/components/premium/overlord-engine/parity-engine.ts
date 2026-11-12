@@ -15,8 +15,8 @@
 // rising, recent digits) are read on every market as well. They never change what Parity says; with `requireOracle` a market
 // is only picked when Parity says READY AND all six Oracle conditions hold for its parity.
 //
-// With `requireEvidence` a market is also only picked when the latest digits already show a run of the side's parity (EEEEE for
-// Even, OOOOO for Odd; see evidence.ts). Without that run the market is shown with the reason, never as a signal.
+// With `requireEvidence` a market is also only picked when the latest digits already show the side's parity dominating (6 of the
+// last 10 digits even for Even, odd for Odd; see evidence.ts). Without that the market is shown with the reason, never as a signal.
 //
 // Honest limit: Deriv digits are generated randomly. Parity ranks how healthy and persistent a parity structure has been and
 // avoids the moments its own analysts flag as costly. It cannot create an edge or predict the next tick.
@@ -103,7 +103,7 @@ export type ParityRead = {
     parity: ParityNotes | null;
     /** The Oracle's Even / Odd conditions on the same digits; null when there are too few ticks to read them. */
     oracle: OracleNotes | null;
-    /** What the latest digits show for the side (a run of its parity at the end); null on a read made without digits. */
+    /** What the latest digits show for the side (its parity dominating the latest digits); null on a read made without digits. */
     evidence: Evidence | null;
     /** Set after an assessment: how the market held up over the live rounds. */
     steady?: { rounds: number; clearShare: number; topShare: number };
@@ -118,7 +118,7 @@ export type ParityInput = {
     settings?: ParitySettings;
     /** Only pick a market whose Oracle Even / Odd conditions all hold (as well as Parity READY). */
     requireOracle?: boolean;
-    /** Only pick a market whose latest digits already end in a run of the side's parity (EEEEE / OOOOO). */
+    /** Only pick a market whose latest digits already show the side's parity dominating. */
     requireEvidence?: boolean;
 };
 
@@ -168,7 +168,7 @@ export const toParityTicks = (digits: readonly number[], max = PARITY_MAX_TICKS)
 /** The Oracle conditions hold, or could not be read (too few ticks), which never blocks a market. */
 export const oracleOk = (r: ParityRead): boolean => !r.oracle || r.oracle.ok;
 
-/** The latest digits show the run the side needs. A read with no evidence attached never passes. */
+/** The latest digits show the side dominating. A read with no evidence attached never passes. */
 export const evidenceOk = (r: ParityRead): boolean => Boolean(r.evidence?.ok);
 
 const oracleOf = (digits: readonly number[], side: ParitySide): OracleNotes | null => {

@@ -14,7 +14,7 @@ import { legacyPercentage } from '../overlord-engine/legacy';
 import { assessParity, PARITY_ASSESS_MS } from '../overlord-engine/parity-assess';
 import { legacyParityPct } from '../overlord-engine/parity-engine';
 import { assessRiseFall, RF_ASSESS_MS } from '../overlord-engine/rise-fall-run';
-import { DEFAULT_EVIDENCE_RUN } from '../overlord-engine/evidence';
+import { EVIDENCE_MIN, EVIDENCE_WINDOW } from '../overlord-engine/evidence';
 import { getHub360AuthContext, getHub360AuthenticatedUrl } from './auth360';
 import { digitOfQuote, freshVh, normalizeVh, tradeWins, vhAfterReal, vhAfterVirtual } from './oracle/trade-plan';
 import { useHub360Module } from './use-hub360-module';
@@ -143,7 +143,7 @@ const Overlord = () => {
     const rfStyleRef = useRef(rfStyle);
     rfStyleRef.current = rfStyle;
     const noReversalRef = useRef(false); // the last Rise/Fall scan found no signal (no reversal point, or no evidence in the latest ticks): Run does not trade it
-    const noEvidenceRef = useRef(false); // the last Even/Odd scan only found a market whose latest digits do not show the run: Run does not trade it
+    const noEvidenceRef = useRef(false); // the last Even/Odd scan only found a market whose latest digits do not show the side dominating: Run does not trade it
 
     const [symbol, setSymbol] = useState('1HZ10V'); // v2.3: a market is always selected, Find Market only suggests a better one
     const [contractType, setContractType] = useState('EVEN');
@@ -162,7 +162,7 @@ const Overlord = () => {
     const [isRunning, setIsRunning] = useState(false);
     const [useVirtualHook, setUseVirtualHook] = useState(false);
     const [requireOracle, setRequireOracle] = useState(true); // Even/Odd Find Market also needs the Oracle's six conditions
-    // Rise/Fall and Even/Odd Find Market only give a signal when the latest ticks already show it (FFFF / RRRR, EEEEE / OOOOO).
+    // Rise/Fall and Even/Odd Find Market only give a signal when the latest ticks already show it dominating (most of the latest ticks are of that side).
     const [requireEvidence, setRequireEvidence] = useState(true);
     const [vhMode, setVhMode] = useState('STREAK');
     const [vhEnterLosses, setVhEnterLosses] = useState('2');
@@ -1383,14 +1383,14 @@ const Overlord = () => {
         }
         if (riseFallTrade && anyMarket && noReversalRef.current) {
             showToast(
-                'No signal: no reversal point was found, or the latest ticks do not show the required run. Press Find Market again shortly.',
+                'No signal: no reversal point was found, or the latest ticks do not show that side. Press Find Market again shortly.',
                 'warning'
             );
             return;
         }
         if (parityTrade && anyMarket && noEvidenceRef.current) {
             showToast(
-                'No signal: the latest digits do not show the required run of Even/Odd. Press Find Market again shortly.',
+                'No signal: the latest digits do not show that side. Press Find Market again shortly.',
                 'warning'
             );
             return;
@@ -2002,7 +2002,7 @@ const Overlord = () => {
         } else if (scan.evaluated > 0) {
             // Parity has no READY market. Nothing is selected and nothing changes on screen except this note.
             const watch = scan.watch;
-            // With the evidence rule on, a market whose latest digits do not show the run is never traded, even as "closest".
+            // With the evidence rule on, a market whose latest digits do not show the side is never traded, even as "closest".
             const watchBlocked = Boolean(watch) && requireEvidence && !(watch.evidence && watch.evidence.ok);
             if (watch) {
                 // The market shown is the one Run trades: pressing Run must not start another scan just because Parity has
@@ -2034,7 +2034,7 @@ const Overlord = () => {
                 ? scan.reads.filter(r => !r.thin && r.ready && r.evidence && !r.evidence.ok && (!requireOracle || !r.oracle || r.oracle.ok))
                 : [];
             const evidenceNote = evidenceBlocked.length
-                ? ` Parity was READY on ${evidenceBlocked.length} market(s) but the latest digits do not show the run (${evidenceBlocked[0].evidence.text.replace('No evidence: ', '')}).`
+                ? ` Parity was READY on ${evidenceBlocked.length} market(s) but the latest digits do not show it (${evidenceBlocked[0].evidence.text.replace('No evidence: ', '')}).`
                 : '';
             const blocked = requireOracle ? scan.reads.filter(r => !r.thin && r.ready && r.oracle && !r.oracle.ok) : [];
             const oracleNote = blocked.length
@@ -2046,13 +2046,13 @@ const Overlord = () => {
                 `⏸ No market is READY for ${wanted} right now.${oracleNote}${evidenceNote}${other}${
                     watch
                         ? watchBlocked
-                            ? ` Closest: ${symbolNames[watch.symbol]} ${watch.label}, but its latest digits do not show the run, so Run will not trade it.`
+                            ? ` Closest: ${symbolNames[watch.symbol]} ${watch.label}, but its latest digits do not show it, so Run will not trade it.`
                             : ` Run will trade the closest: ${symbolNames[watch.symbol]} ${watch.label}.`
                         : ' Try again shortly.'
                 }`
             );
         } else if (scan.legacyOnly && requireEvidence) {
-            logMessage('⏸ No market shows the required run of Even/Odd in its latest digits. Try again shortly.');
+            logMessage('⏸ No market shows Even/Odd dominating its latest digits. Try again shortly.');
         } else {
             logMessage('Scan incomplete: no market returned enough ticks. Try again.');
         }
@@ -2304,11 +2304,9 @@ const Overlord = () => {
                                 disabled={isRunning || analysisStarted}
                             />
                             <span>
-                                Only give a signal when the latest ticks already show it (
-                                {isRiseFallTrade
-                                    ? `${'F'.repeat(DEFAULT_EVIDENCE_RUN.FALL)} for Fall, ${'R'.repeat(DEFAULT_EVIDENCE_RUN.RISE)} for Rise`
-                                    : `${'E'.repeat(DEFAULT_EVIDENCE_RUN.EVEN)} for Even, ${'O'.repeat(DEFAULT_EVIDENCE_RUN.ODD)} for Odd`}
-                                )
+                                Only give a signal when the market already shows it: at least {EVIDENCE_MIN} of the last{' '}
+                                {EVIDENCE_WINDOW} ticks must be{' '}
+                                {isRiseFallTrade ? 'falls for a Fall, rises for a Rise' : 'even for Even, odd for Odd'}
                             </span>
                         </label>
                     )}

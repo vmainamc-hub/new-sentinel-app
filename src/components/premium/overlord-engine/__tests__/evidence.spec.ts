@@ -1,12 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    DEFAULT_EVIDENCE_RUN,
-    digitEvidence,
-    digitLetters,
-    moveEvidence,
-    moveLetters,
-    trailingRun,
-} from '../evidence';
+import { digitEvidence, digitLetters, EVIDENCE_MIN, EVIDENCE_WINDOW, moveEvidence, moveLetters } from '../evidence';
 import { appendTick, assessRiseFall } from '../rise-fall-run';
 import { type Candle, compareRiseFall, scanRiseFall } from '../rise-fall';
 import { evidenceOk, type ParityRead, pickFromReads } from '../parity-engine';
@@ -27,71 +20,80 @@ const pricesFor = (letters: string, start = 100) => {
     return out;
 };
 
-describe('evidence letters and runs', () => {
+describe('evidence letters', () => {
     test('digits become E / O and moves become R / F / -', () => {
         expect(digitLetters([2, 7, 0, 9, 4])).toBe('EOEOE');
         expect(moveLetters([1, 2, 1, 1, 0])).toBe('RF-F');
     });
-    test('trailingRun counts only the end', () => {
-        expect(trailingRun('FFRFFF', 'F')).toBe(3);
-        expect(trailingRun('FFFFR', 'F')).toBe(0);
-        expect(trailingRun('', 'F')).toBe(0);
-    });
-    test('defaults are four moves and five digits', () => {
-        expect(DEFAULT_EVIDENCE_RUN).toEqual({ RISE: 4, FALL: 4, EVEN: 5, ODD: 5 });
+    test('the default is a majority: 6 of the last 10', () => {
+        expect(EVIDENCE_WINDOW).toBe(10);
+        expect(EVIDENCE_MIN).toBe(6);
     });
 });
 
 describe('moveEvidence (Rise / Fall)', () => {
-    test('FFFF passes a Fall signal', () => {
-        const e = moveEvidence(pricesFor('RFRFFFF'), 'FALL');
+    test('falls dominating the latest ticks passes a Fall signal, in any order', () => {
+        const e = moveEvidence(pricesFor('RFFRFFRFFF'), 'FALL'); // 7 falls of 10, not consecutive
         expect(e.ok).toBe(true);
-        expect(e.run).toBe(4);
-        expect(e.pattern.endsWith('FFFF')).toBe(true);
+        expect(e.count).toBe(7);
+        expect(e.against).toBe(3);
     });
-    test('FFFR does not pass a Fall signal, and says what it was looking for', () => {
-        const e = moveEvidence(pricesFor('RFFFR'), 'FALL');
+    test('exactly 6 of 10 is enough, 5 of 10 is not', () => {
+        expect(moveEvidence(pricesFor('RFFRFFRFFR'), 'FALL').ok).toBe(true);
+        expect(moveEvidence(pricesFor('RFFRFRRFFR'), 'FALL').ok).toBe(false);
+    });
+    test('"falls must be present when you give a fall signal": a market of rises gives no Fall', () => {
+        const e = moveEvidence(pricesFor('RRRRRRRFRR'), 'FALL');
         expect(e.ok).toBe(false);
-        expect(e.wanted).toBe('FFFF');
-        expect(e.text).toContain('need FFFF');
+        expect(e.count).toBe(1);
+        expect(e.text).toContain('only 1 of the last 10 ticks were falls');
     });
-    test('three falls are not enough, a flat tick breaks the run', () => {
-        expect(moveEvidence(pricesFor('RFFF'), 'FALL').ok).toBe(false);
-        expect(moveEvidence(pricesFor('FFF-F'), 'FALL').ok).toBe(false);
+    test('the same market of rises does give a Rise', () => {
+        expect(moveEvidence(pricesFor('RRRRRRRFRR'), 'RISE').ok).toBe(true);
     });
-    test('RRRR passes Rise but never Fall', () => {
-        expect(moveEvidence(pricesFor('FRRRR'), 'RISE').ok).toBe(true);
-        expect(moveEvidence(pricesFor('FRRRR'), 'FALL').ok).toBe(false);
+    test('a tick that did not move counts for neither side', () => {
+        const e = moveEvidence(pricesFor('FF--FF--FF'), 'FALL');
+        expect(e.count).toBe(6);
+        expect(e.against).toBe(0);
+        expect(e.ok).toBe(true);
+        expect(moveEvidence(pricesFor('FF----FF--'), 'FALL').ok).toBe(false);
     });
-    test('no ticks is no evidence', () => {
-        const e = moveEvidence([], 'FALL');
+    test('only the latest ticks count', () => {
+        const e = moveEvidence(pricesFor('FFFFFFFFFFRRRRRRRR'), 'FALL'); // old falls, now rising
         expect(e.ok).toBe(false);
-        expect(e.text).toContain('no latest ticks');
+        expect(moveEvidence(pricesFor('RRRRRRRRRRFFFFFFFF'), 'FALL').ok).toBe(true);
     });
-    test('a longer required run is respected', () => {
-        expect(moveEvidence(pricesFor('RFFFF'), 'FALL', 5).ok).toBe(false);
-        expect(moveEvidence(pricesFor('RFFFFF'), 'FALL', 5).ok).toBe(true);
+    test('too few ticks cannot show dominance, and no ticks says so', () => {
+        expect(moveEvidence(pricesFor('FFFF'), 'FALL').ok).toBe(false);
+        const none = moveEvidence([], 'FALL');
+        expect(none.ok).toBe(false);
+        expect(none.text).toContain('no latest ticks');
+    });
+    test('the required count can be changed', () => {
+        expect(moveEvidence(pricesFor('RFFRFFRFFR'), 'FALL', 7).ok).toBe(false);
+        expect(moveEvidence(pricesFor('RFFRFFRFFR'), 'FALL', 5).ok).toBe(true);
     });
 });
 
 describe('digitEvidence (Even / Odd)', () => {
-    test('EEEEE passes an Even signal', () => {
-        const e = digitEvidence([1, 3, 2, 4, 6, 8, 0], 'EVEN');
+    test('evens dominating the latest digits passes an Even signal, in any order', () => {
+        const e = digitEvidence([1, 3, 2, 5, 4, 6, 7, 8, 0, 2], 'EVEN'); // 6 even of 10
         expect(e.ok).toBe(true);
-        expect(e.run).toBe(5);
-    });
-    test('an Even signal with only four even digits in a row is blocked', () => {
-        expect(digitEvidence([1, 2, 4, 6, 8], 'EVEN').ok).toBe(false);
+        expect(e.count).toBe(6);
     });
     test('"dont tell me even and there are no even digits appearing"', () => {
-        const e = digitEvidence([1, 3, 5, 7, 9, 1, 3], 'EVEN');
+        const e = digitEvidence([1, 3, 5, 7, 9, 1, 3, 5, 7, 2], 'EVEN');
         expect(e.ok).toBe(false);
-        expect(e.run).toBe(0);
-        expect(e.text).toContain('need EEEEE');
+        expect(e.count).toBe(1);
     });
-    test('OOOOO passes Odd but never Even', () => {
-        expect(digitEvidence([2, 1, 3, 5, 7, 9], 'ODD').ok).toBe(true);
-        expect(digitEvidence([2, 1, 3, 5, 7, 9], 'EVEN').ok).toBe(false);
+    test('5 of 10 is not a majority', () => {
+        expect(digitEvidence([2, 1, 4, 3, 6, 5, 8, 7, 0, 9], 'EVEN').ok).toBe(false);
+        expect(digitEvidence([2, 1, 4, 3, 6, 5, 8, 7, 0, 2], 'EVEN').ok).toBe(true);
+    });
+    test('odd digits dominating pass Odd but never Even', () => {
+        const odds = [1, 3, 2, 5, 7, 9, 4, 1, 3, 5]; // 8 odd
+        expect(digitEvidence(odds, 'ODD').ok).toBe(true);
+        expect(digitEvidence(odds, 'EVEN').ok).toBe(false);
     });
 });
 
@@ -104,25 +106,25 @@ describe('Rise / Fall scan with the evidence rule', () => {
         expect(scan.best!.evidence).toBeNull();
         expect(scan.best!.blockedByEvidence).toBe(false);
     });
-    test('a Fall signal with no FFFF in the latest ticks is blocked', () => {
+    test('a Fall signal where the latest ticks are mostly rises is blocked', () => {
         const scan = scanRiseFall({
             candles,
             style: 'trend',
             side: 'FALL',
             requireEvidence: true,
-            ticks: { A: pricesFor('FFFRF') },
+            ticks: { A: pricesFor('RRFRFRRFRR') },
         });
         expect(scan.best!.setup).toBe(false);
         expect(scan.best!.blockedByEvidence).toBe(true);
         expect(scan.best!.evidence!.ok).toBe(false);
     });
-    test('a Fall signal with FFFF in the latest ticks is allowed', () => {
+    test('a Fall signal where falls dominate the latest ticks is allowed, even if they are not consecutive', () => {
         const scan = scanRiseFall({
             candles,
             style: 'trend',
             side: 'FALL',
             requireEvidence: true,
-            ticks: { A: pricesFor('RRFFFF') },
+            ticks: { A: pricesFor('RRFFRFFFFF') },
         });
         expect(scan.best!.setup).toBe(true);
         expect(scan.best!.blockedByEvidence).toBe(false);
@@ -144,8 +146,8 @@ describe('Rise / Fall scan with the evidence rule', () => {
             const big = i < 100 ? 0.5 : 0.1;
             return { open: prev, close: c, high: Math.max(prev, c) + big * 0.2, low: Math.min(prev, c) - big * 0.2, time: i * 60 };
         });
-        const blocked = scanRiseFall({ candles: { A: stall }, style: 'reversal', requireEvidence: true, ticks: { A: pricesFor('FRRRR') } });
-        const allowed = scanRiseFall({ candles: { A: stall }, style: 'reversal', requireEvidence: true, ticks: { A: pricesFor('RRFFFF') } });
+        const blocked = scanRiseFall({ candles: { A: stall }, style: 'reversal', requireEvidence: true, ticks: { A: pricesFor('FRRRRRFRRR') } });
+        const allowed = scanRiseFall({ candles: { A: stall }, style: 'reversal', requireEvidence: true, ticks: { A: pricesFor('RRFFRFFFRF') } });
         expect(allowed.best!.side).toBe('FALL');
         expect(allowed.best!.agree).toBeGreaterThanOrEqual(3);
         expect(allowed.best!.setup).toBe(true);
@@ -202,20 +204,20 @@ describe('live ticks in the Rise / Fall run', () => {
         return { result, sent };
     };
 
-    test('with the rule on it asks for the latest ticks and allows a Fall that shows FFFF', async () => {
-        const { result, sent } = await run(true, 'RFFFFF');
+    test('with the rule on it asks for the latest ticks and allows a Fall that dominates them', async () => {
+        const { result, sent } = await run(true, 'RFFRFFRFFF');
         expect(sent.some(r => r.style === 'ticks' && r.subscribe === 1)).toBe(true);
         expect(result.scan.best!.setup).toBe(true);
         expect(result.scan.best!.evidence!.ok).toBe(true);
     });
     test('with the rule on, a Fall whose latest ticks do not show it is not a signal', async () => {
-        const { result } = await run(true, 'FFFFRF');
+        const { result } = await run(true, 'RRFRRFRRRR');
         expect(result.scan.best!.setup).toBe(false);
         expect(result.scan.best!.tier).toBe('WEAK');
         expect(result.scan.best!.blockedByEvidence).toBe(true);
     });
     test('with the rule off it does not subscribe to ticks at all', async () => {
-        const { result, sent } = await run(false, 'FFFFRF');
+        const { result, sent } = await run(false, 'RRFRRFRRRR');
         expect(sent.some(r => r.style === 'ticks')).toBe(false);
         expect(result.scan.best!.setup).toBe(true);
     });
@@ -242,12 +244,12 @@ describe('Even / Odd picking with the evidence rule', () => {
         applied: 6,
         parity: null,
         oracle: null,
-        evidence: digitEvidence([1, 3, 5, 7, 9, 1], 'EVEN'),
+        evidence: digitEvidence([1, 3, 5, 7, 9, 1, 3, 5, 7, 2], 'EVEN'),
         ...over,
     });
-    const showsRun = digitEvidence([1, 2, 4, 6, 8, 0], 'EVEN');
+    const showsRun = digitEvidence([1, 2, 4, 3, 6, 8, 0, 5, 2, 4], 'EVEN');
 
-    test('a READY Even market whose latest digits show no even run is not picked', () => {
+    test('a READY Even market whose latest digits are mostly odd is not picked', () => {
         const noRun = base({ symbol: 'n', score: 99 });
         const out = pickFromReads([noRun], 'EVEN', false, true);
         expect(out.best).toBeNull();
@@ -256,7 +258,7 @@ describe('Even / Odd picking with the evidence rule', () => {
     test('the same market is picked when the rule is off', () => {
         expect(pickFromReads([base({ symbol: 'n' })], 'EVEN', false, false).best?.symbol).toBe('n');
     });
-    test('the market with EEEEE is picked over a higher-confidence one without it', () => {
+    test('the market with evens dominating is picked over a higher-confidence one without it', () => {
         const noRun = base({ symbol: 'n', score: 99 });
         const run = base({ symbol: 'r', score: 60, evidence: showsRun });
         expect(pickFromReads([noRun, run], 'EVEN', false, true).best?.symbol).toBe('r');
@@ -264,13 +266,13 @@ describe('Even / Odd picking with the evidence rule', () => {
     test('a read with no evidence attached never passes', () => {
         expect(evidenceOk(base({ evidence: null }))).toBe(false);
     });
-    test('the other parity is only suggested when it has its own run', () => {
-        const odd = base({ symbol: 'o', side: 'ODD', label: 'Odd', evidence: digitEvidence([2, 4, 6, 8, 0, 1], 'ODD') });
+    test('the other parity is only suggested when it has its own dominance', () => {
+        const odd = base({ symbol: 'o', side: 'ODD', label: 'Odd', evidence: digitEvidence([2, 4, 6, 8, 0, 1, 4, 6, 8, 2], 'ODD') });
         expect(pickFromReads([odd], 'EVEN', false, true).opposite).toBeNull();
-        const oddRun = base({ symbol: 'o', side: 'ODD', label: 'Odd', evidence: digitEvidence([2, 1, 3, 5, 7, 9], 'ODD') });
+        const oddRun = base({ symbol: 'o', side: 'ODD', label: 'Odd', evidence: digitEvidence([2, 1, 3, 5, 7, 9, 4, 1, 3, 5], 'ODD') });
         expect(pickFromReads([oddRun], 'EVEN', false, true).opposite?.symbol).toBe('o');
     });
-    test('the live assessment ignores markets without the run when counting how steadily they were ready', () => {
+    test('the live assessment ignores markets without the evidence when counting how steadily they were ready', () => {
         const a = new ParityAssessment('EVEN', false, true);
         const scan = (reads: ParityRead[]) => ({ reads, best: null, watch: null, opposite: null, legacyOnly: false, evaluated: reads.length });
         a.observe(scan([base({ symbol: 'n' }), base({ symbol: 'r', evidence: showsRun })]));

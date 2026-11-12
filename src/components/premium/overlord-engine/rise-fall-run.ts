@@ -7,7 +7,7 @@ export const RF_CANDLES = 200;
 export const RF_GRANULARITY = 60;
 export const RF_ASSESS_MS = 15_000;
 export const RF_ROUND_MS = 3_000;
-/** Latest ticks asked for and kept per market, for the evidence rule (a run of FFFF / RRRR at the end). */
+/** Latest ticks asked for and kept per market, for the evidence rule (the side must dominate the latest 10 ticks). */
 export const RF_TICKS = 40;
 const TICK_REQ_BASE = 1000;
 
@@ -33,10 +33,10 @@ export type RiseFallOptions = {
     side?: Direction | null;
     style?: RiseFallStyle;
     names?: Record<string, string>;
-    /** A side is only a signal when the latest ticks already end in a run of it (FFFF / RRRR). */
+    /** A side is only a signal when the latest ticks already show it dominating. */
     requireEvidence?: boolean;
-    /** Run the latest ticks must show; defaults to the evidence module's own. */
-    evidenceRun?: number;
+    /** How many of the last 10 ticks must be the side; defaults to the evidence module's own. */
+    evidenceMin?: number;
     assessMs?: number;
     roundMs?: number;
     cancelled?: () => boolean;
@@ -166,7 +166,7 @@ export async function assessRiseFall(opts: RiseFallOptions): Promise<RiseFallAss
             style: opts.style,
             ticks,
             requireEvidence: opts.requireEvidence,
-            evidenceRun: opts.evidenceRun,
+            evidenceMin: opts.evidenceMin,
         });
     const report = () =>
         opts.onProgress?.({
