@@ -7,6 +7,7 @@ import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purc
 import { rankPicks, rankRecovery } from './picker';
 import { getCandidates } from './candidates';
 import './registry-instance'; // sets the candidate provider (baseline + ACTIVE strategies)
+import { createEntryDigitSource } from './entry-digit';
 import { AiIntelExecutor, type ExecConfig, type ExecTrade } from './executor';
 import { assess } from './guard';
 import { createApexGates } from '@/components/premium/edge-gates/apex-gates';
@@ -34,6 +35,9 @@ const write = (key: string, value: unknown) => {
 
 // The edge gates (Kalman health, cross-market danger + frequency, arbiter) added on top of the AI guard below. Console: `apexIntelEdge`.
 const apexGates = createApexGates({ series: () => apexFeed.getLiveSeries() });
+
+// The "Entry digit" mode: Sentinel AI's entry digit (the Bulk Trader's replay of the market's own history), read from the live ticks.
+const entryDigits = createEntryDigitSource({ series: symbol => apexFeed.getLiveSeries()[symbol] });
 
 export const aiIntelExecutor = new AiIntelExecutor({
     buy: ({ parameters, price }) => buyContractForUi({ parameters, price, source: 'Apex Intel' }),
@@ -63,6 +67,8 @@ export const aiIntelExecutor = new AiIntelExecutor({
         const read = readSpecialDigits(apexFeed.getLiveSeries()[req.market], req.contract.side);
         return { allow: read.ok, reason: read.note };
     },
+    entryDigit: (market, contract, duration, now) => entryDigits.get(market, contract, duration, now),
+    resetEntryDigits: () => entryDigits.reset(),
     onBoard: (ranked, recovery, now) => apexGates.onBoard(ranked, recovery, now),
     onBought: n => apexGates.onBought(n),
     onSettled: n => apexGates.onSettled(n),

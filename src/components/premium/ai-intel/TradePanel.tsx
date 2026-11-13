@@ -8,7 +8,7 @@ import '@/components/premium/sentinel/sentinel-simple.scss';
 import { shortName } from '@/components/premium/sixfold/feed';
 import { Num, Seg, Stat, Switch } from '@/components/premium/sixfold/SixfoldPage';
 import { useFeedOf } from '@/components/premium/sixfold/use-feed';
-import { type ExecConfig, type ExecEntry, MIN_STAKE } from './executor';
+import { type EntryMode, type ExecConfig, type ExecEntry, MIN_STAKE } from './executor';
 import { aiIntelExecutor } from './executor-instance';
 import { apexFeed, apexSymbols } from './feed-source';
 import { AutopilotPanel } from './AutopilotPanel';
@@ -48,6 +48,7 @@ export function TradePanel() {
     };
     const toggleMarket = (m: string) => set({ excluded: c.excluded.includes(m) ? c.excluded.filter(x => x !== m) : [...c.excluded, m] });
     const recovering = c.recovery.enabled && s.consecutiveLosses > 0;
+    const byDigit = c.entryMode === 'DIGIT';
     type Row = { key: string; market: string; label: string; regime: string; rate: number | null; trades: number };
     const board: Row[] = recovering ? s.board.recovery : s.board.primary;
 
@@ -62,10 +63,14 @@ export function TradePanel() {
                 ? 'Placing the trade'
                 : s.vh.virtual
                   ? `Paper trading across ${watching} markets${s.vh.opening ? ' (opening)' : ''}`
-                  : `Watching ${watching} markets for the best entry${recovering ? ' (recovery)' : ''}`
+                  : `Watching ${watching} markets for ${byDigit ? 'their entry digit' : 'the best entry'}${recovering ? ' (recovery)' : ''}`
           : (s.stopMessage ?? `${watching} markets ready`);
     const top = board[0];
-    const reason = s.running && !s.proposal ? (s.note ?? (top ? `Best now: ${shortName(top.market)} · ${top.label}` : null)) : null;
+    const topDigit = top ? s.entryDigits[top.market] : null;
+    const reason =
+        s.running && !s.proposal
+            ? (s.note ?? (top ? `Best now: ${shortName(top.market)} · ${top.label}${byDigit && topDigit ? ` · waiting for digit ${topDigit.digit}` : ''}` : null))
+            : null;
     const feedTone = feed.status === 'live' ? 'ok' : 'warn';
 
     return (
@@ -134,6 +139,22 @@ export function TradePanel() {
                         <Num label='Stake' value={c.stake} onCommit={n => !locked && set({ stake: n })} hint={`min ${MIN_STAKE.toFixed(2)}`} />
                         <Num label='Take profit' value={c.targetProfit} onCommit={n => !locked && set({ targetProfit: n })} hint='0 = off' />
                         <Num label='Stop loss' value={c.stopLoss} onCommit={n => !locked && set({ stopLoss: n })} hint='0 = off' />
+                    </div>
+
+                    <div className='sn-label'>Entry mode</div>
+                    <Seg<EntryMode>
+                        label='Entry mode'
+                        value={c.entryMode}
+                        onChange={v => !locked && set({ entryMode: v })}
+                        options={[
+                            ['STANDARD', 'Standard'],
+                            ['DIGIT', 'Entry digit'],
+                        ]}
+                    />
+                    <div className='sn-reason'>
+                        {byDigit
+                            ? "Each market gets an entry digit worked out from its own recent history (the same formula as Sentinel AI and the Bulk Trader). The trade goes out on the first tick that shows it. The market choice, AI guard, digit 1 / 8 rule and recovery are the same."
+                            : 'Apex Intel as it always was: the entry type in More settings decides when to buy.'}
                     </div>
 
                     <Switch on={c.recovery.enabled} onChange={v => !locked && setRec({ enabled: v })} title='Recovery' sub='After a loss: Over 3 or Under 6, whichever is more viable' />
@@ -207,14 +228,22 @@ export function TradePanel() {
                         <p className='sn-empty'>{s.running ? (s.note ?? 'Scanning…') : 'Press Run: every market is scanned, the best entries show here.'}</p>
                     ) : (
                         <ul className='sf-trades ai-best'>
-                            {board.map(p => (
-                                <li key={p.key}>
-                                    <b>{shortName(p.market)}</b>
-                                    <span>{p.label}</span>
-                                    <span>{p.regime.toLowerCase().replace('_', ' ')}</span>
-                                    <em>{pct(p.rate)} · {p.trades}</em>
-                                </li>
-                            ))}
+                            {board.map(p => {
+                                const d = byDigit ? s.entryDigits[p.market] : null;
+                                return (
+                                    <li key={p.key}>
+                                        <b>{shortName(p.market)}</b>
+                                        <span>
+                                            {p.label}
+                                            {byDigit && (d ? ` · on ${d.digit}${d.strength === 'weak' ? ' (weak)' : ''}` : ' · digit pending')}
+                                        </span>
+                                        <span>{p.regime.toLowerCase().replace('_', ' ')}</span>
+                                        <em>
+                                            {pct(p.rate)} · {p.trades}
+                                        </em>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     )}
                 </section>
