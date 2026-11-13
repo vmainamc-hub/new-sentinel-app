@@ -8,6 +8,7 @@ import { rankPicks, rankRecovery } from './picker';
 import { getCandidates } from './candidates';
 import './registry-instance'; // sets the candidate provider (baseline + ACTIVE strategies)
 import { createEntryDigitSource } from './entry-digit';
+import { createOverlordReader } from './overlord-select';
 import { AiIntelExecutor, type ExecConfig, type ExecTrade } from './executor';
 import { assess } from './guard';
 import { createApexGates } from '@/components/premium/edge-gates/apex-gates';
@@ -41,6 +42,10 @@ const apexGates = createApexGates({ series: () => apexFeed.getLiveSeries() });
 const entryDigits = createEntryDigitSource({ series: symbol => apexFeed.getLiveSeries()[symbol] });
 if (typeof window !== 'undefined') (window as unknown as Record<string, unknown>).apexEntryLab = entryDigits;
 
+// The "Overlord" selection modes: Overlord's over/under engines read the live markets (quotes and digits from the same shared feed,
+// no second socket) and take part in choosing the market and contract. Idle in STANDARD mode: nothing is read until a run asks for it.
+const overlordReader = createOverlordReader({ series: () => apexSeries(), prices: () => apexFeed.getLivePrices() });
+
 export const aiIntelExecutor = new AiIntelExecutor({
     buy: ({ parameters, price }) => buyContractForUi({ parameters, price, source: 'Apex Intel' }),
     settle: ({ contractId, fallback, onUpdate, signal }) =>
@@ -72,6 +77,11 @@ export const aiIntelExecutor = new AiIntelExecutor({
     entryDigit: (market, contract, duration) => entryDigits.get(market, contract, duration),
     entryResult: r => entryDigits.record(r.market, r.contract, r.duration, r.digit, r.won),
     entryView: (market, contract, duration) => entryDigits.view(market, contract, duration),
+    overlordView: (market, contract, now) => overlordReader.get(market, contract, now),
+    overlordRefresh: (now, priority) => {
+        overlordReader.refresh(now, priority);
+    },
+    overlordReset: () => overlordReader.reset(),
     onBoard: (ranked, recovery, now) => apexGates.onBoard(ranked, recovery, now),
     onBought: n => apexGates.onBought(n),
     onSettled: n => apexGates.onSettled(n),

@@ -97,6 +97,8 @@ export class SixfoldFeed {
     private status: FeedStatus = 'offline';
     private error = '';
     private buf: Series = {};
+    /** Raw quotes, kept in step with `buf` (same length per market) for engines that need prices, not just last digits. */
+    private pbuf: Record<string, number[]> = {};
     private dirty = new Set<string>();
     private decimals: Record<string, number> = {};
     private lastTick: Record<string, number> = {};
@@ -136,6 +138,11 @@ export class SixfoldFeed {
     };
     /** The live arrays, for synchronous read-only use (scans). Never keep or mutate them. */
     getLiveSeries = (): Series => this.buf;
+    /**
+     * The live quotes behind `getLiveSeries`, one per digit. Read-only; never keep or mutate them. A market whose quotes and digits
+     * differ in length (an imported digit file has no quotes) must be treated as having no prices.
+     */
+    getLivePrices = (): Readonly<Record<string, readonly number[]>> => this.pbuf;
     getLastDigit = (symbol: string): number | null => this.buf[symbol]?.at(-1) ?? null;
     getLastTickAt = (symbol: string): number | null => this.lastTick[symbol] ?? null;
     /** How each market's ticks are actually arriving: measured rate against Deriv's documented rate. */
@@ -272,6 +279,7 @@ export class SixfoldFeed {
 
     private replaceAll(next: Series) {
         this.buf = next;
+        this.pbuf = {}; // imported digits carry no quotes
         this.dirty = new Set(Object.keys(next));
     }
 
@@ -418,6 +426,7 @@ export class SixfoldFeed {
             const places = pipDecimals(msg.pip_size) ?? inferDecimals(prices);
             this.decimals[symbol] = places;
             this.buf[symbol] = prices.map(q => digitFromQuote(q, places)).slice(-MAX_TICKS);
+            this.pbuf[symbol] = prices.slice(-MAX_TICKS);
             // Deriv's own tick times: they show the market's real rate straight away and let repeats be recognised.
             const times: number[] = Array.isArray(msg.history.times) ? msg.history.times.map(Number).filter(Number.isFinite) : [];
             this.tel[symbol] = { epochs: times.slice(-TELEMETRY_KEEP), arrivals: [], accepted: 0, dropped: 0 };
@@ -452,6 +461,9 @@ export class SixfoldFeed {
             const arr = (this.buf[symbol] ??= []);
             arr.push(digit);
             if (arr.length > MAX_TICKS + 100) arr.splice(0, arr.length - MAX_TICKS);
+            const quotes = (this.pbuf[symbol] ??= []);
+            quotes.push(Number(msg.tick.quote));
+            if (quotes.length > MAX_TICKS + 100) quotes.splice(0, quotes.length - MAX_TICKS);
             this.lastTick[symbol] = this.now();
             this.dirty.add(symbol);
             this.schedulePublish();

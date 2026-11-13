@@ -9,6 +9,7 @@ import { shortName } from '@/components/premium/sixfold/feed';
 import { Num, Seg, Stat, Switch } from '@/components/premium/sixfold/SixfoldPage';
 import { useFeedOf } from '@/components/premium/sixfold/use-feed';
 import { type EntryMode, type ExecConfig, type ExecEntry, MIN_STAKE } from './executor';
+import type { SelectionMode } from './overlord-select';
 import { aiIntelExecutor } from './executor-instance';
 import { apexFeed, apexSymbols } from './feed-source';
 import { AutopilotPanel } from './AutopilotPanel';
@@ -49,6 +50,7 @@ export function TradePanel() {
     const toggleMarket = (m: string) => set({ excluded: c.excluded.includes(m) ? c.excluded.filter(x => x !== m) : [...c.excluded, m] });
     const recovering = c.recovery.enabled && s.consecutiveLosses > 0;
     const byDigit = c.entryMode === 'DIGIT';
+    const byOverlord = c.selection !== 'STANDARD';
     type Row = { key: string; market: string; label: string; regime: string; rate: number | null; trades: number };
     const board: Row[] = recovering ? s.board.recovery : s.board.primary;
 
@@ -157,6 +159,25 @@ export function TradePanel() {
                             : 'Apex Intel as it always was: the entry type in More settings decides when to buy.'}
                     </div>
 
+                    <div className='sn-label'>Market and contract selection</div>
+                    <Seg<SelectionMode>
+                        label='Selection'
+                        value={c.selection}
+                        onChange={v => !locked && set({ selection: v })}
+                        options={[
+                            ['STANDARD', 'Standard'],
+                            ['OVERLORD', 'Overlord'],
+                            ['COMBINED', 'Combined'],
+                        ]}
+                    />
+                    <div className='sn-reason'>
+                        {c.selection === 'OVERLORD'
+                            ? "Overlord's engines (its own condition, Oracle's layers and the Apex Sentinel engines) rank the markets and contracts Apex Intel found, and veto any they flag. A market is read for a few rounds before it can be chosen. The AI guard, the edge gates, the digit 1 / 8 rule and every limit still check the trade."
+                            : c.selection === 'COMBINED'
+                              ? "Both engines must say yes: Overlord's reading (no veto, steady over several rounds) and Apex Intel's own win-rate lower bound beating chance. Fewer trades than either alone. Every later check still applies."
+                              : "Apex Intel's own picker chooses the market and contract, as it always did."}
+                    </div>
+
                     <Switch on={c.recovery.enabled} onChange={v => !locked && setRec({ enabled: v })} title='Recovery' sub='After a loss: Over 3 or Under 6, whichever is more viable' />
                     {c.recovery.enabled && (
                         <div className='sf-grid2 sn-nums'>
@@ -230,12 +251,14 @@ export function TradePanel() {
                         <ul className='sf-trades ai-best'>
                             {board.map(p => {
                                 const d = byDigit ? s.entryDigits[p.market] : null;
+                                const o = byOverlord ? s.selection.rows[p.market] : null;
                                 return (
                                     <li key={p.key}>
                                         <b>{shortName(p.market)}</b>
                                         <span>
                                             {p.label}
                                             {byDigit && (d ? (d.tradable ? ` · on ${d.digit} (${d.strength})` : ' · no digit holds up') : ' · digit pending')}
+                                            {o && ` · Overlord ${o.tier.toLowerCase()} ${o.score}`}
                                         </span>
                                         <span>{p.regime.toLowerCase().replace('_', ' ')}</span>
                                         <em>
@@ -245,6 +268,16 @@ export function TradePanel() {
                                 );
                             })}
                         </ul>
+                    )}
+                    {byOverlord && s.selection.blocked.length > 0 && (
+                        <details className='sn-reason'>
+                            <summary>Held back by {s.selection.mode === 'COMBINED' ? 'Overlord + Apex Intel' : 'Overlord'}: {s.selection.blocked.length}</summary>
+                            <ul>
+                                {s.selection.blocked.slice(0, 12).map(b => (
+                                    <li key={b.key}>{b.text}</li>
+                                ))}
+                            </ul>
+                        </details>
                     )}
                 </section>
 
