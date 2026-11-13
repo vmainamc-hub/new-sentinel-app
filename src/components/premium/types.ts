@@ -23,7 +23,6 @@ export type PremiumSection =
     | 'ai_bots'
     | 'digits_analysis'
     | 'sixfold'
-    | 'vanguard'
     | 'ai_intel'
     | 'overlord'
     | 'elite_prime'

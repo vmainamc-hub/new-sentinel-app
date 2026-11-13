@@ -27,7 +27,6 @@ const NAV_ICONS: Partial<Record<PremiumSection, typeof HomeIcon>> = {
     ai_bots: RobotIcon,
     digits_analysis: SearchIcon,
     sixfold: PulseIcon,
-    vanguard: BoltIcon,
     ai_intel: SearchIcon,
     elite_prime: RobotIcon,
     overlord: BoltIcon,

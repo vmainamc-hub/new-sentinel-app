@@ -28,10 +28,6 @@
       "label": "Sixfold"
     },
     {
-      "id": "vanguard",
-      "label": "Vanguard"
-    },
-    {
       "id": "ai_intel",
       "label": "Apex Intel"
     },
@@ -100,7 +96,6 @@
       "auto_trader",
       "sentinel_ai",
       "sixfold",
-      "vanguard",
       "ai_intel",
       "elite_prime",
       "overlord",

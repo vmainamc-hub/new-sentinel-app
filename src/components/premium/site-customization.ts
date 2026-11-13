@@ -23,7 +23,6 @@ export const NAVIGATION_CATALOG: Array<{ id: PremiumSection; label: string; requ
     { id: 'auto_trader', label: 'Auto Trades' },
     { id: 'sentinel_ai', label: 'Sentinel AI' },
     { id: 'sixfold', label: 'Sixfold' },
-    { id: 'vanguard', label: 'Vanguard' },
     { id: 'ai_intel', label: 'Apex Intel' },
     { id: 'elite_prime', label: 'Elite Prime' },
     { id: 'overlord', label: 'Overlord Pro' },
@@ -62,7 +61,7 @@ export const DEFAULT_NAVIGATION: PremiumSection[] = [
 export type NavGroup = { id: string; label: string; members: PremiumSection[] };
 
 export const NAV_GROUPS: NavGroup[] = [
-    { id: 'ai_hub', label: 'AI Hub', members: ['sentinel_ai', 'sixfold', 'vanguard', 'ai_intel'] },
+    { id: 'ai_hub', label: 'AI Hub', members: ['sentinel_ai', 'sixfold', 'ai_intel'] },
 ];
 
 export type NavItem =
