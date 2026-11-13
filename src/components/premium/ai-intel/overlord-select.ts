@@ -39,6 +39,8 @@ export const normalizeSelection = (v: unknown): SelectionMode => (v === 'OVERLOR
 export const MIN_ROUNDS = 3;
 /** How many of the latest reads are kept per contract for the steadiness share. */
 export const ROUND_WINDOW = 6;
+/** OVERLORD mode: how many least-bad contracts are returned when none clears every Overlord check. */
+export const LEAST_BAD_COUNT = 3;
 
 const TIER_RANK: Record<OverlordTier, number> = { STRONG: 3, BEST: 2, CAUTION: 1, LEGACY: 0 };
 
@@ -56,7 +58,14 @@ export type OverlordView = {
 export type BlockReason = 'no-read' | 'thin' | 'veto' | 'watching' | 'unsteady' | 'edge';
 export type Blocked = { key: string; market: string; label: string; reason: BlockReason; text: string };
 
-export type Selection<T> = { items: T[]; blocked: Blocked[] };
+export type Selection<T> = {
+    items: T[];
+    blocked: Blocked[];
+    /** True when no contract cleared Overlord and the items are the least-bad few it returned instead (labelled, never hidden). */
+    leastBad: boolean;
+    /** With `leastBad`: why each returned item did not clear. */
+    caution: Blocked[];
+};
 
 export type SelectOptions<T> = {
     mode: SelectionMode;
@@ -65,7 +74,13 @@ export type SelectOptions<T> = {
     /** The candidate's own evidence: true when the picker's lower bound beats chance. COMBINED needs it. */
     hasEdge: (item: T) => boolean;
     /** Optional: the item as it should be shown once chosen (for example with Overlord's tier in its reason). Must not change what it trades. */
-    annotate?: (item: T, view: OverlordView) => T;
+    annotate?: (item: T, view: OverlordView, leastBad: boolean) => T;
+    /**
+     * OVERLORD mode: when no contract clears Overlord, return this many of the least-bad ones instead of nothing, the way Overlord Pro's
+     * own Find Market always returns its best (labelled CAUTION when every contract was vetoed). 0 / absent = strict: nothing clears,
+     * nothing is returned (COMBINED). A contract with no reading at all is never returned: there is nothing to rank it by.
+     */
+    fallback?: number;
 };
 
 const keyOf = (market: string, c: Contract) => `${market}:${c.side}:${c.param}`;
@@ -76,25 +91,39 @@ const labelOf = (c: Contract) => `${c.side === 'OVER' ? 'Over' : c.side === 'UND
  * only ever contains items from the input, never new ones.
  */
 export function selectByOverlord<T extends { market: string; label: string }>(items: readonly T[], o: SelectOptions<T>): Selection<T> {
-    if (o.mode === 'STANDARD') return { items: items as T[], blocked: [] };
+    if (o.mode === 'STANDARD') return { items: items as T[], blocked: [], leastBad: false, caution: [] };
     const blocked: Blocked[] = [];
-    const kept: { item: T; view: OverlordView; index: number }[] = [];
+    const clear: { item: T; view: OverlordView; index: number }[] = [];
+    const unclear: { item: T; view: OverlordView; index: number; why: Blocked }[] = [];
     items.forEach((item, index) => {
         const c = o.contractOf(item);
         const key = keyOf(item.market, c);
-        const block = (reason: BlockReason, text: string) => blocked.push({ key, market: item.market, label: item.label, reason, text });
+        const why = (reason: BlockReason, text: string): Blocked => ({ key, market: item.market, label: item.label, reason, text });
         const view = o.viewOf(item.market, c);
-        if (!view) return block('no-read', `Overlord has no reading of ${item.market} yet (it needs quotes and ${APEX_MIN_TICKS}+ ticks)`);
-        if (view.read.thin) return block('thin', `${item.market}: too little history for Overlord's deeper engines`);
-        if (view.read.vetoed) return block('veto', view.read.vetoReason || 'an Overlord layer vetoed it');
-        if (view.rounds < MIN_ROUNDS) return block('watching', `Overlord is still watching ${item.market} (${view.rounds} of ${MIN_ROUNDS} reads)`);
-        if (view.clearShare < STEADY_SHARE)
-            return block('unsteady', `${labelOf(c)} on ${item.market} was clear of every Overlord veto in only ${Math.round(view.clearShare * 100)}% of its reads (needs ${Math.round(STEADY_SHARE * 100)}%)`);
-        if (o.mode === 'COMBINED' && !o.hasEdge(item)) return block('edge', `${item.label} on ${item.market}: its own win-rate lower bound does not beat chance (COMBINED needs both engines)`);
-        kept.push({ item, view, index });
+        if (!view) return void blocked.push(why('no-read', `Overlord has no reading of ${item.market} yet (it needs quotes and ${APEX_MIN_TICKS}+ ticks)`));
+        let fail: Blocked | null = null;
+        if (view.read.thin) fail = why('thin', `${item.market}: too little history for Overlord's deeper engines`);
+        else if (view.read.vetoed) fail = why('veto', view.read.vetoReason || 'an Overlord layer vetoed it');
+        else if (view.rounds < MIN_ROUNDS) fail = why('watching', `Overlord is still watching ${item.market} (${view.rounds} of ${MIN_ROUNDS} reads)`);
+        else if (view.clearShare < STEADY_SHARE)
+            fail = why('unsteady', `${labelOf(c)} on ${item.market} was clear of every Overlord veto in only ${Math.round(view.clearShare * 100)}% of its reads (needs ${Math.round(STEADY_SHARE * 100)}%)`);
+        else if (o.mode === 'COMBINED' && !o.hasEdge(item)) fail = why('edge', `${item.label} on ${item.market}: its own win-rate lower bound does not beat chance (COMBINED needs both engines)`);
+        if (fail) unclear.push({ item, view, index, why: fail });
+        else clear.push({ item, view, index });
     });
-    kept.sort((a, b) => TIER_RANK[b.view.read.tier] - TIER_RANK[a.view.read.tier] || b.view.read.score - a.view.read.score || a.index - b.index);
-    return { items: kept.map(k => (o.annotate ? o.annotate(k.item, k.view) : k.item)), blocked };
+    const byRead = (a: { view: OverlordView; index: number }, b: { view: OverlordView; index: number }) =>
+        TIER_RANK[b.view.read.tier] - TIER_RANK[a.view.read.tier] || b.view.read.score - a.view.read.score || a.index - b.index;
+    clear.sort(byRead);
+    const show = (k: { item: T; view: OverlordView }, leastBad: boolean) => (o.annotate ? o.annotate(k.item, k.view, leastBad) : k.item);
+    if (clear.length > 0 || !(o.fallback && o.fallback > 0) || unclear.length === 0) {
+        for (const u of unclear) blocked.push(u.why);
+        return { items: clear.map(k => show(k, false)), blocked, leastBad: false, caution: [] };
+    }
+    // Nothing cleared. Overlord still names its least-bad contracts, best tier and score first, and says so.
+    unclear.sort(byRead);
+    const picked = unclear.slice(0, o.fallback);
+    for (const u of unclear.slice(o.fallback)) blocked.push(u.why);
+    return { items: picked.map(k => show(k, true)), blocked, leastBad: true, caution: picked.map(k => k.why) };
 }
 
 /** Counts of blocks by reason, for one short log line. */
@@ -131,13 +160,17 @@ export type OverlordReaderOptions = {
     /** A market is read again once its last read is this old. */
     everyMs?: number;
     /**
-     * At most this many markets are read per `refresh` call, so one board tick never stalls the page. Measured on a desktop: about
-     * 137 ms per market with every engine on (2000 ticks, 4 contracts), 95 ms without the fluctuation replay, 25 ms with neither the
-     * model ensemble nor the replay. Default 1.
+     * Time budget of one `refresh` call. Markets are read, oldest reading first, until the budget is spent (always at least one), so a
+     * board tick never stalls the page yet every market keeps getting read. Measured on a desktop: about 137 ms per market with every
+     * engine on (2000 ticks, 4 contracts), 95 ms without the fluctuation replay, 25 ms with neither the model ensemble nor the replay.
      */
+    budgetMs?: number;
+    /** Hard cap on markets read per call (default 6). */
     batch?: number;
-    /** A read older than this is treated as missing. */
+    /** A read older than this is treated as missing. Must comfortably exceed one full cycle over every market (default 2 minutes). */
     maxAgeMs?: number;
+    /** Clock for the time budget (test seam). */
+    clock?: () => number;
     /** Give the walk-forward model ensemble (the slow engine) to every read. Overlord's own Find Market does this for the contract on screen. */
     ensemble?: boolean;
     /** Replay the market for Apex's fluctuation engine on each read (slow, about a third of a full read). Default on. */
@@ -157,8 +190,9 @@ export const DEFAULT_READ_CONTRACTS: readonly Contract[] = [
 
 export type OverlordReader = {
     /**
-     * Reads the markets whose reading is oldest (at most `batch`). Markets in `priority` (the ones the picker is considering right
-     * now) go first, so the slow engines are spent where a trade could actually come from. Returns how many markets were read.
+     * Reads the markets whose reading is oldest first (never-read ones before any re-read), within the time budget. `priority` (the
+     * markets the picker is considering right now) only breaks ties between equally old readings: it must never starve the others, or
+     * their readings expire. Returns how many markets were read.
      */
     refresh: (now: number, priority?: readonly string[]) => number;
     /** The newest reading of one contract on one market, or null when there is none or it is too old. */
@@ -172,8 +206,10 @@ export type OverlordReader = {
 export function createOverlordReader(opts: OverlordReaderOptions): OverlordReader {
     const contracts = opts.contracts ?? DEFAULT_READ_CONTRACTS;
     const everyMs = opts.everyMs ?? 4_000;
-    const batch = Math.max(1, opts.batch ?? 1);
-    const maxAgeMs = opts.maxAgeMs ?? 30_000;
+    const batch = Math.max(1, opts.batch ?? 6);
+    const budgetMs = opts.budgetMs ?? 250;
+    const clock = opts.clock ?? (() => (typeof performance !== 'undefined' ? performance.now() : Date.now()));
+    const maxAgeMs = opts.maxAgeMs ?? 120_000;
     const assess = opts.assess ?? assessContract;
     const build: BuildFn = opts.build ?? buildApexMarket;
     const fluct: FluctFn = opts.fluct ?? ((p, d) => replayFluctuation(p as number[], d as number[]));
@@ -230,12 +266,17 @@ export function createOverlordReader(opts: OverlordReaderOptions): OverlordReade
                 })
                 .sort(
                     (a, b) =>
-                        Number(!priority.includes(a)) - Number(!priority.includes(b)) ||
-                        (readAt.get(a) ?? -Infinity) - (readAt.get(b) ?? -Infinity)
-                )
-                .slice(0, batch);
-            for (const s of due) readMarket(s, digitsBy[s], pricesBy[s], now);
-            return due.length;
+                        (readAt.get(a) ?? -Infinity) - (readAt.get(b) ?? -Infinity) ||
+                        Number(!priority.includes(a)) - Number(!priority.includes(b))
+                );
+            const started = clock();
+            let done = 0;
+            for (const s of due) {
+                if (done >= batch || (done > 0 && clock() - started >= budgetMs)) break;
+                readMarket(s, digitsBy[s], pricesBy[s], now);
+                done += 1;
+            }
+            return done;
         },
         get(market, contract, now) {
             const v = views.get(keyOf(market, contract));

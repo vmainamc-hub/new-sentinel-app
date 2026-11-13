@@ -18,7 +18,7 @@ import { freshVh, vhAfterReal, vhAfterVirtual, type VhConfig, type VhMode, type 
 import type { EntryDigit, EntryLabView } from './entry-digit';
 import type { AiMode, GuardRequest, GuardVerdict } from './guard';
 import { compileRule } from './rules';
-import { type Blocked, normalizeSelection, type OverlordView, type SelectionMode, selectByOverlord, summariseBlocked } from './overlord-select';
+import { type Blocked, LEAST_BAD_COUNT, normalizeSelection, type OverlordView, type SelectionMode, selectByOverlord, summariseBlocked } from './overlord-select';
 import { bestPerMarket, contractOf, type Pick, type PickDirection, type PickEntry, type PickOptions, recoveryContract, type RecoveryPick } from './picker';
 
 export type Direction = 'OVER_2' | 'UNDER_7';
@@ -239,7 +239,15 @@ export type ExecSnapshot = {
     /** DIGIT mode: the Entry Digit Lab for the market at the top of the board (all ten digits, re-weighed on every tick). Null in STANDARD mode. */
     entryLab: EntryLabView | null;
     /** Selection modes: what Overlord's reading did to the board (nothing in STANDARD). `rows` is the reading of each market shown. */
-    selection: { mode: SelectionMode; blocked: Blocked[]; rows: Record<string, SelectionRow> };
+    selection: {
+        mode: SelectionMode;
+        blocked: Blocked[];
+        rows: Record<string, SelectionRow>;
+        /** OVERLORD mode: no contract cleared every Overlord check, so the board shows its least-bad ones (labelled). */
+        leastBad: boolean;
+        /** What Overlord would have traded next: the first contract of the board it produced. */
+        suggestion: { market: string; label: string; tier: string; score: number; leastBad: boolean; note: string } | null;
+    };
     /** Why nothing is tradable right now, or null. */
     note: string | null;
     /** The AI guard this run: signals it blocked and the last reason given. */
@@ -365,7 +373,7 @@ export class AiIntelExecutor {
     private boardDigits: ExecSnapshot['entryDigits'] = {};
     private labView: EntryLabView | null = null;
     private boardAt = 0;
-    private boardSel: ExecSnapshot['selection'] = { mode: 'STANDARD', blocked: [], rows: {} };
+    private boardSel: ExecSnapshot['selection'] = { mode: 'STANDARD', blocked: [], rows: {}, leastBad: false, suggestion: null };
     private selLogAt = 0;
     private note: string | null = null;
     private aiBlocked = 0;
@@ -478,12 +486,12 @@ export class AiIntelExecutor {
     private applySelection(primary: Pick[], recovery: RecoveryPick[], now: number): { primary: Pick[]; recovery: RecoveryPick[] } {
         const mode = this.cfg.selection;
         if (mode === 'STANDARD') {
-            this.boardSel = { mode, blocked: [], rows: {} };
+            this.boardSel = { mode, blocked: [], rows: {}, leastBad: false, suggestion: null };
             return { primary, recovery };
         }
         const readView = this.io.overlordView;
         if (!readView) {
-            this.boardSel = { mode, blocked: [], rows: {} };
+            this.boardSel = { mode, blocked: [], rows: {}, leastBad: false, suggestion: null };
             return { primary: [], recovery: [] };
         }
         const recovering = this.cfg.recovery.enabled && this.losses > 0;
@@ -499,9 +507,14 @@ export class AiIntelExecutor {
                 return null;
             }
         };
-        const tag = <T extends { reason: string }>(item: T, v: OverlordView): T => ({ ...item, reason: `${item.reason} · Overlord ${v.read.tier} ${Math.round(v.read.score)}` });
-        const p = selectByOverlord(primary, { mode, contractOf: x => contractOf(x.direction), viewOf, hasEdge: x => x.score > 0, annotate: tag });
-        const r = selectByOverlord(recovery, { mode, contractOf: x => recoveryContract(x.direction), viewOf, hasEdge: x => x.score > 0, annotate: tag });
+        const tag = <T extends { reason: string }>(item: T, v: OverlordView, leastBad: boolean): T => ({
+            ...item,
+            reason: `${item.reason} · Overlord ${v.read.tier} ${Math.round(v.read.score)}${leastBad ? ' (least-bad)' : ''}`,
+        });
+        // OVERLORD always names a market: when nothing clears, its least-bad few, labelled. COMBINED stays strict (both engines must say yes).
+        const fallback = mode === 'OVERLORD' ? LEAST_BAD_COUNT : 0;
+        const p = selectByOverlord(primary, { mode, contractOf: x => contractOf(x.direction), viewOf, hasEdge: x => x.score > 0, annotate: tag, fallback });
+        const r = selectByOverlord(recovery, { mode, contractOf: x => recoveryContract(x.direction), viewOf, hasEdge: x => x.score > 0, annotate: tag, fallback });
         const shown = recovering ? r : p;
         const seen = new Set<string>();
         const blocked = shown.blocked.filter(b => (seen.has(b.key) ? false : (seen.add(b.key), true)));
@@ -512,10 +525,22 @@ export class AiIntelExecutor {
         };
         for (const x of bestPerMarket(p.items)) rowOf(x.market, contractOf(x.direction));
         if (recovering) for (const x of bestPerMarket(r.items)) rowOf(x.market, recoveryContract(x.direction));
-        this.boardSel = { mode, blocked, rows };
-        if (this.running && blocked.length && now - this.selLogAt >= 30_000) {
-            this.selLogAt = now;
-            this.addLog('info', `Overlord selection (${mode.toLowerCase()}): ${bestPerMarket(shown.items).length} market(s) clear, blocked: ${summariseBlocked(blocked)}.`);
+        const top = shown.items[0];
+        const topContract = top ? (recovering ? recoveryContract((top as RecoveryPick).direction) : contractOf((top as Pick).direction)) : null;
+        const topView = top && topContract ? viewOf(top.market, topContract) : null;
+        const suggestion =
+            top && topContract && topView
+                ? { market: top.market, label: labelOf(topContract), tier: topView.read.tier, score: Math.round(topView.read.score), leastBad: shown.leastBad, note: shown.caution[0]?.text ?? '' }
+                : null;
+        this.boardSel = { mode, blocked, rows, leastBad: shown.leastBad, suggestion };
+        if (this.running && now - this.selLogAt >= 30_000) {
+            if (shown.leastBad && suggestion) {
+                this.selLogAt = now;
+                this.addLog('warn', `Overlord: no market clears every check right now, so it suggests the least-bad: ${suggestion.market} ${suggestion.label} (${suggestion.tier} ${suggestion.score}). ${suggestion.note} The AI guard, edge gates and digit 1 / 8 rule still check the trade.`);
+            } else if (blocked.length) {
+                this.selLogAt = now;
+                this.addLog('info', `Overlord selection (${mode.toLowerCase()}): ${bestPerMarket(shown.items).length} market(s) clear, held back: ${summariseBlocked(blocked)}.`);
+            }
         }
         return { primary: p.items, recovery: r.items };
     }
@@ -615,7 +640,7 @@ export class AiIntelExecutor {
         this.board = { primary: [], recovery: [] };
         this.boardDigits = {};
         this.labView = null; // the lab itself keeps learning between runs: it is never reset by a run
-        this.boardSel = { mode: this.cfg.selection, blocked: [], rows: {} };
+        this.boardSel = { mode: this.cfg.selection, blocked: [], rows: {}, leastBad: false, suggestion: null };
         this.selLogAt = 0;
         try {
             this.io.overlordReset?.(); // Overlord watches every contract afresh in a new run

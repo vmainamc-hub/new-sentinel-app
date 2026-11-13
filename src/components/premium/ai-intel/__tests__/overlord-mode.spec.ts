@@ -128,7 +128,7 @@ describe('STANDARD selection is Apex Intel exactly as it was', () => {
         const snap = h.ex.getSnapshot();
         expect(snap.board.primary.map(p => p.market)).toEqual(['R_10', 'R_25']);
         expect(snap.board.primary[0]).toBe(book[0]); // the very same pick, not a copy
-        expect(snap.selection).toEqual({ mode: 'STANDARD', blocked: [], rows: {} });
+        expect(snap.selection).toEqual({ mode: 'STANDARD', blocked: [], rows: {}, leastBad: false, suggestion: null });
         expect(h.calls.refresh).toHaveLength(0);
         expect(h.calls.viewsAsked).toHaveLength(0);
         h.tick(1);
@@ -263,8 +263,8 @@ describe('OVERLORD selection', () => {
         expect(h.buys[1].parameters).toMatchObject({ contract_type: 'DIGITOVER', barrier: '3', amount: 2 });
     });
 
-    it('a vetoed recovery contract waits instead of being bought', async () => {
-        const h = harness({ selection: 'OVERLORD' });
+    it('COMBINED: a vetoed recovery contract waits instead of being bought', async () => {
+        const h = harness({ selection: 'COMBINED' });
         h.views['R_10:OVER:2'] = view();
         h.views['R_10:OVER:3'] = view('CAUTION');
         h.ex.start();
@@ -276,6 +276,82 @@ describe('OVERLORD selection', () => {
         h.tick(1);
         await flush();
         expect(h.buys).toHaveLength(1);
+    });
+
+    it('OVERLORD: a vetoed recovery contract is traded as the labelled least-bad, because OVERLORD always names a market', async () => {
+        const h = harness({ selection: 'OVERLORD' });
+        h.views['R_10:OVER:2'] = view();
+        h.views['R_10:OVER:3'] = view('CAUTION');
+        h.ex.start();
+        h.tick(1);
+        await flush();
+        h.settles[0]({ is_sold: 1, status: 'lost', profit: -1, exit_spot: '1' });
+        await flush();
+        h.advance(1000);
+        h.tick(1);
+        await flush();
+        expect(h.buys).toHaveLength(2);
+        expect(h.buys[1].parameters).toMatchObject({ barrier: '3', amount: 2 });
+    });
+});
+
+describe('OVERLORD always suggests a market (least-bad fallback)', () => {
+    it('with every contract vetoed it still names one, labelled, and says so on the page and in the log', () => {
+        const h = harness({ selection: 'OVERLORD' }, {}, [pick('R_10', 'OVER_2'), pick('R_25', 'UNDER_7'), pick('R_50', 'OVER_2')]);
+        h.views['R_10:OVER:2'] = view('CAUTION', 30);
+        h.views['R_25:UNDER:7'] = view('CAUTION', 62);
+        h.views['R_50:OVER:2'] = view('CAUTION', 45);
+        h.ex.start();
+        const snap = h.ex.getSnapshot();
+        expect(snap.selection.leastBad).toBe(true);
+        expect(snap.selection.suggestion).toMatchObject({ market: 'R_25', label: 'Under 7', tier: 'CAUTION', score: 62, leastBad: true });
+        expect(snap.board.primary.map(p => p.market)).toEqual(['R_25', 'R_50', 'R_10']);
+        expect(snap.board.primary[0].reason).toContain('(least-bad)');
+        expect(snap.log.map(l => l.text).join('\n')).toContain('suggests the least-bad: R_25 Under 7');
+        expect(snap.note).toBeNull(); // not "nothing clear yet": it has a market
+    });
+
+    it('trades the least-bad market when its entry fires, with the unchanged contract parameters', async () => {
+        const h = harness({ selection: 'OVERLORD' }, {}, [pick('R_25', 'UNDER_7')]);
+        h.views['R_25:UNDER:7'] = view('CAUTION', 62);
+        h.ex.start();
+        h.tick(8, 'R_25'); // Under 7 loses on 8 / 9: SETUP entry
+        await flush();
+        expect(h.buys).toHaveLength(1);
+        expect(h.buys[0].parameters).toMatchObject({ symbol: 'R_25', contract_type: 'DIGITUNDER', barrier: '7', amount: 1 });
+    });
+
+    it('the AI guard, the digit 1 / 8 rule and the edge gates still stop a least-bad suggestion', async () => {
+        for (const over of [{ review: () => ({ allow: false, reason: 'no' }) }, { special: () => ({ allow: false, reason: 'no' }) }]) {
+            const h = harness({ selection: 'OVERLORD' }, over as Partial<ExecIO>, [pick('R_25', 'UNDER_7')]);
+            h.views['R_25:UNDER:7'] = view('CAUTION', 62);
+            h.ex.start();
+            h.tick(8, 'R_25');
+            await flush();
+            expect(h.buys).toHaveLength(0);
+        }
+    });
+
+    it('a contract that clears is chosen over the least-bad, and the board then holds only clear ones', () => {
+        const h = harness({ selection: 'OVERLORD' }, {}, [pick('R_10', 'OVER_2'), pick('R_25', 'OVER_2')]);
+        h.views['R_10:OVER:2'] = view('CAUTION', 99);
+        h.views['R_25:OVER:2'] = view('BEST', 30);
+        h.ex.start();
+        const snap = h.ex.getSnapshot();
+        expect(snap.selection.leastBad).toBe(false);
+        expect(snap.board.primary.map(p => p.market)).toEqual(['R_25']);
+    });
+
+    it('never nominates a market it has no reading of; COMBINED never falls back', () => {
+        const none = harness({ selection: 'OVERLORD' });
+        none.ex.start();
+        expect(none.ex.getSnapshot().board.primary).toEqual([]);
+        expect(none.ex.getSnapshot().selection.suggestion).toBeNull();
+        const strict = harness({ selection: 'COMBINED' }, {}, [pick('R_10', 'OVER_2', 0.05)]);
+        strict.views['R_10:OVER:2'] = view('CAUTION', 80);
+        strict.ex.start();
+        expect(strict.ex.getSnapshot().board.primary).toEqual([]);
+        expect(strict.ex.getSnapshot().selection.leastBad).toBe(false);
     });
 });
 

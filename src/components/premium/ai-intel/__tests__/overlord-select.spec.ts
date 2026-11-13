@@ -140,6 +140,83 @@ describe('selectByOverlord', () => {
     });
 });
 
+describe('selectByOverlord with the least-bad fallback (OVERLORD always names a market)', () => {
+    const fb = (items: Cand[], views: Record<string, OverlordView | null>, mode: SelectionMode, fallback = 3) =>
+        selectByOverlord(items, {
+            mode,
+            contractOf: c => c.contract,
+            viewOf: (m, c) => views[`${m}:${c.side}:${c.param}`] ?? null,
+            hasEdge: c => c.score > 0,
+            fallback,
+            annotate: (c, _v, leastBad) => (leastBad ? { ...c, label: `${c.label} (least-bad)` } : c),
+        });
+
+    it('when nothing clears, returns the least-bad few by tier then score, labelled, with why each did not clear', () => {
+        const items = [cand('A', OVER_2), cand('B', OVER_2), cand('C', OVER_2), cand('D', OVER_2), cand('N', OVER_2)];
+        const out = fb(
+            items,
+            {
+                'A:OVER:2': view({ read: { tier: 'CAUTION', vetoed: true, score: 30, vetoReason: 'a' } }),
+                'B:OVER:2': view({ read: { tier: 'CAUTION', vetoed: true, score: 55, vetoReason: 'b' } }),
+                'C:OVER:2': view({ read: { tier: 'BEST', score: 40 }, rounds: 1 }), // still watching: not CAUTION, outranks it
+                'D:OVER:2': view({ read: { tier: 'CAUTION', vetoed: true, score: 10, vetoReason: 'd' } }),
+            },
+            'OVERLORD'
+        );
+        expect(out.leastBad).toBe(true);
+        expect(out.items.map(i => i.market)).toEqual(['C', 'B', 'A']);
+        expect(out.items.every(i => i.label.endsWith('(least-bad)'))).toBe(true);
+        expect(out.caution.map(c => c.reason)).toEqual(['watching', 'veto', 'veto']);
+        expect(out.blocked.map(b => b.market).sort()).toEqual(['D', 'N']); // the rest, and the one with no reading at all
+    });
+
+    it('a contract with no reading is never nominated, even as a last resort', () => {
+        const out = fb([cand('N', OVER_2)], {}, 'OVERLORD');
+        expect(out.items).toEqual([]);
+        expect(out.leastBad).toBe(false);
+        expect(out.blocked[0].reason).toBe('no-read');
+    });
+
+    it('a contract that clears always beats a least-bad one, and the least-bad ones are then left out', () => {
+        const items = [cand('A', OVER_2), cand('B', OVER_2)];
+        const out = fb(items, { 'A:OVER:2': view({ read: { tier: 'CAUTION', vetoed: true, score: 99 } }), 'B:OVER:2': view({ read: { tier: 'BEST', score: 20 } }) }, 'OVERLORD');
+        expect(out.leastBad).toBe(false);
+        expect(out.items.map(i => i.market)).toEqual(['B']);
+        expect(out.blocked.map(b => b.market)).toEqual(['A']);
+    });
+
+    it('COMBINED has no fallback: nothing clears, nothing is returned', () => {
+        const items = [cand('A', OVER_2)];
+        const out = fb(items, { 'A:OVER:2': view({ read: { tier: 'CAUTION', vetoed: true } }) }, 'COMBINED', 0);
+        expect(out.items).toEqual([]);
+        expect(out.leastBad).toBe(false);
+    });
+
+    it('NO DILUTION (property): the fallback only ever returns what the picker offered, at most `fallback` of them', () => {
+        let seed = 3;
+        const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff), seed / 0x7fffffff);
+        const tiers: OverlordTier[] = ['STRONG', 'BEST', 'CAUTION', 'LEGACY'];
+        for (let trial = 0; trial < 200; trial += 1) {
+            const items: Cand[] = [];
+            const views: Record<string, OverlordView | null> = {};
+            for (let m = 0; m < 6; m += 1)
+                for (const c of [OVER_2, UNDER_7]) {
+                    if (rnd() < 0.8) items.push(cand(`M${m}`, c, rnd() - 0.4));
+                    const tier = tiers[Math.floor(rnd() * 4)];
+                    views[`M${m}:${c.side}:${c.param}`] = rnd() < 0.15 ? null : view({ read: { tier, vetoed: tier === 'CAUTION', thin: tier === 'LEGACY', score: Math.round(rnd() * 100) }, rounds: Math.floor(rnd() * 7), clearShare: rnd() });
+                }
+            const out = fb(items, views, 'OVERLORD');
+            expect(out.items.length).toBeLessThanOrEqual(Math.max(3, items.length));
+            if (out.leastBad) expect(out.items.length).toBeLessThanOrEqual(3);
+            for (const i of out.items) expect(items.some(o => o.market === i.market && o.contract === i.contract)).toBe(true);
+            expect(out.items.length + out.blocked.length).toBe(items.length); // kept or accounted for
+            // OVERLORD with no readings at all stays empty; with any reading it names something.
+            const anyRead = items.some(i => views[`${i.market}:${i.contract.side}:${i.contract.param}`]);
+            expect(out.items.length > 0).toBe(anyRead);
+        }
+    });
+});
+
 describe('normalizeSelection', () => {
     it('keeps a config saved before this existed on STANDARD', () => {
         expect(normalizeSelection(undefined)).toBe('STANDARD');
@@ -185,15 +262,48 @@ describe('createOverlordReader', () => {
         expect(DEFAULT_READ_CONTRACTS.map(c => `${c.side}${c.param}`)).toEqual(['OVER2', 'UNDER7', 'OVER3', 'UNDER6']);
     });
 
-    it('reads the markets the picker is considering first', () => {
+    it('priority only breaks ties: never-read markets come before any re-read, so no market is starved', () => {
         const series = { A: long(), B: long(), C: long() };
         const prices = { A: quotes(), B: quotes(), C: quotes() };
         const r = createOverlordReader({ series: () => series, prices: () => prices, assess: fakeAssess(), build: () => null, batch: 1, everyMs: 1 });
-        r.refresh(0, ['C']);
+        r.refresh(0, ['C']); // all three never read: the priority one goes first
         expect(r.get('C', OVER_2, 0)).not.toBeNull();
         expect(r.get('A', OVER_2, 0)).toBeNull();
-        r.refresh(5, ['C']); // C was read just now but is still due after everyMs; priority wins over "oldest"
-        expect(r.get('C', OVER_2, 5)?.rounds).toBe(2);
+        r.refresh(5, ['C']); // C is now the newest reading: A and B (never read) go before C is read again
+        expect(r.get('C', OVER_2, 5)?.rounds).toBe(1);
+        expect(r.get('A', OVER_2, 5)).not.toBeNull();
+        r.refresh(10, ['C']);
+        expect(r.get('B', OVER_2, 10)).not.toBeNull();
+    });
+
+    it('REGRESSION: with many busy markets and one read per call, every market still gets a fresh reading before any expires', () => {
+        // 15 markets, 8 of them "in play" the whole time, one read per call every 2 s, readings valid for the default max age.
+        const names = Array.from({ length: 15 }, (_, i) => `M${i}`);
+        const series = Object.fromEntries(names.map(n => [n, long()]));
+        const prices = Object.fromEntries(names.map(n => [n, quotes()]));
+        const r = createOverlordReader({ series: () => series, prices: () => prices, assess: fakeAssess(), build: () => null, batch: 1, everyMs: 4000 });
+        const busy = names.slice(0, 8);
+        let t = 0;
+        for (let i = 0; i < 60; i += 1) {
+            r.refresh(t, busy);
+            t += 2000;
+        }
+        for (const n of names) expect(r.get(n, OVER_2, t)).not.toBeNull(); // 2 minutes in: nothing is missing
+        expect(r.status(t).markets).toBe(15);
+    });
+
+    it('spends a time budget per call (at least one market) so a slow engine cannot stall the page', () => {
+        let clock = 0;
+        const series = { A: long(), B: long(), C: long(), D: long() };
+        const prices = { A: quotes(), B: quotes(), C: quotes(), D: quotes() };
+        const slow = ((symbol: string, _s: unknown, side: string, barrier: number) => {
+            clock += 120; // each contract read costs 120 ms: 4 contracts per market = 480 ms
+            return read({ symbol, side, barrier, tier: 'STRONG', score: 50 } as Partial<OverlordRead>);
+        }) as never;
+        const r = createOverlordReader({ series: () => series, prices: () => prices, assess: slow, build: () => null, clock: () => clock, budgetMs: 250, everyMs: 1 });
+        expect(r.refresh(0)).toBe(1); // one market already costs more than the budget
+        const fast = createOverlordReader({ series: () => series, prices: () => prices, assess: fakeAssess(), build: () => null, clock: () => 0, budgetMs: 250, everyMs: 1 });
+        expect(fast.refresh(0)).toBe(4); // free reads: everything fits, capped by batch (6)
     });
 
     it('keeps only the latest rounds and measures how often the contract was clear', () => {

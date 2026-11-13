@@ -172,7 +172,7 @@ export function TradePanel() {
                     />
                     <div className='sn-reason'>
                         {c.selection === 'OVERLORD'
-                            ? "Overlord's engines (its own condition, Oracle's layers and the Apex Sentinel engines) rank the markets and contracts Apex Intel found, and veto any they flag. A market is read for a few rounds before it can be chosen. The AI guard, the edge gates, the digit 1 / 8 rule and every limit still check the trade."
+                            ? "Overlord's engines (its own condition, Oracle's layers and the Apex Sentinel engines) rank the markets and contracts Apex Intel found and always suggest one. A contract that clears every check comes first; when none does, it names the least-bad ones, labelled, instead of sitting idle. The AI guard, the edge gates, the digit 1 / 8 rule and every limit still check the trade."
                             : c.selection === 'COMBINED'
                               ? "Both engines must say yes: Overlord's reading (no veto, steady over several rounds) and Apex Intel's own win-rate lower bound beating chance. Fewer trades than either alone. Every later check still applies."
                               : "Apex Intel's own picker chooses the market and contract, as it always did."}
@@ -268,6 +268,14 @@ export function TradePanel() {
                                 );
                             })}
                         </ul>
+                    )}
+                    {byOverlord && s.selection.suggestion && (
+                        <div className='sn-reason'>
+                            <b>Overlord suggests:</b> {shortName(s.selection.suggestion.market)} · {s.selection.suggestion.label} · {s.selection.suggestion.tier.toLowerCase()} {s.selection.suggestion.score}
+                            {s.selection.suggestion.leastBad
+                                ? ` (the least-bad: no market clears every Overlord check right now${s.selection.suggestion.note ? `. ${s.selection.suggestion.note}` : ''}). The AI guard, edge gates and digit 1 / 8 rule still check the trade.`
+                                : ' (clear of every Overlord check)'}
+                        </div>
                     )}
                     {byOverlord && s.selection.blocked.length > 0 && (
                         <details className='sn-reason'>
