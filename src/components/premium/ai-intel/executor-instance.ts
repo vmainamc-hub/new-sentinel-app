@@ -36,8 +36,10 @@ const write = (key: string, value: unknown) => {
 // The edge gates (Kalman health, cross-market danger + frequency, arbiter) added on top of the AI guard below. Console: `apexIntelEdge`.
 const apexGates = createApexGates({ series: () => apexFeed.getLiveSeries() });
 
-// The "Entry digit" mode: Sentinel AI's entry digit (the Bulk Trader's replay of the market's own history), read from the live ticks.
+// The "Entry digit" mode: the Entry Digit Lab. It takes every live tick of every market (below), re-scores all ten digits on each one
+// and weighs the newest data most; the executor reads it on the tick it trades on. Console: `apexEntryLab.view('R_10', {side:'OVER',param:2}, 1)`.
 const entryDigits = createEntryDigitSource({ series: symbol => apexFeed.getLiveSeries()[symbol] });
+if (typeof window !== 'undefined') (window as unknown as Record<string, unknown>).apexEntryLab = entryDigits;
 
 export const aiIntelExecutor = new AiIntelExecutor({
     buy: ({ parameters, price }) => buyContractForUi({ parameters, price, source: 'Apex Intel' }),
@@ -67,8 +69,9 @@ export const aiIntelExecutor = new AiIntelExecutor({
         const read = readSpecialDigits(apexFeed.getLiveSeries()[req.market], req.contract.side);
         return { allow: read.ok, reason: read.note };
     },
-    entryDigit: (market, contract, duration, now) => entryDigits.get(market, contract, duration, now),
-    resetEntryDigits: () => entryDigits.reset(),
+    entryDigit: (market, contract, duration) => entryDigits.get(market, contract, duration),
+    entryResult: r => entryDigits.record(r.market, r.contract, r.duration, r.digit, r.won),
+    entryView: (market, contract, duration) => entryDigits.view(market, contract, duration),
     onBoard: (ranked, recovery, now) => apexGates.onBoard(ranked, recovery, now),
     onBought: n => apexGates.onBought(n),
     onSettled: n => apexGates.onSettled(n),
@@ -87,6 +90,7 @@ export const aiIntelExecutor = new AiIntelExecutor({
 });
 
 apexFeed.onTick((symbol, digit) => {
+    entryDigits.observe(symbol, digit); // first, so the trade below is decided on the newest tick
     apexGates.onTick(symbol, digit);
     aiIntelExecutor.handleTick(symbol, digit);
 });

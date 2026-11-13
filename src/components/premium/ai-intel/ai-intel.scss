@@ -739,4 +739,18 @@
     .ai-trade .ai-best li {
         grid-template-columns: 70px 1fr auto auto;
     }
+    // Entry digit lab: ten digits, the one in use highlighted, cold or benched ones dimmed.
+    .ai-trade .ai-lab li {
+        grid-template-columns: 28px 1fr auto auto;
+        &.is-current {
+            outline: 1px solid var(--accent, #3ddc97);
+            border-radius: 8px;
+        }
+        &.st-thin,
+        &.st-weak,
+        &.st-cooling,
+        &.st-benched {
+            opacity: 0.6;
+        }
+    }
 }

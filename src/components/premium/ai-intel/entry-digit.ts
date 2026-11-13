@@ -1,57 +1,90 @@
-// APEX INTEL: the entry digit, for its second mode ("Entry digit"). It is the SAME formula Sentinel AI and the Bulk Trader use:
-// `discoverEntry` (bulk-scan.ts) replays the market's own history and finds the digit after which the contract kept winning, chosen
-// on the older two thirds and checked on the newest third. Sentinel's `entryTriggerOf` wraps it per contract; this file only adds
-// the same one-minute memory Sentinel's overlay keeps, so the digit being waited for does not change on every tick.
+// APEX INTEL: the entry digit for its second mode ("Entry digit"), now read from the Entry Digit Lab (entry-lab.ts).
 //
-// Pure apart from the injected `series` and `now`. The executor (executor.ts) asks it for a digit per market and contract.
+// The first version worked a digit out from a one-off replay of a market's history and kept it for a minute. A 1-tick contract
+// can trade dozens of times in a minute, so one digit served all of them while the market kept moving. That memory is gone: the
+// lab takes every tick of every market, re-scores all ten candidate digits on each one and weighs the newest data most. `get`
+// always answers from the newest tick, and a digit that is not holding up gets no trade at all (`tradable: false`).
+//
+// Sentinel AI's own entry digit (sentinel/overlay.ts, the Bulk Trader's `discoverEntry`) is untouched.
 import type { Contract } from '@/components/premium/sixfold/bot';
-import { ENTRY_DIGIT_TTL_MS, entryTriggerOf } from '@/components/premium/sentinel/overlay';
+import { EntryDigitLab, type LabParams, type LabView } from './entry-lab';
+
+export type { DigitRead, DigitState, LabView as EntryLabView } from './entry-lab';
 
 export type EntryDigit = {
     digit: number;
-    /** 'confirmed': the digit also held on the newest part of the history. 'weak': the best digit found, but none stands out (a timing choice, not an edge). */
-    strength: 'confirmed' | 'weak';
-    /** Plain words for the log and the page: how the contract did when it was entered right after this digit. */
+    /** confirmed: beats luck even for the best of ten digits. leading: ahead of fair on recent entries and the newest ones agree. weak: neither, so not traded. */
+    strength: 'confirmed' | 'leading' | 'weak';
+    /** Only a digit that holds up right now is traded. */
+    tradable: boolean;
+    /** Plain words for the log and the page: how the contract did when it was entered right after this digit, on the newest data. */
     note: string;
 };
 
-/** A missing digit (history too short) is looked for again after this long, not kept for the full minute. Same as Sentinel's overlay. */
-export const ENTRY_DIGIT_RETRY_MS = 5_000;
-
 export type EntryDigitSource = {
-    /** The entry digit for this contract on this market, or null when the history is too short or the contract is not one of the six. */
-    get: (market: string, contract: Contract, duration: number, now: number) => EntryDigit | null;
-    /** A new session works every digit out afresh from the newest ticks. */
+    /** The entry digit for this contract on this market on the newest tick, or null when the history is too short or the contract is not one of the six. */
+    get: (market: string, contract: Contract, duration: number) => EntryDigit | null;
+    /** Every live tick of a market, whether or not a run is on: the lab never stops. */
+    observe: (market: string, digit: number) => void;
+    /** A trade entered on `digit` settled. Returns a log line when the digit was benched for losing. */
+    record: (market: string, contract: Contract, duration: number, digit: number, won: boolean) => string | null;
+    /** All ten digits of a contract on a market (for the page). */
+    view: (market: string, contract: Contract, duration: number) => LabView | null;
     reset: () => void;
 };
 
 export const createEntryDigitSource = (opts: {
     /** The live digits of a market (current tick included). */
     series: (market: string) => readonly number[] | undefined;
-    /** Test hook: the discovery itself. Default: Sentinel's `entryTriggerOf` (the Bulk Trader's replay). */
-    discover?: typeof entryTriggerOf;
+    /** Test hook: the lab's settings. */
+    params?: Partial<LabParams>;
 }): EntryDigitSource => {
-    const discover = opts.discover ?? entryTriggerOf;
-    // Each market's digit per contract and length, kept for ENTRY_DIGIT_TTL_MS.
-    const cache = new Map<string, { at: number; value: EntryDigit | null }>();
+    const lab = new EntryDigitLab(opts.params);
+    // Keep the lab's copy of a market the same as the feed's: first sight, or after a reconnect that replaced the history.
+    const sync = (market: string): boolean => {
+        const series = opts.series(market);
+        if (!series || series.length < lab.params.minTicks) return false;
+        if (!lab.matches(market, series)) lab.load(market, series);
+        return true;
+    };
     return {
-        get: (market, contract, duration, now) => {
-            const key = `${market}|${contract.side}:${contract.param}|${duration}`;
-            const hit = cache.get(key);
-            if (hit && now - hit.at < ENTRY_DIGIT_TTL_MS && (hit.value || now - hit.at < ENTRY_DIGIT_RETRY_MS))
-                return hit.value;
-            let value: EntryDigit | null = null;
+        get: (market, contract, duration) => {
             try {
-                const found = discover(opts.series(market) ?? [], contract.side, contract.param, duration);
-                value = found
-                    ? { digit: found.trigger.digit, strength: found.trigger.strength, note: found.trigger.note }
-                    : null;
+                if (!sync(market)) return null;
+                const c = lab.choose(market, contract, duration);
+                if (!c) return null;
+                return {
+                    digit: c.digit,
+                    strength: c.state === 'confirmed' ? 'confirmed' : c.state === 'leading' ? 'leading' : 'weak',
+                    tradable: c.tradable,
+                    note: c.note,
+                };
             } catch {
-                value = null; // a digit that cannot be worked out means no trade on that market, never a guess
+                return null; // a digit that cannot be worked out means no trade on that market, never a guess
             }
-            cache.set(key, { at: now, value });
-            return value;
         },
-        reset: () => cache.clear(),
+        observe: (market, digit) => {
+            try {
+                if (lab.has(market)) lab.observe(market, digit);
+                else sync(market);
+            } catch {
+                /* the lab is an extra look: it never disturbs the feed */
+            }
+        },
+        record: (market, contract, duration, digit, won) => {
+            try {
+                return lab.record(market, contract, duration, digit, won);
+            } catch {
+                return null;
+            }
+        },
+        view: (market, contract, duration) => {
+            try {
+                return sync(market) ? lab.view(market, contract, duration) : null;
+            } catch {
+                return null;
+            }
+        },
+        reset: () => lab.reset(),
     };
 };

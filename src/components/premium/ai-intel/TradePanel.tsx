@@ -69,7 +69,7 @@ export function TradePanel() {
     const topDigit = top ? s.entryDigits[top.market] : null;
     const reason =
         s.running && !s.proposal
-            ? (s.note ?? (top ? `Best now: ${shortName(top.market)} · ${top.label}${byDigit && topDigit ? ` · waiting for digit ${topDigit.digit}` : ''}` : null))
+            ? (s.note ?? (top ? `Best now: ${shortName(top.market)} · ${top.label}${byDigit ? (topDigit?.tradable ? ` · waiting for digit ${topDigit.digit}` : ' · no digit holds up, standing aside') : ''}` : null))
             : null;
     const feedTone = feed.status === 'live' ? 'ok' : 'warn';
 
@@ -153,7 +153,7 @@ export function TradePanel() {
                     />
                     <div className='sn-reason'>
                         {byDigit
-                            ? "Each market gets an entry digit worked out from its own recent history (the same formula as Sentinel AI and the Bulk Trader). The trade goes out on the first tick that shows it. The market choice, AI guard, digit 1 / 8 rule and recovery are the same."
+                            ? "The Entry Digit Lab tests every digit on every market on each tick and weighs the newest data most. A trade goes out on the first tick that shows the digit holding up right now; a digit that goes cold is dropped, and when none holds up Apex Intel stands aside. The market choice, AI guard, digit 1 / 8 rule and recovery are the same."
                             : 'Apex Intel as it always was: the entry type in More settings decides when to buy.'}
                     </div>
 
@@ -235,7 +235,7 @@ export function TradePanel() {
                                         <b>{shortName(p.market)}</b>
                                         <span>
                                             {p.label}
-                                            {byDigit && (d ? ` · on ${d.digit}${d.strength === 'weak' ? ' (weak)' : ''}` : ' · digit pending')}
+                                            {byDigit && (d ? (d.tradable ? ` · on ${d.digit} (${d.strength})` : ' · no digit holds up') : ' · digit pending')}
                                         </span>
                                         <span>{p.regime.toLowerCase().replace('_', ' ')}</span>
                                         <em>
@@ -247,6 +247,37 @@ export function TradePanel() {
                         </ul>
                     )}
                 </section>
+
+                {byDigit && (
+                    <section className='sn-card'>
+                        <div className='sn-label'>Entry digit lab</div>
+                        {!s.entryLab ? (
+                            <p className='sn-empty'>{s.running ? 'The lab is reading the top market…' : 'Press Run: the lab shows every digit of the top market here, re-weighed on each tick.'}</p>
+                        ) : (
+                            <>
+                                <div className='sn-reason'>
+                                    {shortName(s.entryLab.market)} · {s.entryLab.label} · {s.entryLab.ticks} ticks read ·{' '}
+                                    {s.entryLab.current === null ? 'no digit holds up, standing aside' : `digit ${s.entryLab.current} in use for ${s.entryLab.heldTicks} ticks`} · changed {s.entryLab.switches}×
+                                </div>
+                                <ul className='sf-trades ai-lab'>
+                                    {s.entryLab.rows.map(r => (
+                                        <li key={r.digit} className={`${r.current ? 'is-current' : ''} st-${r.state}`}>
+                                            <b>{r.digit}</b>
+                                            <span>{r.state}</span>
+                                            <span>
+                                                {r.n === 0 ? '—' : `${Math.round(r.rate * 100)}% of ${r.n}`}
+                                            </span>
+                                            <em>z {r.z >= 0 ? '+' : ''}{r.z.toFixed(1)}</em>
+                                        </li>
+                                    ))}
+                                </ul>
+                                <div className='sn-reason'>
+                                    Fair rate {Math.round(s.entryLab.fair * 100)}%. Newest entries weigh most; a digit that just lost 3 entries in a row is cooling, and 2 lost trades in a row on it bench it.
+                                </div>
+                            </>
+                        )}
+                    </section>
+                )}
 
                 <section className='sn-card'>
                     <div className='sn-label'>Latest trades</div>

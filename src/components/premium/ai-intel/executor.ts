@@ -15,7 +15,7 @@
 import { type Contract, losingDigits, winningDigits, winProbability } from '@/components/premium/sixfold/bot';
 import { profitMultiple } from '@/components/premium/sixfold/stats';
 import { freshVh, vhAfterReal, vhAfterVirtual, type VhConfig, type VhMode, type VhState } from '@/components/premium/sixfold/virtual-hook';
-import type { EntryDigit } from './entry-digit';
+import type { EntryDigit, EntryLabView } from './entry-digit';
 import type { AiMode, GuardRequest, GuardVerdict } from './guard';
 import { compileRule } from './rules';
 import { bestPerMarket, contractOf, type Pick, type PickDirection, type PickEntry, type PickOptions, recoveryContract, type RecoveryPick } from './picker';
@@ -198,7 +198,7 @@ export type Proposal = {
 };
 
 /** What the page shows next to a market on the board in DIGIT mode. */
-export type BoardDigit = { digit: number; strength: EntryDigit['strength'] };
+export type BoardDigit = { digit: number; strength: EntryDigit['strength']; tradable: boolean };
 
 export type VhStatus = { on: boolean; virtual: boolean; opening: boolean; open: boolean; realLosses: number; virtualWins: number; virtualDone: number };
 
@@ -222,6 +222,8 @@ export type ExecSnapshot = {
     board: { primary: Pick[]; recovery: RecoveryPick[] };
     /** DIGIT mode: the entry digit being waited for on each market of the board (null: not worked out yet). Empty in STANDARD mode. */
     entryDigits: Record<string, BoardDigit | null>;
+    /** DIGIT mode: the Entry Digit Lab for the market at the top of the board (all ten digits, re-weighed on every tick). Null in STANDARD mode. */
+    entryLab: EntryLabView | null;
     /** Why nothing is tradable right now, or null. */
     note: string | null;
     /** The AI guard this run: signals it blocked and the last reason given. */
@@ -276,12 +278,14 @@ export type ExecIO = {
      */
     special?: (req: { market: string; contract: Contract; recovery: boolean }) => GuardVerdict;
     /**
-     * DIGIT mode: the entry digit of one contract on one market (Sentinel AI's formula, see entry-digit.ts), or null when the history
-     * is too short. Absent: DIGIT mode cannot start.
+     * DIGIT mode: the entry digit of one contract on one market from the Entry Digit Lab (entry-digit.ts), weighed against the newest
+     * tick on every call. Null when the history is too short. Absent: DIGIT mode cannot start.
      */
-    entryDigit?: (market: string, contract: Contract, duration: number, now: number) => EntryDigit | null;
-    /** A new run: forget the digits worked out earlier, so each market's digit is found afresh from its newest ticks. */
-    resetEntryDigits?: () => void;
+    entryDigit?: (market: string, contract: Contract, duration: number) => EntryDigit | null;
+    /** DIGIT mode: a trade entered on `digit` settled. The lab counts it against the digit; a line comes back when it benched one. */
+    entryResult?: (r: { market: string; contract: Contract; duration: number; digit: number; won: boolean }) => string | null;
+    /** DIGIT mode: all ten digits of a contract on a market, for the page. */
+    entryView?: (market: string, contract: Contract, duration: number) => EntryLabView | null;
     /** Every board refresh: the full ranked lists (before one-per-market), for extra checks that read the whole book. */
     onBoard?: (ranked: readonly Pick[], recovery: readonly RecoveryPick[], now: number) => void;
     /** A real contract was bought / settled (profit null: result not confirmed). */
@@ -305,7 +309,7 @@ const lastDigitOf = (v: unknown): number | null => {
     return m ? Number(m[1]) : null;
 };
 
-type VirtualOpen = { id: number; market: string; contract: Contract; stake: number; remaining: number; at: number };
+type VirtualOpen = { id: number; market: string; contract: Contract; stake: number; remaining: number; at: number; entryDigit?: number };
 
 type Plan = Proposal;
 
@@ -337,6 +341,7 @@ export class AiIntelExecutor {
     private seq = 0;
     private board: ExecSnapshot['board'] = { primary: [], recovery: [] };
     private boardDigits: ExecSnapshot['entryDigits'] = {};
+    private labView: EntryLabView | null = null;
     private boardAt = 0;
     private note: string | null = null;
     private aiBlocked = 0;
@@ -344,7 +349,7 @@ export class AiIntelExecutor {
     private aiNote: string | null = null;
     private aiLogAt = new Map<string, number>();
     /** Real contracts awaiting their result: what was bought, for the settle notice. */
-    private bought = new Map<string, { market: string; contract: Contract; recovery: boolean }>();
+    private bought = new Map<string, { market: string; contract: Contract; recovery: boolean; entryDigit?: number }>();
     private reconciling = false;
     private disposeWatch: (() => void) | null = null;
     private watch: ((on: (runPanelRunning: boolean, active: string | null) => void) => () => void) | null = null;
@@ -404,15 +409,23 @@ export class AiIntelExecutor {
         this.board = { primary, recovery };
         const recovering = this.cfg.recovery.enabled && this.losses > 0;
         const active = recovering ? recovery : primary;
-        // DIGIT mode: the digit being waited for on each market shown. It comes from the same one-minute memory the trade itself reads.
+        // DIGIT mode: the digit being waited for on each market shown, read from the Entry Digit Lab (the same read the trade itself uses).
         this.boardDigits = {};
+        this.labView = null;
         if (this.cfg.entryMode === 'DIGIT') {
             const shown: Array<{ market: string; contract: Contract }> = recovering
                 ? recovery.map(r => ({ market: r.market, contract: recoveryContract(r.direction) }))
                 : primary.map(p => ({ market: p.market, contract: contractOf(p.direction) }));
             for (const row of shown) {
-                const found = this.entryDigitOf(row.market, row.contract, now);
-                this.boardDigits[row.market] = found ? { digit: found.digit, strength: found.strength } : null;
+                const found = this.entryDigitOf(row.market, row.contract);
+                this.boardDigits[row.market] = found ? { digit: found.digit, strength: found.strength, tradable: found.tradable } : null;
+            }
+            if (shown[0]) {
+                try {
+                    this.labView = this.io.entryView?.(shown[0].market, shown[0].contract, this.cfg.duration) ?? null;
+                } catch {
+                    this.labView = null;
+                }
             }
         }
         this.note = active.length
@@ -460,6 +473,7 @@ export class AiIntelExecutor {
             next: { label: recovering ? 'Over 3 / Under 6' : dirs, stake: n.stake, recovery: n.recovery, paper: this.paperNow() },
             board: this.board,
             entryDigits: this.boardDigits,
+            entryLab: this.labView,
             note: this.note,
             aiGuard: { mode: this.cfg.ai, blocked: this.aiBlocked, allowed: this.aiAllowed, note: this.aiNote },
         };
@@ -517,11 +531,7 @@ export class AiIntelExecutor {
         this.runToken += 1;
         this.board = { primary: [], recovery: [] };
         this.boardDigits = {};
-        try {
-            this.io.resetEntryDigits?.(); // a new run works every market's digit out afresh from its newest ticks
-        } catch {
-            /* a stale digit is dropped after a minute anyway */
-        }
+        this.labView = null; // the lab itself keeps learning between runs: it is never reset by a run
         this.boardAt = 0;
         this.note = null;
         this.aiBlocked = 0;
@@ -553,7 +563,7 @@ export class AiIntelExecutor {
         }
         this.addLog(
             'info',
-            `Started: scanning all markets for the best entry (${this.cfg.directions === 'BOTH' ? 'Over 2 and Under 7' : this.cfg.directions === 'OVER_2' ? 'Over 2' : 'Under 7'}${this.cfg.recovery.enabled ? ', recovery with Over 3 or Under 6' : ''}), stake ${this.cfg.stake.toFixed(2)}, ${this.cfg.mode === 'AUTO' ? 'automatic' : 'you confirm each trade'}.${this.opening ? ' Opening on paper until the first paper win.' : ''}${this.cfg.entryMode === 'DIGIT' ? ' Entry digit mode: each market\'s digit is worked out from its own history and the trade goes out when it prints.' : ''}`
+            `Started: scanning all markets for the best entry (${this.cfg.directions === 'BOTH' ? 'Over 2 and Under 7' : this.cfg.directions === 'OVER_2' ? 'Over 2' : 'Under 7'}${this.cfg.recovery.enabled ? ', recovery with Over 3 or Under 6' : ''}), stake ${this.cfg.stake.toFixed(2)}, ${this.cfg.mode === 'AUTO' ? 'automatic' : 'you confirm each trade'}.${this.opening ? ' Opening on paper until the first paper win.' : ''}${this.cfg.entryMode === 'DIGIT' ? ' Entry digit mode: the Entry Digit Lab re-weighs every market\'s digit on every tick, and a trade goes out only when the digit that holds up right now prints.' : ''}`
         );
         this.emit();
         this.refreshBoard(this.io.now(), true);
@@ -628,10 +638,11 @@ export class AiIntelExecutor {
         }
         let digitNote: string | undefined;
         if (byDigit) {
-            // The trade goes out on the first tick that shows the digit. No digit (history too short): no trade on this market yet.
-            const entry = this.entryDigitOf(symbol, contract, now);
-            if (!entry || entry.digit !== digit) return null;
-            digitNote = entry.strength === 'confirmed' ? `confirmed: ${entry.note}` : `weak: ${entry.note}`;
+            // The digit is read on THIS tick, from the lab that has just taken it in: never from an earlier tick. The trade goes out
+            // on the first tick that shows it, and only while the digit holds up. No digit, or none holding up: no trade yet.
+            const entry = this.entryDigitOf(symbol, contract);
+            if (!entry || !entry.tradable || entry.digit !== digit) return null;
+            digitNote = `${entry.strength}: ${entry.note}`;
         }
         return {
             plan: { market: symbol, contract, label: labelOf(contract), stake: n.stake, recovery: n.recovery, step: n.step, triggerDigit: digit, expiresAt: now, ...(digitNote ? { digitNote } : {}) },
@@ -640,12 +651,23 @@ export class AiIntelExecutor {
     }
 
     /** The calculated entry digit of a contract on a market (DIGIT mode). A failure is a missing digit, which means no trade, never a guess. */
-    private entryDigitOf(market: string, contract: Contract, now: number): EntryDigit | null {
+    private entryDigitOf(market: string, contract: Contract): EntryDigit | null {
         if (!this.io.entryDigit) return null;
         try {
-            return this.io.entryDigit(market, contract, this.cfg.duration, now);
+            return this.io.entryDigit(market, contract, this.cfg.duration);
         } catch {
             return null;
+        }
+    }
+
+    /** DIGIT mode: tell the lab how a trade that was entered on a digit ended, so a digit that keeps losing real entries is benched. */
+    private recordEntry(market: string, contract: Contract, digit: number | undefined, won: boolean) {
+        if (digit === undefined || !this.io.entryResult) return;
+        try {
+            const line = this.io.entryResult({ market, contract, duration: this.cfg.duration, digit, won });
+            if (line) this.addLog('info', line);
+        } catch {
+            /* the lab is an extra look: it never disturbs a live session */
         }
     }
 
@@ -834,7 +856,15 @@ export class AiIntelExecutor {
         if (!contractType) return;
         const id = VIRTUAL_ID_BASE + ++this.virtualCount;
         const startedAt = Math.floor(this.io.now() / 1000);
-        this.virtualOpen = { id, market: p.market, contract: p.contract, stake: p.stake, remaining: Math.max(1, this.cfg.duration), at: this.io.now() };
+        this.virtualOpen = {
+            id,
+            market: p.market,
+            contract: p.contract,
+            stake: p.stake,
+            remaining: Math.max(1, this.cfg.duration),
+            at: this.io.now(),
+            ...(this.cfg.entryMode === 'DIGIT' ? { entryDigit: p.triggerDigit } : {}),
+        };
         this.trades = [
             { id: `v${startedAt}-${++this.seq}`, contractId: id, at: this.io.now(), market: p.market, label: p.label, recovery: p.recovery, step: p.step, stake: p.stake, duration: this.cfg.duration, triggerDigit: p.triggerDigit, exitDigit: null, profit: null, status: 'open', virtual: true },
             ...this.trades,
@@ -874,6 +904,7 @@ export class AiIntelExecutor {
             trade.status = won ? 'won' : 'lost';
         }
         this.paper = { trades: this.paper.trades + 1, wins: this.paper.wins + (won ? 1 : 0), pnl: money(this.paper.pnl + profit) };
+        this.recordEntry(v.market, v.contract, v.entryDigit, won);
         this.pushVirtual({
             display_name: v.market,
             underlying_symbol: v.market,
@@ -976,7 +1007,7 @@ export class AiIntelExecutor {
                 status: 'open',
             };
             this.trades = [record, ...this.trades].slice(0, HISTORY_LIMIT);
-            this.bought.set(record.id, { market: symbol, contract: p.contract, recovery: p.recovery });
+            this.bought.set(record.id, { market: symbol, contract: p.contract, recovery: p.recovery, ...(this.cfg.entryMode === 'DIGIT' ? { entryDigit: p.triggerDigit } : {}) });
             try {
                 this.io.onBought?.({ contractId, market: symbol, contract: p.contract, recovery: p.recovery, stake });
             } catch {
@@ -1074,11 +1105,11 @@ export class AiIntelExecutor {
     }
 
     private finish(trade: ExecTrade, profit: number | null, exitDigit: number | null) {
-        const meta = this.bought.get(trade.id);
+        const entry = this.bought.get(trade.id);
         this.bought.delete(trade.id);
-        if (meta) {
+        if (entry) {
             try {
-                this.io.onSettled?.({ contractId: trade.contractId ?? 0, ...meta, stake: trade.stake, profit });
+                this.io.onSettled?.({ contractId: trade.contractId ?? 0, market: entry.market, contract: entry.contract, recovery: entry.recovery, stake: trade.stake, profit });
             } catch {
                 /* never disturbs a live session */
             }
@@ -1094,6 +1125,7 @@ export class AiIntelExecutor {
             trade.profit = profit;
             trade.exitDigit = exitDigit;
             trade.status = won ? 'won' : 'lost';
+            if (entry) this.recordEntry(entry.market, entry.contract, entry.entryDigit, won);
             this.session.pnl = money(this.session.pnl + profit);
             if (won) {
                 this.session.wins += 1;

@@ -1,6 +1,6 @@
 import { AiIntelExecutor, DEFAULT_EXEC, type ExecConfig, type ExecIO, normalizeExec } from '../executor';
-import { createEntryDigitSource, ENTRY_DIGIT_RETRY_MS } from '../entry-digit';
-import { ENTRY_DIGIT_TTL_MS } from '@/components/premium/sentinel/overlay';
+import { createEntryDigitSource, type EntryDigit } from '../entry-digit';
+import { LAB_DEFAULTS } from '../entry-lab';
 import type { Pick, RecoveryPick } from '../picker';
 
 // Noise with one planted habit: right after a 5 the next digit is always 9 (a win for Over 2, a loss for Under 7).
@@ -11,57 +11,97 @@ const planted = (n = 900, seed = 11) => {
     return out;
 };
 const OVER_2 = { side: 'OVER', param: 2 } as const;
+const UNDER_7 = { side: 'UNDER', param: 7 } as const;
 
-describe('createEntryDigitSource (Sentinel AI formula, kept for a minute)', () => {
-    it('gives the digit after which the contract kept winning, labelled confirmed', () => {
+describe('createEntryDigitSource (the Entry Digit Lab behind a facade)', () => {
+    it('gives the digit after which the contract kept winning, confirmed and tradable', () => {
         const src = createEntryDigitSource({ series: () => planted() });
-        const d = src.get('A', OVER_2, 1, 1_000)!;
-        expect(d.digit).toBe(5);
-        expect(d.strength).toBe('confirmed');
+        const d = src.get('A', OVER_2, 1)!;
+        expect(d).toMatchObject({ digit: 5, strength: 'confirmed', tradable: true });
         expect(d.note).toContain('after a 5');
     });
-    it('keeps the same digit for a minute, then works it out again from the newest ticks', () => {
-        let series = planted();
+    it('has no minute of memory: it follows every tick that is fed to it', () => {
+        const series = planted();
         const src = createEntryDigitSource({ series: () => series });
-        expect(src.get('A', OVER_2, 1, 1_000)?.digit).toBe(5);
-        series = series.map(d => (d === 5 ? 3 : d)); // the market moved on
-        expect(src.get('A', OVER_2, 1, 1_000 + ENTRY_DIGIT_TTL_MS - 1)?.digit).toBe(5);
-        expect(src.get('A', OVER_2, 1, 1_000 + ENTRY_DIGIT_TTL_MS + 1)?.digit).not.toBe(5);
+        expect(src.get('A', OVER_2, 1)).toMatchObject({ digit: 5, tradable: true });
+        // The market turns: after a 5 the next digit is now 0, a loss for Over 2.
+        let gone = -1;
+        for (let i = 1; i <= 300 && gone < 0; i += 1) {
+            const d = series[series.length - 1] === 5 ? 0 : [1, 2, 3, 4, 6, 7, 8, 9, 5][i % 9];
+            series.push(d);
+            src.observe('A', d);
+            const now = src.get('A', OVER_2, 1);
+            if (!(now && now.digit === 5 && now.tradable)) gone = i;
+        }
+        expect(gone).toBeGreaterThan(0);
+        expect(gone).toBeLessThan(250);
     });
     it('keeps a digit per market, per contract and per length', () => {
         const series: Record<string, number[]> = { A: planted(), B: planted().map(d => (d === 5 ? 4 : d)) };
         const src = createEntryDigitSource({ series: m => series[m] });
-        expect(src.get('A', OVER_2, 1, 1_000)?.digit).toBe(5);
-        expect(src.get('B', OVER_2, 1, 1_000)?.digit).not.toBe(5);
-        expect(src.get('A', { side: 'UNDER', param: 7 }, 1, 1_000)?.digit).not.toBe(5);
+        expect(src.get('A', OVER_2, 1)?.digit).toBe(5);
+        const b = src.get('B', OVER_2, 1);
+        expect(b && b.digit === 5 && b.tradable).toBeFalsy();
+        const u = src.get('A', UNDER_7, 1);
+        expect(u && u.digit === 5 && u.tradable).toBeFalsy();
     });
-    it('is null with too little history and looks again soon (a missing digit is not kept for a minute)', () => {
+    it('is null with too little history, and starts answering once there is enough', () => {
         let series = planted().slice(0, 100);
         const src = createEntryDigitSource({ series: () => series });
-        expect(src.get('A', OVER_2, 1, 1_000)).toBeNull();
+        expect(src.get('A', OVER_2, 1)).toBeNull();
         series = planted();
-        expect(src.get('A', OVER_2, 1, 1_000 + 100)).toBeNull(); // still inside the retry gap
-        expect(src.get('A', OVER_2, 1, 1_000 + ENTRY_DIGIT_RETRY_MS + 1)?.digit).toBe(5);
+        expect(src.get('A', OVER_2, 1)?.digit).toBe(5); // no retry gap to wait out
     });
-    it('is null for a contract outside the six, a market with no ticks, and when the discovery throws', () => {
+    it('is null for a contract outside the six, a market with no ticks, and when the series throws', () => {
         const src = createEntryDigitSource({ series: () => planted() });
-        expect(src.get('A', { side: 'OVER', param: 5 }, 1, 1_000)).toBeNull();
-        expect(createEntryDigitSource({ series: () => undefined }).get('A', OVER_2, 1, 1_000)).toBeNull();
+        expect(src.get('A', { side: 'OVER', param: 5 }, 1)).toBeNull();
+        expect(createEntryDigitSource({ series: () => undefined }).get('A', OVER_2, 1)).toBeNull();
         const broken = createEntryDigitSource({
-            series: () => planted(),
-            discover: () => {
+            series: () => {
                 throw new Error('x');
             },
         });
-        expect(broken.get('A', OVER_2, 1, 1_000)).toBeNull();
+        expect(broken.get('A', OVER_2, 1)).toBeNull();
+        expect(() => broken.observe('A', 3)).not.toThrow();
+        expect(broken.view('A', OVER_2, 1)).toBeNull();
     });
-    it('reset forgets the digits', () => {
+    it('picks the market up again when a reconnect replaces its history', () => {
         let series = planted();
         const src = createEntryDigitSource({ series: () => series });
-        expect(src.get('A', OVER_2, 1, 1_000)?.digit).toBe(5);
-        series = series.map(d => (d === 5 ? 3 : d));
+        expect(src.get('A', OVER_2, 1)?.digit).toBe(5);
+        series = planted(900, 99).map(d => (d === 5 ? 3 : d)); // a different history altogether, with no 5s
+        const d = src.get('A', OVER_2, 1);
+        expect(d && d.digit === 5 && d.tradable).toBeFalsy();
+    });
+    it('a digit that loses twice on this contract is benched and the log line says so', () => {
+        const src = createEntryDigitSource({ series: () => planted() });
+        expect(src.get('A', OVER_2, 1)?.digit).toBe(5);
+        expect(src.record('A', OVER_2, 1, 5, false)).toBeNull();
+        expect(src.record('A', OVER_2, 1, 5, false)).toContain('benched');
+        const d = src.get('A', OVER_2, 1);
+        expect(d && d.digit === 5 && d.tradable).toBeFalsy();
+        expect(src.view('A', OVER_2, 1)!.rows[5].state).toBe('benched');
+    });
+    it('the lab keeps its numbers for the page', () => {
+        const src = createEntryDigitSource({ series: () => planted() });
+        src.get('A', OVER_2, 1); // the digit in use is set when it is asked for
+        const v = src.view('A', OVER_2, 1)!;
+        expect(v.rows).toHaveLength(10);
+        expect(v.market).toBe('A');
+        expect(v.current).toBe(5);
+    });
+    it('reset forgets everything it learned', () => {
+        const src = createEntryDigitSource({ series: () => planted() });
+        src.get('A', OVER_2, 1);
+        src.record('A', OVER_2, 1, 5, false);
+        src.record('A', OVER_2, 1, 5, false);
         src.reset();
-        expect(src.get('A', OVER_2, 1, 1_001)?.digit).not.toBe(5);
+        expect(src.get('A', OVER_2, 1)).toMatchObject({ digit: 5, tradable: true });
+    });
+    it('accepts settings, and the defaults are what the page describes', () => {
+        expect(LAB_DEFAULTS.minTicks).toBeGreaterThan(0);
+        const strict = createEntryDigitSource({ series: () => planted(), params: { zLead: 99, zConfirm: 99 } });
+        expect(strict.get('A', OVER_2, 1)?.tradable).toBe(false);
     });
 });
 
@@ -156,7 +196,12 @@ function harness(
         pickRecovery: () => recovery,
         entryDigit: (market, contract, duration) => {
             asked.push({ market, label: `${contract.side} ${contract.param}`, duration });
-            return { digit: 7, strength: 'confirmed', note: 'after a 7 the contract won 90% of 40 (fair 70%)' };
+            return {
+                digit: 7,
+                strength: 'confirmed',
+                tradable: true,
+                note: 'after a 7 the contract won 90% of 40 (fair 70%)',
+            };
         },
         describeFailure: (e: any) => ({ kind: 'rejected', message: e?.message ?? 'x', outcomeUnknown: false }),
         load: () => ({
@@ -198,6 +243,7 @@ describe('Entry digit mode in the executor', () => {
         expect(h.buys).toHaveLength(1);
         expect(h.asked).toHaveLength(0);
         expect(h.ex.getSnapshot().entryDigits).toEqual({});
+        expect(h.ex.getSnapshot().entryLab).toBeNull();
     });
     it("DIGIT buys only when the market's entry digit prints, whatever the entry type would say", async () => {
         const h = harness({ entryMode: 'DIGIT' });
@@ -246,6 +292,40 @@ describe('Entry digit mode in the executor', () => {
         expect(h.buys).toHaveLength(2);
         expect(h.buys[1].parameters).toMatchObject({ contract_type: 'DIGITOVER', barrier: '3', amount: 2 });
     });
+    it('follows the digit as it changes: it is asked again on every tick, nothing is kept', async () => {
+        let current = 4;
+        const h = harness(
+            { entryMode: 'DIGIT' },
+            { entryDigit: () => ({ digit: current, strength: 'leading', tradable: true, note: 'n' }) }
+        );
+        h.ex.start();
+        h.tick(7); // the digit now is 4
+        await flush();
+        expect(h.buys).toHaveLength(0);
+        current = 7; // the lab moved on
+        h.tick(7);
+        await flush();
+        expect(h.buys).toHaveLength(1);
+        expect(h.ex.getSnapshot().entryDigits).toEqual({ R_10: { digit: 7, strength: 'leading', tradable: true } });
+    });
+    it('a digit that does not hold up is never traded, even when it prints', async () => {
+        const h = harness(
+            { entryMode: 'DIGIT' },
+            {
+                entryDigit: () => ({
+                    digit: 4,
+                    strength: 'weak',
+                    tradable: false,
+                    note: 'Standing aside: nothing holds up',
+                }),
+            }
+        );
+        h.ex.start();
+        for (const d of [4, 4, 4, 1, 4]) h.tick(d);
+        await flush();
+        expect(h.buys).toHaveLength(0);
+        expect(h.ex.getSnapshot().entryDigits).toEqual({ R_10: { digit: 4, strength: 'weak', tradable: false } });
+    });
     it('no digit yet (short history) means no trade on that market', async () => {
         const h = harness({ entryMode: 'DIGIT' }, { entryDigit: () => null });
         h.ex.start();
@@ -268,46 +348,10 @@ describe('Entry digit mode in the executor', () => {
         await flush();
         expect(h.buys).toHaveLength(0);
     });
-    it('shows the digit being waited for on the board, and labels a weak one', () => {
-        const h = harness(
-            { entryMode: 'DIGIT' },
-            { entryDigit: () => ({ digit: 4, strength: 'weak', note: 'no digit stands out' }) }
-        );
-        h.ex.start();
-        expect(h.ex.getSnapshot().entryDigits).toEqual({ R_10: { digit: 4, strength: 'weak' } });
-    });
-    it('a weak digit is traded like Sentinel does, and the log says it is a timing choice', async () => {
-        const h = harness(
-            { entryMode: 'DIGIT' },
-            {
-                entryDigit: () => ({
-                    digit: 4,
-                    strength: 'weak',
-                    note: 'no digit stands out. Waiting for it is a timing choice, not an edge',
-                }),
-            }
-        );
-        h.ex.start();
-        h.tick(4);
-        await flush();
-        expect(h.buys).toHaveLength(1);
-        expect(
-            h.ex
-                .getSnapshot()
-                .log.map(l => l.text)
-                .join('\n')
-        ).toContain('weak: no digit stands out');
-    });
     it('cannot start without the digit source, and says so', () => {
         const h = harness({ entryMode: 'DIGIT' }, { entryDigit: undefined });
         expect(h.ex.startBlocker()).toMatch(/entry digit is not available/i);
         expect(harness({ entryMode: 'STANDARD' }, { entryDigit: undefined }).ex.startBlocker()).toBeNull();
-    });
-    it('a new run resets the digits', () => {
-        let resets = 0;
-        const h = harness({ entryMode: 'DIGIT' }, { resetEntryDigits: () => (resets += 1) });
-        h.ex.start();
-        expect(resets).toBe(1);
     });
     it('ASSISTED prepares the digit trade for confirmation instead of buying', async () => {
         const h = harness({ entryMode: 'DIGIT', mode: 'ASSISTED', autoAuthorised: false });
@@ -320,19 +364,157 @@ describe('Entry digit mode in the executor', () => {
         expect(p.digitNote).toContain('confirmed');
         expect(h.buys).toHaveLength(0);
     });
+    it('puts the lab on the snapshot for the page', () => {
+        const view = {
+            market: 'R_10',
+            label: 'Over 2',
+            fair: 0.7,
+            ticks: 900,
+            rows: [],
+            current: 7,
+            heldTicks: 12,
+            switches: 3,
+        };
+        const h = harness({ entryMode: 'DIGIT' }, { entryView: () => view as any });
+        h.ex.start();
+        expect(h.ex.getSnapshot().entryLab).toEqual(view);
+    });
 });
 
-describe('Entry digit mode with the real formula', () => {
-    it('trades the planted market on its entry digit and on nothing else', async () => {
-        const series = planted();
-        const src = createEntryDigitSource({ series: () => series });
-        const h = harness({ entryMode: 'DIGIT' }, { entryDigit: (m, c, d, now) => src.get(m, c, d, now) });
+describe('Entry digit mode: results go back to the lab', () => {
+    const results = () => {
+        const seen: any[] = [];
+        return {
+            seen,
+            io: {
+                entryResult: (r: any) => {
+                    seen.push(r);
+                    return seen.length === 1 ? 'Entry digit 7 benched on R_10 for 90 ticks: test' : null;
+                },
+            } as Partial<ExecIO>,
+        };
+    };
+    it('a real trade that settles tells the lab which digit it was entered on, and a benching is logged', async () => {
+        const r = results();
+        const h = harness({ entryMode: 'DIGIT' }, r.io);
         h.ex.start();
-        for (const d of [0, 1, 2, 3, 4, 6, 7, 8, 9]) h.tick(d);
+        h.tick(7);
+        await flush();
+        h.settles[0]({ is_sold: 1, status: 'lost', profit: -1, exit_spot: '1' });
+        await flush();
+        expect(r.seen).toHaveLength(1);
+        expect(r.seen[0]).toMatchObject({
+            market: 'R_10',
+            contract: { side: 'OVER', param: 2 },
+            duration: 1,
+            digit: 7,
+            won: false,
+        });
+        expect(
+            h.ex
+                .getSnapshot()
+                .log.map(l => l.text)
+                .join('\n')
+        ).toContain('Entry digit 7 benched on R_10');
+    });
+    it('a win is reported as a win', async () => {
+        const r = results();
+        const h = harness({ entryMode: 'DIGIT' }, r.io);
+        h.ex.start();
+        h.tick(7);
+        await flush();
+        h.settles[0]({ is_sold: 1, status: 'won', profit: 0.4, exit_spot: '9' });
+        await flush();
+        expect(r.seen[0]).toMatchObject({ digit: 7, won: true });
+    });
+    it('a paper trade teaches it the same way', async () => {
+        const r = results();
+        const h = harness(
+            {
+                entryMode: 'DIGIT',
+                virtualHook: {
+                    enabled: true,
+                    opening: true,
+                    mode: 'STREAK',
+                    enterLosses: 2,
+                    returnWins: 2,
+                    fixedCount: 3,
+                } as any,
+            },
+            r.io
+        );
+        h.ex.start();
+        h.tick(7); // opens on paper
+        h.tick(1); // settles a tick later: a loss for Over 2
         await flush();
         expect(h.buys).toHaveLength(0);
-        h.tick(5); // the digit after which Over 2 kept winning on this market
+        expect(r.seen.length).toBeGreaterThan(0);
+        expect(r.seen[0]).toMatchObject({ market: 'R_10', digit: 7, won: false });
+    });
+    it('STANDARD reports nothing', async () => {
+        const r = results();
+        const h = harness({ entryMode: 'STANDARD' }, r.io);
+        h.ex.start();
+        h.tick(1);
+        await flush();
+        h.settles[0]({ is_sold: 1, status: 'lost', profit: -1, exit_spot: '1' });
+        await flush();
+        expect(r.seen).toHaveLength(0);
+    });
+});
+
+describe('Entry digit mode with the real lab', () => {
+    // Each tick goes to the feed copy, the lab and the executor, in the order the app does it.
+    const rig = () => {
+        const series = planted();
+        const src = createEntryDigitSource({ series: () => series });
+        const h = harness(
+            { entryMode: 'DIGIT' },
+            {
+                entryDigit: (m, c, d) => src.get(m, c, d),
+                entryResult: r => src.record(r.market, r.contract, r.duration, r.digit, r.won),
+            }
+        );
+        const feed = (d: number) => {
+            series.push(d);
+            src.observe('R_10', d);
+            h.tick(d);
+        };
+        return { src, h, feed, series };
+    };
+    it('trades the planted market on its entry digit and on nothing else', async () => {
+        const { h, feed } = rig();
+        h.ex.start();
+        for (const d of [0, 1, 2, 3, 4, 6, 7, 8, 9]) feed(d);
+        await flush();
+        expect(h.buys).toHaveLength(0);
+        feed(5); // the digit after which Over 2 kept winning on this market
         await flush();
         expect(h.buys).toHaveLength(1);
+    });
+    it('stops trading on that digit once the market stops rewarding it', async () => {
+        const { src, h, feed, series } = rig();
+        h.ex.start();
+        let boughtOnFive = 0;
+        // The habit flips: after a 5 the next digit is now a loser (0 for Over 2).
+        for (let i = 0; i < 400; i += 1) {
+            const last = series[series.length - 1];
+            const d = last === 5 ? 0 : [1, 2, 3, 4, 6, 7, 8, 9, 5][i % 9];
+            const before = h.buys.length;
+            feed(d);
+            await flush();
+            if (d === 5 && h.buys.length > before) boughtOnFive += 1;
+            if (h.buys.length > before)
+                h.settles[h.buys.length - 1]({
+                    is_sold: 1,
+                    status: d === 5 ? 'won' : 'lost',
+                    profit: -1,
+                    exit_spot: '0',
+                });
+            await flush();
+        }
+        const now = src.get('R_10', OVER_2, 1);
+        expect(now && now.digit === 5 && now.tradable).toBeFalsy();
+        expect(boughtOnFive).toBeLessThan(25); // it did not keep going on the old digit for the rest of the run
     });
 });
