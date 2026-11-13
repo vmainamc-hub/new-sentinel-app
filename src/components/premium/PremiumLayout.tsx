@@ -76,10 +76,7 @@ const AiIntelPage = lazy(() => import('./ai-intel/AiIntelPage'));
 const AiIntelBridge = lazy(() => import('./ai-intel/AiIntelBridge'));
 // Its runner trades on its own, so the bridge stays mounted on every tab (Run Panel hand-off, Stop sync, session-drop stop).
 const SixfoldBridge = lazy(() => import('./sixfold/sixfold-bridge'));
-// Vanguard: one execution tool across every market (Volatility, 1s Volatility and Jump indices). Its runner trades on its own too,
-// so its bridge is mounted on every tab as well.
-const VanguardPage = lazy(() => import('./vanguard/VanguardPage'));
-const VanguardBridge = lazy(() => import('./vanguard/vanguard-bridge'));
+// Sixfold is the fused tool (it absorbed Vanguard): it watches every market (Volatility, 1s Volatility and Jump indices).
 const DTraderPage = lazy(() => import('./dtrader/DTraderPage'));
 // Manual Trader: Deriv's own DTrader frontend, built from the db-traders repo and served from /dtrader-app/ in an iframe.
 const ManualTraderPage = lazy(() => import('./manual-trader/ManualTraderPage'));
@@ -87,15 +84,15 @@ const ManualTraderPage = lazy(() => import('./manual-trader/ManualTraderPage'));
 const validSections: PremiumSection[] = [
     'dashboard', 'bot_ideas', 'quick_bot', 'bot_builder', 'free_bots', 'signal_ai', 'auto_trader', 'sentinel_ai',
     'manual_trading', 'manual_trader', 'bulk_trader', 'batch_trader', 'copy_trading', 'speedbot', 'calculator', 'pro_ai', 'analysis_tools',
-    'analysis_hub', 'charts', 'tradingview', 'dtrader', 'ai_bots', 'digits_analysis', 'sixfold', 'vanguard', 'ai_intel',
+    'analysis_hub', 'charts', 'tradingview', 'dtrader', 'ai_bots', 'digits_analysis', 'sixfold', 'ai_intel',
     'overlord', 'elite_prime', 'signal_tools',
 ];
 
 const sectionFromHash = (hash: string): PremiumSection => {
     const raw = hash.replace(/^#\/?/, '').split('?')[0];
     // Signal Zone was merged into Sentinel AI: old links and bookmarks land there.
-    // The 360 sites call the Signal Tools page #signals.
-    const value = (raw === 'signal_zone' ? 'sentinel_ai' : raw === 'signals' ? 'signal_tools' : raw) as PremiumSection;
+    // The 360 sites call the Signal Tools page #signals. Vanguard was fused into Sixfold: old links land there.
+    const value = (raw === 'signal_zone' ? 'sentinel_ai' : raw === 'signals' ? 'signal_tools' : raw === 'vanguard' ? 'sixfold' : raw) as PremiumSection;
     return validSections.includes(value) ? value : 'dashboard';
 };
 
@@ -253,7 +250,6 @@ const PremiumLayout = observer(() => {
             case 'ai_bots': return <AIBotsPage />;
             case 'digits_analysis': return <DigitsAnalysisPage openBotBuilder={openBotBuilder} />;
             case 'sixfold': return <Suspense fallback={<PremiumLoader />}><SixfoldPage /></Suspense>;
-            case 'vanguard': return <Suspense fallback={<PremiumLoader />}><VanguardPage /></Suspense>;
             case 'ai_intel': return <Suspense fallback={<PremiumLoader />}><AiIntelPage /></Suspense>;
             // Overlord Pro, Elite Prime and Signal Tools stay mounted once opened (see Hub360Host), so they are not rendered here.
             case 'overlord':
@@ -281,7 +277,6 @@ const PremiumLayout = observer(() => {
         <GlobalContractBridge />
         <Suspense fallback={null}><SentinelAiBridge /></Suspense>
         <Suspense fallback={null}><SixfoldBridge /></Suspense>
-        <Suspense fallback={null}><VanguardBridge /></Suspense>
         <Suspense fallback={null}><AiIntelBridge /></Suspense>
         <PremiumHeader active={section} navigation={customization.navigation} onChange={changeSection} />
         <main className='prodb-premium-content'>
