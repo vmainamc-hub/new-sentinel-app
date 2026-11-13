@@ -8,6 +8,7 @@ import { rankPicks, rankRecovery } from './picker';
 import { getCandidates } from './candidates';
 import './registry-instance'; // sets the candidate provider (baseline + ACTIVE strategies)
 import { createEntryDigitSource } from './entry-digit';
+import { createOverlordReader } from './overlord-select';
 import { AiIntelExecutor, type ExecConfig, type ExecTrade } from './executor';
 import { assess } from './guard';
 import { createApexGates } from '@/components/premium/edge-gates/apex-gates';
@@ -39,6 +40,10 @@ const apexGates = createApexGates({ series: () => apexFeed.getLiveSeries() });
 // The "Entry digit" mode: Sentinel AI's entry digit (the Bulk Trader's replay of the market's own history), read from the live ticks.
 const entryDigits = createEntryDigitSource({ series: symbol => apexFeed.getLiveSeries()[symbol] });
 
+// The "Overlord" selection modes: Overlord's over/under engines read the live markets (quotes and digits from the same shared feed,
+// no second socket) and take part in choosing the market and contract. Idle in STANDARD mode: nothing is read until a run asks for it.
+const overlordReader = createOverlordReader({ series: () => apexSeries(), prices: () => apexFeed.getLivePrices() });
+
 export const aiIntelExecutor = new AiIntelExecutor({
     buy: ({ parameters, price }) => buyContractForUi({ parameters, price, source: 'Apex Intel' }),
     settle: ({ contractId, fallback, onUpdate, signal }) =>
@@ -67,6 +72,11 @@ export const aiIntelExecutor = new AiIntelExecutor({
         const read = readSpecialDigits(apexFeed.getLiveSeries()[req.market], req.contract.side);
         return { allow: read.ok, reason: read.note };
     },
+    overlordView: (market, contract, now) => overlordReader.get(market, contract, now),
+    overlordRefresh: (now, priority) => {
+        overlordReader.refresh(now, priority);
+    },
+    overlordReset: () => overlordReader.reset(),
     entryDigit: (market, contract, duration, now) => entryDigits.get(market, contract, duration, now),
     resetEntryDigits: () => entryDigits.reset(),
     onBoard: (ranked, recovery, now) => apexGates.onBoard(ranked, recovery, now),

@@ -18,6 +18,7 @@ import { freshVh, vhAfterReal, vhAfterVirtual, type VhConfig, type VhMode, type 
 import type { EntryDigit } from './entry-digit';
 import type { AiMode, GuardRequest, GuardVerdict } from './guard';
 import { compileRule } from './rules';
+import { type Blocked, normalizeSelection, type OverlordView, type SelectionMode, selectByOverlord, summariseBlocked } from './overlord-select';
 import { bestPerMarket, contractOf, type Pick, type PickDirection, type PickEntry, type PickOptions, recoveryContract, type RecoveryPick } from './picker';
 
 export type Direction = 'OVER_2' | 'UNDER_7';
@@ -33,12 +34,23 @@ export type ExecMode = 'ASSISTED' | 'AUTO';
  */
 export type EntryMode = 'STANDARD' | 'DIGIT';
 
+/** One row of the board: how Overlord's engines read the contract shown for a market. */
+export type SelectionRow = { tier: string; score: number; rounds: number; clearShare: number };
+
 export type ExecConfig = {
     /** Which primary contracts may be traded: Over 2, Under 7 or both. */
     directions: 'BOTH' | PickDirection;
     entry: ExecEntry;
     /** STANDARD keeps Apex Intel exactly as it was; DIGIT trades on a per-market calculated entry digit. */
     entryMode: EntryMode;
+    /**
+     * Which engines choose the market and contract among the picker's candidates.
+     * STANDARD: Apex Intel's picker alone, exactly as it always was.
+     * OVERLORD: Overlord's engines rank them and veto (see overlord-select.ts).
+     * COMBINED: Overlord AND the picker's own edge must both say yes.
+     * Every later check (AI guard, edge gates, digit 1 / 8 rule, limits) runs on the chosen contract in all three.
+     */
+    selection: SelectionMode;
     /** Markets left out. Every other fresh market is scanned on every tick. */
     excluded: string[];
     /** Contract length in ticks (1-10). */
@@ -72,6 +84,7 @@ export const DEFAULT_EXEC: ExecConfig = {
     directions: 'BOTH',
     entry: 'AUTO',
     entryMode: 'STANDARD',
+    selection: 'STANDARD',
     excluded: [],
     duration: 1,
     stake: 1,
@@ -118,6 +131,7 @@ export function normalizeExec(raw: Partial<ExecConfig> | null | undefined): Exec
         directions: r.directions === 'OVER_2' || r.directions === 'UNDER_7' ? r.directions : 'BOTH',
         entry: r.entry === 'SETUP' || r.entry === 'ANY' ? r.entry : 'AUTO',
         entryMode: r.entryMode === 'DIGIT' ? 'DIGIT' : 'STANDARD', // a saved config from before this mode existed stays STANDARD
+        selection: normalizeSelection(r.selection), // a saved config from before this mode existed stays STANDARD
         excluded: Array.isArray(r.excluded) ? [...new Set(r.excluded.filter(x => typeof x === 'string' && x))] : [],
         duration: clampInt(r.duration, 1, 10, d.duration),
         stake: money(Math.max(0, num(r.stake, d.stake))),
@@ -222,6 +236,8 @@ export type ExecSnapshot = {
     board: { primary: Pick[]; recovery: RecoveryPick[] };
     /** DIGIT mode: the entry digit being waited for on each market of the board (null: not worked out yet). Empty in STANDARD mode. */
     entryDigits: Record<string, BoardDigit | null>;
+    /** Selection modes: what Overlord's reading did to the board (nothing in STANDARD). `rows` is the reading of each market shown. */
+    selection: { mode: SelectionMode; blocked: Blocked[]; rows: Record<string, SelectionRow> };
     /** Why nothing is tradable right now, or null. */
     note: string | null;
     /** The AI guard this run: signals it blocked and the last reason given. */
@@ -280,6 +296,12 @@ export type ExecIO = {
      * is too short. Absent: DIGIT mode cannot start.
      */
     entryDigit?: (market: string, contract: Contract, duration: number, now: number) => EntryDigit | null;
+    /** SELECTION modes: Overlord's reading of one contract on one market, or null. Absent: OVERLORD / COMBINED cannot start. */
+    overlordView?: (market: string, contract: Contract, now: number) => OverlordView | null;
+    /** Every board refresh in those modes: read the next market(s) with Overlord's engines, the `priority` markets first. */
+    overlordRefresh?: (now: number, priority: readonly string[]) => void;
+    /** A new run: Overlord starts watching from zero. */
+    overlordReset?: () => void;
     /** A new run: forget the digits worked out earlier, so each market's digit is found afresh from its newest ticks. */
     resetEntryDigits?: () => void;
     /** Every board refresh: the full ranked lists (before one-per-market), for extra checks that read the whole book. */
@@ -338,6 +360,8 @@ export class AiIntelExecutor {
     private board: ExecSnapshot['board'] = { primary: [], recovery: [] };
     private boardDigits: ExecSnapshot['entryDigits'] = {};
     private boardAt = 0;
+    private boardSel: ExecSnapshot['selection'] = { mode: 'STANDARD', blocked: [], rows: {} };
+    private selLogAt = 0;
     private note: string | null = null;
     private aiBlocked = 0;
     private aiAllowed = 0;
@@ -389,17 +413,22 @@ export class AiIntelExecutor {
         if (!force && now - this.boardAt < BOARD_EVERY_MS) return;
         this.boardAt = now;
         const out = new Set(this.cfg.excluded);
-        const rankedPrimary = this.io.pick({ duration: this.cfg.duration, evidenceOnly: this.cfg.evidenceOnly, directions: this.cfg.directions, entries: this.entryKinds() }).filter(p => !out.has(p.market));
-        const primary = bestPerMarket(rankedPrimary).slice(0, BOARD_TOP);
+        // The picker's own book: what the edge gates have always been shown, and still are, in every selection mode.
+        const pickedPrimary = this.io.pick({ duration: this.cfg.duration, evidenceOnly: this.cfg.evidenceOnly, directions: this.cfg.directions, entries: this.entryKinds() }).filter(p => !out.has(p.market));
         const recoveryEntries = this.entryKinds()?.filter((e): e is 'SETUP' | 'ANY' => e === 'SETUP' || e === 'ANY');
-        const rankedRecovery =
+        const pickedRecovery =
             this.cfg.recovery.enabled && this.io.pickRecovery ? this.io.pickRecovery({ duration: this.cfg.duration, entries: recoveryEntries }).filter(p => !out.has(p.market)) : [];
-        const recovery = bestPerMarket(rankedRecovery).slice(0, BOARD_TOP);
         try {
-            this.io.onBoard?.(rankedPrimary, rankedRecovery, now);
+            this.io.onBoard?.(pickedPrimary, pickedRecovery, now);
         } catch {
             /* an extra look never stops the board */
         }
+        // Which of the picker's candidates Overlord lets through, and in what order (nothing changes in STANDARD).
+        const chosen = this.applySelection(pickedPrimary, pickedRecovery, now);
+        const rankedPrimary = chosen.primary;
+        const rankedRecovery = chosen.recovery;
+        const primary = bestPerMarket(rankedPrimary).slice(0, BOARD_TOP);
+        const recovery = bestPerMarket(rankedRecovery).slice(0, BOARD_TOP);
         const prevTop = this.board.primary[0]?.key;
         this.board = { primary, recovery };
         const recovering = this.cfg.recovery.enabled && this.losses > 0;
@@ -415,15 +444,67 @@ export class AiIntelExecutor {
                 this.boardDigits[row.market] = found ? { digit: found.digit, strength: found.strength } : null;
             }
         }
+        const pickedActive = recovering ? pickedRecovery : pickedPrimary;
         this.note = active.length
             ? null
-            : this.cfg.evidenceOnly && !recovering
+            : this.cfg.selection !== 'STANDARD' && pickedActive.length > 0
+              ? `Overlord selection: nothing clear yet (${summariseBlocked(this.boardSel.blocked) || 'waiting for its first reading'}).`
+              : this.cfg.evidenceOnly && !recovering
               ? 'No market beats chance after false-discovery control yet. Waiting (this is the normal result on random digits).'
               : 'Waiting for fresh data: a market needs 300+ recent ticks and a non-unstable regime.';
         if (this.running && primary[0] && primary[0].key !== prevTop && !recovering) {
             this.addLog('info', `Best entry now: ${primary[0].market} · ${primary[0].label}. ${primary[0].reason}.`);
         }
         this.emit();
+    }
+
+    /**
+     * Overlord's part in choosing the market and contract. It only removes and re-orders what the picker offered (see
+     * selectByOverlord); every later check still runs on the contract that comes out. A missing reading means no trade, never a guess.
+     */
+    private applySelection(primary: Pick[], recovery: RecoveryPick[], now: number): { primary: Pick[]; recovery: RecoveryPick[] } {
+        const mode = this.cfg.selection;
+        if (mode === 'STANDARD') {
+            this.boardSel = { mode, blocked: [], rows: {} };
+            return { primary, recovery };
+        }
+        const readView = this.io.overlordView;
+        if (!readView) {
+            this.boardSel = { mode, blocked: [], rows: {} };
+            return { primary: [], recovery: [] };
+        }
+        const recovering = this.cfg.recovery.enabled && this.losses > 0;
+        try {
+            this.io.overlordRefresh?.(now, bestPerMarket(recovering ? recovery : primary).slice(0, 8).map(r => r.market));
+        } catch {
+            /* a failed read leaves the older readings, which expire on their own */
+        }
+        const viewOf = (market: string, contract: Contract): OverlordView | null => {
+            try {
+                return readView(market, contract, now);
+            } catch {
+                return null;
+            }
+        };
+        const tag = <T extends { reason: string }>(item: T, v: OverlordView): T => ({ ...item, reason: `${item.reason} · Overlord ${v.read.tier} ${Math.round(v.read.score)}` });
+        const p = selectByOverlord(primary, { mode, contractOf: x => contractOf(x.direction), viewOf, hasEdge: x => x.score > 0, annotate: tag });
+        const r = selectByOverlord(recovery, { mode, contractOf: x => recoveryContract(x.direction), viewOf, hasEdge: x => x.score > 0, annotate: tag });
+        const shown = recovering ? r : p;
+        const seen = new Set<string>();
+        const blocked = shown.blocked.filter(b => (seen.has(b.key) ? false : (seen.add(b.key), true)));
+        const rows: Record<string, SelectionRow> = {};
+        const rowOf = (market: string, contract: Contract) => {
+            const v = viewOf(market, contract);
+            if (v) rows[market] = { tier: v.read.tier, score: Math.round(v.read.score), rounds: v.rounds, clearShare: v.clearShare };
+        };
+        for (const x of bestPerMarket(p.items)) rowOf(x.market, contractOf(x.direction));
+        if (recovering) for (const x of bestPerMarket(r.items)) rowOf(x.market, recoveryContract(x.direction));
+        this.boardSel = { mode, blocked, rows };
+        if (this.running && blocked.length && now - this.selLogAt >= 30_000) {
+            this.selLogAt = now;
+            this.addLog('info', `Overlord selection (${mode.toLowerCase()}): ${bestPerMarket(shown.items).length} market(s) clear, blocked: ${summariseBlocked(blocked)}.`);
+        }
+        return { primary: p.items, recovery: r.items };
     }
 
     private paperNow(): boolean {
@@ -460,6 +541,7 @@ export class AiIntelExecutor {
             next: { label: recovering ? 'Over 3 / Under 6' : dirs, stake: n.stake, recovery: n.recovery, paper: this.paperNow() },
             board: this.board,
             entryDigits: this.boardDigits,
+            selection: this.boardSel,
             note: this.note,
             aiGuard: { mode: this.cfg.ai, blocked: this.aiBlocked, allowed: this.aiAllowed, note: this.aiNote },
         };
@@ -481,6 +563,7 @@ export class AiIntelExecutor {
         if (!this.io.isAuthorized()) return 'Please log in to your Deriv account before trading.';
         if (c.stake < MIN_STAKE) return `Stake must be at least ${MIN_STAKE.toFixed(2)}.`;
         if (!this.io.pick) return 'Market scanning is not available in this build.';
+        if (c.selection !== 'STANDARD' && !(this.io.overlordView && this.io.overlordRefresh)) return 'Overlord selection is not available in this build.';
         if (c.entryMode === 'DIGIT' && !this.io.entryDigit) return 'The entry digit is not available in this build.';
         if (c.mode === 'AUTO' && !c.autoAuthorised) return 'Automatic trading needs your explicit authorisation: switch on "Trade automatically".';
         if (c.stopLoss === 0 && c.maxTrades === 0 && c.targetProfit === 0) return 'Set at least one limit: stop loss, take profit or max trades.';
@@ -517,6 +600,13 @@ export class AiIntelExecutor {
         this.runToken += 1;
         this.board = { primary: [], recovery: [] };
         this.boardDigits = {};
+        this.boardSel = { mode: this.cfg.selection, blocked: [], rows: {} };
+        this.selLogAt = 0;
+        try {
+            this.io.overlordReset?.(); // Overlord watches every contract afresh in a new run
+        } catch {
+            /* a stale reading is dropped after 30 s anyway */
+        }
         try {
             this.io.resetEntryDigits?.(); // a new run works every market's digit out afresh from its newest ticks
         } catch {
