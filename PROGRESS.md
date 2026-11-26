@@ -2,6 +2,12 @@
 
 Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main only after build + tests pass; main auto-deploys to Netlify). Module dir: `src/components/premium/ai-intel/`.
 
+## Free bot 91: Under 8 Digit-9 Hunter (13 markets, split martingale)
+- [x] Added the XML to `apex-library` and listed it in `bots.json` and `domains/apex-sentinel.json` (count 90 -> 91).
+- Checked: `scripts/validate-free-bots.js` passes; XML has no undefined variables, duplicate ids or missing procedures.
+- NOT done: jest, `npm run build`, loading the bot in Bot Builder, a demo run against Deriv.
+- Note: Take profit and Stop loss ship as 0 (off). Session P/L is an estimate from fixed payout rates.
+
 ## Apex Intel Entry digit: the Entry Digit Lab, a digit that follows the market (latest)
 Problem: the first version worked a digit out once from a replay of history and kept it 60 s (`ENTRY_DIGIT_TTL_MS`). A 1-tick contract trades dozens of times a minute, so ONE digit served all of them while the market moved, and a weak digit was traded anyway. Result: many losses.
 - [x] New `ai-intel/entry-lab.ts`, an always-on lab. Every live tick of every market (fed from `apexFeed.onTick`, whether or not a run is on) goes through ONE step shared by replay and live. For each market x contract x run length it keeps ten candidate rules, "enter right after digit e prints", as a shadow ledger (newest 240 entries). Each shadow entry settles on the digit `duration` ticks later, so it never sees the future.

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "site_id": "apex-sentinel",
-  "count": 90,
+  "count": 91,
   "bots": [
     {
       "id": "grffy-v1",
@@ -812,6 +812,15 @@
       "description": "Digits Under 7 with auto switch to Under 6 and martingale recovery.",
       "emoji": "SITE BOT",
       "priority": 90
+    },
+    {
+      "id": "under-8-digit9-hunter-13-markets",
+      "name": "91. Under 8 Digit-9 Hunter (13 markets, split martingale)",
+      "file": "Under8_Digit9_Hunter_13_markets.xml",
+      "asset": "uploads/apex-sentinel/apex-library/under-8-digit9-hunter-13-markets.xml",
+      "description": "Scans all 13 volatility markets. Buys Under 8 when the last 1000 ticks show a green bar on an odd digit (not 9), a red bar on an even digit (not 8), digit 9 at 10.2%+, and 3+ digits 5-9 followed by a 0-4 digit. Split martingale recovery on Under 6.",
+      "emoji": "FREE BOT",
+      "priority": 91
     }
   ]
 }
