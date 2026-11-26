@@ -10,6 +10,7 @@ Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main onl
 - [x] Fix: as first published the bot could not run. Both notify messages used a value-style `text_join`; this app's `text_join` is a statement block. Rewritten as `text_join` + `text_statement` into a `Message` variable.
 - Checked (scratch rig, not in repo): repo block generators and trade engine with a Blockly stand-in and simulated Deriv feed; five scenarios, no rule mismatches (market, barrier, stake, recovery, TP/SL).
 - Still NOT done: real Blockly in a browser, the real JS interpreter, jest, build, a Deriv demo run. A stop loss can be overshot (3 stopped at 3.72); after a limit the bot stops buying but keeps running.
+- [x] Recovery changed from Under 6 to Over 3. `Recovery barrier` is now 3 and the single `DIGITUNDER` purchase became an if/else on `Recovery active`: recovery buys `DIGITOVER`, main trades still buy `DIGITUNDER`. Over 3 wins on digits 4-9, the same 60% as Under 6, so `Recovery win rate` (0.58) and the stake maths are unchanged. `validate-free-bots.js` passes; XML is well-formed with unique block ids. NOT done: loading it in Bot Builder or a Deriv demo run.
 
 ## Apex Intel Entry digit: the Entry Digit Lab, a digit that follows the market (latest)
 Problem: the first version worked a digit out once from a replay of history and kept it 60 s (`ENTRY_DIGIT_TTL_MS`). A 1-tick contract trades dozens of times a minute, so ONE digit served all of them while the market moved, and a weak digit was traded anyway. Result: many losses.
