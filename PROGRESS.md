@@ -7,6 +7,9 @@ Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main onl
 - Checked: `scripts/validate-free-bots.js` passes; XML has no undefined variables, duplicate ids or missing procedures.
 - NOT done: jest, `npm run build`, loading the bot in Bot Builder, a demo run against Deriv.
 - Note: Take profit and Stop loss ship as 0 (off). Session P/L is an estimate from fixed payout rates.
+- [x] Fix: as first published the bot could not run. Both notify messages used a value-style `text_join`; this app's `text_join` is a statement block. Rewritten as `text_join` + `text_statement` into a `Message` variable.
+- Checked (scratch rig, not in repo): repo block generators and trade engine with a Blockly stand-in and simulated Deriv feed; five scenarios, no rule mismatches (market, barrier, stake, recovery, TP/SL).
+- Still NOT done: real Blockly in a browser, the real JS interpreter, jest, build, a Deriv demo run. A stop loss can be overshot (3 stopped at 3.72); after a limit the bot stops buying but keeps running.
 
 ## Apex Intel Entry digit: the Entry Digit Lab, a digit that follows the market (latest)
 Problem: the first version worked a digit out once from a replay of history and kept it 60 s (`ENTRY_DIGIT_TTL_MS`). A 1-tick contract trades dozens of times a minute, so ONE digit served all of them while the market moved, and a weak digit was traded anyway. Result: many losses.
