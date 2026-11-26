@@ -205,8 +205,19 @@ export default class AppStore {
     onClickOutsideBlockly = (event: Event) => {
         if (document.querySelector('.injectionDiv')) {
             const path = event.path || (event.composedPath && event.composedPath());
+            // Blockly renders its own pop-ups (the number/text field editor, dropdown menus, tooltips) in
+            // separate containers outside `.injectionDiv`. A tap on the editor's input must not count as a
+            // click "outside" Blockly, otherwise hideChaff() closes the editor (and the phone keypad) the
+            // moment it opens, because the touch's follow-up click lands on the freshly shown input.
+            const blockly_container_classes = [
+                'injectionDiv',
+                'blocklyWidgetDiv',
+                'blocklyDropDownDiv',
+                'blocklyTooltipDiv',
+            ];
             const is_click_outside_blockly = !path.some(
-                (el: Element) => el.classList && el.classList.contains('injectionDiv')
+                (el: Element) =>
+                    el.classList && blockly_container_classes.some(class_name => el.classList.contains(class_name))
             );
 
             if (is_click_outside_blockly) {

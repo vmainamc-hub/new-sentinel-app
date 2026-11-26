@@ -14,6 +14,16 @@ export const hasAllRequiredBlocks = () => {
 
 export const onWorkspaceResize = () => {
     const workspace = window.Blockly.derivWorkspace;
+
+    // On phones the on-screen keypad shrinks the viewport and fires a window resize. While a block field
+    // (e.g. the stake) is being typed into, leave the workspace alone: Blockly repositions its own editor
+    // for the resize, and a second svgResize here can make the editor and keypad drop. The resize that
+    // follows when the keypad closes still runs this function normally.
+    const active_element = document.activeElement;
+    if (active_element && active_element.closest && active_element.closest('.blocklyWidgetDiv')) {
+        return;
+    }
+
     if (workspace) {
         // kept this commented to fix slow rendering issue
         //workspace.getAllFields().forEach(field => field.forceRerender());
