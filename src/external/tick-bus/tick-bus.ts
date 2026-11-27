@@ -6,6 +6,11 @@ type HistoryListener = (symbol: string, ticks: Tick[]) => void;
 type StatusListener = (s: BusStatus) => void;
 
 const MAX_BUFFER = 1000;
+/**
+ * Ticks actually kept per market: the 1000 that getTicks / getDigits return, plus 100 older ones so countDigits can read a
+ * 1000-tick window as it stood 100 ticks ago (a digit's share now against its share 100 ticks back).
+ */
+const KEEP_BUFFER = MAX_BUFFER + 100;
 /** How often the per-market watchdog checks that every subscribed market is still delivering ticks. */
 const WATCHDOG_MS = 4000;
 /**
@@ -66,7 +71,7 @@ class DerivTickBus {
     }
     /** Number of last digits currently buffered for a market (cheap: no copy). */
     getDigitCount(s: string) {
-        return this.digits.get(s)?.length ?? 0;
+        return Math.min(this.digits.get(s)?.length ?? 0, MAX_BUFFER);
     }
     /**
      * How many of the `window` ticks that end `skip` ticks before the newest one have a last digit in `wanted`.
@@ -92,7 +97,7 @@ class DerivTickBus {
     }
     onHistory(cb: HistoryListener) {
         this.histLs.add(cb);
-        for (const [s, t] of this.buffers) cb(s, [...t]);
+        for (const [s, t] of this.buffers) cb(s, t.slice(-MAX_BUFFER));
         return () => {
             this.histLs.delete(cb);
         };
@@ -153,7 +158,7 @@ class DerivTickBus {
         return Math.abs(Math.round(p * f)) % 10;
     }
     private setBuffer(s: string, t: Tick[]) {
-        const x = t.slice(-MAX_BUFFER);
+        const x = t.slice(-KEEP_BUFFER);
         this.buffers.set(s, x);
         this.digits.set(
             s,
@@ -164,11 +169,11 @@ class DerivTickBus {
     private append(s: string, t: Tick) {
         const b = this.buffers.get(s) || [];
         b.push(t);
-        if (b.length > MAX_BUFFER) b.splice(0, b.length - MAX_BUFFER);
+        if (b.length > KEEP_BUFFER) b.splice(0, b.length - KEEP_BUFFER);
         this.buffers.set(s, b);
         const d = this.digits.get(s) || [];
         d.push(this.digit(s, t.price));
-        if (d.length > MAX_BUFFER) d.splice(0, d.length - MAX_BUFFER);
+        if (d.length > KEEP_BUFFER) d.splice(0, d.length - KEEP_BUFFER);
         this.digits.set(s, d);
         this.lastEpoch.set(s, Math.floor(t.t / 1000));
     }
@@ -283,7 +288,7 @@ class DerivTickBus {
             const r: any = await api_base.api.send({
                 ticks_history: s,
                 adjust_start_time: 1,
-                count: MAX_BUFFER,
+                count: KEEP_BUFFER,
                 end: 'latest',
                 style: 'ticks',
             });
