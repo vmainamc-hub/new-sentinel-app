@@ -1,4 +1,4 @@
-export const DERIV_APP_ID = "33GTaXHoMp3wQACqZXQL5";
+export const DERIV_APP_ID = "34BIr72thLXMJHaL9PQxN";
 export const DERIV_WS_URL = `wss://api.derivws.com/trading/v1/options/ws/public?app_id=${DERIV_APP_ID}`;
 
 export type Tick = { epoch: number; quote: number };

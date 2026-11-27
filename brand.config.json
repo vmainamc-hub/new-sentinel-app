@@ -123,6 +123,25 @@
           "manifest_url": "/free-bots/domains/apex-sentinel.json",
           "base_url": "/free-bots"
         }
+      },
+      {
+        "id": "precision-profits",
+        "hosts": [
+          "precisionprofits.netlify.app"
+        ],
+        "display_domain": "Precision Profits",
+        "website_url": "https://precisionprofits.netlify.app",
+        "redirect_uri": "https://precisionprofits.netlify.app/callback",
+        "client_id": "34BIr72thLXMJHaL9PQxN",
+        "scopes": [
+          "trade"
+        ],
+        "environment": "production",
+        "bot_library": {
+          "title": "Free Bots",
+          "manifest_url": "/free-bots/domains/apex-sentinel.json",
+          "base_url": "/free-bots"
+        }
       }
     ]
   },
