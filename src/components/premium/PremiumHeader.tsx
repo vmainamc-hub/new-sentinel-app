@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { observer } from 'mobx-react-lite';
+import { useLogout } from '@/hooks/useLogout';
 import useThemeSwitcher from '@/hooks/useThemeSwitcher';
 import BrandMark from './BrandMark';
 import PremiumAccountSwitcher from './PremiumAccountSwitcher';
-import { BoltIcon, CalculatorIcon, CopyIcon, GearIcon, GridIcon, HomeIcon, MonitorIcon, MoonIcon, PulseIcon, RobotIcon, SearchIcon, ShieldIcon, SunIcon } from './icons';
+import { BoltIcon, CalculatorIcon, CopyIcon, GearIcon, GridIcon, HomeIcon, LogoutIcon, MonitorIcon, MoonIcon, PulseIcon, RobotIcon, SearchIcon, ShieldIcon, SunIcon } from './icons';
 import { buildNavItems, getGroupForSection, NAVIGATION_CATALOG, readGroupTab, rememberGroupTab } from './site-customization';
 import PremiumTicker from './PremiumTicker';
 import type { PremiumSection } from './types';
@@ -41,6 +42,20 @@ const PremiumHeader = observer(
         const dragRef = useRef({ active: false, pointerId: -1, startX: 0, scrollLeft: 0, moved: false });
         const suppressClickRef = useRef(false);
         const { is_dark_mode_on, toggleTheme } = useThemeSwitcher();
+        const logout = useLogout();
+        const [loggingOut, setLoggingOut] = useState(false);
+
+        const handleLogout = useCallback(async () => {
+            if (loggingOut) return;
+            if (!window.confirm('Log out of your account? Any running bot will stop.')) return;
+            setLoggingOut(true);
+            try {
+                await logout();
+            } finally {
+                // A full page load drops every open connection, store and embedded page, and shows the sign-in page.
+                window.location.replace(`${window.location.origin}${window.location.pathname}`);
+            }
+        }, [logout, loggingOut]);
         const [canScrollLeft, setCanScrollLeft] = useState(false);
         const [canScrollRight, setCanScrollRight] = useState(false);
 
@@ -160,6 +175,16 @@ const PremiumHeader = observer(
                             {is_dark_mode_on ? <MoonIcon /> : <SunIcon />}
                         </button>
                         <PremiumAccountSwitcher />
+                        <button
+                            type='button'
+                            className='prodb-theme-toggle prodb-logout-toggle'
+                            onClick={handleLogout}
+                            disabled={loggingOut}
+                            aria-label='Log out'
+                            title='Log out'
+                        >
+                            <LogoutIcon />
+                        </button>
                     </div>
                 </div>
                 <nav

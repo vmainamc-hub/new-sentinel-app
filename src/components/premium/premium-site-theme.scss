@@ -79,3 +79,15 @@
         color: var(--site-secondary, #19cba3);
     }
 }
+
+// Log out button in the header: same round button as the theme toggle, red on hover so it reads as the exit.
+.prodb-premium-shell .prodb-theme-toggle.prodb-logout-toggle:hover:not(:disabled) {
+    border-color: #e5484d;
+    background: rgba(229, 72, 77, .12);
+    color: #e5484d;
+}
+
+.prodb-premium-shell .prodb-theme-toggle.prodb-logout-toggle:disabled {
+    opacity: .55;
+    cursor: wait;
+}

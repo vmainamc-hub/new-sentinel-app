@@ -122,6 +122,23 @@ describe('useLogout', () => {
             });
         });
 
+        it('should also clear the Manual Trader copy of the session', async () => {
+            mockLogout.mockResolvedValue(undefined);
+            localStorage.setItem('mt:client.accounts', '{"VRTC1":{"token":"x"}}');
+            localStorage.setItem('unrelated_setting', '1');
+
+            const { result } = renderHook(() => useLogout());
+            await result.current();
+
+            await waitFor(() => {
+                expect(localStorage.removeItem).toHaveBeenCalledWith('deriv_oauth_session');
+                expect(localStorage.removeItem).toHaveBeenCalledWith('deriv_oauth_accounts_raw');
+                expect(localStorage.removeItem).toHaveBeenCalledWith('deriv_oauth_app_id');
+                expect(localStorage.removeItem).toHaveBeenCalledWith('mt:client.accounts');
+                expect(localStorage.removeItem).not.toHaveBeenCalledWith('unrelated_setting');
+            });
+        });
+
         it('should not clear all storage on first attempt', async () => {
             const mockError = new Error('Logout failed');
             mockLogout.mockRejectedValue(mockError);

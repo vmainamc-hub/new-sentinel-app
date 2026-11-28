@@ -16,4 +16,5 @@ export const MoonIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path d='M2
 export const SunIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><circle cx='12' cy='12' r='4' /><path d='M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4' /></Icon>;
 export const DownloadIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path d='M12 3v12M7 10l5 5 5-5M5 21h14' /></Icon>;
 export const ShieldIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path d='M12 3 4.5 6v5.5c0 4.6 3.1 8.2 7.5 9.5 4.4-1.3 7.5-4.9 7.5-9.5V6z' /><path d='m9 12 2.2 2.2L15.5 10' /></Icon>;
-export const PlayIcon = (p: SVGProps<SVGSVGElement>) => <svg viewBox='0 0 24 24' fill='currentColor' {...p}><path d='M7 4.7v14.6c0 .8.9 1.3 1.6.9l11-7.3a1.1 1.1 0 0 0 0-1.8l-11-7.3A1 1 0 0 0 7 4.7Z' /></svg>;
+export const LogoutIcon = (p: SVGProps<SVGSVGElement>) => <Icon {...p}><path d='M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4' /><path d='m16 17 5-5-5-5' /><path d='M21 12H9' /></Icon>;
+export const PlayIcon =(p: SVGProps<SVGSVGElement>) => <svg viewBox='0 0 24 24' fill='currentColor' {...p}><path d='M7 4.7v14.6c0 .8.9 1.3 1.6.9l11-7.3a1.1 1.1 0 0 0 0-1.8l-11-7.3A1 1 0 0 0 7 4.7Z' /></svg>;

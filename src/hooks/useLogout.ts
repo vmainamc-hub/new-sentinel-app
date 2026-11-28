@@ -30,6 +30,14 @@ export const useLogout = () => {
                 localStorage.removeItem('account_type');
                 localStorage.removeItem('client.country');
 
+                // The embedded Manual Trader keeps its own copy of the session: the three keys the hand-off shares on purpose
+                // (see manual-trader-session.ts) and everything it stores under the "mt:" prefix (scripts/manual-trader/storage-isolation.js).
+                ['deriv_oauth_session', 'deriv_oauth_accounts_raw', 'deriv_oauth_app_id'].forEach(key => localStorage.removeItem(key));
+                for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+                    const key = localStorage.key(index);
+                    if (key && key.startsWith('mt:')) localStorage.removeItem(key);
+                }
+
                 sessionStorage.removeItem('oauth_code_verifier');
                 sessionStorage.removeItem('oauth_code_verifier_timestamp');
                 sessionStorage.removeItem('oauth_csrf_token');
