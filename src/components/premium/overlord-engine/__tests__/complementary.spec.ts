@@ -34,6 +34,10 @@ describe('complementary Under rules', () => {
         const greenEven = readComplementary(build([40, 50, 50, 50, 120, 30, 50, 50, 50, 100], [40, 50, 50, 50, 120, 30, 50, 50, 50, 90]), 'UNDER');
         expect(greenEven?.checks[3].ok).toBe(false);
     });
+    it('lets any digit hold a bar, including 7 as green and 2 as red', () => {
+        const r = readComplementary(build([40, 50, 20, 50, 50, 50, 50, 130, 50, 100], [40, 50, 20, 50, 50, 50, 50, 130, 50, 90]), 'UNDER');
+        expect(r?.pass).toBe(true);
+    });
     it('rejects red bar on digit 8', () => {
         const d = [45, 50, 50, 50, 50, 70, 50, 50, 30, 105];
         expect(readComplementary(build(d, d), 'UNDER')?.checks[4].ok).toBe(false);

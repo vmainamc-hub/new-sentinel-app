@@ -6,8 +6,7 @@
 //   UNDER  digit 9 (the opposite edge) above 10.1% and decreasing, digit 0 below 10%,
 //          green bar odd, red bar even and never digit 8.
 //
-// Bars use the same roles as Apex (digit-roles.ts): digits 2, 3, 6, 7 never hold a bar, so the next eligible digit takes it.
-import { assignDigitRoles } from './apex/digit-roles';
+// Bars are the true extremes: green = the most frequent digit, red = the least frequent, and ANY digit 0-9 can hold either.
 import type { OuSide } from './legacy';
 
 /** Ticks the shares are measured over (the same base window the Apex engines use). */
@@ -35,9 +34,12 @@ export function readComplementary(allDigits: readonly number[], side: OuSide): C
     const half = Math.floor(digits.length / 2);
     const older = shares(digits.slice(0, half))[edge];
     const newer = shares(digits.slice(half))[edge];
-    const roles = assignDigitRoles(pct, Array(10).fill(0));
-    const green = roles.hot;
-    const red = roles.cold;
+    let green = 0;
+    let red = 0;
+    for (let d = 1; d < 10; d += 1) {
+        if (pct[d] > pct[green]) green = d;
+        if (pct[d] < pct[red]) red = d;
+    }
     const f = (n: number) => n.toFixed(1);
 
     const checks: ComplementaryCheck[] = [
