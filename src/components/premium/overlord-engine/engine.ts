@@ -24,6 +24,7 @@ import { OU_CONTRACTS, OU_MIN_TICKS, type OverUnderRead, readOverUnder } from '.
 import type { Contract } from '../sixfold/bot';
 import type { FluctuationReport } from './apex/fluctuation';
 import { DEFAULT_REFINEMENT } from './apex/settings';
+import { type ComplementaryRead, readComplementary } from './complementary';
 import {
     APEX_MIN_TICKS,
     apexEnsemble,
@@ -94,6 +95,8 @@ export type OverlordRead = {
     applied: number;
     /** Apex Sentinel's agreement / stability / fluctuation / direction / psychology readings, in words. */
     apexNotes: ApexNotes | null;
+    /** The complementary priority rules (opposite edge digit, green / red bar). Orders reads inside a tier; never vetoes. */
+    complementary: ComplementaryRead | null;
     /** Set after an assessment: how the contract held up over the live rounds. */
     steady?: { rounds: number; clearShare: number; topShare: number };
     /** The live ticks that arrived during the assessment: how many won, how many chance alone would give. */
@@ -462,6 +465,7 @@ export function assessContract(
         vetoReason: hard ? `${hard.engine}: ${hard.label.toLowerCase()} failed (${hard.detail})` : '',
         tier,
         legacyPct: legacyPercentage(digits, side, barrier),
+        complementary: readComplementary(digits, side),
         thin,
         ticks: digits.length,
         reasons,
@@ -487,9 +491,14 @@ export function assessContract(
 
 const tierRank: Record<OverlordTier, number> = { STRONG: 3, BEST: 2, CAUTION: 1, LEGACY: 0 };
 
-/** STRONG before BEST before CAUTION before LEGACY, then score, then Overlord's original number (lower share first). */
+const compRank = (r: OverlordRead) => (r.complementary?.pass ? 1 : 0);
+
+/**
+ * STRONG before BEST before CAUTION before LEGACY, then reads passing the complementary rules, then score, then Overlord's
+ * original number (lower share first).
+ */
 export const compareReads = (a: OverlordRead, b: OverlordRead): number =>
-    tierRank[b.tier] - tierRank[a.tier] || b.score - a.score || (a.legacyPct ?? 101) - (b.legacyPct ?? 101);
+    tierRank[b.tier] - tierRank[a.tier] || compRank(b) - compRank(a) || b.score - a.score || (a.legacyPct ?? 101) - (b.legacyPct ?? 101);
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Whole scan

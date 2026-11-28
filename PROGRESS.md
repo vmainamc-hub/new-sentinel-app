@@ -2,6 +2,12 @@
 
 Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main only after build + tests pass; main auto-deploys to Netlify). Module dir: `src/components/premium/ai-intel/`.
 
+## Overlord Find Market: complementary edge-digit and bar rules
+- [x] New `overlord-engine/complementary.ts`, wired into `OverlordRead.complementary` and `compareReads` (tier, then rules pass, then score, then legacy %). Priority only: it never overrides a veto or a better tier. Shown on the Overlord result card.
+- Over: digit 0 above 10.1% and decreasing, digit 9 below 10%, green bar even, red bar odd and not 1. Under: digit 9 above 10.1% and decreasing, digit 0 below 10%, green bar odd, red bar even and not 8.
+- Measured on the last 1000 ticks; "decreasing" = newer 500 show the digit less than the older 500. Green = most frequent, red = least frequent, digits 2/3/6/7 never hold a bar (Apex rule).
+- Checked: logic run via esbuild + node; parse checks. NOT done: jest, build, live run.
+
 ## Free bot 91: Under 8 Digit-9 Hunter (13 markets, split martingale)
 - [x] Added the XML to `apex-library` and listed it in `bots.json` and `domains/apex-sentinel.json` (count 90 -> 91).
 - Checked: `scripts/validate-free-bots.js` passes; XML has no undefined variables, duplicate ids or missing procedures.

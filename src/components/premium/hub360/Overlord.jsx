@@ -2683,6 +2683,21 @@ const Overlord = () => {
                                     </span>
                                 </div>
                             )}
+                            {strongestSignal.engine.complementary && (
+                                <div className='ovl-eng-reasons'>
+                                    <strong>
+                                        {strongestSignal.engine.complementary.pass ? '✓' : '✗'} Edge-digit and bar rules (
+                                        {strongestSignal.engine.complementary.passed}/{strongestSignal.engine.complementary.total})
+                                    </strong>
+                                    <ul>
+                                        {strongestSignal.engine.complementary.checks.map(c => (
+                                            <li key={c.name}>
+                                                {c.ok ? '✓' : '✗'} {c.name} ({c.detail})
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
                             <ul className='ovl-eng-reasons'>
                                 {strongestSignal.engine.reasons.map((reason, i) => (
                                     <li key={i}>{reason}</li>

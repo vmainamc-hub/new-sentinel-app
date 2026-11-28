@@ -237,6 +237,7 @@ describe('Even / Odd picking with the evidence rule', () => {
         vetoed: false,
         vetoReason: '',
         legacyPct: 50,
+        complementary: null,
         thin: false,
         ticks: 2000,
         reasons: [],
