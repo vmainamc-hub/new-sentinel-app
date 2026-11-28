@@ -214,6 +214,8 @@ const Overlord = () => {
     const activeContractsRef = useRef(new Set());
     const contractTimeoutsRef = useRef(new Map()); // Track contract update timeouts
     const transactionRecoveryTimeoutsRef = useRef(new Map()); // Track sell-event recovery timers
+    const runIdRef = useRef(0); // bumped on every Run and every Stop: an answer from an earlier run can never buy anything
+    const proposalRunIdRef = useRef(0);
     const pendingProposalRef = useRef(false); // Track if a proposal/buy is in flight
 
     const symbolRef = useRef(symbol);
@@ -430,6 +432,17 @@ const Overlord = () => {
 
             setIsRunning(false);
             isRunningRef.current = false;
+            runIdRef.current += 1; // any proposal already asked for now belongs to a finished run
+            pendingProposalRef.current = false;
+            speedGateRef.current = false;
+            if (rateLimitTimerRef.current) {
+                window.clearTimeout(rateLimitTimerRef.current);
+                rateLimitTimerRef.current = null;
+            }
+            if (virtualTimerRef.current && !virtualOpenRef.current) {
+                window.clearTimeout(virtualTimerRef.current);
+                virtualTimerRef.current = null;
+            }
 
             if (wsRef.current?.readyState === WebSocket.OPEN) {
                 wsRef.current.send(JSON.stringify({ forget_all: 'proposal' }));
@@ -699,6 +712,7 @@ const Overlord = () => {
                 } on ${symbolRef.current} x${currentStakeRef.current}`
             );
             pendingProposalRef.current = true; // Mark proposal as pending
+            proposalRunIdRef.current = runIdRef.current;
             run_panel?.setContractStage?.(contract_stages.PURCHASE_SENT);
             wsRef.current.send(JSON.stringify(proposalPayload));
         },
@@ -741,7 +755,9 @@ const Overlord = () => {
             }
 
             if (data.msg_type === 'proposal' && !data.error) {
-                if (!isRunningRef.current) {
+                // Stopped, or this answer was asked for in an earlier run: never buy it.
+                if (!isRunningRef.current || proposalRunIdRef.current !== runIdRef.current) {
+                    pendingProposalRef.current = false;
                     return;
                 }
 
@@ -1456,6 +1472,7 @@ const Overlord = () => {
 
         setIsRunning(true);
         isRunningRef.current = true;
+        runIdRef.current += 1;
         rateLimitAttemptRef.current = 0;
         cooldownUntilRef.current = 0;
         reconnectAttemptRef.current = 0;

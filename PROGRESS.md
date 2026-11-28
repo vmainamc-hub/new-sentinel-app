@@ -2,6 +2,11 @@
 
 Spec: master prompt (14 parts). Branch `feat/ai-intelligence` (merge to main only after build + tests pass; main auto-deploys to Netlify). Module dir: `src/components/premium/ai-intel/`.
 
+## Overlord: no new trade after Stop
+- [x] Cause: a proposal asked for before Stop could still be answered and bought, above all when Run was pressed again quickly, because the answer was only checked against "is running". Fix in `hub360/Overlord.jsx`: a run id bumped on every Run and Stop; a proposal is bought only if it was asked for in the current run. Stop now also clears the pending-proposal flag, the Slow-mode wait, the rate-limit retry timer and the paper-trade timeout.
+- Not changeable: a purchase already sent to Deriv before Stop still goes through and settles.
+- Checked: parse only. NOT done: jest, live run.
+
 ## Overlord Find Market: complementary edge-digit and bar rules
 - [x] New `overlord-engine/complementary.ts`, wired into `OverlordRead.complementary` and `compareReads` (tier, then rules pass, then score, then legacy %). Priority only: it never overrides a veto or a better tier. Shown on the Overlord result card.
 - Over: digit 0 above 10.1% and decreasing, digit 9 below 10%, green bar even, red bar odd and not 1. Under: digit 9 above 10.1% and decreasing, digit 0 below 10%, green bar odd, red bar even and not 8.
